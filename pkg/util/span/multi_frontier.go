@@ -138,7 +138,10 @@ func (f *MultiFrontier[P]) PeekFrontierSpan() roachpb.Span {
 
 // Forward implements Frontier.
 func (f *MultiFrontier[P]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
-	details, err := f.ForwardWithDetails(span, ts)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	details, err := f.forwardWithDetailsLocked(span, ts)
 	if err != nil {
 		return false, err
 	}
@@ -254,6 +257,12 @@ func (f *MultiFrontier[P]) ForwardWithDetails(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	return f.forwardWithDetailsLocked(span, ts)
+}
+
+func (f *MultiFrontier[P]) forwardWithDetailsLocked(
+	span roachpb.Span, ts hlc.Timestamp,
+) (MultiFrontierForwardDetails, error) {
 	partition, err := f.partitioner(span)
 	if err != nil {
 		return MultiFrontierForwardDetails{},
