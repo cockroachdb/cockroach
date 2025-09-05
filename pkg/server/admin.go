@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -116,7 +115,7 @@ type adminServer struct {
 	statsLimiter     *quotapool.IntPool
 	st               *cluster.Settings
 	serverIterator   ServerIterator
-	nd               rpcbase.NodeDialer
+	nd               *nodeDialer
 	distSender       *kvcoord.DistSender
 	rpcContext       *rpc.Context
 	clock            *hlc.Clock
@@ -221,7 +220,7 @@ func newAdminServer(
 		),
 		st:             cs,
 		serverIterator: serverIterator,
-		nd:             &nodeDialer{si: serverIterator},
+		nd:             &nodeDialer{cs: cs, si: serverIterator},
 		distSender:     distSender,
 		rpcContext:     rpcCtx,
 		clock:          clock,
@@ -1357,7 +1356,7 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID)
+						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
 						if err == nil {
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
@@ -3770,7 +3769,7 @@ func (s *adminServer) queryTableID(
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.RPCAdminClient, error) {
-	return serverpb.DialAdminClient(s.nd, ctx, nodeID)
+	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.cs)
 }
 
 func (s *adminServer) ListTracingSnapshots(

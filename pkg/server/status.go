@@ -150,7 +150,7 @@ type baseStatusServer struct {
 	rpcCtx             *rpc.Context
 	stopper            *stop.Stopper
 	serverIterator     ServerIterator
-	nd                 rpcbase.NodeDialer
+	nd                 *nodeDialer
 	clock              *hlc.Clock
 }
 
@@ -649,7 +649,7 @@ func newStatusServer(
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 			serverIterator:     serverIterator,
-			nd:                 &nodeDialer{si: serverIterator},
+			nd:                 &nodeDialer{cs: st, si: serverIterator},
 			clock:              clock,
 		},
 		cfg:              cfg,
@@ -776,7 +776,7 @@ func (s *statusServer) dialNode(
 			return nil, err
 		}
 	}
-	return serverpb.DialStatusClient(s.nd, ctx, nodeID)
+	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
 }
 
 // Gossip returns current state of gossip information on the given node
