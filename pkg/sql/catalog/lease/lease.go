@@ -1037,7 +1037,7 @@ func acquireNodeLease(
 		},
 		func(ctx context.Context) (interface{}, error) {
 			if m.IsDraining() {
-				return nil, errLeaseManagerIsDraining
+				return false, errLeaseManagerIsDraining
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
@@ -1051,26 +1051,75 @@ func acquireNodeLease(
 			if err != nil {
 				return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 			}
-			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
-			if err != nil {
-				return nil, err
+
+			doAcquisition := func() (catalog.Descriptor, error) {
+				desc, _, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
+				if err != nil {
+					return nil, err
+				}
+
+				return desc, nil
 			}
-			// If a nil descriptor is returned, then the latest version has already
-			// been leased. So, nothing needs to be done here.
-			if desc == nil {
-				return true, nil
+
+			doUpsertion := func(desc catalog.Descriptor) error {
+				t := m.findDescriptorState(id, false /* create */)
+				if t == nil {
+					return errors.AssertionFailedf("could not find descriptor state for id %d", id)
+				}
+				t.mu.Lock()
+				t.mu.takenOffline = false
+				defer t.mu.Unlock()
+				err = t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
+				if err != nil {
+					return err
+				}
+
+				return nil
 			}
-			t := m.findDescriptorState(id, false /* create */)
-			if t == nil {
-				return nil, errors.AssertionFailedf("could not find descriptor state for id %d", id)
+
+			// These tables are special and can have their versions bumped
+			// without blocking on other nodes converging to that version.
+			if newest != nil && (id == keys.UsersTableID ||
+				id == keys.RoleMembersTableID ||
+				id == keys.RoleOptionsTableID ||
+				isMaybeSystemPrivilegesTable(ctx, m, id)) {
+
+				// The two-version invariant allows an update in lease manager
+				// without (immediately) acquiring a new lease. This prevents
+				// a race on where the lease is acquired but the manager isn't
+				// yet updated.
+				desc, err := m.maybeGetDescriptorWithoutValidation(ctx, id, true /* existenceRequired */)
+				if err != nil {
+					return false, err
+				}
+				err = doUpsertion(desc)
+				if err != nil {
+					return false, err
+				}
+
+				desc, err = doAcquisition()
+				if err != nil {
+					return false, err
+				}
+				if desc == nil {
+					return true, nil
+				}
+			} else {
+				desc, err := doAcquisition()
+				if err != nil {
+					return false, err
+				}
+				// If a nil descriptor is returned, then the latest version has already
+				// been leased. So, nothing needs to be done here.
+				if desc == nil {
+					return true, nil
+				}
+				err = doUpsertion(desc)
+				if err != nil {
+					return false, err
+				}
 			}
-			t.mu.Lock()
-			t.mu.takenOffline = false
-			defer t.mu.Unlock()
-			err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
-			if err != nil {
-				return nil, err
-			}
+
 			return true, nil
 		})
 	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
@@ -1082,6 +1131,22 @@ func acquireNodeLease(
 	}
 	log.VEventf(ctx, 2, "acquired lease for descriptor %d, took %v", id, timeutil.Since(start))
 	return didAcquire, nil
+}
+
+var systemPrivilegesTableDescID descpb.ID = descpb.InvalidID
+
+// isMaybeSystemPrivilegesTable tries to determine if the given descriptor is
+// for the system privileges table. It depends on the namecache to resolve the
+// descriptor ID after which the ID is memoized.
+func isMaybeSystemPrivilegesTable(ctx context.Context, m *Manager, desc descpb.ID) bool {
+	if systemPrivilegesTableDescID == descpb.InvalidID {
+		if privilegesDesc, _ := m.names.get(ctx, keys.SystemDatabaseID, keys.SystemPublicSchemaID, "privileges", hlc.Timestamp{}); privilegesDesc != nil {
+			systemPrivilegesTableDescID = privilegesDesc.GetID()
+			privilegesDesc.Release(ctx)
+		}
+	}
+
+	return desc == systemPrivilegesTableDescID
 }
 
 // releaseLease deletes an entry from system.lease.
