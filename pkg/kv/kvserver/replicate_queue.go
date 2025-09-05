@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -111,19 +113,20 @@ var PriorityInversionRequeue = settings.RegisterBoolSetting(
 	"kv.priority_inversion_requeue_replicate_queue.enabled",
 	"whether the requeue replicas should requeue when enqueued for "+
 		"repair action but ended up consider rebalancing during processing",
-	false,
+	metamorphic.ConstantWithTestBool("kv.priority_inversion_requeue_replicate_queue.enabled", false /*defaultValue*/),
 )
 
 // ReplicateQueueMaxSize is a setting that controls the max size of the
 // replicate queue. When this limit is exceeded, lower priority replicas (not
 // guaranteed to be the lowest) are dropped from the queue.
 var ReplicateQueueMaxSize = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
+	settings.SystemOnly,
 	"kv.replicate_queue.max_size",
 	"maximum number of replicas that can be queued for replicate queue processing; "+
 		"when this limit is exceeded, lower priority (not guaranteed to be the lowest) "+
 		"replicas are dropped from the queue",
-	defaultQueueMaxSize,
+	metamorphic.ConstantWithTestChoice[int64]("kv.replicate_queue.max_size",
+		defaultQueueMaxSize /*defaultValue*/, math.MaxInt32 /*otherValues*/),
 	settings.WithValidateInt(func(v int64) error {
 		if v < defaultQueueMaxSize {
 			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
