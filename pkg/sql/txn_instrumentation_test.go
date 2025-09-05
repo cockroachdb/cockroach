@@ -188,7 +188,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	helper := &txnInstrumentationHelper{}
-	helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(nil, nil, nil)
+	helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(nil, nil, nil, timeutil.DefaultTimeSource{})
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
@@ -214,7 +214,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	helper := &txnInstrumentationHelper{}
-	helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(nil, nil, nil)
+	helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(nil, nil, nil, timeutil.DefaultTimeSource{})
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
