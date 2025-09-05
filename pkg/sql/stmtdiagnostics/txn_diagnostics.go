@@ -7,12 +7,16 @@ package stmtdiagnostics
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,6 +100,7 @@ type TxnRegistry struct {
 	st           *cluster.Settings
 	db           isql.DB
 	StmtRegistry *Registry
+	ts           timeutil.TimeSource
 	mu           struct {
 		// NOTE: This lock can't be held while the registry runs any statements
 		// internally; it'd deadlock.
@@ -115,14 +120,15 @@ type TxnRegistry struct {
 }
 
 func NewTxnRegistry(
-	db isql.DB, st *cluster.Settings, stmtDiagnosticsRegistry *Registry,
+	db isql.DB, st *cluster.Settings, stmtDiagnosticsRegistry *Registry, ts timeutil.TimeSource,
 ) *TxnRegistry {
 	r := &TxnRegistry{
 		db:           db,
 		st:           st,
 		StmtRegistry: stmtDiagnosticsRegistry,
+		ts:           ts,
 	}
-	r.mu.rand = rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	r.mu.rand = rand.New(rand.NewSource(ts.Now().UnixNano()))
 	r.mu.requests = make(map[RequestID]TxnRequest)
 	r.mu.unconditionalOngoingRequests = make(map[RequestID]TxnRequest)
 	return r
@@ -144,7 +150,7 @@ func (r *TxnRegistry) ShouldStartTxnDiagnostic(
 
 	for id, f := range r.mu.requests {
 		if len(f.stmtFingerprintIds) > 0 && f.stmtFingerprintIds[0] == stmtFingerprintId {
-			if f.isExpired(timeutil.Now()) {
+			if f.isExpired(r.ts.Now()) {
 				delete(r.mu.requests, id)
 				return false, 0, req
 			}
@@ -182,25 +188,109 @@ func (r *TxnRegistry) InsertTxnRequest(
 	expiresAfter time.Duration,
 	redacted bool,
 ) error {
+	_, err := r.insertTxnRequestInternal(
+		ctx, txnFingerprintId, stmtFingerprintIds, username, samplingProbability, minExecutionLatency, expiresAfter, redacted)
+	return err
+}
+
+func (r *TxnRegistry) insertTxnRequestInternal(
+	ctx context.Context,
+	txnFingerprintId uint64,
+	stmtFingerprintIds []uint64,
+	username string,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+	redacted bool,
+) (reqID RequestID, er error) {
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
-			return errors.Newf(
+			return reqID, errors.Newf(
 				"expected sampling probability in range [0.0, 1.0], got %f",
 				samplingProbability)
 		}
 		if minExecutionLatency == 0 {
-			return errors.Newf(
+			return reqID, errors.Newf(
 				"got non-zero sampling probability %f and empty min exec latency",
 				samplingProbability)
 		}
 	}
 
-	var reqID RequestID = RequestID(rand.Int())
 	var expiresAt time.Time
 	if expiresAfter != 0 {
-		expiresAt = timeutil.Now().Add(expiresAfter)
+		expiresAt = r.ts.Now().Add(expiresAfter)
 	}
-	// TODO: insert the request into system.txn_diagnostics_requests once the table is made
+
+	// Insert the request into system.transaction_diagnostics_requests
+	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		txn.KV().SetDebugName("txn-diag-insert-request")
+
+		now := r.ts.Now()
+		insertColumns := "transaction_fingerprint_id, statement_fingerprint_ids, requested_at"
+		qargs := make([]interface{}, 3, 7)
+
+		// Convert txnFingerprintId to bytes for storage
+		txnFingerprintBytes := sqlstatsutil.EncodeUint64ToBytes(txnFingerprintId)
+		qargs[0] = tree.NewDBytes(tree.DBytes(txnFingerprintBytes))
+
+		// Convert statement fingerprint IDs to byte arrays
+		stmtFingerprintArray := tree.NewDArray(types.Bytes)
+		for _, id := range stmtFingerprintIds {
+			idBytes := sqlstatsutil.EncodeUint64ToBytes(id)
+			if err := stmtFingerprintArray.Append(tree.NewDBytes(tree.DBytes(idBytes))); err != nil {
+				return err
+			}
+		}
+		qargs[1] = stmtFingerprintArray
+		qargs[2] = now
+
+		if minExecutionLatency != 0 {
+			insertColumns += ", min_execution_latency"
+			qargs = append(qargs, minExecutionLatency)
+		}
+		if !expiresAt.IsZero() {
+			insertColumns += ", expires_at"
+			qargs = append(qargs, expiresAt)
+		}
+		if samplingProbability != 0 {
+			insertColumns += ", sampling_probability"
+			qargs = append(qargs, samplingProbability)
+		}
+		if redacted {
+			insertColumns += ", redacted"
+			qargs = append(qargs, redacted)
+		}
+		if username != "" {
+			insertColumns += ", username"
+			qargs = append(qargs, username) // username
+		}
+
+		valuesClause := "$1, $2, $3"
+		for i := range qargs[3:] {
+			valuesClause += fmt.Sprintf(", $%d", i+4)
+		}
+
+		stmt := "INSERT INTO system.transaction_diagnostics_requests (" +
+			insertColumns + ") VALUES (" + valuesClause + ") RETURNING id;"
+
+		row, err := txn.QueryRowEx(
+			ctx, "txn-diag-insert-request", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			stmt, qargs...,
+		)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return errors.New("failed to insert transaction diagnostics request")
+		}
+		reqID = RequestID(*row[0].(*tree.DInt))
+		return nil
+	})
+	if err != nil {
+		return reqID, err
+	}
+
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -210,7 +300,7 @@ func (r *TxnRegistry) InsertTxnRequest(
 		)
 	}()
 
-	return nil
+	return reqID, nil
 }
 
 // ResetTxnRequest moves the TxnRequest of the given requestID from the ongoing
@@ -242,18 +332,55 @@ func (r *TxnRegistry) InsertTxnDiagnostic(
 	ctx context.Context, requestId RequestID, request TxnRequest, diagnostic TxnDiagnostic,
 ) (CollectedInstanceID, error) {
 	var txnDiagnosticId CollectedInstanceID
+	collectionTime := r.ts.Now()
+	txnFingerprintBytes := sqlstatsutil.EncodeUint64ToBytes(request.txnFingerprintId)
+
+	stmtFingerprintArray := tree.NewDArray(types.Bytes)
+	for _, id := range request.stmtFingerprintIds {
+		idBytes := sqlstatsutil.EncodeUint64ToBytes(id)
+		if err := stmtFingerprintArray.Append(tree.NewDBytes(tree.DBytes(idBytes))); err != nil {
+			return txnDiagnosticId, err
+		}
+	}
+
+	var stmtsStrings = make([]string, 0, len(diagnostic.stmtDiagnostics))
+	for _, sd := range diagnostic.stmtDiagnostics {
+		stmtsStrings = append(stmtsStrings, sd.stmtFingerprint)
+	}
+
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("txn-diag-insert-bundle")
 
-		_, err := r.StmtRegistry.insertBundleChunks(ctx, diagnostic.bundle, "transaction diagnostics bundle", txn)
 		// Insert the transaction diagnostic bundle
+		bundleChunkIds, err := r.StmtRegistry.insertBundleChunks(ctx, diagnostic.bundle, "transaction diagnostics bundle", txn)
 		if err != nil {
+			fmt.Printf("failed to insert bundle chunks: %v\n", err)
 			return err
 		}
+
+		// Insert the transaction diagnostics record
+		row, err := txn.QueryRowEx(
+			ctx, "txn-diag-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.transaction_diagnostics "+
+				"(transaction_fingerprint_id, statement_fingerprint_ids, transaction_fingerprint, collected_at, bundle_chunks) "+
+				"VALUES ($1, $2, $3, $4, $5) RETURNING id",
+			tree.NewDBytes(tree.DBytes(txnFingerprintBytes)), stmtFingerprintArray, strings.Join(stmtsStrings, ";\n"), collectionTime, bundleChunkIds,
+		)
+		if err != nil {
+			fmt.Printf("failed to insert transaction diagnostics: %v\n", err)
+			return err
+		}
+		if row == nil {
+			fmt.Printf("failed to insert transaction diagnostics: %v\n", err)
+			return errors.New("failed to insert transaction diagnostics")
+		}
+		txnDiagnosticId = CollectedInstanceID(*row[0].(*tree.DInt))
+
 		// Insert all the statement diagnostics
 		stmtDiagnostics := tree.NewDArray(types.Int)
 		for _, sd := range diagnostic.stmtDiagnostics {
-			id, err := r.StmtRegistry.innerInsertStatementDiagnostics(ctx, sd, txn)
+			id, err := r.StmtRegistry.innerInsertStatementDiagnostics(ctx, sd, txn, txnDiagnosticId)
 			if err != nil {
 				return err
 			}
@@ -262,12 +389,18 @@ func (r *TxnRegistry) InsertTxnDiagnostic(
 			}
 		}
 
-		txnDiagnosticId = CollectedInstanceID(rand.Int())
-
-		// TODO: insert into txn_diagnostics once the table is made
-
-		// TODO: mark request complete in txn_diagnostics_requests once the table is made
-
+		// Mark the request as completed in system.transaction_diagnostics_requests
+		if requestId != 0 {
+			_, err := txn.ExecEx(ctx, "txn-diag-mark-completed", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"UPDATE system.transaction_diagnostics_requests "+
+					"SET completed = true, transaction_diagnostics_id = $1 WHERE id = $2",
+				txnDiagnosticId, requestId)
+			if err != nil {
+				fmt.Printf("failed to mark request as completed: %v\n", err)
+				return err
+			}
+		}
 		return nil
 	})
 
@@ -306,7 +439,7 @@ func (r *TxnRegistry) addTxnRequestInternalLocked(
 func (r *TxnRegistry) findTxnRequestLocked(requestID RequestID) bool {
 	f, ok := r.mu.requests[requestID]
 	if ok {
-		if f.isExpired(timeutil.Now()) {
+		if f.isExpired(r.ts.Now()) {
 			delete(r.mu.requests, requestID)
 		}
 		return true
