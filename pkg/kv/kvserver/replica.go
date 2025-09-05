@@ -1065,25 +1065,25 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 // impacted by changes to the SpanConfig. This should be called after any
 // changes to the span configs.
 func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
-	r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, r, now)
 	})
-	r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, r, now)
 	})
 	if EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
-		r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		_ = r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
-	r.store.leaseQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = r.store.leaseQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, r, now)
 	})
 	// The replicate queue has a relatively more expensive queue check
 	// (shouldQueue), because it scales with the number of stores, and
 	// performs more checks.
 	if EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
-		r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		_ = r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
@@ -2567,15 +2567,19 @@ func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 // manner via the replica scanner, see #130199. This functionality is disabled
 // by default for this reason.
 func (r *Replica) maybeEnqueueProblemRange(
-	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool,
+	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool, maybeLog bool,
 ) {
+
 	// The method expects the caller to provide whether the lease is valid and
 	// the replica is the leaseholder for the range, so that it can avoid
 	// unnecessary work. We expect this method to be called in the context of
 	// updating metrics.
 	if !isLeaseholder || !leaseValid {
 		// The replicate queue will not process the replica without a valid lease.
-		// Nothing to do.
+		// Track when we skip enqueuing for these reasons.
+		log.KvDistribution.Infof(ctx, "not enqueuing replica %s because isLeaseholder=%t, leaseValid=%t",
+			r.Desc(), isLeaseholder, leaseValid)
+		r.store.metrics.DecommissioningNudgerNotLeaseholderOrInvalidLease.Inc(1)
 		return
 	}
 
@@ -2596,10 +2600,43 @@ func (r *Replica) maybeEnqueueProblemRange(
 	// expect a race, however if the value changed underneath us we won't enqueue
 	// the replica as we lost the race.
 	if !r.lastProblemRangeReplicateEnqueueTime.CompareAndSwap(lastTime, now) {
+		// This race condition is expected to be rare.
+		log.KvDistribution.VInfof(ctx, 1, "not enqueuing replica %s due to race: "+
+			"lastProblemRangeReplicateEnqueueTime was updated concurrently", r.Desc())
 		return
 	}
-	r.store.replicateQueue.AddAsync(ctx, r,
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
+	// TODO(dodeca12): Figure out a better way to track the
+	// decommissioning nudger enqueue failures/errors.
+	level := log.Level(2)
+	if maybeLog {
+		level = log.Level(0)
+	}
+	r.store.replicateQueue.AddAsyncWithCallback(ctx, r,
+		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority(), processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				if err != nil {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
+					r.store.metrics.DecommissioningNudgerEnqueueFailure.Inc(1)
+				} else {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
+					r.store.metrics.DecommissioningNudgerEnqueueSuccess.Inc(1)
+				}
+			},
+			onProcessResult: func(err error) {
+				if err != nil {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
+					r.store.metrics.DecommissioningNudgerProcessFailure.Inc(1)
+				} else {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger successfully processed replica %s", r.Desc())
+					r.store.metrics.DecommissioningNudgerProcessSuccess.Inc(1)
+				}
+			},
+		})
 }
 
 // SendStreamStats sets the stats for the replica send streams that belong to

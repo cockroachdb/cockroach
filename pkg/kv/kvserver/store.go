@@ -3354,6 +3354,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()
 
+	// TODO(wenyihu6): it would be nicer if we can sort the replicas so that we
+	// can always get the nudger story on the same set of replicas, will this
+	// introduce a lot of overhead? For now, it seems fine since we usually see <
+	// 15 ranges on decommission stall.
+	var logBudgetOnDecommissioningNudger = 15
+
 	// We want to avoid having to read this multiple times during the replica
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
@@ -3417,7 +3423,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Decommissioning {
 				// NB: Enqueue is disabled by default from here and throttled async if
 				// enabled.
-				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder)
+				maybeLog := logBudgetOnDecommissioningNudger > 0
+				if maybeLog {
+					logBudgetOnDecommissioningNudger--
+				}
+				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder, maybeLog)
 				decommissioningRangeCount++
 			}
 		}
@@ -3840,7 +3850,7 @@ func (s *Store) ReplicateQueueDryRun(
 		return collectAndFinish(), nil
 	}
 	_, err = s.replicateQueue.processOneChange(
-		ctx, repl, desc, conf, false /* scatter */, true, /* dryRun */
+		ctx, repl, desc, conf, false /* scatter */, true /* dryRun */, -1, /*priorityAtEnqueue*/
 	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
@@ -4019,7 +4029,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return processErr, nil
 }
@@ -4056,7 +4066,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			processed, err := s.replicaGCQueue.process(ctx, repl, nil, -1 /*priorityAtEnqueue*/)
 			if err != nil {
 				return errors.Wrapf(err, "on %s", repl.Desc())
 			}

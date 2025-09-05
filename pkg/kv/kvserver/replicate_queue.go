@@ -100,6 +100,38 @@ var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetti
 	settings.NonNegativeDuration,
 )
 
+// TODO(wenyihu6): move these cluster settings to kvserverbase
+
+// PriorityInversionRequeue is a setting that controls whether to requeue
+// replicas when their priority at enqueue time and processing time is inverted
+// too much (e.g. dropping from a repair action to AllocatorConsiderRebalance).
+// TODO(wenyihu6): flip default to true after landing 152596 to bake
+var PriorityInversionRequeue = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.priority_inversion_requeue_replicate_queue.enabled",
+	"whether the requeue replicas should requeue when enqueued for "+
+		"repair action but ended up consider rebalancing during processing",
+	false,
+)
+
+// ReplicateQueueMaxSize is a setting that controls the max size of the
+// replicate queue. When this limit is exceeded, lower priority replicas (not
+// guaranteed to be the lowest) are dropped from the queue.
+var ReplicateQueueMaxSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.replicate_queue.max_size",
+	"maximum number of replicas that can be queued for replicate queue processing; "+
+		"when this limit is exceeded, lower priority (not guaranteed to be the lowest) "+
+		"replicas are dropped from the queue",
+	defaultQueueMaxSize,
+	settings.WithValidateInt(func(v int64) error {
+		if v < defaultQueueMaxSize {
+			return errors.Errorf("cannot be set to a value lower than %d: %d", defaultQueueMaxSize, v)
+		}
+		return nil
+	}),
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
@@ -287,6 +319,22 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReplicateQueueRequeueDueToPriorityInversion = metric.Metadata{
+		Name: "queue.replicate.priority_inversion.requeue",
+		Help: "Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. " +
+			"A priority inversion occurs when the priority at processing time ends up being lower " +
+			"than at enqueue time. When the priority has changed from a high priority repair action to rebalance, " +
+			"the change is requeued to avoid unfairness.",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueuePriorityInversionTotal = metric.Metadata{
+		Name: "queue.replicate.priority_inversion.total",
+		Help: "Total number of priority inversions in the replicate queue. " +
+			"A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // quorumError indicates a retryable error condition which sends replicas being
@@ -309,6 +357,7 @@ func (e *quorumError) Error() string {
 func (*quorumError) PurgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
+// TODO(wenyihu6): metrics initialization could be cleaned up by using a map.
 type ReplicateQueueMetrics struct {
 	AddReplicaCount                           *metric.Counter
 	AddVoterReplicaCount                      *metric.Counter
@@ -346,6 +395,10 @@ type ReplicateQueueMetrics struct {
 	// TODO(sarkesian): Consider adding metrics for AllocatorRemoveLearner,
 	// AllocatorConsiderRebalance, and AllocatorFinalizeAtomicReplicationChange
 	// allocator actions.
+
+	// Priority Inversion.
+	RequeueDueToPriorityInversion *metric.Counter
+	PriorityInversionTotal        *metric.Counter
 }
 
 func makeReplicateQueueMetrics() ReplicateQueueMetrics {
@@ -382,6 +435,9 @@ func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 		ReplaceDecommissioningReplicaErrorCount:   metric.NewCounter(metaReplicateQueueReplaceDecommissioningReplicaErrorCount),
 		RemoveDecommissioningReplicaSuccessCount:  metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaSuccessCount),
 		RemoveDecommissioningReplicaErrorCount:    metric.NewCounter(metaReplicateQueueRemoveDecommissioningReplicaErrorCount),
+
+		RequeueDueToPriorityInversion: metric.NewCounter(metaReplicateQueueRequeueDueToPriorityInversion),
+		PriorityInversionTotal:        metric.NewCounter(metaReplicateQueuePriorityInversionTotal),
 	}
 }
 
@@ -521,6 +577,7 @@ func (metrics *ReplicateQueueMetrics) trackResultByAllocatorAction(
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
+	maxSize   *settings.IntSetting
 	metrics   ReplicateQueueMetrics
 	allocator allocatorimpl.Allocator
 	storePool storepool.AllocatorStorePool
@@ -545,6 +602,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		storePool = store.cfg.StorePool
 	}
 	rq := &replicateQueue{
+		maxSize: ReplicateQueueMaxSize,
 		metrics: makeReplicateQueueMetrics(),
 		planner: plan.NewReplicaPlanner(allocator, storePool,
 			store.TestingKnobs().ReplicaPlannerKnobs),
@@ -569,16 +627,25 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
-			successes:          store.metrics.ReplicateQueueSuccesses,
-			failures:           store.metrics.ReplicateQueueFailures,
-			storeFailures:      store.metrics.StoreFailures,
-			pending:            store.metrics.ReplicateQueuePending,
-			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
-			purgatory:          store.metrics.ReplicateQueuePurgatory,
-			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
+			processTimeoutFunc:        makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			successes:                 store.metrics.ReplicateQueueSuccesses,
+			failures:                  store.metrics.ReplicateQueueFailures,
+			storeFailures:             store.metrics.StoreFailures,
+			pending:                   store.metrics.ReplicateQueuePending,
+			full:                      store.metrics.ReplicateQueueFull,
+			processingNanos:           store.metrics.ReplicateQueueProcessingNanos,
+			purgatory:                 store.metrics.ReplicateQueuePurgatory,
+			disabledConfig:            kvserverbase.ReplicateQueueEnabled,
+			enqueueAdd:                store.metrics.ReplicateQueueEnqueueAdd,
+			enqueueFailedPrecondition: store.metrics.ReplicateQueueEnqueueFailedPrecondition,
+			enqueueNoAction:           store.metrics.ReplicateQueueEnqueueNoAction,
+			enqueueUnexpectedError:    store.metrics.ReplicateQueueEnqueueUnexpectedError,
 		},
 	)
+	rq.baseQueue.SetMaxSize(ReplicateQueueMaxSize.Get(&store.cfg.Settings.SV))
+	ReplicateQueueMaxSize.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		rq.baseQueue.SetMaxSize(ReplicateQueueMaxSize.Get(&store.cfg.Settings.SV))
+	})
 	updateFn := func() {
 		select {
 		case rq.updateCh <- timeutil.Now():
@@ -632,7 +699,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priorityAtEnqueue float64,
 ) (processed bool, err error) {
 	if tokenErr := repl.allocatorToken.TryAcquire(ctx, rq.name); tokenErr != nil {
 		log.KvDistribution.VEventf(ctx,
@@ -658,7 +725,7 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf)
+		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf, priorityAtEnqueue)
 		if isSnapshotError(err) {
 			// If ChangeReplicas failed because the snapshot failed, we attempt to
 			// retry the operation. The most likely causes of the snapshot failing
@@ -677,20 +744,20 @@ func (rq *replicateQueue) process(
 			log.KvDistribution.Infof(ctx, "%v", err)
 			continue
 		}
-
+		// At the time of writing, requeue => err == nil except for priority
+		// inversions. Priority inversion intentionally returns a priority inversion
+		// error along with requeue = true.
+		if requeue {
+			log.KvDistribution.VEventf(ctx, 1, "re-queuing: %v", err)
+			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
+		}
 		if err != nil {
 			return false, err
 		}
-
 		if testingAggressiveConsistencyChecks {
-			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader); err != nil {
+			if _, err := rq.store.consistencyQueue.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/); err != nil {
 				log.KvDistribution.Warningf(ctx, "%v", err)
 			}
-		}
-
-		if requeue {
-			log.KvDistribution.VEventf(ctx, 1, "re-queuing")
-			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
 		}
 		return true, nil
 	}
@@ -742,7 +809,11 @@ func filterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) trac
 // logging the resulting traces to the DEV channel in the case of errors or
 // when the configured log traces threshold is exceeded.
 func (rq *replicateQueue) processOneChangeWithTracing(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
+	ctx context.Context,
+	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
+	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
 	startTracing := log.ExpensiveLogEnabled(ctx, 1)
@@ -757,7 +828,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	defer sp.Finish()
 
 	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
-		false /* scatter */, false, /* dryRun */
+		false /* scatter */, false /* dryRun */, priorityAtEnqueue,
 	)
 	processDuration := timeutil.Since(processStart)
 	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
@@ -858,15 +929,21 @@ func ShouldRequeue(
 	return requeue
 }
 
+// priorityInversionLogEveryN rate limits how often we log about priority
+// inversion to avoid spams.
+var priorityInversionLogEveryN = log.Every(3 * time.Second)
+
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
 	scatter, dryRun bool,
+	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	change, err := rq.planner.PlanOneChange(
 		ctx, repl, desc, conf, plan.PlannerOptions{Scatter: scatter})
+
 	// When there is an error planning a change, return the error immediately
 	// and do not requeue. It is unlikely that the range or storepool state
 	// will change quickly enough in order to not get the same error and
@@ -889,6 +966,30 @@ func (rq *replicateQueue) processOneChange(
 	// There is nothing further to do during a dry run.
 	if dryRun {
 		return false, nil
+	}
+
+	// At this point, planning returned no error, and we're not doing a dry run.
+	// Check for priority inversion if enabled. If detected, we may requeue the
+	// replica to return an error early to requeue the range instead to avoid
+	// starving other higher priority work.
+	if PriorityInversionRequeue.Get(&rq.store.cfg.Settings.SV) {
+		if inversion, shouldRequeue := allocatorimpl.CheckPriorityInversion(priorityAtEnqueue, change.Action); inversion {
+			rq.metrics.PriorityInversionTotal.Inc(1)
+			if priorityInversionLogEveryN.ShouldLog() {
+				log.KvDistribution.Infof(ctx,
+					"priority inversion during process: shouldRequeue = %t action=%s, priority=%v, enqueuePriority=%v",
+					shouldRequeue, change.Action, change.Action.Priority(), priorityAtEnqueue)
+			}
+			if shouldRequeue {
+				rq.metrics.RequeueDueToPriorityInversion.Inc(1)
+				// Return true to requeue the range. Return the error to ensure it is
+				// logged and tracked in replicate queue bq.failures metrics. See
+				// replicateQueue.process for details.
+				return true /*requeue*/, maybeAnnotateDecommissionErr(
+					errors.Errorf("requing due to priority inversion: action=%s, priority=%v, enqueuePriority=%v",
+						change.Action, change.Action.Priority(), priorityAtEnqueue), change.Action)
+			}
+		}
 	}
 
 	// Track the metrics generated during planning. These are not updated
@@ -922,17 +1023,10 @@ func (rq *replicateQueue) processOneChange(
 }
 
 func maybeAnnotateDecommissionErr(err error, action allocatorimpl.AllocatorAction) error {
-	if err != nil && isDecommissionAction(action) {
+	if err != nil && action.Decommissioning() {
 		err = decommissionPurgatoryError{err}
 	}
 	return err
-}
-
-func isDecommissionAction(action allocatorimpl.AllocatorAction) bool {
-	return action == allocatorimpl.AllocatorRemoveDecommissioningVoter ||
-		action == allocatorimpl.AllocatorRemoveDecommissioningNonVoter ||
-		action == allocatorimpl.AllocatorReplaceDecommissioningVoter ||
-		action == allocatorimpl.AllocatorReplaceDecommissioningNonVoter
 }
 
 // shedLease takes in a leaseholder replica, looks for a target for transferring
