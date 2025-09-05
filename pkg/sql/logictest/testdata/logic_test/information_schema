@@ -43,6 +43,7 @@ information_schema  domains                                table  node  NULL  NU
 information_schema  element_types                          table  node  NULL  NULL
 information_schema  enabled_roles                          table  node  NULL  NULL
 information_schema  engines                                table  node  NULL  NULL
+information_schema  eventlog                               view   node  NULL  NULL
 information_schema  events                                 table  node  NULL  NULL
 information_schema  files                                  table  node  NULL  NULL
 information_schema  foreign_data_wrapper_options           table  node  NULL  NULL
@@ -258,6 +259,7 @@ information_schema  domains                                table  node  NULL  NU
 information_schema  element_types                          table  node  NULL  NULL
 information_schema  enabled_roles                          table  node  NULL  NULL
 information_schema  engines                                table  node  NULL  NULL
+information_schema  eventlog                               view   node  NULL  NULL
 information_schema  events                                 table  node  NULL  NULL
 information_schema  files                                  table  node  NULL  NULL
 information_schema  foreign_data_wrapper_options           table  node  NULL  NULL
@@ -419,6 +421,7 @@ information_schema  domains
 information_schema  element_types
 information_schema  enabled_roles
 information_schema  engines
+information_schema  eventlog
 information_schema  events
 information_schema  files
 information_schema  foreign_data_wrapper_options
@@ -675,6 +678,7 @@ domains
 element_types
 enabled_roles
 engines
+eventlog
 events
 files
 foreign_data_wrapper_options
@@ -977,6 +981,7 @@ system         information_schema  domains                                SYSTEM
 system         information_schema  element_types                          SYSTEM VIEW  NO
 system         information_schema  enabled_roles                          SYSTEM VIEW  NO
 system         information_schema  engines                                SYSTEM VIEW  NO
+system         information_schema  eventlog                               SYSTEM VIEW  NO
 system         information_schema  events                                 SYSTEM VIEW  NO
 system         information_schema  files                                  SYSTEM VIEW  NO
 system         information_schema  foreign_data_wrapper_options           SYSTEM VIEW  NO
@@ -2671,6 +2676,7 @@ NULL     public   system         information_schema  domains                    
 NULL     public   system         information_schema  element_types                          SELECT          NO            YES
 NULL     public   system         information_schema  enabled_roles                          SELECT          NO            YES
 NULL     public   system         information_schema  engines                                SELECT          NO            YES
+NULL     public   system         information_schema  eventlog                               SELECT          NO            YES
 NULL     public   system         information_schema  events                                 SELECT          NO            YES
 NULL     public   system         information_schema  files                                  SELECT          NO            YES
 NULL     public   system         information_schema  foreign_data_wrapper_options           SELECT          NO            YES
@@ -2898,6 +2904,7 @@ NULL     public   system         information_schema  domains                    
 NULL     public   system         information_schema  element_types                          SELECT          NO            YES
 NULL     public   system         information_schema  enabled_roles                          SELECT          NO            YES
 NULL     public   system         information_schema  engines                                SELECT          NO            YES
+NULL     public   system         information_schema  eventlog                               SELECT          NO            YES
 NULL     public   system         information_schema  events                                 SELECT          NO            YES
 NULL     public   system         information_schema  files                                  SELECT          NO            YES
 NULL     public   system         information_schema  foreign_data_wrapper_options           SELECT          NO            YES
@@ -3507,6 +3514,13 @@ query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.column_privileges WHERE table_name = 'eventlog'
 ----
 grantor  grantee  table_catalog  table_schema  table_name  column_name  privilege_type  is_grantable
+NULL     public   system         information_schema  eventlog    timestamp    SELECT          NULL
+NULL     public   system         information_schema  eventlog    eventType    SELECT          NULL
+NULL     public   system         information_schema  eventlog    targetID     SELECT          NULL
+NULL     public   system         information_schema  eventlog    reportingID  SELECT          NULL
+NULL     public   system         information_schema  eventlog    info         SELECT          NULL
+NULL     public   system         information_schema  eventlog    uniqueID     SELECT          NULL
+NULL     public   system         information_schema  eventlog    payload      SELECT          NULL
 NULL     admin    system         public        eventlog    timestamp    SELECT          NULL
 NULL     admin    system         public        eventlog    eventType    SELECT          NULL
 NULL     admin    system         public        eventlog    targetID     SELECT          NULL
