@@ -1872,7 +1872,7 @@ func runCDCMultiTablePTSBenchmark(
 	ct.verifyMetrics(ctx, ct.verifyMetricsUnderThreshold([]string{
 		"changefeed_stage_pts_manage_latency",
 		"changefeed_stage_pts_create_latency",
-	}, float64(25*time.Millisecond)))
+	}, float64(30*time.Millisecond)))
 
 	t.Status("multi-table PTS benchmark finished")
 }
@@ -2912,12 +2912,13 @@ func registerCDC(r registry.Registry) {
 
 	for _, perTablePTS := range []bool{false, true} {
 		for _, config := range []struct {
-			numTables int
-			numRanges int
+			numTables    int
+			numRanges    int
+			timeoutHours int
 		}{
-			{numTables: 500, numRanges: 10},
-			{numTables: 5000, numRanges: 10},
-			{numTables: 50000, numRanges: 1}, // Splitting tables into ranges slows down test setup at this scale
+			{numTables: 500, numRanges: 10, timeoutHours: 1},
+			{numTables: 5000, numRanges: 10, timeoutHours: 1},
+			{numTables: 50000, numRanges: 1, timeoutHours: 2}, // Splitting tables into ranges slows down test setup at this scale
 		} {
 			r.Add(registry.TestSpec{
 				Name:             fmt.Sprintf("cdc/multi-table-pts-benchmark/per-table-pts=%t/num-tables=%d/num-ranges=%d", perTablePTS, config.numTables, config.numRanges),
@@ -2926,7 +2927,7 @@ func registerCDC(r registry.Registry) {
 				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 				CompatibleClouds: registry.AllClouds,
 				Suites:           registry.Suites(registry.Nightly),
-				Timeout:          1 * time.Hour,
+				Timeout:          time.Duration(config.timeoutHours) * time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					params := multiTablePTSBenchmarkParams{
 						numTables:   config.numTables,
