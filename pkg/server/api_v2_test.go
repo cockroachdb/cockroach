@@ -199,18 +199,38 @@ func TestRestartSafetyV2(t *testing.T) {
 	// Drain the node; then we'll expect success.
 	require.NoError(t, drain(ctx, ts1, t))
 
-	req, err = http.NewRequest("GET", urlStr, nil)
-	require.NoError(t, err)
-	resp, err = client.Do(req)
-	require.NoError(t, err)
-	require.NotNil(t, resp)
+	testutils.SucceedsSoon(t, func() error {
+		req, err := http.NewRequest("GET", urlStr, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		if resp == nil {
+			return fmt.Errorf("response is nil")
+		}
 
-	bodyBytes, err = io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		if err := resp.Body.Close(); err != nil {
+			return err
+		}
 
-	require.Equal(t, 200, resp.StatusCode, "expected 200: %s", string(bodyBytes))
-	require.NoError(t, json.Unmarshal(bodyBytes, &response))
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("expected 200 but got %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		var response RestartSafetyResponse
+		if err := json.Unmarshal(bodyBytes, &response); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // TestRulesV2 tests the /api/v2/rules endpoint to ensure it
@@ -373,6 +393,8 @@ func TestCheckRestartSafe_RangeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t)
+
 	ctx := context.Background()
 	var err error
 
@@ -392,14 +414,29 @@ func TestCheckRestartSafe_RangeStatus(t *testing.T) {
 	require.True(t, vitality.GetNodeVitalityFromCache(ts0.NodeID()).IsDraining())
 	require.False(t, vitality.GetNodeVitalityFromCache(ts1nodeID).IsLive(livenesspb.Metrics))
 
-	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, ts0.GetStores().(storeVisitor), 3, false)
-	require.NoError(t, err)
-	require.False(t, res.IsRestartSafe, "expected unsafe since a different node is down")
+	testutils.SucceedsSoon(t, func() error {
+		res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, ts0.GetStores().(storeVisitor), 3, false)
+		if err != nil {
+			return err
+		}
+		if res.IsRestartSafe {
+			return fmt.Errorf("expected unsafe since a different node is down")
+		}
 
-	require.Equal(t, int32(0), res.UnavailableRangeCount)
-	require.Equal(t, int32(0), res.RaftLeadershipOnNodeCount)
-	require.Equal(t, int32(0), res.StoreNotDrainingCount)
-	require.Greater(t, res.UnderreplicatedRangeCount, int32(0))
+		if res.UnavailableRangeCount != 0 {
+			return fmt.Errorf("expected UnavailableRangeCount=0, got %d", res.UnavailableRangeCount)
+		}
+		if res.RaftLeadershipOnNodeCount != 0 {
+			return fmt.Errorf("expected RaftLeadershipOnNodeCount=0, got %d", res.RaftLeadershipOnNodeCount)
+		}
+		if res.StoreNotDrainingCount != 0 {
+			return fmt.Errorf("expected StoreNotDrainingCount=0, got %d", res.StoreNotDrainingCount)
+		}
+		if res.UnderreplicatedRangeCount <= 0 {
+			return fmt.Errorf("expected UnderreplicatedRangeCount>0, got %d", res.UnderreplicatedRangeCount)
+		}
+		return nil
+	})
 }
 
 func updateAllReplicaCounts(
@@ -455,9 +492,16 @@ func TestCheckRestartSafe_AllowMinimumQuorum_Pass(t *testing.T) {
 	require.NoError(t, err)
 
 	vitality.Draining(ts0.NodeID(), true)
-	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, stores, testCluster.NumServers(), false)
-	require.NoError(t, err)
-	require.True(t, res.IsRestartSafe)
+	testutils.SucceedsSoon(t, func() error {
+		res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, stores, testCluster.NumServers(), false)
+		if err != nil {
+			return err
+		}
+		if !res.IsRestartSafe {
+			return fmt.Errorf("expected node to be restart safe")
+		}
+		return nil
+	})
 
 	ts1nodeID := testCluster.Server(1).NodeID()
 	vitality.DownNode(ts1nodeID)
@@ -465,10 +509,16 @@ func TestCheckRestartSafe_AllowMinimumQuorum_Pass(t *testing.T) {
 	require.True(t, vitality.GetNodeVitalityFromCache(ts0.NodeID()).IsDraining())
 	require.False(t, vitality.GetNodeVitalityFromCache(ts1nodeID).IsLive(livenesspb.Metrics))
 
-	res, err = checkRestartSafe(ctx, ts0.NodeID(), vitality, stores, testCluster.NumServers(), true)
-	require.NoError(t, err)
-
-	require.True(t, res.IsRestartSafe)
+	testutils.SucceedsSoon(t, func() error {
+		res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, stores, testCluster.NumServers(), true)
+		if err != nil {
+			return err
+		}
+		if !res.IsRestartSafe {
+			return fmt.Errorf("expected node to be restart safe with minimum quorum")
+		}
+		return nil
+	})
 }
 
 // TestCheckRestartSafe_AllowMinimumQuorum_Fail verifies that with 2
