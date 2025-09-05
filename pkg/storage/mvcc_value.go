@@ -328,15 +328,9 @@ func DecodeMVCCValueAndErr(buf []byte, err error) (MVCCValue, error) {
 	return DecodeMVCCValue(buf)
 }
 
-func DecodeTieringAttributeFromMVCCValue(buf []byte) (uint64, error) {
-	if _, ok, err := tryDecodeSimpleMVCCValue(buf); ok || err != nil {
-		return 0, err
-	}
-	v, err := decodeExtendedMVCCValue(buf, true)
-	if err != nil {
-		return 0, err
-	}
-	return v.TieringAttribute, nil
+func DecodeTieringAttributeFromValue(buf []byte) (uint64, error) {
+	v := roachpb.Value{RawBytes: buf}
+	return v.GetTieringAttribute(), nil
 }
 
 // Static error definitions, to permit inlining.

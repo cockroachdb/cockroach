@@ -172,13 +172,18 @@ func prepareInsertOrUpdateBatch(
 		}
 
 		*kvKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-		// We need to ensure that column family 0 contains extra metadata, like composite primary key values.
-		// Additionally, the decoders expect that column family 0 is encoded with a TUPLE value tag, so we
-		// don't want to use the untagged value encoding.
-		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
-			// Storage optimization to store DefaultColumnID directly as a value. Also
-			// backwards compatible with the original BaseFormatVersion.
 
+		// Storage optimization to use the untagged value encoding to store
+		// DefaultColumnID directly as a value. Also backwards compatible with the
+		// original BaseFormatVersion.
+		//
+		// We cannot use this path when the default column family contains extra
+		// metadata, like composite primary key values or a tiering attribute.
+		//
+		// Additionally, the decoders expect that column family 0 is encoded with a
+		// TUPLE value tag, so we don't want to use the untagged value encoding in
+		// that case.
+		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 && tieringAttribute == 0 {
 			idx, ok := valColIDMapping.Get(family.DefaultColumnID)
 			if !ok {
 				continue
@@ -240,9 +245,6 @@ func prepareInsertOrUpdateBatch(
 				// the row exists.
 				if err := helper.CheckRowSize(ctx, kvKey, marshaled.RawBytes, family.ID); err != nil {
 					return nil, err
-				}
-				if tieringAttribute != 0 {
-					marshaled.TieringAttribute = tieringAttribute
 				}
 
 				if oth.IsSet() {
@@ -320,10 +322,7 @@ func prepareInsertOrUpdateBatch(
 			// Copy the contents of rawValueBuf into the roachpb.Value. This is
 			// a deep copy so rawValueBuf can be re-used by other calls to the
 			// function.
-			kvValue.SetTuple(rawValueBuf)
-			if tieringAttribute != 0 {
-				kvValue.TieringAttribute = tieringAttribute
-			}
+			kvValue.SetTupleAndTieringAttribute(rawValueBuf, tieringAttribute)
 			if err := helper.CheckRowSize(ctx, kvKey, kvValue.RawBytes, family.ID); err != nil {
 				return nil, err
 			}

@@ -53,8 +53,15 @@ enum ValueType {
   // TUPLE represents a DTuple, encoded as repeated pairs of varint field number
   // followed by a value encoded Datum.
   TUPLE = 10;
+  // TUPLE_WITH_TIERING_ATTRIBUTE_4 is like TUPLE but the first four bytes
+  // are a 32-bit tiering attribute value (little endian).
+  TUPLE_WITH_TIERING_ATTRIBUTE_4 = 15;
+  // TUPLE_WITH_TIERING_ATTRIBUTE_8 is like TUPLE but the first eight bytes
+  // are a 64-bit tiering attribute value (little endian).
+  TUPLE_WITH_TIERING_ATTRIBUTE_8 = 16;
 
   BITARRAY = 11;
+
 
   // TIMESERIES is applied to values which contain InternalTimeSeriesData.
   TIMESERIES = 100;
@@ -87,12 +94,6 @@ message Value {
   bytes raw_bytes = 1;
   // Timestamp of value.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-
-  // Tiering attribute is used to populate the corresponding field in
-  // MVCCValueHeader.
-  // TODO(radu): prototype the alternative of encoding the tiering attribute
-  // directly into raw_bytes, as an optional header with a special tag.
-  uint64 tiering_attribute = 3;
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
