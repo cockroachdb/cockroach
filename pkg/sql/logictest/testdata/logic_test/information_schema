@@ -4102,6 +4102,7 @@ optimizer_prefer_bounded_cardinality                             on
 optimizer_prove_implication_with_virtual_computed_columns        on
 optimizer_push_limit_into_project_filtered_scan                  on
 optimizer_push_offset_into_index_join                            on
+optimizer_trust_low_histogram_selectivity                        on
 optimizer_use_conditional_hoist_fix                              on
 optimizer_use_delete_range_fast_path                             on
 optimizer_use_exists_filter_hoist_rule                           on
