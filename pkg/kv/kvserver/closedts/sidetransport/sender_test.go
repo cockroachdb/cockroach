@@ -622,7 +622,7 @@ type mockDialer struct {
 	}
 }
 
-var _ nodeDialer = &mockDialer{}
+var _ rpcbase.NodeDialer = &mockDialer{}
 
 type nodeAddr struct {
 	nid  roachpb.NodeID
@@ -825,7 +825,7 @@ type failingDialer struct {
 	dialCount int32
 }
 
-var _ nodeDialer = &failingDialer{}
+var _ rpcbase.NodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
@@ -858,8 +858,14 @@ func TestRPCConnStopOnClose(t *testing.T) {
 
 	dialer := &failingDialer{}
 	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
-	connection := factory.new(nil, /* sender is not needed as dialer always fails Dial attempts */
-		roachpb.NodeID(1))
+
+	s, stopper := newMockSender(factory)
+	defer stopper.Stop(ctx)
+
+	// While sender is strictly not needed to dial a connection as dialer
+	// always fails dial attempts, it is needed to check if DRPC is enabled
+	// or disabled.
+	connection := factory.new(s, roachpb.NodeID(1))
 	connection.run(ctx, stopper)
 
 	// Wait for first dial attempt for sanity reasons.
