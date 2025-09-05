@@ -90,6 +90,16 @@ const (
 	// values from the spans a check constraint is allowed to have in order to build
 	// a histogram from it.
 	maxValuesForFullHistogramFromCheckConstraint = tabledesc.MaxBucketAllowed
+
+	// histogramPessimisticThreshold determines the cutoff point below which the
+	// selectivity estimate of a histogram is overridden with a more pessimistic
+	// estimate. This is to avoid over-fitting to a stale or inaccurate histogram.
+	//
+	// The value (1 in 10,000) was chosen because we choose sample sizes according
+	// to table size such that we expect to *nearly* always sample all values with
+	// multiplicity >= row_count/10000. Cardinality estimates below this threshold
+	// are increasingly likely to be inaccurate. See also computeNumberSamples.
+	histogramPessimisticThreshold = 1.0 / 10000.0
 )
 
 // statisticsBuilder is responsible for building the statistics that are
@@ -761,7 +771,10 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 					// is tracked here: https://github.com/cockroachdb/cockroach/issues/50655
 					col := cols.SingleColumn()
 					colStat.Histogram = &props.Histogram{}
-					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
+					// Track the minimum number of rows for which histogram selectivity
+					// estimates are trusted.
+					resolution := histogramPessimisticThreshold * stats.RowCount
+					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram(), resolution)
 				}
 
 				// Make sure the distinct count is at least 1, for the same reason as
@@ -786,7 +799,18 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 					invCols := opt.MakeColSet(invCol)
 					if invColStat, ok := stats.ColStats.Add(invCols); ok {
 						invColStat.Histogram = &props.Histogram{}
-						invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram())
+						// Track the minimum number of rows for which histogram selectivity
+						// estimates are trusted.
+						//
+						// NOTE: an inverted index can have multiple entries per table row.
+						// However, we still use the number of table rows here because the
+						// max multiplicity of a missed value is proportional to the number
+						// of table rows, not the number of inverted index entries. For
+						// example, the arrays [10, 20, 30] and [20, 40, 60] result in six
+						// inverted index entries, but only a maximum multiplicity of two
+						// for the value "20".
+						resolution := histogramPessimisticThreshold * stats.RowCount
+						invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram(), resolution)
 						// Set inverted entry counts from the histogram. Make sure the
 						// distinct count is at least 1, for the same reason as the row
 						// count above.
@@ -4558,9 +4582,14 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		newCount := newHist.ValuesCount()
 		oldCount := oldHist.ValuesCount()
 
-		// Calculate the selectivity of the predicate. Nulls are already included
-		// in the histogram, so we do not need to account for them separately.
+		// Calculate the selectivity of the predicate using the histogram. Nulls
+		// are already included in the histogram, so we do not need to account for
+		// them separately.
 		predicateSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
+
+		// Possibly clamp the selectivity to a higher value to avoid overly
+		// optimistic estimates.
+		predicateSelectivity = sb.clampSelForHistogram(inputColStat, colStat, s, predicateSelectivity)
 
 		// The maximum possible selectivity of the entire expression is the minimum
 		// selectivity of all individual predicates.
@@ -4570,6 +4599,34 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 	}
 
 	return selectivity, selectivityUpperBound
+}
+
+// clampSelForHistogram clamps the selectivity estimate derived from a histogram
+// to a minimum value. This accounts for the possibility that the histogram is
+// missing values due to sampling or staleness. See also
+// histogramPessimisticThreshold.
+func (sb *statisticsBuilder) clampSelForHistogram(
+	oldColStat, newColStat *props.ColumnStatistic, s *props.Statistics, originalSel props.Selectivity,
+) (clampedSel props.Selectivity) {
+	clampedSel = originalSel
+	oldHist, newHist := oldColStat.Histogram, newColStat.Histogram
+	if sb.evalCtx.SessionData().OptimizerClampLowHistogramSelectivity &&
+		newHist.ValuesCount() < oldHist.Resolution() {
+		// NOTE: columns with histograms are skipped when considering distinct
+		// counts in selectivityFromSingleColDistinctCounts, so this doesn't
+		// double count the effect of the predicate.
+		resClamp := props.MakeSelectivityFromFraction(newColStat.DistinctCount, oldColStat.DistinctCount)
+
+		// Cap the selectivity so that the row count estimate is no more than the
+		// pessimistic threshold. This can result in a lower estimate if the
+		// multiplicities of the filtered values really are low compared to the
+		// average multiplicity.
+		resClamp = props.MinSelectivity(resClamp,
+			props.MakeSelectivityFromFraction(oldHist.Resolution(), s.RowCount),
+		)
+		clampedSel = props.MaxSelectivity(clampedSel, resClamp)
+	}
+	return clampedSel
 }
 
 // selectivityFromMaxFrequencies calculates the selectivity of an equality
@@ -5332,7 +5389,10 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 			colStat.NullCount = nullCount
 			if useHistogram {
 				colStat.Histogram = &props.Histogram{}
-				colStat.Histogram.Init(sb.evalCtx, firstColID, histogram)
+				// Track the minimum number of rows for which histogram selectivity
+				// estimates are trusted.
+				resolution := histogramPessimisticThreshold * statistics.RowCount
+				colStat.Histogram.Init(sb.evalCtx, firstColID, histogram, resolution)
 			}
 			sb.finalizeFromRowCountAndDistinctCounts(colStat, statistics)
 			tabMeta.AddCheckConstraintsStats(firstColID, colStat)
