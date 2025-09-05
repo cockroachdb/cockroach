@@ -36,6 +36,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
     ],
 )
