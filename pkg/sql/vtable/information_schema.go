@@ -1444,3 +1444,16 @@ CREATE TABLE information_schema.table_constraints_extensions (
 	secondary_engine_attribute STRING,
 	table_name STRING
 )`
+
+// InformationSchemaEventLog provides access to the system.eventlog table
+const InformationSchemaEventLog = `
+CREATE VIEW information_schema.eventlog AS
+SELECT
+	"timestamp",
+	"eventType",
+	"targetID",
+	"reportingID",
+	"info",
+	"uniqueID",
+	"payload"
+FROM system.eventlog`
