@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
@@ -65,6 +66,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kmsg"
+	"github.com/twmb/franz-go/pkg/kversion"
 )
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
@@ -1552,9 +1557,15 @@ func (b *changefeedResumer) resumeWithRetries(
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
-		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
+		flowErr := func() error {
+			if err := maybeCreateKafkaTopics(ctx, jobID, details, execCfg); err != nil {
+				return errors.Wrap(err, "failed to create kafka topics")
+			}
 
-		if flowErr == nil {
+			if err := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec); err != nil {
+				return errors.Wrap(err, "failed to upgrade pre-production ready expression")
+			}
+
 			// startedCh is normally used to signal back to the creator of the job that
 			// the job has started; however, in this case nothing will ever receive
 			// on the channel, causing the changefeed flow to block. Replace it with
@@ -1594,10 +1605,8 @@ func (b *changefeedResumer) resumeWithRetries(
 					}
 				}
 			})
-
-			flowErr = g.Wait()
-
-			if flowErr == nil {
+			err := g.Wait()
+			if err == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
 			}
 
@@ -1606,9 +1615,11 @@ func (b *changefeedResumer) resumeWithRetries(
 				continue
 			}
 
-			if knobs != nil && knobs.HandleDistChangefeedError != nil {
-				flowErr = knobs.HandleDistChangefeedError(flowErr)
-			}
+			return nil
+		}()
+
+		if knobs != nil && knobs.HandleDistChangefeedError != nil {
+			flowErr = knobs.HandleDistChangefeedError(flowErr)
 		}
 
 		// Terminate changefeed if needed.
@@ -2123,4 +2134,123 @@ func getChangefeedEventMigrator(migrateEvent bool) log.StructuredEventMigrator {
 		},
 		channel.CHANGEFEED,
 	)
+}
+func maybeCreateKafkaTopics(ctx context.Context, jobID jobspb.JobID, details jobspb.ChangefeedDetails, execCfg *sql.ExecutorConfig, targets changefeedbase.Targets) error {
+	ctx, span := tracing.ChildSpan(ctx, "maybeCreateKafkaTopics")
+	defer span.Finish()
+
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
+	createTopics, err := opts.GetCreateKafkaTopics()
+	if err != nil {
+		return err
+	}
+	if createTopics != changefeedbase.CreateKafkaTopicsYes {
+		return nil
+	}
+
+	parsedSinkURL, err := url.Parse(details.SinkURI)
+	if err != nil {
+		return err
+	}
+	if !isKafkaSink(parsedSinkURL) {
+		return nil
+	}
+
+	sinkURL := &changefeedbase.SinkURL{URL: parsedSinkURL}
+
+	// Build a TopicNamer and derive the exact set of topic names for this changefeed.
+	topicNamer, err := buildKafkaTopicNamer(targets, sinkURL)
+	if err != nil {
+		return err
+	}
+	topics := topicNamer.DisplayNamesSlice()
+
+	// Build kafka client & admin using shared helper.
+	bootstrapBrokers := strings.Split(sinkURL.Host, `,`)
+	sinkOpts, err := opts.GetKafkaSinkOptions()
+	if err != nil {
+		return err
+	}
+	clientOpts, err := buildKgoConfig(ctx, sinkURL, sinkOpts.JSONConfig, nil /* netMetrics */)
+	if err != nil {
+		return err
+	}
+	client, adminClient, err := buildKafkaClients(ctx, bootstrapBrokers, false /* allowAutoTopic */, clientOpts, kafkaSinkV2Knobs{})
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	// version check -- only kafka 2.4+ supports create topics with default values (-1)
+	// lmao this sucks
+	v24 := kversion.V2_4_0()
+	v24kvm, ok := v24.LookupMaxKeyVersion(kmsg.CreateTopics.Int16())
+	if !ok {
+		return errors.AssertionFailedf("v2.4.0 does not support create topics but it should")
+	}
+
+	vr, err := adminClient.(*kadm.Client).ApiVersions(ctx)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "api versions: %+v", vr)
+	for bid, ver := range vr {
+		if ver.Err != nil {
+			return errors.Wrapf(ver.Err, "failed to get api versions for broker %d", bid)
+		}
+		mv, ok := ver.KeyMaxVersion(kmsg.CreateTopics.Int16())
+		if !ok {
+			return errors.Errorf("broker %d does not support create topics", bid)
+		}
+		if mv < v24kvm {
+			return errors.Errorf("broker %d does not support create topics at >= v2.4.0 level", bid)
+		}
+	}
+
+	// Determine which topics are missing.
+	detailsResp, err := adminClient.ListTopics(ctx, topics...)
+	if err != nil {
+		return err
+	}
+	missing := make([]string, 0, len(topics))
+	for _, t := range topics {
+		d, ok := detailsResp[t]
+		if d.Err != nil && !errors.Is(d.Err, kerr.UnknownTopicOrPartition) {
+			return errors.Wrapf(d.Err, "failed to list topic %s", t)
+		}
+		if !ok || (d.Err != nil && errors.Is(d.Err, kerr.UnknownTopicOrPartition)) {
+			missing = append(missing, t)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	// We need full kadm client for topic creation APIs.
+	kadmClient, ok := adminClient.(*kadm.Client)
+	if !ok {
+		return errors.New("admin client does not support topic creation APIs")
+	}
+
+	vresp, err := kadmClient.ValidateCreateTopics(ctx, -1, -1, nil, missing...)
+	if err != nil {
+		return err
+	}
+	for topic, r := range vresp {
+		if r.Err != nil && !errors.Is(r.Err, kerr.TopicAlreadyExists) {
+			return errors.Wrapf(r.Err, "failed to validate topic creation for topic %s", topic)
+		}
+	}
+
+	cresp, err := kadmClient.CreateTopics(ctx, -1, -1, nil, missing...)
+	if err != nil {
+		return err
+	}
+	for topic, r := range cresp {
+		if r.Err != nil && !errors.Is(r.Err, kerr.TopicAlreadyExists) {
+			return errors.Wrapf(r.Err, "failed to create topic %s", topic)
+		}
+		log.Infof(ctx, "created topic %s with (numPartitions: %d, replicationFactor: %d, configs: %+v)", topic, r.NumPartitions, r.ReplicationFactor, r.Configs)
+	}
+	return nil
 }

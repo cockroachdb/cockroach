@@ -161,7 +161,7 @@ func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVe
 func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) (cleanup func()) {
 	t.Status("starting Kafka node")
 
-	manager, tearDown := setupKafka(cmvt.ctx, t, c, cmvt.kafkaNodes)
+	manager, tearDown := setupKafka(cmvt.ctx, t, c, cmvt.kafkaNodes, kafkaManagerOpts{})
 	if err := manager.createTopic(cmvt.ctx, targetTable); err != nil {
 		t.Fatal(err)
 	}

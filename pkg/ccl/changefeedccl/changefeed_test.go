@@ -112,6 +112,9 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kfake"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 var testServerRegion = "us-east-1"
@@ -12342,6 +12345,143 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 }
 
 func TestChangefeedExtraHeaders(t *testing.T) {
+	// TODO fix this bad merge
+}
+
+func TestChangefeedCreateKafkaTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	setupKafka := func(t *testing.T, allowAutoTopic bool) (*kfake.Cluster, *kgo.Client, *kadm.Client, func()) {
+		opts := []kfake.Opt{
+			kfake.DefaultNumPartitions(13),
+			kfake.WithLogger(&kfakeLogAdapter{t}),
+		}
+		if allowAutoTopic {
+			opts = append(opts, kfake.AllowAutoTopicCreation())
+		}
+		kafka, err := kfake.NewCluster(opts...)
+		require.NoError(t, err)
+
+		kcli, err := kgo.NewClient(kgo.SeedBrokers(kafka.ListenAddrs()...))
+		require.NoError(t, err)
+		kadmCli := kadm.NewClient(kcli)
+
+		return kafka, kcli, kadmCli, func() {
+			kafka.Close()
+			kcli.Close()
+		}
+	}
+
+	setupTables := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+		sqlDB.Exec(t, `CREATE TABLE bar (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1);`)
+	}
+	setup := func(t *testing.T, allowAutoTopic bool) (*kfake.Cluster, *kgo.Client, *kadm.Client, *sqlutils.SQLRunner, func()) {
+		kafka, kcli, kadmCli, cleanup := setupKafka(t, allowAutoTopic)
+		_, db, stopServer := startTestFullServer(t, feedTestOptions{})
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		setupTables(t, sqlDB)
+		return kafka, kcli, kadmCli, sqlDB, func() {
+			cleanup()
+			stopServer()
+		}
+	}
+
+	assertTopics := func(kadmCli *kadm.Client) {
+		topics, err := kadmCli.ListTopics(ctx)
+		require.NoError(t, err)
+		require.NoError(t, topics.Error())
+
+		require.Equal(t, 2, len(topics))
+		require.Contains(t, topics, "foo")
+		require.Contains(t, topics, "bar")
+		require.Len(t, topics["foo"].Partitions, 13)
+		require.Len(t, topics["bar"].Partitions, 13)
+	}
+
+	createFeed := func(t *testing.T, sqlDB *sqlutils.SQLRunner, kafka *kfake.Cluster, createKafkaTopics string) jobspb.JobID {
+		if createKafkaTopics != "" {
+			createKafkaTopics = fmt.Sprintf(", create_kafka_topics='%s'", createKafkaTopics)
+		}
+		feedRow := sqlDB.QueryRow(t,
+			fmt.Sprintf(`CREATE CHANGEFEED FOR foo, bar INTO 'kafka://%s' WITH end_time='%d' %s`,
+				strings.Join(kafka.ListenAddrs(), ","),
+				timeutil.Now().Add(5*time.Second).UnixNano(),
+				createKafkaTopics,
+			),
+		)
+		var jobID int64
+		feedRow.Scan(&jobID)
+		return jobspb.JobID(jobID)
+	}
+
+	t.Run("create_kafka_topics_yes_on_good_version", func(t *testing.T) {
+		kafka, _, kadmCli, sqlDB, cleanup := setup(t, false)
+		defer cleanup()
+
+		jobID := createFeed(t, sqlDB, kafka, "yes")
+		waitForJobState(sqlDB, t, jobID, jobs.StateSucceeded)
+
+		// NOTE: kfake doesnt seem to respect the validateonly flag, so it doesnt do
+		// exactly the same thing as a regular kafka, though the result is the same.
+		assertTopics(kadmCli)
+	})
+	t.Run("create_kafka_topics_yes_on_bad_version", func(t *testing.T) {
+		t.Skip("idk how to do this quite yet")
+	})
+
+	t.Run("create_kafka_topics_no_present", func(t *testing.T) {
+		kafka, _, kadmCli, sqlDB, cleanup := setup(t, false)
+		defer cleanup()
+
+		resp, err := kadmCli.CreateTopics(ctx, -1, -1, nil, "foo", "bar")
+		require.NoError(t, err)
+		require.NoError(t, resp.Error())
+
+		jobID := createFeed(t, sqlDB, kafka, "no")
+		waitForJobState(sqlDB, t, jobID, jobs.StateSucceeded)
+	})
+	t.Run("create_kafka_topics_no_not_present", func(t *testing.T) {
+		skip.WithIssue(t, 147705, "implement when the quick errors pr merges")
+	})
+	t.Run("create_kafka_topics_auto", func(t *testing.T) {
+		kafka, _, kadmCli, sqlDB, cleanup := setup(t, true)
+		defer cleanup()
+
+		jobID := createFeed(t, sqlDB, kafka, "auto")
+		waitForJobState(sqlDB, t, jobID, jobs.StateSucceeded)
+		assertTopics(kadmCli)
+	})
+	t.Run("create_kafka_topics_omitted (same as auto)", func(t *testing.T) {
+		kafka, _, kadmCli, sqlDB, cleanup := setup(t, true)
+		defer cleanup()
+
+		jobID := createFeed(t, sqlDB, kafka, "")
+		waitForJobState(sqlDB, t, jobID, jobs.StateSucceeded)
+		assertTopics(kadmCli)
+	})
+}
+
+type kfakeLogAdapter struct {
+	t *testing.T
+}
+
+func (k *kfakeLogAdapter) Logf(level kfake.LogLevel, msg string, args ...any) {
+	k.t.Logf(msg, args...)
+}
+
+func (k *kfakeLogAdapter) Level() kfake.LogLevel {
+	return kfake.LogLevelDebug
+}
+
+var _ kfake.Logger = &kfakeLogAdapter{}
+
+func TestDatabaseLevelChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
