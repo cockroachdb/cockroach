@@ -156,6 +156,41 @@ type drpcServer struct {
 	drpc.Mux
 }
 
+// makeStopperInterceptors returns unary and stream interceptors that run
+// incoming RPCs in stopper tasks.
+func makeStopperInterceptors(
+	rpcCtx *Context,
+) (drpcmux.UnaryServerInterceptor, drpcmux.StreamServerInterceptor) {
+	unary := func(
+		ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
+	) (interface{}, error) {
+		var resp interface{}
+		if err := rpcCtx.Stopper.RunTaskWithErr(ctx, rpc, func(ctx context.Context) error {
+			var err error
+			resp, err = handler(ctx, req)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+
+	stream := func(
+		stream drpc.Stream, rpc string, handler drpcmux.StreamHandler,
+	) (interface{}, error) {
+		var resp interface{}
+		if err := rpcCtx.Stopper.RunTaskWithErr(stream.Context(), rpc, func(ctx context.Context) error {
+			var err error
+			resp, err = handler(stream)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	}
+	return unary, stream
+}
+
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
 func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DRPCServer, error) {
 	d := &drpcServer{}
@@ -167,6 +202,16 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 
 	var unaryInterceptors []drpcmux.UnaryServerInterceptor
 	var streamInterceptors []drpcmux.StreamServerInterceptor
+
+	// These interceptors run in the order they're appended. The first
+	// interceptor added becomes the outermost wrapper around the handler.
+
+	// We start with an interceptor that ensures every RPC executes inside a
+	// stopper task. Running the handler in a stopper task lets the stopper
+	// keep track of in-flight RPCs and reject new ones once draining begins.
+	stopUnary, stopStream := makeStopperInterceptors(rpcCtx)
+	unaryInterceptors = append(unaryInterceptors, stopUnary)
+	streamInterceptors = append(streamInterceptors, stopStream)
 
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
@@ -194,19 +239,6 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	})
 	d.Mux = mux
 
-	// NB: any server middleware (server interceptors in gRPC parlance) would go
-	// here:
-	//     dmux = whateverMiddleware1(dmux)
-	//     dmux = whateverMiddleware2(dmux)
-	//     ...
-	//
-	// Each middleware must implement the Handler interface:
-	//
-	//   HandleRPC(stream Stream, rpc string) error
-	//
-	// where Stream
-	// See here for an example:
-	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
 	return d, nil
 }
 
