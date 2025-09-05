@@ -1042,7 +1042,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		log.Ops.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
 	} else {
 		rsr.last.disk = diskCounters
-		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
+		subtractDiskCounters(&diskCounters, &rsr.initialDiskCounters)
 
 		rsr.HostDiskReadBytes.Update(diskCounters.ReadBytes)
 		rsr.HostDiskReadCount.Update(diskCounters.readCount)
@@ -1063,11 +1063,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		}
 	} else {
 		deltaNet = nc // delta since *last* scrape
-		subtractNetworkCounters(&deltaNet, rsr.last.net)
+		subtractNetworkCounters(&deltaNet, &rsr.last.net)
 		rsr.last.net = nc
 
 		// `nc` will now be the delta since *first* scrape.
-		subtractNetworkCounters(&nc, rsr.initialNetCounters)
+		subtractNetworkCounters(&nc, &rsr.initialNetCounters)
 		// TODO(tbg): this is awkward: we're computing the delta above,
 		// why don't we increment the counters?
 		rsr.HostNetRecvBytes.Update(int64(nc.IOCounters.BytesRecv))
@@ -1444,8 +1444,36 @@ func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 }
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
-// saving the results in `from`.
-func subtractDiskCounters(from *DiskStats, sub DiskStats) {
+// saving the results in `from`. If any counter in `from` is lower than the
+// corresponding counter in `sub` (indicating a reset), the baseline in `sub` is
+// updated to the current value in `from` to establish a new baseline.
+func subtractDiskCounters(from *DiskStats, sub *DiskStats) {
+	if from.WriteBytes < sub.WriteBytes {
+		sub.WriteBytes = from.WriteBytes
+	}
+	if from.writeCount < sub.writeCount {
+		sub.writeCount = from.writeCount
+	}
+	if from.writeTime < sub.writeTime {
+		sub.writeTime = from.writeTime
+	}
+	if from.ReadBytes < sub.ReadBytes {
+		sub.ReadBytes = from.ReadBytes
+	}
+	if from.readCount < sub.readCount {
+		sub.readCount = from.readCount
+	}
+	if from.readTime < sub.readTime {
+		sub.readTime = from.readTime
+	}
+	if from.ioTime < sub.ioTime {
+		sub.ioTime = from.ioTime
+	}
+	if from.weightedIOTime < sub.weightedIOTime {
+		sub.weightedIOTime = from.weightedIOTime
+	}
+
+	// Perform normal subtraction
 	from.writeCount -= sub.writeCount
 	from.WriteBytes -= sub.WriteBytes
 	from.writeTime -= sub.writeTime
@@ -1476,8 +1504,51 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 }
 
 // subtractNetworkCounters subtracts the counters in `sub` from the counters in `from`,
-// saving the results in `from`.
-func subtractNetworkCounters(from *netCounters, sub netCounters) {
+// saving the results in `from`. If any counter in `from` is lower than the
+// corresponding counter in `sub` (indicating a reset), the baseline in `sub` is
+// updated to the current value in `from` to establish a new baseline.
+func subtractNetworkCounters(from *netCounters, sub *netCounters) {
+	if from.IOCounters.BytesRecv < sub.IOCounters.BytesRecv {
+		sub.IOCounters.BytesRecv = from.IOCounters.BytesRecv
+	}
+	if from.IOCounters.PacketsRecv < sub.IOCounters.PacketsRecv {
+		sub.IOCounters.PacketsRecv = from.IOCounters.PacketsRecv
+	}
+	if from.IOCounters.Errin < sub.IOCounters.Errin {
+		sub.IOCounters.Errin = from.IOCounters.Errin
+	}
+	if from.IOCounters.Dropin < sub.IOCounters.Dropin {
+		sub.IOCounters.Dropin = from.IOCounters.Dropin
+	}
+	if from.IOCounters.BytesSent < sub.IOCounters.BytesSent {
+		sub.IOCounters.BytesSent = from.IOCounters.BytesSent
+	}
+	if from.IOCounters.PacketsSent < sub.IOCounters.PacketsSent {
+		sub.IOCounters.PacketsSent = from.IOCounters.PacketsSent
+	}
+	if from.IOCounters.Errout < sub.IOCounters.Errout {
+		sub.IOCounters.Errout = from.IOCounters.Errout
+	}
+	if from.IOCounters.Dropout < sub.IOCounters.Dropout {
+		sub.IOCounters.Dropout = from.IOCounters.Dropout
+	}
+	if from.TCPRetransSegs < sub.TCPRetransSegs {
+		sub.TCPRetransSegs = from.TCPRetransSegs
+	}
+	if from.TCPFastRetrans < sub.TCPFastRetrans {
+		sub.TCPFastRetrans = from.TCPFastRetrans
+	}
+	if from.TCPTimeouts < sub.TCPTimeouts {
+		sub.TCPTimeouts = from.TCPTimeouts
+	}
+	if from.TCPSlowStartRetrans < sub.TCPSlowStartRetrans {
+		sub.TCPSlowStartRetrans = from.TCPSlowStartRetrans
+	}
+	if from.TCPLossProbes < sub.TCPLossProbes {
+		sub.TCPLossProbes = from.TCPLossProbes
+	}
+
+	// Perform normal subtraction
 	from.IOCounters.BytesRecv -= sub.IOCounters.BytesRecv
 	from.IOCounters.PacketsRecv -= sub.IOCounters.PacketsRecv
 	from.IOCounters.Errin -= sub.IOCounters.Errin
