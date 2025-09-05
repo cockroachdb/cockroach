@@ -9,27 +9,18 @@ import (
 	context "context"
 
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // DialDistSQLClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
 // RPCDistSQLClient.
 func DialDistSQLClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	nd *nodedialer.Dialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCDistSQLClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCDistSQLClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCDistSQLClientAdapter(conn), nil
+	return nodedialer.DialRPCClient(nd, ctx, nodeID, class, NewGRPCDistSQLClientAdapter, NewDRPCDistSQLClientAdapter)
 }
 
 // DialDistSQLClientNoBreaker establishes a DRPC connection if enabled;
@@ -41,17 +32,7 @@ func DialDistSQLClientNoBreaker(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
+	cs *cluster.Settings,
 ) (RPCDistSQLClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCDistSQLClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCDistSQLClientAdapter(conn), nil
+	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class, NewGRPCDistSQLClientAdapter, NewDRPCDistSQLClientAdapter, cs)
 }
