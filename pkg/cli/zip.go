@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"io"
 	"net"
 	"os"
@@ -233,6 +234,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	var tenants []*serverpb.Tenant
 	if err := func() error {
 		s := zr.start("discovering virtual clusters")
+		serverCfg.User = username.MakeSQLUsernameFromPreNormalizedString("maxroach")
 		conn, finish, err := newClientConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
