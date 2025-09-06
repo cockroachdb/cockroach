@@ -39,6 +39,7 @@ type renameTableNode struct {
 //	       mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //	       on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
+	// copy this
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -65,6 +66,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return newZeroNode(nil /* columns */), nil
 	}
 
+	// copy this?
 	if err := checkViewMatchesMaterialized(tableDesc, n.IsView, n.IsMaterialized); err != nil {
 		return nil, err
 	}
@@ -79,6 +81,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 
 	// Check if any objects depend on this table/view/sequence via its name.
 	// If so, then we disallow renaming, otherwise we allow it.
+	// copy this
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
 			return nil, p.dependentError(
@@ -129,6 +132,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
+		// copy this
+
 		// Otherwise, resolve the new qualified name of the table. We are in the
 		// process of deprecating qualified rename targets, so issue a notice.
 		// TODO (rohany): Convert this to take in an unqualified name after 20.2
@@ -174,6 +179,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Special checks for tables, view and sequences to determine if cross
 	// DB references would occur.
+	// copy this
 	if oldTn.Catalog() != newTn.Catalog() {
 		err := n.checkForCrossDbReferences(ctx, p, targetDbDesc)
 		if err != nil {
@@ -189,6 +195,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
+	// copy this?
 	err := descs.CheckObjectNameCollision(
 		params.ctx,
 		p.Descriptors(),
@@ -230,6 +237,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// copy this?
 	metadataUpdater := descmetadata.NewMetadataUpdater(
 		ctx,
 		p.InternalSQLTxn(),
@@ -247,6 +255,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Log Rename Table event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
+	// copy this
 	return p.logEvent(ctx,
 		tableDesc.ID,
 		&eventpb.RenameTable{
