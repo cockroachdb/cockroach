@@ -576,8 +576,10 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 				inputLocs[i].URIsByOriginalLocalityKV[index] = index
 			}
 
-			uris, res, locs, err := backupinfo.ValidateEndTimeAndTruncate(
-				inputURIs, tc.manifests, inputLocs,
+			manifestEntries, err := backupinfo.ZipBackupTreeEntries(inputURIs, tc.manifests, inputLocs)
+			require.NoError(t, err)
+			manifestEntries, err = backupinfo.ValidateEndTimeAndTruncate(
+				manifestEntries,
 				hlc.Timestamp{WallTime: int64(tc.endTime)},
 				false, /* includeSkipped */
 				tc.includeCompacted,
@@ -586,6 +588,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 				require.ErrorContains(t, err, tc.err)
 				return
 			}
+			uris, res, locs := backupinfo.UnzipBackupTreeEntries(manifestEntries)
 			require.Equal(t, len(tc.expected), len(res))
 			require.Equal(t, expectedOrder, uris)
 			require.Len(t, locs, len(tc.expected))

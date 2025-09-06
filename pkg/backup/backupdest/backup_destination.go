@@ -688,12 +688,18 @@ func ResolveBackupManifests(
 
 	totalMemSize := ownedMemSize
 	ownedMemSize = 0
-	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := backupinfo.ValidateEndTimeAndTruncate(
-		defaultURIs, mainBackupManifests, localityInfo, endTime, includeSkipped, includeCompacted,
+	manifestEntries, err := backupinfo.ZipBackupTreeEntries(
+		defaultURIs, mainBackupManifests, localityInfo,
 	)
-
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
-	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+	validatedEntries, err := backupinfo.ValidateEndTimeAndTruncate(
+		manifestEntries, endTime, includeSkipped, includeCompacted,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	uris, manifests, localityInfo := backupinfo.UnzipBackupTreeEntries(validatedEntries)
+	return uris, manifests, localityInfo, totalMemSize, nil
 }
