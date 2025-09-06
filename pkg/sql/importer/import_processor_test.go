@@ -774,6 +774,11 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT id FROM t ORDER BY id`,
 		sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
 	)
+
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.Summary.EntryCounts != nil })
+	for _, e := range js.prog.Summary.EntryCounts {
+		require.Equal(t, int64(csv1.numRows), e)
+	}
 }
 
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
@@ -875,6 +880,11 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// Verify that after resume we have not processed any additional rows.
 	assert.Zero(t, importSummary.Rows)
+
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.Summary.EntryCounts != nil })
+	for _, e := range js.prog.Summary.EntryCounts {
+		require.Equal(t, int64(csv1.numRows+csv2.numRows+csv3.numRows), e)
+	}
 }
 
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
