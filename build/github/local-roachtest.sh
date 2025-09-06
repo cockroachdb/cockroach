@@ -48,5 +48,5 @@ $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest run \
   --workload "$BAZEL_BIN/pkg/cmd/workload/workload_/workload" \
   --artifacts $PWD/artifacts \
   --github \
-  --suite acceptance
+  acceptance/event-log
 
