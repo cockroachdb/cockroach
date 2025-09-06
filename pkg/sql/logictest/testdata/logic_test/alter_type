@@ -373,8 +373,15 @@ INSERT INTO uses_alphabets_2 VALUES(1);
 statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
 
+
+statement ok
+ALTER TABLE uses_alphabets_2 SET (schema_locked=false)
+
 statement ok
 TRUNCATE uses_alphabets_2
+
+statement ok
+ALTER TABLE uses_alphabets_2 RESET (schema_locked)
 
 statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
@@ -551,7 +558,14 @@ statement error could not remove enum value "b" as it is being used by table "te
 ALTER TYPE alphabets_60004 DROP VALUE 'b'
 
 statement ok
+ALTER TABLE using_alphabets_60004 SET (schema_locked=false);
+
+statement ok
 TRUNCATE using_alphabets_60004
+
+statement ok
+ALTER TABLE using_alphabets_60004 RESET (schema_locked);
+
 
 statement ok
 ALTER TYPE alphabets_60004 DROP VALUE 'c'
@@ -563,7 +577,15 @@ statement error could not remove enum value "b" as it is being used by table "te
 ALTER TYPE alphabets_60004 DROP VALUE 'b'
 
 statement ok
+ALTER TABLE using_alphabets2_60004 SET (schema_locked=false);
+
+
+statement ok
 TRUNCATE using_alphabets2_60004
+
+statement ok
+ALTER TABLE using_alphabets2_60004 RESET (schema_locked);
+
 
 statement ok
 ALTER TYPE alphabets_60004 DROP VALUE 'a'
@@ -740,7 +762,13 @@ statement error pgcode 2BP01 could not remove enum value "a" as it is being used
 ALTER TYPE typ_127147 DROP VALUE 'a';
 
 statement ok
+ALTER TABLE t SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t;
+
+statement ok
+ALTER TABLE t RESET (schema_locked);
 
 statement ok
 ALTER TYPE typ_127147 DROP VALUE 'a';

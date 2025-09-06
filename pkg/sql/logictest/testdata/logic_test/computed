@@ -280,7 +280,13 @@ SELECT a, b, c, d FROM x
 1 2 3 1
 
 statement ok
+ALTER TABLE x SET (schema_locked=false)
+
+statement ok
 TRUNCATE x
+
+statement ok
+ALTER TABLE x RESET (schema_locked)
 
 # statement ok
 # INSERT INTO x VALUES (2, 3) ON CONFLICT (a) DO UPDATE SET a = 2, b = 3
@@ -294,7 +300,13 @@ SELECT a, b, c, d FROM x
 2 3 4 2
 
 statement ok
+ALTER TABLE x SET (schema_locked=false)
+
+statement ok
 TRUNCATE x
+
+statement ok
+ALTER TABLE x RESET (schema_locked)
 
 statement error cannot write directly to computed column "c"
 UPSERT INTO x VALUES (2, 3, 12)
@@ -771,7 +783,13 @@ SELECT d FROM x
 {1,2,3}
 
 statement ok
+ALTER TABLE x SET (schema_locked=false)
+
+statement ok
 TRUNCATE x
+
+statement ok
+ALTER TABLE x RESET (schema_locked)
 
 # Make sure we get the permutation on the inserts correct.
 
@@ -1005,7 +1023,7 @@ ALTER TABLE x
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE x SET (schema_locked=true);
+ALTER TABLE x RESET (schema_locked);
 
 # Verify a bad statement fails.
 statement error pq: could not parse "a" as type int

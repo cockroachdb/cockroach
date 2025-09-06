@@ -312,7 +312,7 @@ CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_2 > 0
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE t SET (schema_locked=true);
+ALTER TABLE t RESET (schema_locked);
 
 # Referencing an inaccessible column in a FK is not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced by a foreign key
@@ -437,7 +437,7 @@ CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE t SET (schema_locked=true);
+ALTER TABLE t RESET (schema_locked);
 
 statement ok
 CREATE INDEX err ON t (a, (j->'a'));
@@ -1111,7 +1111,13 @@ statement ok
 INSERT INTO l VALUES (1, 1), (6, 6)
 
 statement ok
+ALTER TABLE l SET (schema_locked=false);
+
+statement ok
 TRUNCATE l
+
+statement ok
+ALTER TABLE l RESET (schema_locked);
 
 query II rowsort
 SELECT * FROM l@a_plus_b

@@ -649,7 +649,7 @@ ALTER TABLE colref DROP COLUMN c1;
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE colref SET (schema_locked=true)
+ALTER TABLE colref RESET (schema_locked)
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -685,7 +685,7 @@ ALTER TABLE colref DROP COLUMN c2;
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE colref SET (schema_locked=true)
+ALTER TABLE colref RESET (schema_locked)
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -962,7 +962,7 @@ statement error pq: ALTER TABLE ... ROW LEVEL SECURITY is only implemented in th
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 
 statement ok
-ALTER TABLE roaches SET (schema_locked=true);
+ALTER TABLE roaches RESET (schema_locked);
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -2495,7 +2495,13 @@ trunc  CREATE TABLE public.trunc (
 
 # Truncate should be allowed, despite the policy to prevent deletes.
 statement ok
+ALTER TABLE trunc SET (schema_locked=false)
+
+statement ok
 TRUNCATE TABLE trunc;
+
+statement ok
+ALTER TABLE trunc RESET (schema_locked)
 
 query IT
 SELECT a, b FROM trunc ORDER BY a;
@@ -3225,9 +3231,15 @@ select * from multip ORDER BY key, value;
 statement ok
 SET ROLE root;
 
+statement ok
+ALTER TABLE multip SET (schema_locked=false);
+
 # Setup to verify the write policies.
 statement ok
 TRUNCATE TABLE multip;
+
+statement ok
+ALTER TABLE multip RESET (schema_locked);
 
 statement ok
 CREATE POLICY or1 ON multip AS PERMISSIVE USING (key = 1);

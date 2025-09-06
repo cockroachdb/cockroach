@@ -264,8 +264,15 @@ UPDATE t_idx SET b=b+1 RETURNING w
 
 # Upsert tests on t.
 
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
 statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement error cannot write directly to computed column
 UPSERT INTO t(a,b,v) VALUES (1, 1, 1)
@@ -342,8 +349,15 @@ a  b    v
 
 # Upsert tests on t_idx.
 
+
+statement ok
+ALTER TABLE t_idx SET (schema_locked=false)
+
 statement ok
 TRUNCATE t_idx
+
+statement ok
+ALTER TABLE t_idx RESET (schema_locked)
 
 statement error cannot write directly to computed column
 UPSERT INTO t_idx(a,b,v) VALUES (1, 1, 1)

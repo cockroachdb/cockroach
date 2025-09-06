@@ -372,8 +372,14 @@ SELECT * FROM pks
 
 # Check that UPDATE properly supports ORDER BY (MySQL extension)
 
+statement ok
+ALTER TABLE kv SET (schema_locked=false)
+
 statement count 0
 TRUNCATE kv
+
+statement ok
+ALTER TABLE kv RESET (schema_locked)
 
 statement count 4
 INSERT INTO kv VALUES (1, 9), (8, 2), (3, 7), (6, 4)
@@ -387,8 +393,15 @@ UPDATE kv SET v = v + 1 ORDER BY v DESC LIMIT 3 RETURNING k,v
 
 # Check that UPDATE properly supports LIMIT (MySQL extension)
 
+
+statement ok
+ALTER TABLE kv SET (schema_locked=false)
+
 statement ok
 TRUNCATE kv;
+
+statement ok
+ALTER TABLE kv RESET (schema_locked)
 
 statement count 3
 INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)

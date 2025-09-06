@@ -117,7 +117,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	}
 
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann())); err != nil {
+		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann()), t.n); err != nil {
 			return err
 		}
 
@@ -158,11 +158,18 @@ var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 // so by dropping all existing indexes on the table and creating new ones without
 // backfilling any data into the new indexes. The old indexes are cleaned up
 // asynchronously by the SchemaChangeGCJob.
-func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc string) error {
+func (p *planner) truncateTable(
+	ctx context.Context, id descpb.ID, jobDesc string, truncate *tree.Truncate,
+) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 	if err != nil {
+		return err
+	}
+
+	// Check if this operation is blocked due to schema_locked.
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, truncate); err != nil {
 		return err
 	}
 

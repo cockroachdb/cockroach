@@ -88,7 +88,7 @@ func TestTelemetryLogging(t *testing.T) {
 	db.QueryRow(t, `SHOW database`).Scan(&databaseName)
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-	db.Exec(t, "CREATE TABLE t();")
+	db.Exec(t, "CREATE TABLE t() WITH (schema_locked=false);")
 	db.Exec(t, "CREATE TABLE u(x int);")
 	db.Exec(t, "INSERT INTO u SELECT generate_series(1, 100);")
 	// Use INJECT STATISTICS instead of ANALYZE to avoid test flakes.

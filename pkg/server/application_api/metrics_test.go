@@ -338,7 +338,7 @@ func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 	)
 
 	_, err := db.Exec(`		
-		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE);
+		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE) WITH (schema_locked=false);
 		INSERT INTO tbl (t) VALUES ('d');`)
 	require.NoError(t, err)
 
@@ -529,7 +529,7 @@ func TestUDFStatementMetrics(t *testing.T) {
 	)
 
 	_, err := db.Exec(`		
-		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE);
+		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE) WITH (schema_locked=false);
 		INSERT INTO tbl (t) VALUES ('d');`)
 	require.NoError(t, err)
 

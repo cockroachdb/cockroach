@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/stretchr/testify/require"
 )
 
 // Regression tests for #22304.
@@ -271,8 +272,12 @@ PARTITION ALL BY LIST (r) (
 		}
 		rows.Close()
 
+		_, err = db.Exec(`ALTER TABLE d.upsert SET (schema_locked=false)`)
+		require.NoError(t, err)
 		if _, err := db.Exec(`TRUNCATE TABLE d.upsert`); err != nil {
 			t.Fatal(err)
 		}
+		_, err = db.Exec(`ALTER TABLE d.upsert SET (schema_locked=true)`)
+		require.NoError(t, err)
 	}
 }
