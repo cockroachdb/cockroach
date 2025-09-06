@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
@@ -180,6 +181,11 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 
 		unaryInterceptors = append(unaryInterceptors, a.AuthDRPCUnary())
 		streamInterceptors = append(streamInterceptors, a.AuthDRPCStream())
+	}
+
+	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
+		unaryInterceptors = append(unaryInterceptors, drpcinterceptor.ServerInterceptor(tracer))
+		streamInterceptors = append(streamInterceptors, drpcinterceptor.StreamServerInterceptor(tracer))
 	}
 
 	mux := drpcmux.NewWithInterceptors(unaryInterceptors, streamInterceptors)
