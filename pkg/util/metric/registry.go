@@ -267,7 +267,6 @@ func (r *Registry) ReinitialiseChildMetrics(isDBNameEnabled, isAppNameEnabled bo
 			m.ReinitialiseChildMetrics(labelConfig)
 		}
 	}
-
 }
 
 var (
