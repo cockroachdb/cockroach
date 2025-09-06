@@ -83,6 +83,16 @@ func registerClusterSettings(r registry.Registry) {
 			Owner:     registry.OwnerKV,
 		},
 		{
+			Name:      "kv.prober.read.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 24*3*time.Hour),
+			Owner:     registry.OwnerKV,
+		},
+		{
+			Name:      "kv.prober.write.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 24*3*time.Hour),
+			Owner:     registry.OwnerKV,
+		},
+		{
 			// Change the fraction of replicas that run leader leases.
 			Name: "kv.raft.leader_fortification.fraction_enabled",
 			Generator: timeBasedRandomValue(timeutil.Now, 6*time.Hour, func(rng *rand.Rand) string {
