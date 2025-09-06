@@ -40,11 +40,15 @@ gen_load rate=1000 rw_ratio=0 min_key=0 max_key=10000 raft_cpu_per_write=500000
 eval duration=30m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=260292000, s2=300156000, s3=320067000, s4=299992333, s5=319992666] (stddev=21813256.71, mean=300099999.80, sum=1500499999)
+cpu#1: thrash_pct: [s1=12%, s2=23%, s3=23%, s4=24%, s5=25%]  (sum=108%)
 leases#1: first: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
 leases#1: last:  [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 replicas#1: first: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
 replicas#1: last:  [s1=13, s2=15, s3=16, s4=15, s5=16] (stddev=1.10, mean=15.00, sum=75)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 write_bytes_per_second#1: last:  [s1=520, s2=600, s3=640, s4=599, s5=639] (stddev=43.64, mean=599.60, sum=2998)
+write_bytes_per_second#1: thrash_pct: [s1=45%, s2=21%, s3=24%, s4=26%, s5=24%]  (sum=139%)
 artifacts[mma-only]: f4b2b302e185d34e
 
 # TODO(kvoli): Case (2)

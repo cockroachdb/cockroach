@@ -25,9 +25,13 @@ gen_load rate=15000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access
 eval duration=25m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=15000000, s2=0, s3=15000000, s4=0, s5=0, s6=1515000000, s7=0] (stddev=528430483.14, mean=220714285.71, sum=1545000000)
+cpu#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
 leases#1: first: [s1=11, s2=5, s3=2, s4=2, s5=0, s6=1, s7=0] (stddev=3.63, mean=3.00, sum=21)
 leases#1: last:  [s1=11, s2=5, s3=2, s4=2, s5=0, s6=1, s7=0] (stddev=3.63, mean=3.00, sum=21)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
 replicas#1: first: [s1=21, s2=17, s3=10, s4=6, s5=4, s6=3, s7=2] (stddev=6.85, mean=9.00, sum=63)
 replicas#1: last:  [s1=21, s2=17, s3=10, s4=6, s5=4, s6=3, s7=2] (stddev=6.85, mean=9.00, sum=63)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
 write_bytes_per_second#1: last:  [s1=750, s2=0, s3=750, s4=0, s5=0, s6=750, s7=0] (stddev=371.15, mean=321.43, sum=2250)
+write_bytes_per_second#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
 artifacts[mma-only]: b5747adffb55c2e
