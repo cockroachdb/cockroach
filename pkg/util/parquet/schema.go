@@ -7,12 +7,12 @@ package parquet
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -88,7 +88,19 @@ func NewSchema(columnNames []string, columnTypes []*types.T) (*SchemaDefinition,
 		if columnTypes[i] == nil {
 			return nil, errors.AssertionFailedf("column %s missing type information", columnNames[i])
 		}
-		column, err := makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
+		var column datumColumn
+		var err error
+		if columnTypes[i].Family() == types.DecimalFamily {
+			typ := columnTypes[i]
+			column, err = makeColumn(columnNames[i], types.MakeLabeledTuple([]*types.T{
+				types.MakeDecimal(typ.Precision(), typ.Scale()),
+				types.String,
+			},
+				[]string{"decimal", "string"},
+			), defaultRepetitions)
+		} else {
+			column, err = makeColumn(columnNames[i], columnTypes[i], defaultRepetitions)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -173,14 +185,15 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (d
 		precision := typ.Precision()
 		scale := typ.Scale()
 		if typ.Precision() == 0 {
-			precision = math.MaxInt32
+			precision = tree.DecimalMaxPrecision
 		}
 		if typ.Scale() == 0 {
 			// Scale cannot exceed precision, so we do not set it to math.MaxInt32.
 			// This is relevant for cases when the precision is nonzero, but the scale is 0.
-			scale = precision
+			scale = min(precision, tree.DecimalMaxScale)
 		}
 
+		fmt.Println("AMF: making a column (name: ", colName, ") with precision, scale", precision, scale)
 		result.node, err = schema.NewPrimitiveNodeLogical(colName,
 			repetitions, schema.NewDecimalLogicalType(precision,
 				scale), parquet.Types.ByteArray, defaultTypeLength,
