@@ -10,8 +10,11 @@ import (
 	"regexp/syntax"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 var (
@@ -61,6 +64,26 @@ func (k Key) ToString(sb *strings.Builder, inKey, _ bool) {
 
 func (k Key) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
+}
+
+// isKey returns true if a Path is a Key.
+func isKey(p Path) bool {
+	_, ok := p.(Key)
+	return ok
+}
+
+// lastKeyIndex returns the index of the component which is the
+// last Key component in the paths.
+func lastKeyIndex(ps []Path) int {
+	if len(ps) == 0 {
+		return -1
+	}
+	for i := len(ps) - 1; i >= 0; i-- {
+		if isKey(ps[i]) {
+			return i
+		}
+	}
+	return -1
 }
 
 type Wildcard struct{}
@@ -276,4 +299,87 @@ func (a AnyKey) ToString(sb *strings.Builder, inKey, _ bool) {
 
 func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
+}
+
+// isAllKeyPath returns true if the given paths matches the pattern of
+// $.[key|wildcard].[key|wildcard].[key|wildcard]...
+func isAllKeyPath(ps []Path) bool {
+	if len(ps) == 0 {
+		return false
+	}
+	if _, ok := ps[0].(Root); !ok {
+		return false
+	}
+	for i := 1; i < len(ps); i++ {
+		switch ps[i].(type) {
+		case Wildcard, Key:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func recur(bs [][]byte, ps []Path, idx int, lastKeyIdx int) inverted.Expression {
+	if len(ps) == 0 || idx == len(ps) {
+		return nil
+	}
+	if idx == lastKeyIdx {
+		var res inverted.Expression
+		for _, b := range bs {
+			// It could be the last key of any value path, so we should not add
+			// the JSON path separator.
+			objectKey := append(b[:len(b):len(b)], []byte(ps[idx].(Key))...)
+
+			objectSpan := inverted.Span{
+				Start: objectKey,
+				End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(objectKey)),
+			}
+
+			if res == nil {
+				res = inverted.ExprForSpan(objectSpan, true /* tight */)
+			} else {
+				res = inverted.Or(res, inverted.ExprForSpan(objectSpan, true /* tight */))
+			}
+		}
+
+		return res
+	}
+
+	prefixes := make([][]byte, 0)
+	if isKey(ps[idx]) {
+		for _, b := range bs {
+			// Borrowed from encodeContainingInvertedIndexSpans.
+			// For "a": "b":
+			prefixes = append(prefixes, encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[idx].(Key)), false /* end */))
+			// For "a": ["b":
+			prefixes = append(prefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[idx].(Key)), false /* end */)))
+		}
+	} else {
+		prefixes = bs
+	}
+
+	return recur(prefixes, ps, idx+1, lastKeyIdx)
+}
+
+func EncodeJsonPathInvertedIndexSpans(
+	b []byte, ps Paths,
+) (invertedExpr inverted.Expression, err error) {
+
+	if !isAllKeyPath(ps) {
+		return nil, nil
+	}
+	// No path
+	if len(ps) == 0 {
+		return nil, nil
+	}
+	// Only the root
+	if len(ps) == 1 {
+		emptyObjSpanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(encoding.EncodeJSONEmptyObject(b[:len(b):len(b)])), false, /* tight */
+		)
+		emptyObjSpanExpr.Unique = true
+		return emptyObjSpanExpr, nil
+	}
+	return recur([][]byte{encoding.EncodeJSONAscending(b)}, ps, 0, lastKeyIndex(ps)), nil
 }
