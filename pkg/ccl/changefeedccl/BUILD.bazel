@@ -201,6 +201,7 @@ go_test(
         "alter_changefeed_test.go",
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
+        "changefeed_progress_test.go",
         "changefeed_stmt_test.go",
         "changefeed_test.go",
         "csv_test.go",
