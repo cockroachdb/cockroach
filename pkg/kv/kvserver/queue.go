@@ -623,18 +623,37 @@ func (bq *baseQueue) SetDisabled(disabled bool) {
 
 // SetMaxSize sets the max size of the queue.
 func (bq *baseQueue) SetMaxSize(maxSize int64) {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-	bq.mu.maxSize = maxSize
-	// Drop replicas until no longer exceeding the max size. Note: We call
-	// removeLocked to match the behavior of addInternal. In theory, only
-	// removeFromQueueLocked should be triggered in removeLocked, since the item
-	// is in the priority queue, it should not be processing or in the purgatory
-	// queue. To be safe, however, we use removeLocked.
-	for int64(bq.mu.priorityQ.Len()) > maxSize {
-		pqLen := bq.mu.priorityQ.Len()
-		bq.full.Inc(1)
-		bq.removeLocked(bq.mu.priorityQ.sl[pqLen-1])
+	var droppedItems []*replicaItem
+	func() {
+		bq.mu.Lock()
+		defer bq.mu.Unlock()
+		bq.mu.maxSize = maxSize
+		currentLen := int64(bq.mu.priorityQ.Len())
+		if currentLen > maxSize {
+			itemsToDrop := currentLen - maxSize
+			droppedItems = make([]*replicaItem, 0, itemsToDrop)
+
+			// Drop lower-priority replicas until no longer exceeding the max size.
+			// Note: We call removeLocked to match the behavior of addInternal. In
+			// theory, only removeFromQueueLocked should be triggered in removeLocked,
+			// since the item is in the priority queue, it should not be processing or
+			// in the purgatory queue. To be safe, however, we use removeLocked.
+			for int64(bq.mu.priorityQ.Len()) > maxSize {
+				lastIdx := bq.mu.priorityQ.Len() - 1
+				item := bq.mu.priorityQ.sl[lastIdx]
+				droppedItems = append(droppedItems, item)
+				bq.removeLocked(item)
+			}
+		}
+	}()
+
+	// Notify callbacks outside the lock to avoid holding onto the lock for too
+	// long.
+	for _, item := range droppedItems {
+		bq.updateMetricsOnDroppedDueToFullQueue()
+		for _, cb := range item.callbacks {
+			cb.onEnqueueResult(-1 /*indexOnHeap*/, errDroppedDueToFullQueueSize)
+		}
 	}
 }
 
@@ -802,6 +821,14 @@ func (bq *baseQueue) updateMetricsOnEnqueueUnexpectedError() {
 func (bq *baseQueue) updateMetricsOnEnqueueAdd() {
 	if bq.enqueueAdd != nil {
 		bq.enqueueAdd.Inc(1)
+	}
+}
+
+// updateMetricsOnDroppedDueToFullQueue updates the metrics when a replica is
+// dropped due to a full queue size.
+func (bq *baseQueue) updateMetricsOnDroppedDueToFullQueue() {
+	if bq.full != nil {
+		bq.full.Inc(1)
 	}
 }
 
@@ -983,9 +1010,7 @@ func (bq *baseQueue) addInternal(
 	// scan.
 	if pqLen := bq.mu.priorityQ.Len(); int64(pqLen) > bq.mu.maxSize {
 		replicaItemToDrop := bq.mu.priorityQ.sl[pqLen-1]
-		if bq.full != nil {
-			bq.full.Inc(1)
-		}
+		bq.updateMetricsOnDroppedDueToFullQueue()
 		log.Dev.VInfof(ctx, 1, "dropping due to exceeding queue max size: priority=%0.3f, replica=%v",
 			priority, replicaItemToDrop.replicaID)
 		// TODO(wenyihu6): when we introduce base queue max size cluster setting,
