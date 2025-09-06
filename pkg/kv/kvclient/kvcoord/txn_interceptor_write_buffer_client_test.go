@@ -92,3 +92,71 @@ func TestTxnCoordSenderWriteBufferingDisablesPipelining(t *testing.T) {
 		kvpb.Scan, kvpb.Put, kvpb.EndTxn,
 	}, calls)
 }
+
+// TestTxnCoordSenderWriteBufferingReEnablesPipelining verifies that pipelining
+// is re-enabled after a mid-transaction flush.
+func TestTxnCoordSenderWriteBufferingReEnablesPipelining(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	distSender := s.DistSenderI().(*DistSender)
+	batchCount := 0
+	var calls []kvpb.Method
+	var senderFn kv.SenderFunc = func(
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
+		batchCount++
+		t.Logf("Batch: %#+v", ba.Methods())
+		calls = append(calls, ba.Methods()...)
+		if et, ok := ba.GetArg(kvpb.EndTxn); ok {
+			// Ensure that no transactions enter a STAGING state.
+			et.(*kvpb.EndTxnRequest).InFlightWrites = nil
+		}
+		return distSender.Send(ctx, ba)
+	}
+
+	st := s.ClusterSettings()
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
+
+	tsf := NewTxnCoordSenderFactory(TxnCoordSenderFactoryConfig{
+		AmbientCtx: s.AmbientCtx(),
+		Settings:   st,
+		Clock:      s.Clock(),
+		Stopper:    s.Stopper(),
+		// Disable transaction heartbeats so that they don't disrupt our attempt to
+		// track the requests issued by the transactions.
+		HeartbeatInterval: -1,
+	}, senderFn)
+	db := kv.NewDB(s.AmbientCtx(), tsf, s.Clock(), s.Stopper())
+
+	require.NoError(t, db.Put(ctx, "test-key-a", "hello"))
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetBufferedWritesEnabled(true)
+		if err := txn.Put(ctx, "test-key-c", "hello"); err != nil {
+			return err
+		}
+		if _, err := txn.DelRange(ctx, "test-key", "test-key-d", true); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "test-key-a", "hello"); err != nil {
+			return err
+		}
+		return nil
+	}))
+
+	require.Equal(t, 4, batchCount)
+	require.Equal(t, []kvpb.Method{
+		// The initial setup
+		kvpb.Put,
+		// The first (buffered) Put and the DeleteRange that flushes the buffer.
+		kvpb.Put, kvpb.DeleteRange,
+		// The second (pipelined) Put
+		kvpb.Put,
+		// EndTxn with the QueryIntent because pipelining was turned back on.
+		kvpb.QueryIntent, kvpb.EndTxn,
+	}, calls)
+}
