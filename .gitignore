@@ -66,3 +66,7 @@ pkg/testutils/serverutils/*_generated.go
 .DS_Store
 .idea/
 .vscode/
+# Ignore files directly under .claude because these are local settings
+.claude/*
+# Include files under /commands because these are shared
+!.claude/commands/
