@@ -134,10 +134,12 @@ type TxnSender interface {
 	SetOmitInRangefeeds()
 
 	// SetBufferedWritesEnabled toggles whether the writes are buffered on the
-	// gateway node until the commit time. Only allowed on the RootTxn. Buffered
-	// writes cannot be enabled on a txn that performed any requests. When
-	// disabling buffered writes, if there are any writes in the buffer, they
-	// are flushed with the next BatchRequest.
+	// gateway node until the commit time. Buffered writes cannot be enabled on
+	// a txn that performed any requests. When disabling buffered writes, if
+	// there are any writes in the buffer, they are flushed with the next
+	// BatchRequest.
+	//
+	// Only allowed on the RootTxn.
 	SetBufferedWritesEnabled(bool)
 
 	// BufferedWritesEnabled returns whether the buffered writes are enabled.
@@ -378,6 +380,10 @@ type TxnSender interface {
 	// HasPerformedWrites returns true if a write has been performed in the
 	// transaction's current epoch.
 	HasPerformedWrites() bool
+
+	// HasBufferedWrites returns true if a write has been buffered for the
+	// transaction's current epoch.
+	HasBufferedWrites() bool
 
 	// TestingShouldRetry returns true if transaction retry errors should be
 	// randomly returned to callers. Note that it is the responsibility of
