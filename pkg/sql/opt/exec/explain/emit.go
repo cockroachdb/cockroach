@@ -853,6 +853,30 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
 		ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
+		if a.RightSideForExplainFn != nil {
+			// RightSideForExplainFn can produce multiple lines that correspond
+			// to the unoptimized right side plan. Given the OutputBuilder
+			// expects single-line attributes, we'll treat this right side plan
+			// as a "fake" node where the first line (the expression type) is
+			// used as the "node name".
+			lines := strings.Split(a.RightSideForExplainFn(e.ob.flags.RedactValues), "\n")
+			func() {
+				var enteredNode bool
+				for _, line := range lines {
+					l := strings.TrimSpace(line)
+					if len(l) == 0 {
+						continue
+					}
+					if !enteredNode {
+						ob.EnterNode(l /* name */, nil /* columns */, nil /* ordering */)
+						defer ob.LeaveNode() //nolint:deferloop
+						enteredNode = true
+					} else {
+						ob.Attr(l, "")
+					}
+				}
+			}()
+		}
 
 	case lookupJoinOp:
 		a := n.args.(*lookupJoinArgs)
