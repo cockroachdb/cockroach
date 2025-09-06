@@ -957,6 +957,14 @@ func (ba *BatchRequest) ValidateForEvaluation() error {
 	return nil
 }
 
+// MightStopEarly returns true if any of the batch's options might result in the
+// batch response being returned before all requests have been fully processed
+// without an error.
+func (ba *BatchRequest) MightStopEarly() bool {
+	h := ba.Header
+	return h.MaxSpanRequestKeys != 0 || h.TargetBytes != 0 || h.ReturnElasticCPUResumeSpans
+}
+
 func (cb ColBatches) Size() int {
 	var size int
 	for _, b := range cb.ColBatches {
