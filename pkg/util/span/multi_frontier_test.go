@@ -291,6 +291,27 @@ func TestMultiFrontier_Frontiers(t *testing.T) {
 	}
 }
 
+func TestMultiFrontier_ForwardWithDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f, err := span.NewMultiFrontier(
+		testingTripartitePartitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
+	require.NoError(t, err)
+	require.Equal(t, `1: {{a-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+
+	details, err := f.ForwardWithDetails(sp('a', 'b'), ts(2))
+	require.NoError(t, err)
+	require.False(t, details.FrontierForwarded)
+	require.False(t, details.SubFrontierForwarded)
+	require.Equal(t, `1: {{a-b}@2 {b-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+
+	details, err = f.ForwardWithDetails(sp('b', 'd'), ts(2))
+	require.NoError(t, err)
+	require.False(t, details.FrontierForwarded)
+	require.True(t, details.SubFrontierForwarded)
+	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+}
+
 // testingTripartitePartitioner partitions spans in the range [a, k) into
 // one of three partitions:
 // - 1: [a, d)

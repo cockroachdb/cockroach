@@ -250,10 +250,11 @@ func newResolvedSpanFrontier(
 func (f *resolvedSpanFrontier) ForwardResolvedSpan(
 	r jobspb.ResolvedSpan,
 ) (forwarded bool, err error) {
-	forwarded, err = f.Forward(r.Span, r.Timestamp)
+	details, err := f.ForwardWithDetails(r.Span, r.Timestamp)
 	if err != nil {
 		return false, err
 	}
+	forwarded = details.FrontierForwarded || details.SubFrontierForwarded
 	f.latestTS.Forward(r.Timestamp)
 	if r.BoundaryType != jobspb.ResolvedSpan_NONE {
 		newBoundary := resolvedSpanBoundary{
@@ -439,6 +440,10 @@ type maybeTablePartitionedFrontier interface {
 	// on a per-table basis, the iterator will return a single frontier
 	// with descpb.InvalidID.
 	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
+
+	// ForwardWithDetails is like Forward except it returns more details
+	// about the per-table sub-frontier being forwarded.
+	ForwardWithDetails(sp roachpb.Span, ts hlc.Timestamp) (span.MultiFrontierForwardDetails, error)
 }
 
 var _ maybeTablePartitionedFrontier = (*span.MultiFrontier[descpb.ID])(nil)
@@ -460,6 +465,19 @@ func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.ReadO
 	return func(yield func(descpb.ID, span.ReadOnlyFrontier) bool) {
 		yield(descpb.InvalidID, f.spanFrontier)
 	}
+}
+
+// ForwardWithDetails implements maybeTablePartitionedFrontier.
+func (f notTablePartitionedFrontier) ForwardWithDetails(
+	sp roachpb.Span, ts hlc.Timestamp,
+) (span.MultiFrontierForwardDetails, error) {
+	forwarded, err := f.Forward(sp, ts)
+	if err != nil {
+		return span.MultiFrontierForwardDetails{}, err
+	}
+	return span.MultiFrontierForwardDetails{
+		FrontierForwarded: forwarded,
+	}, nil
 }
 
 // A TableCodec does table-related decoding/encoding.
