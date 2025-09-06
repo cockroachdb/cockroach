@@ -31,6 +31,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/rpc/rpcbase",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server/decommissioning",
