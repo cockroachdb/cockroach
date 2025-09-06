@@ -2183,7 +2183,7 @@ func TestUserPrivileges(t *testing.T) {
 		dbA.Exec(t, fmt.Sprintf("REVOKE SYSTEM REPLICATIONDEST FROM %s", username.TestUser))
 	})
 	t.Run("replication-src", func(t *testing.T) {
-		dbA.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE privilege on relation tab", createStmt, dbBURL2.String())
+		dbA.ExpectErr(t, "user testuser3 does not have either REPLICATIONSOURCE or VIEWSYSTEMTABLE system privilege", createStmt, dbBURL2.String())
 		sourcePriv := "REPLICATIONSOURCE"
 		if rng.Intn(3) == 0 {
 			// Test deprecated privilege name.
@@ -2195,7 +2195,7 @@ func TestUserPrivileges(t *testing.T) {
 		dbB.Exec(t, fmt.Sprintf("REVOKE SYSTEM %s FROM %s", sourcePriv, username.TestUser+"3"))
 	})
 	t.Run("table-level-replication-src", func(t *testing.T) {
-		dbA.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE privilege on relation tab", createStmt, dbBURL2.String())
+		dbA.ExpectErr(t, "user testuser3 does not have either REPLICATIONSOURCE or VIEWSYSTEMTABLE system privilege", createStmt, dbBURL2.String())
 
 		dbB.Exec(t, fmt.Sprintf("GRANT REPLICATIONSOURCE ON TABLE tab TO %s", username.TestUser+"3"))
 		dbA.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
