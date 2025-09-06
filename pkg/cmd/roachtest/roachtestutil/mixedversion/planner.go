@@ -7,8 +7,10 @@ package mixedversion
 
 import (
 	"fmt"
+	"maps"
 	"math/rand"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -1201,11 +1203,7 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
-// mapSingleSteps iterates over every step in the test plan and calls
-// the given function `f` for every `singleStep` (i.e., every step
-// that actually performs an action). The function should return a
-// list of testSteps that replace the given step in the plan.
-func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
+func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []testStep) []testStep {
 	var mapStep func(testStep, bool) []testStep
 	mapStep = func(step testStep, isConcurrent bool) []testStep {
 		switch s := step.(type) {
@@ -1249,47 +1247,61 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 			return f(ss, isConcurrent)
 		}
 	}
-
-	mapSteps := func(steps []testStep) []testStep {
-		var newSteps []testStep
-		for _, s := range steps {
-			newSteps = append(newSteps, mapStep(s, false)...)
-		}
-
-		return newSteps
+	var newSteps []testStep
+	for _, s := range steps {
+		newSteps = append(newSteps, mapStep(s, false)...)
 	}
 
-	mapUpgrades := func(upgrades []*upgradePlan) []*upgradePlan {
-		var newUpgrades []*upgradePlan
-		for _, upgrade := range upgrades {
-			newUpgrades = append(newUpgrades, &upgradePlan{
-				from: upgrade.from,
-				to:   upgrade.to,
-				sequentialStep: sequentialRunStep{
-					label: upgrade.sequentialStep.label,
-					steps: mapSteps(upgrade.sequentialStep.steps),
-				},
-			})
-		}
+	return newSteps
+}
 
-		return newUpgrades
+// mapSingleSteps iterates over every step in the test plan and calls
+// the given function `f` for every `singleStep` (i.e., every step
+// that actually performs an action). The function should return a
+// list of testSteps that replace the given step in the plan.
+func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
+	plan.setup.systemSetup = plan.mapServiceSetup(plan.setup.systemSetup, f)
+	plan.setup.tenantSetup = plan.mapServiceSetup(plan.setup.tenantSetup, f)
+	plan.initSteps = plan.walkSteps(plan.initSteps, f)
+	plan.upgrades = plan.mapUpgrades(plan.upgrades, f)
+}
+
+func (plan *TestPlan) mapServiceSetup(
+	s *serviceSetup, f func(*singleStep, bool) []testStep,
+) *serviceSetup {
+	if s == nil {
+		return nil
 	}
 
-	mapServiceSetup := func(s *serviceSetup) *serviceSetup {
-		if s == nil {
-			return nil
-		}
+	return &serviceSetup{
+		steps:    plan.walkSteps(s.steps, f),
+		upgrades: plan.mapUpgrades(s.upgrades, f),
+	}
+}
 
-		return &serviceSetup{
-			steps:    mapSteps(s.steps),
-			upgrades: mapUpgrades(s.upgrades),
-		}
+func (plan *TestPlan) mapUpgrades(
+	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep,
+) []*upgradePlan {
+	var newUpgrades []*upgradePlan
+	for _, upgrade := range upgrades {
+		newUpgrades = append(newUpgrades, &upgradePlan{
+			from: upgrade.from,
+			to:   upgrade.to,
+			sequentialStep: sequentialRunStep{
+				label: upgrade.sequentialStep.label,
+				steps: plan.walkSteps(upgrade.sequentialStep.steps, f),
+			},
+		})
 	}
 
-	plan.setup.systemSetup = mapServiceSetup(plan.setup.systemSetup)
-	plan.setup.tenantSetup = mapServiceSetup(plan.setup.tenantSetup)
-	plan.initSteps = mapSteps(plan.initSteps)
-	plan.upgrades = mapUpgrades(plan.upgrades)
+	return newUpgrades
+}
+
+func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool) []testStep) {
+	plan.mapServiceSetup(plan.setup.systemSetup, f)
+	plan.mapServiceSetup(plan.setup.tenantSetup, f)
+	plan.walkSteps(plan.initSteps, f)
+	plan.mapUpgrades(plan.upgrades, f)
 }
 
 func newStepIndex(plan *TestPlan) stepIndex {
@@ -1723,6 +1735,7 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	var out strings.Builder
 	allSteps := plan.Steps()
 	for i, step := range allSteps {
+
 		plan.prettyPrintStep(&out, step, treeBranchString(i, len(allSteps)), debug)
 	}
 
@@ -1743,6 +1756,20 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 		}
 
 		addLine("Mutators", strings.Join(mutatorNames, ", "))
+	}
+	// Extract user hooks from the plan.
+	userHooks := make(map[string]string)
+	plan.iterateSingleSteps(func(ss *singleStep, _ bool) []testStep {
+		if hook, ok := ss.impl.(runHookStep); ok {
+			userHooks[hook.hook.id] = hook.hook.name
+		}
+		return nil
+	})
+	if len(userHooks) > 0 {
+		names := slices.Collect(maps.Values(userHooks))
+		// N.B. sort the names to ensure deterministic output.
+		sort.Strings(names)
+		addLine("Hooks", strings.Join(names, ", "))
 	}
 
 	return fmt.Sprintf(
@@ -1791,7 +1818,7 @@ func (plan *TestPlan) prettyPrintStep(
 		}
 
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.ID, debugInfo,
+			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(debug), extras, ss.ID, debugInfo,
 		))
 	}
 

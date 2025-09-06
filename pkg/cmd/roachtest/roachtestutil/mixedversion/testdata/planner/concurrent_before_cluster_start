@@ -19,60 +19,124 @@ ok
 plan debug=true
 ----
 Seed:               12345
-Upgrades:           v24.2.2 → <current>
+Upgrades:           v23.1.17 → v23.2.4 → v24.1.1 → v24.2.2 → v24.3.0 (<current>)
 Deployment mode:    separate-process
+Hooks:              init 1, init 2, init 3
 Plan:
-├── install fixtures for version "v24.2.2" (1) [stage=system:system-setup;tenant:system-setup]
 ├── run before cluster start hooks concurrently
-│   ├── run "init 1", after 0s delay (2) [stage=system:system-setup;tenant:system-setup]
-│   ├── run "init 2", after 30s delay (3) [stage=system:system-setup;tenant:system-setup]
-│   └── run "init 3", after 3m0s delay (4) [stage=system:system-setup;tenant:system-setup]
-├── start cluster at version "v24.2.2" (5) [stage=system:system-setup;tenant:system-setup]
-├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (6) [stage=system:system-setup;tenant:system-setup]
+│   ├── run "init 1" hookId="planner_test.go:124", after 3m0s delay (1) [stage=system:system-setup;tenant:system-setup]
+│   ├── run "init 2" hookId="planner_test.go:124_1", after 3m0s delay (2) [stage=system:system-setup;tenant:system-setup]
+│   └── run "init 3" hookId="planner_test.go:124_2", after 5s delay (3) [stage=system:system-setup;tenant:system-setup]
+├── start cluster at version "v23.1.17" (4) [stage=system:system-setup;tenant:system-setup]
+├── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (5) [stage=system:system-setup;tenant:system-setup]
 ├── run before cluster start hooks concurrently
-│   ├── run "init 1", after 500ms delay (7) [stage=system:tenant-setup;tenant:tenant-setup]
-│   ├── run "init 2", after 5s delay (8) [stage=system:tenant-setup;tenant:tenant-setup]
-│   └── run "init 3", after 0s delay (9) [stage=system:tenant-setup;tenant:tenant-setup]
-├── start separate process virtual cluster mixed-version-tenant-zngg5 with binary version v24.2.2 (10) [stage=system:tenant-setup;tenant:tenant-setup]
-├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on mixed-version-tenant-zngg5 tenant (11) [stage=system:tenant-setup;tenant:tenant-setup]
-├── set cluster setting "spanconfig.tenant_limit" to '50000' on mixed-version-tenant-zngg5 tenant (12) [stage=system:tenant-setup;tenant:tenant-setup]
-├── disable KV and tenant(SQL) rate limiter on mixed-version-tenant-zngg5 tenant (13) [stage=system:tenant-setup;tenant:tenant-setup]
-├── set cluster setting "server.secondary_tenants.authorization.mode" to 'allow-all' on system tenant (14) [stage=system:tenant-setup;tenant:tenant-setup]
-└── upgrade cluster from "v24.2.2" to "<current>"
+│   ├── run "init 1" hookId="planner_test.go:124", after 0s delay (6) [stage=system:tenant-setup;tenant:tenant-setup]
+│   ├── run "init 2" hookId="planner_test.go:124_1", after 30s delay (7) [stage=system:tenant-setup;tenant:tenant-setup]
+│   └── run "init 3" hookId="planner_test.go:124_2", after 500ms delay (8) [stage=system:tenant-setup;tenant:tenant-setup]
+├── start separate process virtual cluster mixed-version-tenant-g5cyv with binary version v23.1.17 (9) [stage=system:tenant-setup;tenant:tenant-setup]
+├── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on mixed-version-tenant-g5cyv tenant (10) [stage=system:tenant-setup;tenant:tenant-setup]
+├── set cluster setting "spanconfig.tenant_limit" to '50000' on mixed-version-tenant-g5cyv tenant (11) [stage=system:tenant-setup;tenant:tenant-setup]
+├── disable KV and tenant(SQL) rate limiter on mixed-version-tenant-g5cyv tenant (12) [stage=system:tenant-setup;tenant:tenant-setup]
+├── set cluster setting "server.secondary_tenants.authorization.mode" to 'allow-all' on system tenant (13) [stage=system:tenant-setup;tenant:tenant-setup]
+├── upgrade cluster from "v23.1.17" to "v23.2.4"
+│   ├── upgrade storage cluster
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (14) [stage=system:init;tenant:upgrading-system]
+│   │   ├── upgrade nodes :1-4 from "v23.1.17" to "v23.2.4"
+│   │   │   ├── restart system server on node 2 with binary version v23.2.4 (15) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 1 with binary version v23.2.4 (16) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 4 with binary version v23.2.4 (17) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   └── restart system server on node 3 with binary version v23.2.4 (18) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (19) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   │   └── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on system tenant (20) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   └── upgrade tenant
+│      ├── upgrade nodes :1-4 from "v23.1.17" to "v23.2.4"
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v23.2.4 (21) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v23.2.4 (22) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 4 with binary version v23.2.4 (23) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   └── restart mixed-version-tenant-g5cyv server on node 1 with binary version v23.2.4 (24) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      ├── set `version` to '23.2' on mixed-version-tenant-g5cyv tenant (25) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+│      └── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on mixed-version-tenant-g5cyv tenant (26) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+├── upgrade cluster from "v23.2.4" to "v24.1.1"
+│   ├── upgrade storage cluster
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (27) [stage=system:init;tenant:upgrading-system]
+│   │   ├── upgrade nodes :1-4 from "v23.2.4" to "v24.1.1"
+│   │   │   ├── restart system server on node 3 with binary version v24.1.1 (28) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 2 with binary version v24.1.1 (29) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 1 with binary version v24.1.1 (30) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   └── restart system server on node 4 with binary version v24.1.1 (31) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (32) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   │   └── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (33) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   └── upgrade tenant
+│      ├── upgrade nodes :1-4 from "v23.2.4" to "v24.1.1"
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 1 with binary version v24.1.1 (34) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v24.1.1 (35) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 4 with binary version v24.1.1 (36) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+│      │   └── restart mixed-version-tenant-g5cyv server on node 2 with binary version v24.1.1 (37) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+│      ├── downgrade nodes :1-4 from "v24.1.1" to "v23.2.4"
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v23.2.4 (38) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v23.2.4 (39) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 4 with binary version v23.2.4 (40) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+│      │   └── restart mixed-version-tenant-g5cyv server on node 1 with binary version v23.2.4 (41) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+│      ├── upgrade nodes :1-4 from "v23.2.4" to "v24.1.1"
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v24.1.1 (42) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 4 with binary version v24.1.1 (43) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v24.1.1 (44) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   └── restart mixed-version-tenant-g5cyv server on node 1 with binary version v24.1.1 (45) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      ├── set `version` to '24.1' on mixed-version-tenant-g5cyv tenant (46) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+│      └── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on mixed-version-tenant-g5cyv tenant (47) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+├── upgrade cluster from "v24.1.1" to "v24.2.2"
+│   ├── upgrade storage cluster
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (48) [stage=system:init;tenant:upgrading-system]
+│   │   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.2.2"
+│   │   │   ├── restart system server on node 3 with binary version v24.2.2 (49) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 2 with binary version v24.2.2 (50) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 4 with binary version v24.2.2 (51) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   └── restart system server on node 1 with binary version v24.2.2 (52) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (53) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   │   └── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (54) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   └── upgrade tenant
+│      ├── upgrade nodes :1-4 from "v24.1.1" to "v24.2.2"
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v24.2.2 (55) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v24.2.2 (56) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   ├── restart mixed-version-tenant-g5cyv server on node 1 with binary version v24.2.2 (57) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      │   └── restart mixed-version-tenant-g5cyv server on node 4 with binary version v24.2.2 (58) [stage=system:upgrading-tenant;tenant:last-upgrade]
+│      ├── set `version` to '24.2' on mixed-version-tenant-g5cyv tenant (59) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+│      └── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on mixed-version-tenant-g5cyv tenant (60) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+└── upgrade cluster from "v24.2.2" to "v24.3.0 (<current>)"
    ├── upgrade storage cluster
-   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (15) [stage=system:init;tenant:upgrading-system]
-   │   ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
-   │   │   ├── restart system server on node 1 with binary version <current> (16) [stage=system:temporary-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 2 with binary version <current> (17) [stage=system:temporary-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 4 with binary version <current> (18) [stage=system:temporary-upgrade;tenant:upgrading-system]
-   │   │   └── restart system server on node 3 with binary version <current> (19) [stage=system:temporary-upgrade;tenant:upgrading-system]
-   │   ├── downgrade nodes :1-4 from "<current>" to "v24.2.2"
-   │   │   ├── restart system server on node 2 with binary version v24.2.2 (20) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 4 with binary version v24.2.2 (21) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 1 with binary version v24.2.2 (22) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   │   └── restart system server on node 3 with binary version v24.2.2 (23) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
-   │   │   ├── restart system server on node 3 with binary version <current> (24) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 4 with binary version <current> (25) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 2 with binary version <current> (26) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   └── restart system server on node 1 with binary version <current> (27) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (28) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
-   │   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (29) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (61) [stage=system:init;tenant:upgrading-system]
+   │   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+   │   │   ├── restart system server on node 4 with binary version v24.3.0 (<current>) (62) [stage=system:temporary-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 1 with binary version v24.3.0 (<current>) (63) [stage=system:temporary-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 2 with binary version v24.3.0 (<current>) (64) [stage=system:temporary-upgrade;tenant:upgrading-system]
+   │   │   └── restart system server on node 3 with binary version v24.3.0 (<current>) (65) [stage=system:temporary-upgrade;tenant:upgrading-system]
+   │   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.2"
+   │   │   ├── restart system server on node 4 with binary version v24.2.2 (66) [stage=system:rollback-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 2 with binary version v24.2.2 (67) [stage=system:rollback-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 3 with binary version v24.2.2 (68) [stage=system:rollback-upgrade;tenant:upgrading-system]
+   │   │   └── restart system server on node 1 with binary version v24.2.2 (69) [stage=system:rollback-upgrade;tenant:upgrading-system]
+   │   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+   │   │   ├── restart system server on node 3 with binary version v24.3.0 (<current>) (70) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 1 with binary version v24.3.0 (<current>) (71) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 2 with binary version v24.3.0 (<current>) (72) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   └── restart system server on node 4 with binary version v24.3.0 (<current>) (73) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (74) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+   │   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (75) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
    └── upgrade tenant
-      ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
-      │   ├── restart mixed-version-tenant-zngg5 server on node 3 with binary version <current> (30) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      │   ├── restart mixed-version-tenant-zngg5 server on node 2 with binary version <current> (31) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      │   ├── restart mixed-version-tenant-zngg5 server on node 1 with binary version <current> (32) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      │   └── restart mixed-version-tenant-zngg5 server on node 4 with binary version <current> (33) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      ├── downgrade nodes :1-4 from "<current>" to "v24.2.2"
-      │   ├── restart mixed-version-tenant-zngg5 server on node 3 with binary version v24.2.2 (34) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      │   ├── restart mixed-version-tenant-zngg5 server on node 1 with binary version v24.2.2 (35) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      │   ├── restart mixed-version-tenant-zngg5 server on node 2 with binary version v24.2.2 (36) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      │   └── restart mixed-version-tenant-zngg5 server on node 4 with binary version v24.2.2 (37) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      ├── upgrade nodes :1-4 from "v24.2.2" to "<current>"
-      │   ├── restart mixed-version-tenant-zngg5 server on node 2 with binary version <current> (38) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      │   ├── restart mixed-version-tenant-zngg5 server on node 3 with binary version <current> (39) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      │   ├── restart mixed-version-tenant-zngg5 server on node 4 with binary version <current> (40) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      │   └── restart mixed-version-tenant-zngg5 server on node 1 with binary version <current> (41) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      ├── set `version` to <current> on mixed-version-tenant-zngg5 tenant (42) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
-      └── wait for all nodes (:1-4) to acknowledge cluster version <current> on mixed-version-tenant-zngg5 tenant (43) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+      ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v24.3.0 (<current>) (76) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   ├── restart mixed-version-tenant-g5cyv server on node 1 with binary version v24.3.0 (<current>) (77) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v24.3.0 (<current>) (78) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   └── restart mixed-version-tenant-g5cyv server on node 4 with binary version v24.3.0 (<current>) (79) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.2"
+      │   ├── restart mixed-version-tenant-g5cyv server on node 4 with binary version v24.2.2 (80) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v24.2.2 (81) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v24.2.2 (82) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   └── restart mixed-version-tenant-g5cyv server on node 1 with binary version v24.2.2 (83) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
+      │   ├── restart mixed-version-tenant-g5cyv server on node 2 with binary version v24.3.0 (<current>) (84) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      │   ├── restart mixed-version-tenant-g5cyv server on node 4 with binary version v24.3.0 (<current>) (85) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      │   ├── restart mixed-version-tenant-g5cyv server on node 3 with binary version v24.3.0 (<current>) (86) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      │   └── restart mixed-version-tenant-g5cyv server on node 1 with binary version v24.3.0 (<current>) (87) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      ├── set `version` to <current> on mixed-version-tenant-g5cyv tenant (88) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+      └── wait for all nodes (:1-4) to acknowledge cluster version <current> on mixed-version-tenant-g5cyv tenant (89) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
