@@ -19,7 +19,8 @@ import (
 
 // Metrics are for production monitoring of each job type.
 type Metrics struct {
-	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
+	JobMetrics    [jobspb.NumJobTypes]*JobTypeMetrics
+	JobPTSMetrics [jobspb.NumJobTypes]*JobTypePTSMetrics
 
 	// JobSpecificMetrics contains a list of job specific metrics, registered when
 	// the job was registered with the system.  Prior to this array, job
@@ -64,14 +65,21 @@ type JobTypeMetrics struct {
 	ResumeFailed           *metric.Counter
 	FailOrCancelCompleted  *metric.Counter
 	FailOrCancelRetryError *metric.Counter
+}
 
+// MetricStruct implements the metric.Struct interface.
+func (JobTypeMetrics) MetricStruct() {}
+
+// JobTypePTSMetrics is a metrics.Struct containing PTS-specific metrics for a
+// job type.
+type JobTypePTSMetrics struct {
 	NumJobsWithPTS *metric.Gauge
 	ExpiredPTS     *metric.Counter
 	ProtectedAge   *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
-func (JobTypeMetrics) MetricStruct() {}
+func (JobTypePTSMetrics) MetricStruct() {}
 
 func typeToString(jobType jobspb.Type) string {
 	return strings.ToLower(strings.Replace(jobType.String(), " ", "_", -1))
@@ -413,9 +421,13 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 			ResumeFailed:           metric.NewCounter(makeMetaResumeFailed(jt)),
 			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(jt)),
 			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(jt)),
-			NumJobsWithPTS:         metric.NewGauge(makeMetaProtectedCount(jt)),
-			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(jt)),
-			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(jt)),
+		}
+		if interactsWithPTS(jt) {
+			m.JobPTSMetrics[jt] = &JobTypePTSMetrics{
+				NumJobsWithPTS: metric.NewGauge(makeMetaProtectedCount(jt)),
+				ExpiredPTS:     metric.NewCounter(makeMetaExpiredPTS(jt)),
+				ProtectedAge:   metric.NewGauge(makeMetaProtectedAge(jt)),
+			}
 		}
 
 		if opts, ok := getRegisterOptions(jt); ok {
@@ -426,6 +438,29 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 				m.ResolvedMetrics[jt] = opts.resolvedMetric
 			}
 		}
+	}
+}
+
+// interactsWithPTS returns false when the given job is guaranteed to not
+// interact with the PTS system.
+func interactsWithPTS(jt jobspb.Type) bool {
+	switch jt {
+	case jobspb.TypeImport:
+		// Note that even though the IMPORT jobs as of 25.4 do not lay protected
+		// timestamps, we have plans to do so (see #91151), so we'll report that
+		// IMPORTs do interact with PTS system.
+		return true
+	case jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
+		// None of the stats jobs interact with the PTS system.
+		return false
+	case jobspb.TypeImportRollback:
+		// IMPORT ROLLBACK job is used to roll back the table for the online
+		// restore and to bring it back online. It doesn't interact with the PTS
+		// system.
+		return false
+	default:
+		// TODO(yuzefovich): other job types should be audited.
+		return true
 	}
 }
 
