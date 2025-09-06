@@ -440,7 +440,9 @@ func indexSubdir(subdir string) (string, error) {
 func flattenSubdirForIndex(subdir string) (string, error) {
 	subdirTime, err := time.Parse(backupbase.DateBasedIntoFolderName, subdir)
 	if err != nil {
-		return "", errors.Wrapf(err, "parsing subdir %q for flattening", subdir)
+		return "", errors.Wrapf(
+			err, "subdir does not match format '%s'", backupbase.DateBasedIntoFolderName,
+		)
 	}
 	return subdirTime.Format(backupbase.BackupIndexFlattenedSubdir), nil
 }
@@ -450,7 +452,9 @@ func flattenSubdirForIndex(subdir string) (string, error) {
 func unflattenIndexSubdir(flattened string) (string, error) {
 	subdirTime, err := time.Parse(backupbase.BackupIndexFlattenedSubdir, flattened)
 	if err != nil {
-		return "", errors.Wrapf(err, "parsing flattened index subdir %q for unflattening", flattened)
+		return "", errors.Wrapf(
+			err, "index subdir does not match format %s", backupbase.BackupIndexFlattenedSubdir,
+		)
 	}
 	unflattened := subdirTime.Format(backupbase.DateBasedIntoFolderName)
 	return unflattened, nil

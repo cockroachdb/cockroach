@@ -713,12 +713,15 @@ func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
+	// Error output changes depending on whether or not the index is used. This
+	// deterministically enables the index to make the error output consistent.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.index.read.enabled = true")
+
 	// Make an initial backup.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, localFoo)
 
 	// Ensure proper error gets returned from back SHOW BACKUP Path
-	sqlDB.ExpectErr(t, "The specified path is the root of a backup collection.",
-		"SHOW BACKUP '' IN $1", localFoo)
+	sqlDB.ExpectErr(t, "subdir does not match format", "SHOW BACKUP '' IN $1", localFoo)
 }
 
 // TestShowBackupCheckFiles verifies the check_files option catches a corrupt
