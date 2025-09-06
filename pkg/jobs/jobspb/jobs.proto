@@ -1306,8 +1306,14 @@ message RowLevelTTLDetails {
 }
 
 message RowLevelTTLProgress {
+  // UseCheckpointing is true if the TTL job will use checkpointing for progress
+  // tracking.
+  bool use_checkpointing = 6;
 
-  // JobDeletedRowCount is the number of rows deleted by TTL job so far.
+  // JobDeletedRowCount is the number of rows deleted by TTL job so far. If
+  // UseCheckpointing is true, then this is the deleted row count across all
+  // restarts of the job. If that is false, this is the delete row count in
+  // the current running of the job.
   int64 job_deleted_row_count = 1;
 
   // ProcessorProgresses is the progress per DistSQL processor.
@@ -1316,12 +1322,18 @@ message RowLevelTTLProgress {
   // UseDistSQL is no longer used in v23.1+ as all TTL jobs are using DistSQL.
   reserved 3;
 
-  // JobTotalSpanCount is the number of spans for the entire TTL job.
-  int64 job_total_span_count = 4;
+  // JobTotalSpanCount is the number of spans for the entire TTL job. This is
+  // deprecated and not used if UseCheckpointing is true.
+  int64 job_total_span_count = 4 [deprecated = true];
 
   // JobProcessedSpanCount is the number of spans that have been processed by
-  // the TTL job so far.
-  int64 job_processed_span_count = 5;
+  // the TTL job so far. This is deprecated and not used if UseCheckpointing is
+  // true.
+  int64 job_processed_span_count = 5 [deprecated = true];
+
+  // CompletedSpans are the list of spans that this TTL job has already
+  // completed. This is only valid if UseCheckpointing is also true.
+  repeated roachpb.Span completed_spans = 7 [(gogoproto.nullable) = false];
 }
 
 message RowLevelTTLProcessorProgress {
@@ -1339,11 +1351,13 @@ message RowLevelTTLProcessorProgress {
   // DeletedRowCount is the number of rows deleted by this DistSQL processor.
   int64 deleted_row_count = 3;
 
-  // TotalSpanCount is the total number of spans assigned to the DistSQL processor.
-  int64 total_span_count = 4;
+  // TotalSpanCount is the total number of spans assigned to the DistSQL
+  // processor. This is deprecated and not used if using checkpointing.
+  int64 total_span_count = 4 [deprecated = true];
 
-  // ProcessedSpanCount is the number of spans already processed.
-  int64 processed_span_count = 6;
+  // ProcessedSpanCount is the number of spans already processed. This is
+  // deprecated when using checkpointing.
+  int64 processed_span_count = 6 [deprecated = true];
 
   // ProcessorConcurrency is the number parallel tasks the processor will do at once.
   int64 processor_concurrency = 5;

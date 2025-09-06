@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -186,7 +187,26 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 
 	distSQLPlanner := jobExecCtx.DistSQLPlanner()
 
-	t.setupProgressTracking()
+	completedSpans, err := t.setupProgressTracking(ctx, settingsValues, execCfg, entirePKSpan)
+	if err != nil {
+		return err
+	}
+
+	// Calculate remaining spans by subtracting completed spans from the entire table span
+	var remainingSpans []roachpb.Span
+	if len(completedSpans) > 0 {
+		var g roachpb.SpanGroup
+		g.Add(entirePKSpan)
+		g.Sub(completedSpans...)
+		remainingSpans = g.Slice()
+	} else {
+		remainingSpans = []roachpb.Span{entirePKSpan}
+	}
+
+	// Early exit if all spans have been completed
+	if len(remainingSpans) == 0 {
+		return nil
+	}
 
 	jobSpanCount := 0
 	makePlan := func(ctx context.Context, distSQLPlanner *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -196,7 +216,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		if err != nil {
 			return nil, nil, err
 		}
-		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, []roachpb.Span{entirePKSpan}, sql.PartitionSpansBoundDefault)
+		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, remainingSpans, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -270,7 +290,6 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return physicalPlan, planCtx, nil
 	}
 
-	var err error
 	t.physicalPlan, t.planCtx, err = makePlan(ctx, distSQLPlanner)
 	if err != nil {
 		return err
@@ -279,6 +298,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	if err := t.progressTracker.initJobProgress(ctx, int64(jobSpanCount)); err != nil {
 		return err
 	}
+	defer func() { t.progressTracker.termTracker() }()
 
 	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
 		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -367,9 +387,50 @@ func (t *rowLevelTTLResumer) CollectProfile(_ context.Context, _ interface{}) er
 	return nil
 }
 
-// setupProgressTracking sets up progress tracking for the TTL job.
-func (t *rowLevelTTLResumer) setupProgressTracking() {
-	t.progressTracker = newLegacyProgressTracker(t.job)
+// setupProgressTracking sets up progress tracking for the TTL job, handling
+// both initial startup and resumption scenarios. This should be called once
+// before job execution starts. Returns the completed spans from any previous
+// job execution for use in planning.
+func (t *rowLevelTTLResumer) setupProgressTracking(
+	ctx context.Context, sv *settings.Values, execCfg *sql.ExecutorConfig, entirePKSpan roachpb.Span,
+) ([]roachpb.Span, error) {
+	var completedSpans []roachpb.Span
+	err := t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		ttlProg := md.Progress.GetRowLevelTTL()
+		if ttlProg == nil {
+			return errors.AssertionFailedf("no TTL job progress")
+		}
+
+		t.progressTracker = t.progressTrackerFactory(ctx, ttlProg, sv, execCfg, entirePKSpan)
+		var err error
+		completedSpans, err = t.progressTracker.initTracker(ctx, ttlProg, sv)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return completedSpans, err
+}
+
+// progressTrackerFactory creates and returns an appropriate progress tracker
+// based on the job's UseCheckpointing configuration.
+func (t *rowLevelTTLResumer) progressTrackerFactory(
+	ctx context.Context,
+	prog *jobspb.RowLevelTTLProgress,
+	sv *settings.Values,
+	execCfg *sql.ExecutorConfig,
+	entirePKSpan roachpb.Span,
+) progressTracker {
+	if prog.UseCheckpointing {
+		return newCheckpointProgressTracker(
+			t.job,
+			sv,
+			execCfg.DB,
+			execCfg.DistSQLPlanner,
+			entirePKSpan,
+		)
+	}
+	return newLegacyProgressTracker(t.job)
 }
 
 // replanDecider returns a function that determines whether a TTL job should be
