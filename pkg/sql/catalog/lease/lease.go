@@ -558,8 +558,8 @@ func (m *Manager) WaitForOneVersion(
 func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
 	descriptorId descpb.ID,
-	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
+	regions regionliveness.CachedDatabaseRegions,
 ) (catalog.Descriptor, error) {
 	if retryOpts.MaxRetries != 0 {
 		return nil, errors.New("The MaxRetries option shouldn't be set in WaitForNewVersion")
@@ -1033,7 +1033,7 @@ func acquireNodeLease(
 		},
 		func(ctx context.Context) (interface{}, error) {
 			if m.IsDraining() {
-				return nil, errLeaseManagerIsDraining
+				return false, errLeaseManagerIsDraining
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
@@ -1047,26 +1047,69 @@ func acquireNodeLease(
 			if err != nil {
 				return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 			}
-			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
-			if err != nil {
-				return nil, err
+
+			doAcquisition := func() (catalog.Descriptor, error) {
+				desc, _, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
+				if err != nil {
+					return nil, err
+				}
+
+				return desc, nil
 			}
-			// If a nil descriptor is returned, then the latest version has already
-			// been leased. So, nothing needs to be done here.
-			if desc == nil {
-				return true, nil
+
+			doUpsertion := func(desc catalog.Descriptor) error {
+				t := m.findDescriptorState(id, false /* create */)
+				if t == nil {
+					return errors.AssertionFailedf("could not find descriptor state for id %d", id)
+				}
+				t.mu.Lock()
+				t.mu.takenOffline = false
+				defer t.mu.Unlock()
+				err = t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
+				if err != nil {
+					return err
+				}
+
+				return nil
 			}
-			t := m.findDescriptorState(id, false /* create */)
-			if t == nil {
-				return nil, errors.AssertionFailedf("could not find descriptor state for id %d", id)
+
+			if newest == nil { // No lease held on any version of the descriptor.
+				desc, err := doAcquisition()
+				if err != nil {
+					return false, err
+				}
+				// If a nil descriptor is returned, then the latest version has already
+				// been leased. So, nothing needs to be done here.
+				if desc == nil {
+					return true, nil
+				}
+				err = doUpsertion(desc)
+				if err != nil {
+					return false, err
+				}
+			} else {
+				// The two-version invariant allows an update in lease manager
+				// without (immediately) acquiring a new lease. This prevents
+				// a race on where the lease is acquired but the manager isn't
+				// yet updated.
+				desc, err := m.maybeGetDescriptorWithoutValidation(ctx, id, true /* existenceRequired */)
+				if err != nil {
+					return false, err
+				}
+				err = doUpsertion(desc)
+				if err != nil {
+					return false, err
+				}
+
+				desc, err = doAcquisition()
+				if err != nil {
+					return false, err
+				}
+				if desc == nil {
+					return true, nil
+				}
 			}
-			t.mu.Lock()
-			t.mu.takenOffline = false
-			defer t.mu.Unlock()
-			err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
-			if err != nil {
-				return nil, err
-			}
+
 			return true, nil
 		})
 	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {

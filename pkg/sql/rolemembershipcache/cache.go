@@ -154,50 +154,48 @@ func (m *MembershipCache) GetRolesForMember(
 		return resolveRolesForMember(ctx, txn, member)
 	}
 
-	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
-		systemUsersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
-		if err != nil {
-			return nil, err
-		}
-
-		roleOptionsTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
-		if err != nil {
-			return nil, err
-		}
-
-		systemUsersTableVersion := systemUsersTableDesc.GetVersion()
-		if systemUsersTableDesc.IsUncommittedVersion() {
-			return resolveRolesForMember(ctx, txn, member)
-		}
-
-		roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
-		if roleOptionsTableDesc.IsUncommittedVersion() {
-			return resolveRolesForMember(ctx, txn, member)
-		}
-
-		defer func() {
-			if retErr != nil {
-				return
-			}
-			txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
-				{
-					Name:    roleMembersTableDesc.GetName(),
-					ID:      roleMembersTableDesc.GetID(),
-					Version: tableVersion,
-				},
-				{
-					Name:    systemUsersTableDesc.GetName(),
-					ID:      systemUsersTableDesc.GetID(),
-					Version: systemUsersTableVersion,
-				},
-				{
-					Name:    roleOptionsTableDesc.GetName(),
-					ID:      roleOptionsTableDesc.GetID(),
-					Version: roleOptionsTableVersion,
-				},
-			})
-		}()
+	systemUsersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
+	if err != nil {
+		return nil, err
 	}
+
+	roleOptionsTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
+	if err != nil {
+		return nil, err
+	}
+
+	systemUsersTableVersion := systemUsersTableDesc.GetVersion()
+	if systemUsersTableDesc.IsUncommittedVersion() {
+		return resolveRolesForMember(ctx, txn, member)
+	}
+
+	roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+	if roleOptionsTableDesc.IsUncommittedVersion() {
+		return resolveRolesForMember(ctx, txn, member)
+	}
+
+	defer func() {
+		if retErr != nil {
+			return
+		}
+		txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
+			{
+				Name:    roleMembersTableDesc.GetName(),
+				ID:      roleMembersTableDesc.GetID(),
+				Version: tableVersion,
+			},
+			{
+				Name:    systemUsersTableDesc.GetName(),
+				ID:      systemUsersTableDesc.GetID(),
+				Version: systemUsersTableVersion,
+			},
+			{
+				Name:    roleOptionsTableDesc.GetName(),
+				ID:      roleOptionsTableDesc.GetID(),
+				Version: roleOptionsTableVersion,
+			},
+		})
+	}()
 
 	// Check version and maybe clear cache while holding the mutex.
 	// We use a closure here so that we release the lock here, then keep
