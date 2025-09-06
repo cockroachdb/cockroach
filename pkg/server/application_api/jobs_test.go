@@ -438,3 +438,65 @@ func TestJobStatusResponse(t *testing.T) {
 	require.Equal(t, job.Payload(), *response.Job.Payload)
 	require.Equal(t, job.Progress(), *response.Job.Progress)
 }
+
+func TestJobMessagesAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	testCases := []struct {
+		jobID         int64
+		owner         username.SQLUsername
+		isAdmin       bool
+		expectSuccess bool
+		expectMsgCnt  int
+	}{
+		{1000, apiconstants.TestingUserNameNoAdmin(), true, true, 2},  // admin can see non-admin job + messages
+		{1001, apiconstants.TestingUserNameNoAdmin(), false, true, 2}, // non-admin can see own job + messages
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("jobID=%d/owner=%s/isAdmin=%t", tc.jobID, tc.owner.Normalized(), tc.isAdmin), func(t *testing.T) {
+			// Create job and messages
+			payload := jobspb.Payload{
+				UsernameProto: tc.owner.EncodeProto(),
+				Details:       jobspb.WrapPayloadDetails(jobspb.BackupDetails{}),
+			}
+			payloadBytes, err := protoutil.Marshal(&payload)
+			require.NoError(t, err)
+
+			progress := jobspb.Progress{
+				Details:  jobspb.WrapProgressDetails(jobspb.BackupProgress{}),
+				Progress: &jobspb.Progress_FractionCompleted{FractionCompleted: 1.0},
+			}
+			progressBytes, err := protoutil.Marshal(&progress)
+			require.NoError(t, err)
+
+			sqlDB.Exec(t, `INSERT INTO system.jobs (id, status, job_type, owner) VALUES ($1, $2, $3, $4)`,
+				tc.jobID, jobs.StateSucceeded, payload.Type().String(), tc.owner.Normalized())
+			sqlDB.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
+				tc.jobID, jobs.GetLegacyPayloadKey(), payloadBytes)
+			sqlDB.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
+				tc.jobID, jobs.GetLegacyProgressKey(), progressBytes)
+			sqlDB.Exec(t, `INSERT INTO system.job_message (job_id, kind, written, message) VALUES ($1, $2, now(), $3)`,
+				tc.jobID, "info", "Job started successfully")
+			sqlDB.Exec(t, `INSERT INTO system.job_message (job_id, kind, written, message) VALUES ($1, $2, now(), $3)`,
+				tc.jobID, "warning", "Minor issue encountered")
+
+			// Test access
+			var res serverpb.JobResponse
+			err = srvtestutils.GetAdminJSONProtoWithAdminOption(s, fmt.Sprintf("jobs/%d", tc.jobID), &res, tc.isAdmin)
+
+			if tc.expectSuccess {
+				require.NoError(t, err)
+				require.Equal(t, tc.jobID, res.ID)
+				require.Len(t, res.Messages, tc.expectMsgCnt)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
