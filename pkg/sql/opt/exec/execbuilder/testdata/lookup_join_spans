@@ -573,17 +573,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 1
+│ estimated row count: 10
 │ order: +value
 │
 └── • lookup join
-    │ estimated row count: 1
+    │ estimated row count: 10
     │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 1
+        │ estimated row count: 10
         │ table: metric_values@secondary
         │ lookup condition: ((nullable >= -20) AND (nullable <= -10)) AND (id = metric_id)
         │
@@ -612,17 +612,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 1
+│ estimated row count: 10
 │ order: +value
 │
 └── • lookup join
-    │ estimated row count: 1
+    │ estimated row count: 10
     │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 1
+        │ estimated row count: 10
         │ table: metric_values@secondary
         │ lookup condition: (nullable > 1) AND (id = metric_id)
         │
@@ -651,17 +651,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 1
+│ estimated row count: 10
 │ order: +value
 │
 └── • lookup join
-    │ estimated row count: 1
+    │ estimated row count: 10
     │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 1
+        │ estimated row count: 10
         │ table: metric_values@secondary
         │ lookup condition: (nullable >= 1) AND (id = metric_id)
         │
@@ -691,17 +691,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 1
+│ estimated row count: 10
 │ order: +value
 │
 └── • lookup join
-    │ estimated row count: 1
+    │ estimated row count: 10
     │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 1
+        │ estimated row count: 10
         │ table: metric_values@secondary
         │ lookup condition: (nullable < -10) AND (id = metric_id)
         │
@@ -730,17 +730,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 1
+│ estimated row count: 10
 │ order: +value
 │
 └── • lookup join
-    │ estimated row count: 1
+    │ estimated row count: 10
     │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 1
+        │ estimated row count: 10
         │ table: metric_values@secondary
         │ lookup condition: (nullable <= -10) AND (id = metric_id)
         │
@@ -811,17 +811,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 1
+│ estimated row count: 3
 │ order: +value
 │
 └── • lookup join
-    │ estimated row count: 1
+    │ estimated row count: 3
     │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id, time)
     │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 1
+        │ estimated row count: 3
         │ table: metric_values@secondary
         │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
         │
