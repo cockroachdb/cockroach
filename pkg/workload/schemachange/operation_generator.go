@@ -2520,7 +2520,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 
 	defaultDatum := randgen.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
 	stmt := makeOpStmt(OpStmtDDL)
-	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
+	if !datumTyp.Equivalent(columnForDefault.typ) {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
 	// Generated columns cannot have default values.
