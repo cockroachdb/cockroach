@@ -53,7 +53,12 @@ func DialDRPC(
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
 			_ struct{}) (drpcpool.Conn, error) {
 
-			netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+			netConn, err := func(ctx context.Context) (net.Conn, error) {
+				if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+					return rpcCtx.loopbackDRPCDialFn(ctx)
+				}
+				return drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+			}(ctx)
 			if err != nil {
 				return nil, err
 			}
