@@ -152,7 +152,7 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 	}
 
 	require.NoError(t, WriteBackupIndexMetadata(
-		ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+		ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 	))
 
 	filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -217,6 +217,10 @@ func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 
 	require.True(t, fullIndex.StartTime.IsEmpty())
 	require.False(t, incrIndex.StartTime.IsEmpty())
+	require.True(t, strings.HasPrefix(
+		incrIndex.Path,
+		"/"+path.Join(backupbase.DefaultIncrementalsSubdir, fullIndex.Path),
+	))
 }
 
 func TestWriteBackupindexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
@@ -286,7 +290,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		details.EndTime = end
 
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 		))
 
 		filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -311,7 +315,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		details.EndTime = end
 
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 		))
 
 		filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -469,7 +473,7 @@ func TestIndexExists(t *testing.T) {
 						URI: collectionURI + "/" + sub.name,
 					}
 					require.NoError(t, WriteBackupIndexMetadata(
-						ctx, execCfg, username.RootUserName(), makeExternalStorage, details,
+						ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
 					))
 				}
 			}
@@ -540,7 +544,7 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 			URI: collectionURI + subdir,
 		}
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), storageFactory, details,
+			ctx, execCfg, username.RootUserName(), storageFactory, details, hlc.Timestamp{},
 		))
 	}
 

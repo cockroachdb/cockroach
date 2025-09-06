@@ -488,7 +488,7 @@ func writeEmptyBackupManifest(
 		t,
 		backupdest.WriteBackupIndexMetadata(
 			context.Background(), execCfg, username.RootUserName(),
-			execCfg.DistSQLSrv.ExternalStorageFromURI, backupDetails,
+			execCfg.DistSQLSrv.ExternalStorageFromURI, backupDetails, hlc.Timestamp{},
 		),
 	)
 }

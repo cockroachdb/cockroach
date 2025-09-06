@@ -246,6 +246,30 @@ func (e *ExportStats) ToText() []byte {
 	return []byte(e.String())
 }
 
+// The following functions implement the ManifestLike interface in
+// manifest_handling.go. They can be removed once the interface is cleaned up.
+// TODO (kev-cao): Remove in v26.2
+
+func (b BackupIndexMetadata) Start() hlc.Timestamp {
+	return b.StartTime
+}
+
+func (b BackupIndexMetadata) End() hlc.Timestamp {
+	return b.EndTime
+}
+
+func (b BackupIndexMetadata) Compacted() bool {
+	return b.IsCompacted
+}
+
+func (b BackupIndexMetadata) MVCC() MVCCFilter {
+	return b.MVCCFilter
+}
+
+func (b BackupIndexMetadata) RevisionStart() hlc.Timestamp {
+	return b.RevisionStartTime
+}
+
 func init() {
 	protoreflect.RegisterShorthands((*BackupManifest)(nil), "backup", "backup_manifest")
 }

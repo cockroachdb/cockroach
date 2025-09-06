@@ -52,6 +52,7 @@ func WriteBackupIndexMetadata(
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	details jobspb.BackupDetails,
+	revisionStartTS hlc.Timestamp,
 ) error {
 	indexStore, err := makeExternalStorageFromURI(
 		ctx, details.CollectionURI, user,
@@ -81,10 +82,17 @@ func WriteBackupIndexMetadata(
 	if err != nil {
 		return err
 	}
+	mvccFilter := backuppb.MVCCFilter_Latest
+	if details.RevisionHistory {
+		mvccFilter = backuppb.MVCCFilter_All
+	}
 	metadata := &backuppb.BackupIndexMetadata{
-		StartTime: details.StartTime,
-		EndTime:   details.EndTime,
-		Path:      path,
+		StartTime:         details.StartTime,
+		EndTime:           details.EndTime,
+		Path:              path,
+		IsCompacted:       details.Compact,
+		MVCCFilter:        mvccFilter,
+		RevisionStartTime: revisionStartTS,
 	}
 	metadataBytes, err := protoutil.Marshal(metadata)
 	if err != nil {
