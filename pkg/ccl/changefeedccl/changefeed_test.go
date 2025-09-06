@@ -4034,6 +4034,8 @@ func TestChangefeedJobControl(t *testing.T) {
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "RESUME job $1", currentFeed.JobID())
+		})
+		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
 			waitForJobState(userDB, t, currentFeed.JobID(), "running")
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {

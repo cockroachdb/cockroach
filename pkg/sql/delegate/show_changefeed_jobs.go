@@ -29,6 +29,49 @@ WITH payload AS (
   FROM
   crdb_internal.system_jobs
   WHERE job_type = 'CHANGEFEED'%s
+),
+spec_details AS (
+  SELECT
+    id,
+    json_array_elements(changefeed_details->'target_specifications') ? 'type' AND (json_array_elements(changefeed_details->'target_specifications')->'type')::int = 3 AS is_db, -- database level changefeed
+    json_array_elements(changefeed_details->'target_specifications')->>'descriptor_id' AS descriptor_id,
+    changefeed_details->'tables' AS tables
+  FROM payload
+),
+db_targets AS (
+  SELECT
+    sd.id,
+    CASE
+      WHEN %t
+      THEN array_agg(concat(t.database_name,'.',t.schema_name,'.',t.name))
+      ELSE
+      array_agg(distinct t.database_name)
+    END AS names
+  FROM spec_details sd
+  INNER JOIN crdb_internal.tables t ON sd.descriptor_id::int = t.parent_id
+  WHERE sd.is_db
+  GROUP BY sd.id
+),
+table_targets AS (
+  SELECT 
+    sd.id,
+    array_agg(distinct concat(t.database_name,'.',t.schema_name, '.', t.name)) AS names
+  FROM spec_details sd
+  CROSS JOIN LATERAL json_each(sd.tables) AS j(table_id, val)
+  INNER JOIN crdb_internal.tables t ON t.table_id = j.table_id::INT
+  WHERE NOT sd.is_db
+  GROUP BY sd.id
+),
+targets AS (
+  SELECT
+    id,
+    names
+  FROM db_targets
+  UNION ALL
+  SELECT
+    id,
+    names
+  FROM table_targets
 )
 SELECT
   job_id,
@@ -37,34 +80,25 @@ SELECT
   status,
   running_status,
   created,
-  created as started,
+  created AS started,
   finished,
   modified,
   high_water_timestamp,
-  hlc_to_timestamp(high_water_timestamp) as readable_high_water_timestamptz,
+  hlc_to_timestamp(high_water_timestamp) AS readable_high_water_timestamptz,
   error,
   replace(
     changefeed_details->>'sink_uri',
     '\u0026', '&'
   ) AS sink_uri,
-  ARRAY (
-    SELECT
-      concat(
-        database_name, '.', schema_name, '.',
-        name
-      )
-    FROM
-      crdb_internal.tables
-    WHERE
-      table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
-  ) AS full_table_names,
+  targets.names AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
   COALESCE(changefeed_details->'opts'->>'format','json') AS format
 FROM
   crdb_internal.jobs
-  INNER JOIN payload ON id = job_id`
+  INNER JOIN targets ON job_id = targets.id
+  INNER JOIN payload ON job_id = payload.id
+`
 	)
-
 	var whereClause, innerWhereClause, orderbyClause string
 	if n.Jobs == nil {
 		// The query intends to present:
@@ -80,7 +114,7 @@ FROM
 		innerWhereClause = fmt.Sprintf(` AND id in (%s)`, n.Jobs.String())
 	}
 
-	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause)
+	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause, n.WatchedTables)
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 
 	return d.parse(sqlStmt)
