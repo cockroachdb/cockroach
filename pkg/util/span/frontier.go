@@ -27,17 +27,13 @@ import (
 // Frontier is not safe for concurrent modification, but MakeConcurrentFrontier
 // can be used to make thread safe frontier.
 type Frontier interface {
+	ReadOnlyFrontier
+
 	// AddSpansAt adds the provided spans to the frontier at the provided timestamp.
 	// If the span overlaps any spans already tracked by the frontier, the tree is adjusted
 	// to hold union of the span and the overlaps, with all entries assigned startAt starting
 	// timestamp.
 	AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error
-
-	// Frontier returns the minimum timestamp being tracked.
-	Frontier() hlc.Timestamp
-
-	// PeekFrontierSpan returns one of the spans at the Frontier.
-	PeekFrontierSpan() roachpb.Span
 
 	// Forward advances the timestamp for a span. Any part of the span that doesn't
 	// overlap the tracked span set will be ignored. True is returned if the
@@ -49,6 +45,16 @@ type Frontier interface {
 	// letting a frontier be GCed is safe in that it won't cause a memory leak,
 	// but it will prevent frontier nodes from being efficiently re-used.
 	Release()
+}
+
+// ReadOnlyFrontier is a subset of Frontier with only the methods
+// that are read-only.
+type ReadOnlyFrontier interface {
+	// Frontier returns the minimum timestamp being tracked.
+	Frontier() hlc.Timestamp
+
+	// PeekFrontierSpan returns one of the spans at the Frontier.
+	PeekFrontierSpan() roachpb.Span
 
 	// Entries returns an iterator over the entries in the frontier.
 	// Updates to the frontier are restricted until iteration is stopped.
