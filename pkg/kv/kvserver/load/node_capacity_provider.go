@@ -24,7 +24,7 @@ type StoresStatsAggregator interface {
 	// GetAggregatedStoreStats returns the total cpu usage across all stores and
 	// the count of stores. If useCached is true, it uses the cached store
 	// descriptor instead of computing new ones. Implemented by Stores.
-	GetAggregatedStoreStats(useCached bool) (aggregatedCPUUsage int64, totalStoreCount int32)
+	GetAggregatedStoreStats(useCached bool) (aggregatedCPUUsage int64, totalStoreCount int32, err error)
 }
 
 // NodeCapacityProvider reports node-level cpu usage and capacity by sampling
@@ -82,8 +82,11 @@ func (n *NodeCapacityProvider) Run(ctx context.Context) {
 // capacity and aggregated store-level cpu usage. If useCached is true, it will
 // use cached store descriptors to aggregate the sum of store-level cpu
 // capacity.
-func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) roachpb.NodeCapacity {
-	storesCPURate, numStores := n.stores.GetAggregatedStoreStats(useCached)
+func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) (roachpb.NodeCapacity, error) {
+	storesCPURate, numStores, err := n.stores.GetAggregatedStoreStats(useCached)
+	if err != nil {
+		return roachpb.NodeCapacity{}, err
+	}
 	// TODO(wenyihu6): may be unexpected to caller that useCached only applies to
 	// the stores stats but not runtime load monitor. We can change
 	// runtimeLoadMonitor to also fetch updated stats.
@@ -95,7 +98,7 @@ func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) roachpb.NodeCapac
 		NumStores:           numStores,
 		NodeCPURateCapacity: cpuCapacityNanoPerSec,
 		NodeCPURateUsage:    cpuUsageNanoPerSec,
-	}
+	}, nil
 }
 
 // runtimeLoadMonitor polls cpu usage and capacity stats of the node

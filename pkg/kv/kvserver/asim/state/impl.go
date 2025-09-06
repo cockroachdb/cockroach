@@ -1089,7 +1089,7 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.RangeUsageInfo {
 	r, ok := s.Range(rangeID)
 	if !ok {
-		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
+		panic(fmt.Sprintf("no leaseholder store found for range %d", rangeID))
 	}
 
 	if _, ok = r.Replica(storeID); !ok {

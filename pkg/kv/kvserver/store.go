@@ -3295,6 +3295,11 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 		return nil, err
 	}
 
+	nc, err := s.nodeCapacityProvider.GetNodeCapacity(useCached)
+	if err != nil {
+		return nil, err
+	}
+
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
 		StoreID:      s.Ident.StoreID,
@@ -3302,7 +3307,7 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 		Node:         *s.nodeDesc,
 		Capacity:     capacity,
 		Properties:   s.Properties(),
-		NodeCapacity: s.nodeCapacityProvider.GetNodeCapacity(useCached),
+		NodeCapacity: nc,
 	}, nil
 }
 
