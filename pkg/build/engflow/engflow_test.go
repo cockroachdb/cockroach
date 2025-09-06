@@ -62,10 +62,10 @@ func TestConstructJSONReport(t *testing.T) {
 		},
 	}
 
-	jsonReport, errs := ConstructJSONReport(i, "tanzanite")
+	jsonReport, errs := ConstructJSONReport(i, "mesolite")
 	require.Empty(t, errs)
 	require.Equal(t, jsonReport, JsonReport{
-		Server:       "tanzanite",
+		Server:       "mesolite",
 		InvocationId: "fake-invocation-id",
 		StartedAt:    "2024-01-18T20:50:47Z",
 		FinishedAt:   "2024-01-18T20:50:54Z",
