@@ -81,7 +81,7 @@ type testIssueCollector struct {
 
 var _ inspectLogger = &testIssueCollector{}
 
-// logIssue implements the inspectLogger interface.
+// LogIssue implements the inspectLogger interface.
 func (m *testIssueCollector) logIssue(_ context.Context, issue *inspectIssue) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -89,7 +89,7 @@ func (m *testIssueCollector) logIssue(_ context.Context, issue *inspectIssue) er
 	return nil
 }
 
-// hasIssues implements the inspectLogger interface.
+// HasIssues implements the inspectLogger interface.
 func (m *testIssueCollector) hasIssues() bool {
 	return m.numIssuesFound() > 0
 }
