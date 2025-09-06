@@ -4232,6 +4232,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_gorilla_schema",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/gorilla/schema",
+        sha256 = "63885f95be210851d623d464698326a202274e191f53f7b7905a150e9cf04494",
+        strip_prefix = "github.com/gorilla/schema@v1.4.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gorilla/schema/com_github_gorilla_schema-v1.4.1.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_gorilla_securecookie",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gorilla/securecookie",

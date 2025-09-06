@@ -1775,6 +1775,7 @@ GO_TARGETS = [
     "//pkg/security:security",
     "//pkg/security:security_test",
     "//pkg/server/apiconstants:apiconstants",
+    "//pkg/server/apiinternal:apiinternal",
     "//pkg/server/apiutil:apiutil",
     "//pkg/server/apiutil:apiutil_test",
     "//pkg/server/application_api:application_api",
