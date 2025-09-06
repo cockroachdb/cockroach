@@ -82,7 +82,11 @@ func Get(
 // InfoStorage keys are prefixed with "frontier/", the passed name, and then a
 // chunk identifier.
 func Store(
-	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, name string, frontier span.Frontier,
+	ctx context.Context,
+	txn isql.Txn,
+	jobID jobspb.JobID,
+	name string,
+	frontier span.ReadOnlyFrontier,
 ) error {
 	return storeChunked(ctx, txn, jobID, name, frontier, 2<<20 /* 2mb */)
 }
@@ -92,7 +96,7 @@ func storeChunked(
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	name string,
-	frontier span.Frontier,
+	frontier span.ReadOnlyFrontier,
 	chunkSize int,
 ) error {
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
