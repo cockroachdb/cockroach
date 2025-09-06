@@ -1993,17 +1993,21 @@ func (expr *Placeholder) TypeCheck(
 		return expr, err
 	} else if ok {
 		typ = typ.WithoutTypeModifiers()
-		if !desired.Equivalent(typ) || (typ.IsAmbiguous() && !desired.IsAmbiguous()) {
+		if (!desired.Equivalent(typ) || typ.IsAmbiguous()) && !desired.IsAmbiguous() {
+			// if !desired.Equivalent(typ) || (typ.IsAmbiguous() && !desired.IsAmbiguous()) {
 			// This indicates either:
-			// - There's a conflict between what the type system thinks
-			//   the type for this position should be, and the actual type of the
+			// - There's a conflict between what the type system thinks the type
+			//   for this position should be, and the actual type of the
 			//   placeholder.
-			// - A type was already set for the placeholder, but it was ambiguous. If
-			//   the desired type is not ambiguous then it can be used as the
-			//   placeholder type. This can happen during overload type checking: an
+			// - A type was already set for the placeholder, but it was
+			//   ambiguous.  This can happen during overload type checking: an
 			//   overload that operates on collated strings might cause the type
-			//   checker to assign AnyCollatedString to a placeholder, but a later
-			//   stage of type checking can further refine the desired type.
+			//   checker to assign AnyCollatedString to a placeholder, but a
+			//   later stage of type checking can further refine the desired
+			//   type.
+			//
+			// In both cases, if the desired type is not ambiguous then it can
+			// be used as the placeholder type.
 			//
 			// This actual placeholder type could be either a type hint
 			// (from pgwire or from a SQL PREPARE), or the actual value type.
@@ -2311,7 +2315,8 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Family() == types.UnknownFamily || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !required.IsAmbiguous() && !typ.IsAmbiguous() &&
+		!typ.Equivalent(required) {
 		// A void literal is output as an empty string (see DVoid.Format), so type
 		// annotation of an empty string as VOID ('':::VOID) should succeed.
 		if required.Family() == types.VoidFamily && typ.Family() == types.StringFamily {
