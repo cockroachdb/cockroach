@@ -420,32 +420,45 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	scanPrivate *memo.ScanPrivate,
 	explicitFilters memo.FiltersExpr,
 ) {
-	var pkCols opt.ColSet
-	var sb indexScanBuilder
-	var ok bool
-	var partitionFilters, remainingFilters memo.FiltersExpr
-	var combinedConstraint *constraint.Constraint
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
 
+	var sb indexScanBuilder
 	sb.Init(c, scanPrivate.Table)
 
 	// Build optional filters from check constraint and computed column filters.
 	optionalFilters, filterColumns :=
 		c.GetOptionalFiltersAndFilterColumns(explicitFilters, scanPrivate)
 
+	type candidate struct {
+		index            cat.Index
+		indexCols        opt.ColSet
+		constraint       *constraint.Constraint
+		isCovering       bool
+		remainingFilters memo.FiltersExpr
+		partitionFilters memo.FiltersExpr
+		constProj        memo.ProjectionsExpr
+	}
+
 	// Iterate over all non-inverted, non-vector indexes.
 	var iter scanIndexIter
+	var candidates []candidate
 	reject := rejectInvertedIndexes | rejectVectorIndexes
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, explicitFilters, reject)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		cand := candidate{
+			index:      index,
+			isCovering: isCovering,
+			constProj:  constProj,
+		}
 
 		// Create a prefix sorter that describes which index partitions are
 		// local to the gateway region.
 		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
 		// Build Constraints to scan a subset of the table Spans.
-		if partitionFilters, remainingFilters, combinedConstraint, ok =
+		var ok bool
+		if cand.partitionFilters, cand.remainingFilters, cand.constraint, ok =
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
 				filters, optionalFilters, filterColumns,
@@ -471,35 +484,67 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 					continue
 				}
 				for j := 0; j < optionalConstraints.Length(); j++ {
-					if combinedConstraint.Contains(c.e.ctx, c.e.evalCtx, optionalConstraints.Constraint(j)) {
+					if cand.constraint.Contains(c.e.ctx, c.e.evalCtx, optionalConstraints.Constraint(j)) {
 						return
 					}
 				}
 			}
 		}
+		candidates = append(candidates, cand)
+	})
+
+	// Prune candidates with constraints that contain other constraints, unless
+	// one avoids an index join. These constraints are strictly worse than the
+	// constraints they contain. For example, if we have the two constraints:
+	//
+	// /1/2: [/0 - /0]
+	// /1/2: [/0/100 - /0/101]
+	//
+	// The second constraint is more selective than the first. There is no
+	// reason to ever scan the first unless it is covering and avoids an index
+	// join.
+	var pruned intsets.Fast
+	for i := 0; i < len(candidates); i++ {
+		for j := i + 1; j < len(candidates); j++ {
+			cand1, cand2 := candidates[i], candidates[j]
+			if cand1.isCovering != cand2.isCovering {
+				continue
+			}
+			if cand1.constraint.Contains(c.e.ctx, c.e.evalCtx, cand2.constraint) {
+				pruned.Add(i)
+			}
+		}
+	}
+
+	var pkCols opt.ColSet
+	for i, cand := range candidates {
+		// Skip pruned candidates.
+		if pruned.Contains(i) {
+			continue
+		}
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
-		newScanPrivate.Index = index.Ordinal()
-		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, combinedConstraint)
+		newScanPrivate.Index = cand.index.Ordinal()
+		newScanPrivate.Cols = cand.indexCols.Intersection(scanPrivate.Cols)
+		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, cand.constraint)
 		// Record whether we were able to use partitions to constrain the scan.
-		newScanPrivate.PartitionConstrainedScan = len(partitionFilters) > 0
+		newScanPrivate.PartitionConstrainedScan = len(cand.partitionFilters) > 0
 
 		// If the alternate index includes the set of needed columns, then
 		// construct a new Scan operator using that index.
-		if isCovering {
+		if cand.isCovering {
 			sb.SetScan(&newScanPrivate)
 
 			// Project constants from partial index predicate filters, if there
 			// are any.
-			sb.AddConstProjections(constProj)
+			sb.AddConstProjections(cand.constProj)
 
 			// If there are remaining filters, then the constrained Scan operator
 			// will be created in a new group, and a Select operator will be added
 			// to the same group as the original operator.
-			sb.AddSelect(remainingFilters)
+			sb.AddSelect(cand.remainingFilters)
 
 			sb.Build(grp)
 			return
@@ -523,12 +568,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remainingFilters = sb.AddSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
+		remainingFilters := sb.AddSelectAfterSplit(cand.remainingFilters, newScanPrivate.Cols)
 		sb.AddIndexJoin(scanPrivate.Cols)
 		sb.AddSelect(remainingFilters)
 
 		sb.Build(grp)
-	})
+	}
 }
 
 // inBetweenFilters returns a set of filters that are required to cover all the
