@@ -51,6 +51,7 @@ go_library(
         "lock.go",
         "ranges.go",
         "split_stats_helper.go",
+        "split_trigger_datadriven.go",
         "stateloader.go",
         "transaction.go",
     ],
@@ -95,6 +96,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
@@ -138,6 +140,7 @@ go_test(
         "testutils_test.go",
         "transaction_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":batcheval"],
     exec_properties = {"test.Pool": "large"},
     deps = [
