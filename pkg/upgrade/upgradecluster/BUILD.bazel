@@ -17,6 +17,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/util/ctxgroup",

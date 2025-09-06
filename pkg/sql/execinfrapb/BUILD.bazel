@@ -20,8 +20,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
         "//pkg/security/username",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/colinfo",

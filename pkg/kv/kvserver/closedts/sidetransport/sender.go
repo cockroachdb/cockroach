@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // Sender represents the sending-side of the closed timestamps "side-transport".
@@ -687,11 +685,11 @@ type conn interface {
 // rpcConnFactory is an implementation of connFactory that establishes
 // connections to other nodes using gRPC.
 type rpcConnFactory struct {
-	dialer       nodeDialer
+	dialer       rpcbase.NodeDialer
 	testingKnobs connTestingKnobs
 }
 
-func newRPCConnFactory(dialer nodeDialer, testingKnobs connTestingKnobs) connFactory {
+func newRPCConnFactory(dialer rpcbase.NodeDialer, testingKnobs connTestingKnobs) connFactory {
 	return &rpcConnFactory{
 		dialer:       dialer,
 		testingKnobs: testingKnobs,
@@ -701,12 +699,6 @@ func newRPCConnFactory(dialer nodeDialer, testingKnobs connTestingKnobs) connFac
 // new implements the connFactory interface.
 func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
 	return newRPCConn(f.dialer, s, nodeID, f.testingKnobs)
-}
-
-// nodeDialer abstracts *nodedialer.Dialer.
-type nodeDialer interface {
-	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ *grpc.ClientConn, err error)
-	DRPCDial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ drpc.Conn, err error)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped
@@ -720,7 +712,7 @@ const sleepOnErr = time.Second
 // snapshot before we can resume sending regular messages.
 type rpcConn struct {
 	log.AmbientContext
-	dialer       nodeDialer
+	dialer       rpcbase.NodeDialer
 	producer     *Sender
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
@@ -739,7 +731,7 @@ type rpcConn struct {
 }
 
 func newRPCConn(
-	dialer nodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
+	dialer rpcbase.NodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
 ) conn {
 	r := &rpcConn{
 		dialer:       dialer,
@@ -791,7 +783,7 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass)
+	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
 	if err != nil {
 		return err
 	}
