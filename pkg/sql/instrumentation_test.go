@@ -6,13 +6,18 @@
 package sql
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -21,6 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -293,4 +301,229 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 		}
 	})
 
+}
+
+func TestTxnInstrumentationHelper(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("inactive before init", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		require.Nil(t, helper.zip, "zip should be nil before Init()")
+		require.False(t, helper.Active(), "helper should be inactive before Init() is called")
+	})
+
+	t.Run("active after init", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		helper.Init()
+		firstZip := helper.zip
+		require.NotNil(t, helper.zip, "zip should not be nil after Init()")
+		require.True(t, helper.Active(), "helper should be active after Init() is called")
+
+		helper.Init()
+		require.Same(t, firstZip, helper.zip, "multiple Init() calls should not replace existing zip")
+	})
+
+	t.Run("finalize creates valid zip with trace", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		helper.Init()
+
+		txnID := uuid.MakeV4()
+		recording := tracingpb.Recording{
+			{
+				TraceID:   12345,
+				SpanID:    67890,
+				Operation: "test-operation",
+				StartTime: timeutil.Now(),
+				Duration:  5 * time.Second,
+			},
+		}
+
+		// Add a manual file before finalizing
+		helper.zip.AddFile("custom.txt", "custom content")
+
+		helper.Finalize(txnID, recording)
+
+		require.NotNil(t, helper.buf, "buf should be set after Finalize()")
+		require.NotEmpty(t, helper.buf.Bytes(), "buf should contain zip data")
+
+		// Verify the zip contains expected files
+		reader, err := zip.NewReader(bytes.NewReader(helper.buf.Bytes()), int64(helper.buf.Len()))
+		require.NoError(t, err, "should be able to read the finalized zip")
+		require.Len(t, reader.File, 2, "zip should contain trace and custom files")
+
+		// Check that both expected files are present
+		fileNames := make(map[string]bool)
+		for _, file := range reader.File {
+			fileNames[file.Name] = true
+		}
+		require.True(t, fileNames["trace-jaeger.json"], "zip should contain trace-jaeger.json")
+		require.True(t, fileNames["custom.txt"], "zip should contain custom.txt")
+
+		// Verify the trace file contains valid JSON
+		for _, file := range reader.File {
+			if file.Name == "trace-jaeger.json" {
+				rc, err := file.Open()
+				require.NoError(t, err, "should be able to open trace file")
+				defer rc.Close()
+
+				var buf bytes.Buffer
+				_, err = buf.ReadFrom(rc)
+				require.NoError(t, err, "should be able to read trace file")
+
+				var jaegerData interface{}
+				err = json.Unmarshal(buf.Bytes(), &jaegerData)
+				require.NoError(t, err, "trace file should contain valid JSON")
+			}
+		}
+	})
+
+	t.Run("panics when calling Finalize without Init", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		txnID := uuid.MakeV4()
+		recording := tracingpb.Recording{
+			{
+				TraceID:   12345,
+				SpanID:    67890,
+				Operation: "test-operation",
+			},
+		}
+
+		require.Panics(t, func() {
+			helper.Finalize(txnID, recording)
+		}, "Finalize() should panic when called without Init()")
+	})
+
+	t.Run("finalize handles empty recording", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		helper.Init()
+
+		txnID := uuid.MakeV4()
+		emptyRecording := tracingpb.Recording{}
+
+		// Should not panic with empty recording
+		require.NotPanics(t, func() {
+			helper.Finalize(txnID, emptyRecording)
+		}, "Finalize() should handle empty recording without panicking")
+
+		require.NotNil(t, helper.buf, "buf should be set even with empty recording")
+
+		// Verify zip still contains trace file (even if empty)
+		reader, err := zip.NewReader(bytes.NewReader(helper.buf.Bytes()), int64(helper.buf.Len()))
+		require.NoError(t, err, "should be able to read zip with empty recording")
+		require.Len(t, reader.File, 1, "zip should contain trace file")
+		require.Equal(t, "trace-jaeger.json", reader.File[0].Name, "should contain trace file")
+	})
+
+	t.Run("adds statement bundles with correct naming", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		helper.Init()
+
+		testCases := []struct {
+			sql          string
+			expectedName string
+		}{
+			{"SELECT * FROM users WHERE id = 1", "SELECT"},
+			{"UPDATE users SET name = 'test' WHERE id = 1", "UPDATE"},
+			{"DELETE FROM users WHERE id = 1", "DELETE"},
+			{"CREATE TABLE test (id INT)", "CREATE TABLE"},
+			{"DROP TABLE test", "DROP TABLE"},
+			{"BEGIN", "BEGIN"},
+			{"COMMIT", "COMMIT"},
+		}
+
+		for i, tc := range testCases {
+			stmt, err := parser.ParseOne(tc.sql)
+			require.NoError(t, err, "should be able to parse statement: %s", tc.sql)
+
+			helper.AddStatementBundle(stmt.AST, fmt.Sprintf("data for statement %d", i+1))
+		}
+
+		// Verify statement counter increments correctly
+		require.Equal(t, 7, helper.stmtCounter, "statement counter should be 7 after adding 7 bundles")
+
+		// Finalize to create the zip
+		txnID := uuid.MakeV4()
+		recording := tracingpb.Recording{
+			{
+				TraceID:   12345,
+				SpanID:    67890,
+				Operation: "test-txn",
+			},
+		}
+		helper.Finalize(txnID, recording)
+
+		// Verify zip contains all expected files
+		reader, err := zip.NewReader(bytes.NewReader(helper.buf.Bytes()), int64(helper.buf.Len()))
+		require.NoError(t, err, "should be able to read finalized zip")
+		require.Len(t, reader.File, len(testCases)+1, "zip should contain trace plus 3 statement bundle files")
+
+		// Check file names and contents
+		fileContents := make(map[string]string)
+		for _, file := range reader.File {
+			rc, err := file.Open()
+			require.NoError(t, err, "should be able to open file: %s", file.Name)
+			defer rc.Close()
+
+			var buf bytes.Buffer
+			_, err = buf.ReadFrom(rc)
+			require.NoError(t, err, "should be able to read file: %s", file.Name)
+			fileContents[file.Name] = buf.String()
+		}
+
+		for i, tc := range testCases {
+			expectedFilename := fmt.Sprintf("%d-%s.zip", i+1, tc.expectedName)
+			require.Equal(t, fileContents[expectedFilename], fmt.Sprintf("data for statement %d", i+1),
+				"should contain file: %s in %v", expectedFilename, fileContents)
+		}
+		require.Contains(t, fileContents, "trace-jaeger.json", "should contain trace file")
+	})
+
+	t.Run("panics when AddStatementBundle called without Init", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+
+		selectStmt, err := parser.ParseOne("SELECT 1")
+		require.NoError(t, err, "should be able to parse SELECT statement")
+
+		require.Panics(t, func() {
+			helper.AddStatementBundle(selectStmt.AST, "test data")
+		}, "AddStatementBundle() should panic when called without Init()")
+	})
+
+	t.Run("handles empty bundle data", func(t *testing.T) {
+		helper := &txnInstrumentationHelper{}
+		helper.Init()
+
+		selectStmt, err := parser.ParseOne("SELECT 1")
+		require.NoError(t, err, "should be able to parse SELECT statement")
+
+		// Add bundle with empty data
+		helper.AddStatementBundle(selectStmt.AST, "")
+
+		txnID := uuid.MakeV4()
+		recording := tracingpb.Recording{}
+		helper.Finalize(txnID, recording)
+
+		reader, err := zip.NewReader(bytes.NewReader(helper.buf.Bytes()), int64(helper.buf.Len()))
+		require.NoError(t, err, "should be able to read finalized zip")
+		require.Len(t, reader.File, 2, "zip should contain trace and statement bundle")
+
+		// Verify empty file exists and is readable
+		var foundEmptyBundle bool
+		for _, file := range reader.File {
+			if file.Name == "1-SELECT.zip" {
+				foundEmptyBundle = true
+				rc, err := file.Open()
+				require.NoError(t, err, "should be able to open empty bundle file")
+				defer rc.Close()
+
+				var buf bytes.Buffer
+				_, err = buf.ReadFrom(rc)
+				require.NoError(t, err, "should be able to read empty bundle file")
+				require.Empty(t, buf.String(), "empty bundle should have empty content")
+				break
+			}
+		}
+		require.True(t, foundEmptyBundle, "should find the empty bundle file")
+	})
 }
