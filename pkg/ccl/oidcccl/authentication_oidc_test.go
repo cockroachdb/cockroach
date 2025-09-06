@@ -69,29 +69,37 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 }
 
 type mockOidcManager struct {
-	oauth2Config *oauth2.Config
-	claimEmail   string
+	oauth2Config    *oauth2.Config
+	claimEmail      string
+	authCodeURLHook func(url string, opts ...oauth2.AuthCodeOption)
+	exchangeHook    func(opts ...oauth2.AuthCodeOption)
 }
 
 func (m mockOidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
 	return nil, nil
 }
 
-func (m mockOidcManager) Exchange(
+func (m *mockOidcManager) Exchange(
 	ctx context.Context, s string, option ...oauth2.AuthCodeOption,
 ) (*oauth2.Token, error) {
+	if m.exchangeHook != nil {
+		m.exchangeHook(option...)
+	}
 	return nil, nil
 }
 
-func (m mockOidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) string {
+func (m *mockOidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) string {
+	if m.authCodeURLHook != nil {
+		m.authCodeURLHook(s, option...)
+	}
 	return m.oauth2Config.AuthCodeURL(s, option...)
 }
 
 func (m mockOidcManager) ExchangeVerifyGetTokenInfo(
-	ctx context.Context, code, idTokenKey string, _ bool,
+	ctx context.Context, code, idTokenKey string, _ bool, _ ...oauth2.AuthCodeOption,
 ) (map[string]json.RawMessage, map[string]json.RawMessage, string, string, error) {
 	claims := map[string]json.RawMessage{
-		"email": json.RawMessage(`"test@example.com"`),
+		"email": json.RawMessage(fmt.Sprintf(`"%s"`, m.claimEmail)),
 	}
 	// Return nil for access token claims, and the raw token strings.
 	return claims, nil, "dummy-id-token", "dummy-access-token", nil
@@ -724,4 +732,99 @@ func TestOIDCProviderCustomCACert(t *testing.T) {
 			testCase.assertFn(t, err)
 		})
 	}
+}
+
+// In oidcccl/authentication_oidc_test.go
+
+func TestOIDCWithPKCEEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	usernameUnderTest := "test_pkce_user"
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s`, usernameUnderTest))
+
+	// Mock the OIDC Manager
+	realNewManager := NewOIDCManager
+	NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+		c := &oauth2.Config{
+			ClientID:     conf.clientID,
+			ClientSecret: conf.clientSecret,
+			RedirectURL:  redirectURL,
+			Endpoint: oauth2.Endpoint{
+				AuthURL: "https://provider.example.com/auth",
+			},
+			Scopes: scopes,
+		}
+		return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
+	}
+	defer func() {
+		NewOIDCManager = realNewManager
+	}()
+
+	// Enable OIDC and PKCE settings
+	OIDCProviderURL.Override(ctx, &s.ClusterSettings().SV, "providerURL")
+	OIDCClientID.Override(ctx, &s.ClusterSettings().SV, "pkce_client_id")
+	OIDCClientSecret.Override(ctx, &s.ClusterSettings().SV, "pkce_client_secret")
+	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/pkce/callback")
+	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
+	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	OIDCPKCEEnabled.Override(ctx, &s.ClusterSettings().SV, true) // Enable PKCE
+
+	client, err := s.GetAdminHTTPClient()
+	require.NoError(t, err)
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	// Test the /login endpoint and inspect its redirect URL.
+	resp, err := client.Get(s.AdminURL().WithPath(oidcLoginPath).String())
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+
+	// Get the redirect URL from the Location header.
+	locationURL, err := resp.Location()
+	require.NoError(t, err)
+
+	// Assert that the PKCE parameters are present in the redirect URL's query.
+	codeChallenge := locationURL.Query().Get("code_challenge")
+	require.NotEmpty(t, codeChallenge, "code_challenge should be sent in the auth URL")
+	require.Equal(t, "S256", locationURL.Query().Get("code_challenge_method"))
+
+	// For a more thorough check, decode the state, get the verifier, and ensure the challenge matches.
+	stateParam := locationURL.Query().Get("state")
+	state, err := decodeOIDCState(stateParam)
+	require.NoError(t, err)
+	require.NotEmpty(t, state.PkceCodeVerifier, "PKCE code verifier should be in the state")
+
+	// Verify the challenge is the S256 hash of the verifier.
+	s256 := sha256.Sum256([]byte(state.PkceCodeVerifier))
+	expectedChallenge := base64.RawURLEncoding.EncodeToString(s256[:])
+	require.Equal(t, expectedChallenge, codeChallenge)
+
+	// Test the /callback endpoint.
+	cookie := resp.Cookies()[0]
+	req, err := http.NewRequest("GET", s.AdminURL().WithPath(oidcCallbackPath).String(), nil)
+	require.NoError(t, err)
+	req.AddCookie(cookie)
+	q := req.URL.Query()
+	q.Add("state", stateParam) // Use the state from the redirect
+	q.Add("code", "some-auth-code")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// A successful callback results in another redirect (to the UI),
+	// confirming the flow worked.
+	require.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
 }
