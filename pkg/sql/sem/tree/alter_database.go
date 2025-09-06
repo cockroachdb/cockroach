@@ -5,7 +5,11 @@
 
 package tree
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+)
 
 // AlterDatabaseOwner represents a ALTER DATABASE OWNER TO statement.
 type AlterDatabaseOwner struct {
@@ -245,4 +249,40 @@ func (node *AlterDatabaseSetZoneConfigExtension) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(" CONFIGURE ZONE ")
 	node.ZoneConfigSettings.Format(ctx)
+}
+
+type AlterDatabaseSetStorageParams struct {
+	Name          Name
+	StorageParams StorageParams
+}
+
+var _ Statement = &AlterDatabaseSetStorageParams{}
+
+func (node *AlterDatabaseSetStorageParams) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" SET (")
+	ctx.FormatNode(&node.StorageParams)
+	ctx.WriteString(")")
+}
+
+type AlterDatabaseResetStorageParams struct {
+	Name   Name
+	Params []string
+}
+
+var _ Statement = &AlterDatabaseResetStorageParams{}
+
+func (node *AlterDatabaseResetStorageParams) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" RESET (")
+	for i, param := range node.Params {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		lexbase.EncodeSQLStringWithFlags(buf, param, f.EncodeFlags())
+	}
+	ctx.WriteString(")")
 }
