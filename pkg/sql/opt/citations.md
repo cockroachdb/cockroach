@@ -15,7 +15,7 @@ further information, and in some cases proofs, can be found.
 [3] Galindo-Legaria, C.A. & Joshi, Milind. (2001).
     Orthogonal Optimization of Subqueries and Aggregation.
     Sigmod Record. 30. 571-581. 10.1145/375663.375748. 
-    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf
+    https://sigmodrecord.org/publications/sigmodRecord/0106/pdfs/Orthogonal%20Optimization%20of%20Subqueries%20and%20Aggregation.pdf
 
 [4] Galindo-Legaria, C.A.. (2001).
     Parameterized queries and nesting equivalences.
@@ -24,7 +24,7 @@ further information, and in some cases proofs, can be found.
 [5] Elhemali, Mostafa & Galindo-Legaria, C.A. & Grabs, Torsten & M. Joshi, Milind. (2007).
     Execution strategies for SQL subqueries.
     993-1004. 10.1145/1247480.1247598.
-    https://www.researchgate.net/profile/Mostafa_Elhemali/publication/221213885_Execution_strategies_for_SQL_subqueries/links/584f631308aecb6bd8d02aa4/Execution-strategies-for-SQL-subqueries.pdf
+    https://web.archive.org/web/20161020062359id_/http://www.cse.iitb.ac.in:80/infolab/Data/Courses/CS632/Papers/subquery-proc-elhemali-sigmod07.pdf 
 
 [6] Simmen, David & Shekita, Eugene & Malkemus, Timothy. (1996).
     Fundamental Techniques for Order Optimization.
