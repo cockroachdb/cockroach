@@ -101,7 +101,7 @@ func (ba *BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 			//
 			// See the example in RefreshRequest for more details.
 			if !t.ExpectExclusionSince.IsEmpty() {
-				ts.Backward(t.ExpectExclusionSince.Next())
+				ts.Backward(t.ExpectExclusionSince)
 			}
 		case *ExportRequest:
 			if !t.StartTime.IsEmpty() {
@@ -115,7 +115,7 @@ func (ba *BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 			//
 			// See the example in RefreshRequest for more details.
 			if !t.ExpectExclusionSince.IsEmpty() {
-				ts.Backward(t.ExpectExclusionSince.Next())
+				ts.Backward(t.ExpectExclusionSince)
 			}
 		case *PutRequest:
 			// A PutRequest with ExpectExclusionSince set need to be able to observe MVCC
