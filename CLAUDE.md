@@ -128,6 +128,20 @@ Always run `./dev generate` after modifying `.proto` files, SQL grammar, or opti
 - **Contributing**: See `/CONTRIBUTING.md` and https://wiki.crdb.io/
 - **Design Documents**: `/docs/design.md` and `/docs/tech-notes/`
 
+## Domain Context Files
+Use these high‑signal docs before editing, reviewing, or triaging code in the listed package (and subpackages). If you change an invariant/gate/major flow, update the DCF in the same PR.
+- `pkg/kv/kvclient/kvcoord/INTERCEPTORS.md` — Client-side txn interceptor stack: layering, buffering/pipelining/refresh, commits, settings, and triage.
+- `pkg/kv/kvclient/kvcoord/OVERVIEW.md` — Transaction coordinator and DistSender: lifecycle, routing, retries/refreshes, uncertainty, closed timestamps.
+- `pkg/kv/kvserver/concurrency/OVERVIEW.md` — KV concurrency control: latches, lock table, waits, reliability, triage.
+- `pkg/kv/kvserver/OVERVIEW.md` — Range replication, leases, Raft, snapshots, split/merge, GC, rebalancing, flow control, closed/ protected timestamps, and liveness.
+- `pkg/sql/OVERVIEW.md` — End-to-end SQL engine: parsing, optimizer/planning, DistSQL flows, row/vectorized execution, session state, privilege enforcement, jobs, SQL→KV boundary.
+- `pkg/sql/schemachanger/OVERVIEW.md` — Declarative schema changer architecture (phases, jobs, backfills, protected timestamps, rollback guarantees).
+- `pkg/multitenant/OVERVIEW.md` — Multi-tenancy: tenant isolation, KV routing, capabilities, RU cost control/admission, SQL↔KV boundaries, and tenant upgrade/migration flows.
+- `pkg/storage/OVERVIEW.md` — Storage engine API over Pebble: MVCC encoding/iteration, EAR registries, snapshots/ingestion, I/O categories, and triage.
+- `pkg/settings/OVERVIEW.md` — Cluster settings system: defaults, overrides/propagation, watcher callbacks, tenant scoping, version gates.
+- `pkg/upgrade/OVERVIEW.md` — Cluster upgrades: version gates, migrations, mixed-version compatibility, rollback window, and tenant interactions.
+
+
 ### When generating PRs and commit records
 
 - Follow the format:
