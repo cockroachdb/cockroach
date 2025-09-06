@@ -30,6 +30,8 @@ cockroachdb/kv:
     cockroachdb/kv-prs: other
     cockroachdb/kv-distribution: other
   label: T-kv
+cockroachdb/kv-distribution:
+  label: T-kv,A-kv-distribution
 cockroachdb/admission-control:
   label: T-kv,A-admission-control
 cockroachdb/spatial:
