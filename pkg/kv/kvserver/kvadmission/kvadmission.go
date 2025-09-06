@@ -142,14 +142,32 @@ var ConnectedStoreExpiration = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+// useRangeTenantIDForNonAdminEnabled determines whether the range's tenant ID
+// is used by admission control when called by the system tenant. When false,
+// the requester's tenant ID (i.e., the system tenant ID) is used.
+var useRangeTenantIDForNonAdminEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.use_range_tenant_id_for_non_admin.enabled",
+	"when true, and the caller is the system tenant, the tenantID used by admission control "+
+		"for non-admin requests is overridden to the range's tenantID",
+	true,
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
 	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
-	// populated for admission to work correctly. If err is non-nil, the
-	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
-	// called after the KV work is done executing.
-	AdmitKVWork(context.Context, roachpb.TenantID, *kvpb.BatchRequest) (Handle, error)
+	// populated for admission to work correctly. The requestTenantID represents
+	// the authenticated caller and must be populated. The rangeTenantID
+	// represents the tenant of the range on which the work is being performed
+	// -- in rare cases it may be unpopulated.
+	//
+	// If err is non-nil, the returned handle can be ignored. If err is nil,
+	// AdmittedKVWorkDone must be called after the KV work is done executing.
+	AdmitKVWork(
+		_ context.Context, requestTenantID roachpb.TenantID, rangeTenantID roachpb.TenantID,
+		_ *kvpb.BatchRequest,
+	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
@@ -269,50 +287,16 @@ func MakeController(
 // TODO(irfansharif): There's a fair bit happening here and there's no test
 // coverage. Fix that.
 func (n *controllerImpl) AdmitKVWork(
-	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
-) (handle Handle, retErr error) {
-	ah := Handle{tenantID: tenantID}
+	ctx context.Context,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) (_ Handle, retErr error) {
 	if n.kvAdmissionQ == nil {
-		return ah, nil
+		return Handle{}, nil
 	}
-
-	bypassAdmission := ba.IsAdmin()
-	source := ba.AdmissionHeader.Source
-	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-		// Request is from a SQL node.
-		bypassAdmission = false
-		source = kvpb.AdmissionHeader_FROM_SQL
-	}
-	if source == kvpb.AdmissionHeader_OTHER {
-		bypassAdmission = true
-	}
-	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
-	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
-		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
-			bypassAdmission = true
-		}
-	}
-	// LeaseInfo requests are used as makeshift replica health probes by
-	// DistSender circuit breakers, make sure they bypass AC.
-	//
-	// TODO(erikgrinaker): the various bypass conditions here should be moved to
-	// one or more request flags.
-	if ba.IsSingleLeaseInfoRequest() {
-		bypassAdmission = true
-	}
-	createTime := ba.AdmissionHeader.CreateTime
-	if !bypassAdmission && createTime == 0 {
-		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-		// of zero CreateTime needs to be revisited. It should use high priority.
-		createTime = timeutil.Now().UnixNano()
-	}
-	admissionInfo := admission.WorkInfo{
-		TenantID:        tenantID,
-		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-		CreateTime:      createTime,
-		BypassAdmission: bypassAdmission,
-	}
-
+	admissionInfo := workInfoForBatch(n.settings, requestTenantID, rangeTenantID, ba)
+	ah := Handle{tenantID: admissionInfo.TenantID}
 	admissionEnabled := true
 	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
 	// it would bypass admission, it would consume a slot. When writes are
@@ -323,13 +307,14 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
-		if attemptFlowControl && !bypassAdmission {
+		if attemptFlowControl && !admissionInfo.BypassAdmission {
 			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
 			var err error
-			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+			admitted, err = kvflowHandle.Admit(
+				ctx, admissionInfo.Priority, timeutil.FromUnixNanos(admissionInfo.CreateTime))
 			if err != nil {
 				return Handle{}, err
 			} else if admitted {
@@ -653,4 +638,58 @@ func (wb *StoreWriteBytes) Release() {
 		return
 	}
 	storeWriteBytesPool.Put(wb)
+}
+
+func workInfoForBatch(
+	st *cluster.Settings,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) admission.WorkInfo {
+	bypassAdmission := ba.IsAdmin()
+	source := ba.AdmissionHeader.Source
+	tenantID := requestTenantID
+	if requestTenantID.IsSystem() {
+		if useRangeTenantIDForNonAdminEnabled.Get(&st.SV) && !bypassAdmission &&
+			rangeTenantID.IsSet() {
+			tenantID = rangeTenantID
+		}
+		// Else, either it is an admin request (common), or rangeTenantID is not
+		// set (rare), or the cluster setting is disabled, so continue using the
+		// SystemTenantID.
+	} else {
+		// Request is from a SQL node.
+		bypassAdmission = false
+		source = kvpb.AdmissionHeader_FROM_SQL
+	}
+	if source == kvpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
+	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&st.SV) {
+		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
+			bypassAdmission = true
+		}
+	}
+	// LeaseInfo requests are used as makeshift replica health probes by
+	// DistSender circuit breakers, make sure they bypass AC.
+	//
+	// TODO(erikgrinaker): the various bypass conditions here should be moved to
+	// one or more request flags.
+	if ba.IsSingleLeaseInfoRequest() {
+		bypassAdmission = true
+	}
+	createTime := ba.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+	}
+	return admissionInfo
 }
