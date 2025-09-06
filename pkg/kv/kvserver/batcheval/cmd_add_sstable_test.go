@@ -6,7 +6,6 @@
 package batcheval_test
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"regexp"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1391,14 +1391,14 @@ func runTestDBAddSSTable(
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 
-		var sstFile bytes.Buffer
+		var sstFile objstorage.MemObj
 		w := storage.MakeTransportSSTWriter(ctx, cs, &sstFile)
 		defer w.Close()
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
 
 		_, _, err := db.AddSSTable(
-			ctx, k("b"), k("c"), sstFile.Bytes(), allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("b"), k("c"), sstFile.Data(), allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}

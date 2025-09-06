@@ -8,7 +8,6 @@ package backup
 import (
 	"context"
 	"fmt"
-	"io"
 	"math/rand"
 	"testing"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,8 +59,8 @@ func BenchmarkIteratorMemory(b *testing.B) {
 	makeWriter := func(
 		store cloud.ExternalStorage,
 		filename string,
-		enc *jobspb.BackupEncryptionOptions) (io.WriteCloser, error) {
-		w, err := store.Writer(ctx, filename)
+		enc *jobspb.BackupEncryptionOptions) (objstorage.Writable, error) {
+		w, err := cloud.OpenPebbleWriter(ctx, store, filename)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +87,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 		}
 	}
 
-	writeSST := func(w io.WriteCloser, store cloud.ExternalStorage, payloadSize int, numKeys int) {
+	writeSST := func(w objstorage.Writable, store cloud.ExternalStorage, payloadSize int, numKeys int) {
 		sst := storage.MakeTransportSSTWriter(ctx, store.Settings(), w)
 
 		buf := make([]byte, payloadSize)
@@ -156,7 +156,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 							require.NoError(b, err)
 
 							writeSST(w, store, 100, rows)
-							require.NoError(b, w.Close())
+							require.NoError(b, w.Finish())
 
 							sz, err := store.Size(ctx, filename)
 							require.NoError(b, err)

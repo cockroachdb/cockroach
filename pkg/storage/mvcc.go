@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"math"
 	"runtime"
 	"slices"
@@ -46,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 )
 
 const (
@@ -7734,7 +7734,11 @@ func MVCCIsSpanEmpty(
 // is used by the caller to throw away the empty SST file and avoid unnecessary
 // allocations.
 func MVCCExportFingerprint(
-	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+	ctx context.Context,
+	cs *cluster.Settings,
+	reader Reader,
+	opts MVCCExportOptions,
+	dest objstorage.Writable,
 ) (kvpb.BulkOpSummary, ExportRequestResumeInfo, uint64, bool, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportFingerprint")
 	defer span.Finish()
@@ -7762,7 +7766,11 @@ func MVCCExportFingerprint(
 // interval (StartTS, EndTS] as a Pebble SST. See mvccExportToWriter for more
 // details.
 func MVCCExportToSST(
-	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+	ctx context.Context,
+	cs *cluster.Settings,
+	reader Reader,
+	opts MVCCExportOptions,
+	dest objstorage.Writable,
 ) (kvpb.BulkOpSummary, ExportRequestResumeInfo, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
 	defer span.Finish()
