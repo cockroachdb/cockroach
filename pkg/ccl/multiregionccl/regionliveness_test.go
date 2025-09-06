@@ -403,7 +403,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	for _, ts := range tenants {
 		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeoutLong)
 	}
-	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), cachedDatabaseRegions, retry.Options{}))
+	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), retry.Options{}, cachedDatabaseRegions))
 
 	// Use a closure so that we unconditionally wait for the recovery to finish.
 	grp := ctxgroup.WithContext(ctx)
