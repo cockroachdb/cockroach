@@ -223,7 +223,7 @@ catalog:
   "001":
     descriptor: database
     namespace: (0, 0, "system")
-    num_objects: 64
+    num_objects: 66
   "100":
     comments:
       database: this is the default database
