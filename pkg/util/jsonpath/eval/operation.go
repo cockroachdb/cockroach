@@ -75,7 +75,7 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpPlus, jsonpath.OpMinus:
 		return ctx.evalUnaryArithmetic(op, jsonValue)
 	default:
-		panic(errors.AssertionFailedf("unhandled operation type"))
+		return nil, errors.AssertionFailedf("unhandled operation type")
 	}
 }
 
@@ -98,7 +98,7 @@ func (ctx *jsonpathCtx) evalBoolean(
 	case jsonpath.OpStartsWith:
 		return ctx.evalPredicate(op, jsonValue, evalStartsWithFunc, true /* evalRight */, false /* unwrapRight */)
 	default:
-		panic(errors.AssertionFailedf("unhandled operation type"))
+		return jsonpathBoolUnknown, errors.AssertionFailedf("unhandled operation type")
 	}
 }
 
@@ -224,7 +224,7 @@ func (ctx *jsonpathCtx) evalLogical(
 		}
 		return jsonpathBoolTrue, nil
 	default:
-		panic(errors.AssertionFailedf("unhandled logical operation type"))
+		return jsonpathBoolUnknown, errors.AssertionFailedf("unhandled logical operation type")
 	}
 
 	rightOp, ok := op.Right.(jsonpath.Operation)
@@ -247,7 +247,7 @@ func (ctx *jsonpathCtx) evalLogical(
 		}
 		return rightBool, nil
 	default:
-		panic(errors.AssertionFailedf("unhandled logical operation type"))
+		return jsonpathBoolUnknown, errors.AssertionFailedf("unhandled logical operation type")
 	}
 }
 
@@ -359,7 +359,7 @@ func evalComparisonFunc(operation jsonpath.Operation, l, r json.JSON) (jsonpathB
 		// Don't evaluate non-scalar types.
 		return jsonpathBoolUnknown, nil
 	default:
-		panic(errors.AssertionFailedf("unhandled json type"))
+		return jsonpathBoolUnknown, errors.AssertionFailedf("unhandled json type")
 	}
 
 	var res bool
@@ -377,7 +377,7 @@ func evalComparisonFunc(operation jsonpath.Operation, l, r json.JSON) (jsonpathB
 	case jsonpath.OpCompGreaterEqual:
 		res = cmp >= 0
 	default:
-		panic(errors.AssertionFailedf("unhandled jsonpath comparison type"))
+		return jsonpathBoolUnknown, errors.AssertionFailedf("unhandled jsonpath comparison type")
 	}
 	if res {
 		return jsonpathBoolTrue, nil
@@ -473,7 +473,7 @@ func performArithmetic(
 		}
 		_, err = tree.DecimalCtx.Rem(&res, leftNum, rightNum)
 	default:
-		panic(errors.AssertionFailedf("unhandled jsonpath arithmetic type"))
+		return nil, errors.AssertionFailedf("unhandled jsonpath arithmetic type")
 	}
 	if err != nil {
 		return nil, err
