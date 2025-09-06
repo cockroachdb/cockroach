@@ -994,6 +994,7 @@ func (w *tpcc) Ops(
 			if err != nil {
 				return workload.QueryLoad{}, err
 			}
+			workload.ConfigurePgxConnConfigWithUnsafeInternals(connConfig)
 			conn, err := pgx.ConnectConfig(ctx, connConfig)
 			if err != nil {
 				return workload.QueryLoad{}, err
@@ -1147,7 +1148,7 @@ func (w *tpcc) executeTx(
 }
 
 func (w *tpcc) partitionAndScatter(ctx context.Context, urls []string) (err error) {
-	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	db, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}

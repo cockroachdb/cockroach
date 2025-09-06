@@ -7,7 +7,6 @@ package sqlsmith
 
 import (
 	"context"
-	gosql "database/sql"
 	"math/rand"
 	"strings"
 
@@ -129,7 +128,7 @@ func (g *sqlSmith) Ops(
 	if err := g.validateErrorSetting(); err != nil {
 		return workload.QueryLoad{}, err
 	}
-	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	db, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

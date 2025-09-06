@@ -315,7 +315,7 @@ func workerRun(
 
 func runInit(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
-	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	initDB, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
@@ -397,7 +397,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 
 	startPProfEndPoint(ctx)
-	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	initDB, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}

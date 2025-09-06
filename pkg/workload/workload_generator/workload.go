@@ -436,7 +436,7 @@ func (w *workloadGenerator) Ops(
 	if len(urls) == 0 {
 		return workload.QueryLoad{}, fmt.Errorf("no database URLs provided")
 	}
-	db, err := gosql.Open("postgres", urls[0])
+	db, err := workload.OpenDBWithUnsafeInternals("postgres", urls[0])
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

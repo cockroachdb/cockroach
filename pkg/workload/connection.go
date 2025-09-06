@@ -6,6 +6,7 @@
 package workload
 
 import (
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
 )
 
@@ -155,4 +157,45 @@ func SetUrlConnVars(gen Generator, connFlags *ConnFlags, urls []string) error {
 		urls[i] = parsed.String()
 	}
 	return nil
+}
+
+// OpenDBWithUnsafeInternals opens a database connection and sets allow_unsafe_internals = on.
+// This is a convenience function for workload implementations that need to access
+// crdb_internal and system tables.
+func OpenDBWithUnsafeInternals(driverName, dataSourceName string) (*gosql.DB, error) {
+	// Add allow_unsafe_internals=on to the connection URL so it gets set on every
+	// connection from the pool, not just the initial connection
+	urlWithUnsafeInternals, err := AddUnsafeInternalsToURL(dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := gosql.Open(driverName, urlWithUnsafeInternals)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// ConfigurePgxConnConfigWithUnsafeInternals configures a pgx connection config to set allow_unsafe_internals = on.
+// This is a convenience function for workload implementations that use pgx and need to access
+// crdb_internal and system tables.
+func ConfigurePgxConnConfigWithUnsafeInternals(connCfg *pgx.ConnConfig) {
+	if connCfg.RuntimeParams == nil {
+		connCfg.RuntimeParams = make(map[string]string)
+	}
+	connCfg.RuntimeParams["allow_unsafe_internals"] = "on"
+}
+
+// AddUnsafeInternalsToURL adds allow_unsafe_internals=on to a database URL.
+func AddUnsafeInternalsToURL(dbURL string) (string, error) {
+	parsed, err := url.Parse(dbURL)
+	if err != nil {
+		return "", err
+	}
+	q := parsed.Query()
+	q.Set("allow_unsafe_internals", "on")
+	parsed.RawQuery = q.Encode()
+	return parsed.String(), nil
 }

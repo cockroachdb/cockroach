@@ -225,7 +225,7 @@ func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 	}
 	defer func() { _ = gcs.Close() }()
 
-	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	sqlDB, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
@@ -288,7 +288,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	}
 	defer func() { _ = gcs.Close() }()
 
-	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	sqlDB, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 
 func fixturesImport(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
-	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	sqlDB, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}

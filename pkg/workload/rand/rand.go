@@ -108,7 +108,7 @@ func (w *random) Tables() []workload.Table {
 func (w *random) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (ql workload.QueryLoad, retErr error) {
-	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	db, err := workload.OpenDBWithUnsafeInternals(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}

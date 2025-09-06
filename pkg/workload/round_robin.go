@@ -22,7 +22,7 @@ type RoundRobinDB struct {
 func NewRoundRobinDB(urls []string) (*RoundRobinDB, error) {
 	r := &RoundRobinDB{handles: make([]*gosql.DB, 0, len(urls))}
 	for _, url := range urls {
-		db, err := gosql.Open(`cockroach`, url)
+		db, err := OpenDBWithUnsafeInternals(`cockroach`, url)
 		if err != nil {
 			return nil, err
 		}

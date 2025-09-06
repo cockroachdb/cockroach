@@ -100,7 +100,7 @@ func (w *tpccChecks) Ops(
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
 		var err error
-		dbs[i], err = gosql.Open(`cockroach`, url)
+		dbs[i], err = workload.OpenDBWithUnsafeInternals(`cockroach`, url)
 		if err != nil {
 			return workload.QueryLoad{}, errors.Wrapf(err, "failed to dial %s", url)
 		}
