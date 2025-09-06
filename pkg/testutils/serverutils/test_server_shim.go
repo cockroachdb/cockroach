@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -564,5 +564,5 @@ func TryEnableDRPCSetting(ctx context.Context, t TestLogger, args *base.TestServ
 	if args.Settings == nil {
 		args.Settings = cluster.MakeClusterSettings()
 	}
-	rpc.ExperimentalDRPCEnabled.Override(ctx, &args.Settings.SV, true)
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.Settings.SV, true)
 }
