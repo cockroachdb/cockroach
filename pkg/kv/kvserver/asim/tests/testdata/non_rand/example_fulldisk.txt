@@ -24,6 +24,8 @@ eval duration=30m seed=42 metrics=(replicas,disk_fraction_used)
 ----
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
 disk_fraction_used#1: last:  [s1=0.30, s2=0.30, s3=0.30, s4=0.30, s5=0.95] (stddev=0.26, mean=0.43, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=33%, s2=28%, s3=32%, s4=32%, s5=110%]  (sum=235%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
 replicas#1: last:  [s1=322, s2=328, s3=327, s4=323, s5=200] (stddev=50.05, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=262%, s2=221%, s3=253%, s4=256%, s5=72%]  (sum=1063%)
 artifacts[default]: 686ff7227dd03ade

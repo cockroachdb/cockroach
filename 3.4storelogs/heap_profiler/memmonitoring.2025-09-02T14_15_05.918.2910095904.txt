@@ -1,0 +1,124 @@
+root 8.5 MiB (15 GiB / 0 B)
+    sql 7.6 MiB
+        session root 70 KiB (21 KiB / 84 KiB)
+            session 70 KiB
+                session prepared statements 45 KiB
+        session root 70 KiB (21 KiB / 84 KiB)
+            session 70 KiB
+                session prepared statements 45 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 110 KiB (21 KiB / 84 KiB)
+            txn 30 KiB
+                flow-c8e05d09 30 KiB
+                    cfetcher-unlimited 20 KiB
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 110 KiB (21 KiB / 84 KiB)
+            txn 30 KiB
+                flow-3bab5a43 30 KiB
+                    cfetcher-unlimited 20 KiB
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 110 KiB (21 KiB / 84 KiB)
+            txn 30 KiB
+                flow-d6a53b7c 30 KiB
+                    cfetcher-unlimited 20 KiB
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 110 KiB (21 KiB / 84 KiB)
+            txn 30 KiB
+                flow-23a35337 30 KiB
+                    cfetcher-unlimited 20 KiB
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 100 KiB (21 KiB / 84 KiB)
+            txn 20 KiB
+                flow-c7dc3d1d 20 KiB
+                    cfetcher-unlimited 20 KiB
+            session 80 KiB
+                session prepared statements 57 KiB
+        session root 80 KiB (21 KiB / 84 KiB)
+            session 80 KiB
+                session prepared statements 57 KiB
+        conn 3.4 MiB
+        SQLStats 330 KiB
+        SQLStats 730 KiB
+    leased-descriptors 90 KiB
+    closed-session-cache 290 KiB
+    kv-mem 10 KiB
+        rangefeed-monitor 10 KiB
+        rangefeed-system-monitor 20 KiB (128 MiB / 0 B)

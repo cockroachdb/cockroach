@@ -1,0 +1,7 @@
+I250902 12:17:39.331076 1 util/log/file_sync_buffer.go:237 ⋮ [config]   file created at: 2025/09/02 12:17:39
+I250902 12:17:39.331095 1 util/log/file_sync_buffer.go:237 ⋮ [config]   running on machine: ‹tobias-mma-0004›
+I250902 12:17:39.331107 1 util/log/file_sync_buffer.go:237 ⋮ [config]   binary: CockroachDB CCL v25.4.0-alpha.1-dev-ee0bb8fa3912df192238a61e6d0e471f14408b2c (x86_64-pc-linux-gnu, built 2025/09/02 12:02:23, go1.23.12 X:nocoverageredesign)
+I250902 12:17:39.331113 1 util/log/file_sync_buffer.go:237 ⋮ [config]   arguments: [‹./cockroach› ‹start› ‹--insecure› ‹--log› ‹file-defaults: {dir: 'logs', exit-on-error: false}› ‹--listen-addr=:26257› ‹--http-addr=:26258› ‹--advertise-addr=10.142.1.185:26257› ‹--join=34.26.45.63:26257› ‹--store› ‹path=/mnt/data1/cockroach,attrs=store1:node4:node4store1› ‹--store› ‹path=/mnt/data2/cockroach,attrs=store2:node4:node4store2› ‹--store› ‹path=/mnt/data3/cockroach,attrs=store3:node4:node4store3› ‹--store› ‹path=/mnt/data4/cockroach,attrs=store4:node4:node4store4› ‹--wal-failover=among-stores› ‹--cache=25%› ‹--locality=cloud=gce,region=us-east1,zone=us-east1-c› ‹--max-sql-memory=25%›]
+I250902 12:17:39.331139 1 util/log/file_sync_buffer.go:237 ⋮ [config]   log format (utf8=✓): crdb-v2
+I250902 12:17:39.331143 1 util/log/file_sync_buffer.go:237 ⋮ [config]   line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg
+I250902 12:17:39.330886 1 util/log/flags.go:239  [-] 1  stderr capture started

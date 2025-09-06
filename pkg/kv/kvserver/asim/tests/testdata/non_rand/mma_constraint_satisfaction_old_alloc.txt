@@ -29,8 +29,11 @@ set_span_config
 eval duration=60m samples=1 seed=42 metrics=(cpu,leases,replicas)
 ----
 cpu#1: last:  [s1=41374276, s2=27297814, s3=32347286, s4=499562, s5=499562, s6=499562, s7=0, s8=0, s9=0] (stddev=16111846.58, mean=11390895.78, sum=102518062)
+cpu#1: thrash_pct: [s1=14%, s2=14%, s3=29%, s4=1%, s5=1%, s6=1%, s7=0%, s8=0%, s9=0%]  (sum=59%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
 leases#1: last:  [s1=41, s2=27, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=16.07, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=8%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=8%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
 replicas#1: last:  [s1=69, s2=67, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=8%, s2=6%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=14%)
 artifacts[default]: 69a8bda9ac7f99aa
