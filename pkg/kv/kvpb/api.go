@@ -2118,6 +2118,16 @@ func BulkOpSummaryID(tableID, indexID uint64) uint64 {
 	return (tableID << 32) | indexID
 }
 
+// DecodeIndexID returns the index ID encoded within a BulkOpSummaryID, given
+// the table ID.
+func DecodeIndexID(bulkID, tableID uint64) (uint64, error) {
+	expectedPrefix := tableID << 32
+	if (bulkID &^ 0xffffffff) != expectedPrefix {
+		return 0, errors.AssertionFailedf("mismatched tableID")
+	}
+	return bulkID & 0xffffffff, nil
+}
+
 // Add combines the values from other, for use on an accumulator BulkOpSummary.
 func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.DataSize += other.DataSize
