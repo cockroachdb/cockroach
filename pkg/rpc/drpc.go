@@ -168,6 +168,34 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	var unaryInterceptors []drpcmux.UnaryServerInterceptor
 	var streamInterceptors []drpcmux.StreamServerInterceptor
 
+	unaryInterceptors = append(unaryInterceptors, func(
+		ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
+	) (interface{}, error) {
+		var resp interface{}
+		if err := rpcCtx.Stopper.RunTaskWithErr(ctx, rpc, func(ctx context.Context) error {
+			var err error
+			resp, err = handler(ctx, req)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	})
+
+	streamInterceptors = append(streamInterceptors, func(
+		stream drpc.Stream, rpc string, handler drpcmux.StreamHandler,
+	) (interface{}, error) {
+		var resp interface{}
+		if err := rpcCtx.Stopper.RunTaskWithErr(stream.Context(), rpc, func(ctx context.Context) error {
+			var err error
+			resp, err = handler(stream)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+		return resp, nil
+	})
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
