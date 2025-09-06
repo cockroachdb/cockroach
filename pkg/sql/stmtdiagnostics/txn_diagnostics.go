@@ -31,6 +31,30 @@ type TxnRequest struct {
 	samplingProbability float64
 }
 
+func NewTxnRequest(
+	txnFingerprintId uint64,
+	stmtFingerprintsId []uint64,
+	redacted bool,
+	username string,
+	expiresAt time.Time,
+	minExecutionLatency time.Duration,
+	samplingProbability float64,
+) TxnRequest {
+	return TxnRequest{
+		txnFingerprintId:    txnFingerprintId,
+		stmtFingerprintsId:  stmtFingerprintsId,
+		redacted:            redacted,
+		username:            username,
+		expiresAt:           expiresAt,
+		minExecutionLatency: minExecutionLatency,
+		samplingProbability: samplingProbability,
+	}
+}
+
+func (t *TxnRequest) TxnFingerprintId() uint64 {
+	return t.txnFingerprintId
+}
+
 func (t *TxnRequest) StmtFingerprintIds() []uint64 {
 	return t.stmtFingerprintsId
 }
@@ -56,10 +80,11 @@ func (t *TxnRequest) isConditional() bool {
 // as a transaction diagnostic bundle
 type TxnDiagnostic struct {
 	stmtDiagnostics []StmtDiagnostic
+	bundle          []byte
 }
 
-func NewTxnDiagnostic(stmtDiagnostics []StmtDiagnostic) TxnDiagnostic {
-	return TxnDiagnostic{stmtDiagnostics: stmtDiagnostics}
+func NewTxnDiagnostic(stmtDiagnostics []StmtDiagnostic, bundle []byte) TxnDiagnostic {
+	return TxnDiagnostic{stmtDiagnostics: stmtDiagnostics, bundle: bundle}
 }
 
 // TxnRegistry maintains a view on the transactions on which a diagnostic
@@ -219,6 +244,13 @@ func (r *TxnRegistry) InsertTxnDiagnostic(
 	var txnDiagnosticId CollectedInstanceID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("txn-diag-insert-bundle")
+
+		_, err := r.StmtRegistry.insertBundleChunks(ctx, diagnostic.bundle, "transaction diagnostics bundle", txn)
+		// Insert the transaction diagnostic bundle
+		if err != nil {
+			return err
+		}
+		// Insert all the statement diagnostics
 		stmtDiagnostics := tree.NewDArray(types.Int)
 		for _, sd := range diagnostic.stmtDiagnostics {
 			id, err := r.StmtRegistry.innerInsertStatementDiagnostics(ctx, sd, txn)

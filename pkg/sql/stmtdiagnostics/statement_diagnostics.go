@@ -591,6 +591,41 @@ func (r *Registry) InsertStatementDiagnostics(
 	return diagID, err
 }
 
+func (r *Registry) insertBundleChunks(
+	ctx context.Context, bundle []byte, description string, txn isql.Txn,
+) (*tree.DArray, error) {
+	bundleChunksVal := tree.NewDArray(types.Int)
+	bundleToUpload := bundle
+	for len(bundleToUpload) > 0 {
+		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
+		chunk := bundleToUpload
+		if len(chunk) > chunkSize {
+			chunk = chunk[:chunkSize]
+		}
+		bundleToUpload = bundleToUpload[len(chunk):]
+
+		// Insert the chunk into system.statement_bundle_chunks.
+		row, err := txn.QueryRowEx(
+			ctx, "stmt-bundle-chunks-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
+			description,
+			tree.NewDBytes(tree.DBytes(chunk)),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			return nil, errors.New("failed to check statement bundle chunk")
+		}
+		chunkID := row[0].(*tree.DInt)
+		if err := bundleChunksVal.Append(chunkID); err != nil {
+			return nil, err
+		}
+	}
+	return bundleChunksVal, nil
+}
+
 func (r *Registry) innerInsertStatementDiagnostics(
 	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn,
 ) (CollectedInstanceID, error) {
@@ -621,34 +656,9 @@ func (r *Registry) innerInsertStatementDiagnostics(
 		errorVal = tree.NewDString(diagnostic.collectionErr.Error())
 	}
 
-	bundleChunksVal := tree.NewDArray(types.Int)
-	bundleToUpload := diagnostic.bundle
-	for len(bundleToUpload) > 0 {
-		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
-		chunk := bundleToUpload
-		if len(chunk) > chunkSize {
-			chunk = chunk[:chunkSize]
-		}
-		bundleToUpload = bundleToUpload[len(chunk):]
-
-		// Insert the chunk into system.statement_bundle_chunks.
-		row, err := txn.QueryRowEx(
-			ctx, "stmt-bundle-chunks-insert", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
-			"statement diagnostics bundle",
-			tree.NewDBytes(tree.DBytes(chunk)),
-		)
-		if err != nil {
-			return diagID, err
-		}
-		if row == nil {
-			return diagID, errors.New("failed to check statement bundle chunk")
-		}
-		chunkID := row[0].(*tree.DInt)
-		if err := bundleChunksVal.Append(chunkID); err != nil {
-			return diagID, err
-		}
+	bundleChunksVal, err := r.insertBundleChunks(ctx, diagnostic.bundle, "statement diagnostics bundle", txn)
+	if err != nil {
+		return diagID, err
 	}
 
 	collectionTime := timeutil.Now()
