@@ -38,13 +38,17 @@ type lexer struct {
 	lastError error
 }
 
-func (l *lexer) init(sql string, tokens []sqlSymType, nakedIntType *types.T) {
+// numAnnotations indicates the number of annotations that have already been
+// claimed.
+func (l *lexer) init(
+	sql string, tokens []sqlSymType, nakedIntType *types.T, numAnnotations tree.AnnotationIdx,
+) {
 	l.in = sql
 	l.tokens = tokens
 	l.lastPos = -1
 	l.stmt = nil
 	l.numPlaceholders = 0
-	l.numAnnotations = 0
+	l.numAnnotations = numAnnotations
 	l.lastError = nil
 
 	l.nakedIntType = nakedIntType
