@@ -1505,7 +1505,18 @@ func MVCCGetWithValueHeader(
 		return result, enginepb.MVCCValueHeader{}, err
 	}
 	defer iter.Close()
+
+	// Capture initial block read stats to track blocks loaded during this MVCC get.
+	initialStats := iter.Stats()
+	initialBlockReads := initialStats.Stats.InternalStats.TotalBlockReads()
+
 	value, intent, err := mvccGet(ctx, iter, key, timestamp, opts)
+
+	// Record block loads for this MVCC get operation.
+	finalStats := iter.Stats()
+	finalBlockReads := finalStats.Stats.InternalStats.TotalBlockReads()
+	blockLoads := int64(finalBlockReads.Count - initialBlockReads.Count)
+	reader.RecordMVCCGetBlocksLoaded(blockLoads)
 	val := value.ToPointer()
 	if err == nil && val != nil {
 		// NB: This calculation is different from Scan, since Scan responses include

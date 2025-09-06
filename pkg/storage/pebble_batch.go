@@ -456,6 +456,13 @@ func (wb *writeBatch) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 	return wb.shouldWriteLocalTimestamps
 }
 
+// RecordMVCCGetBlocksLoaded implements the Reader interface.
+func (wb *writeBatch) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	if wb.parent != nil {
+		wb.parent.RecordMVCCGetBlocksLoaded(blockLoads)
+	}
+}
+
 // Close implements the WriteBatch interface.
 func (wb *writeBatch) Close() {
 	wb.close()
@@ -727,6 +734,13 @@ func (p *pebbleBatch) PinEngineStateForIterators(readCategory fs.ReadCategory) e
 		// just created it, so cloning it would just be overhead.
 	}
 	return nil
+}
+
+// RecordMVCCGetBlocksLoaded implements the Reader interface.
+func (p *pebbleBatch) RecordMVCCGetBlocksLoaded(blockLoads int64) {
+	if p.parent != nil {
+		p.parent.RecordMVCCGetBlocksLoaded(blockLoads)
+	}
 }
 
 // ClearMVCCIteratorRange implements the Batch interface.
