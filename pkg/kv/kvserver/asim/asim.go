@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/logtags"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
@@ -323,6 +324,9 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 	for _, store := range stores {
 		storeID := store.StoreID()
 
+		ctx := logtags.AddTag(ctx, "n", store.NodeID())
+		ctx = logtags.AddTag(ctx, "s", storeID)
+
 		// Tick the split queue.
 		s.sqs[storeID].Tick(ctx, tick, state)
 		// Tick the replicate queue.
@@ -370,6 +374,8 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
+		ctx := logtags.AddTag(ctx, "n", store.NodeID())
+		ctx = logtags.AddTag(ctx, "s", store.StoreID())
 		s.srs[store.StoreID()].Tick(ctx, tick, state)
 	}
 }
@@ -380,6 +386,8 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, 
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
+		ctx := logtags.AddTag(ctx, "n", store.NodeID())
+		ctx = logtags.AddTag(ctx, "s", store.StoreID())
 		s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
 	}
 }

@@ -8,7 +8,6 @@ package queue
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -59,7 +58,8 @@ func NewLeaseQueue(
 		as:        allocatorSync,
 	}
 	lq.AddLogTag("lease", nil)
-	lq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
+	lq.AddLogTag("n", nodeID)
+	lq.AddLogTag("s", storeID)
 	return &lq
 }
 
