@@ -103,8 +103,11 @@ func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *
 func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
 	leftCols, rightCols opt.ColList,
 ) (keyCols opt.ColSet, ok bool) {
-	if len(leftCols) != len(rightCols) || len(leftCols) == 0 {
+	if len(leftCols) != len(rightCols) {
 		panic(errors.AssertionFailedf("invalid union"))
+	}
+	if len(leftCols) == 0 {
+		return opt.ColSet{}, false
 	}
 	md := c.mem.Metadata()
 	leftTableID, rightTableID := md.ColumnMeta(leftCols[0]).Table, md.ColumnMeta(rightCols[0]).Table
