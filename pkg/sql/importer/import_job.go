@@ -279,6 +279,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
+	_, err = postImportRowCounts(ctx, p.ExecCfg(), details.Tables[0].Desc, hlc.Timestamp{WallTime: details.Walltime})
+
 	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
 	}
@@ -306,6 +308,82 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), true, nil, r.res.Rows)
 
 	return nil
+}
+
+func postImportRowCounts(
+	ctx context.Context,
+	cfg *sql.ExecutorConfig,
+	tblDescriptor *descpb.TableDescriptor,
+	importStartTime hlc.Timestamp,
+) (map[string]int64, error) {
+	tblDesc := tabledesc.NewBuilder(tblDescriptor).BuildImmutableTable()
+	tblSpan := tblDesc.TableSpan(cfg.Codec)
+
+	sender := cfg.DB.NonTransactionalSender()
+	request := &kvpb.BatchRequest{
+		Header: kvpb.Header{
+			Timestamp: cfg.Clock.Now(),
+		},
+	}
+
+	request.Add(&kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    tblSpan.Key,
+			EndKey: tblSpan.EndKey,
+		},
+		StartTime: importStartTime,
+	})
+
+	kvDBRes, kvErr := sender.Send(ctx, request)
+	if kvErr != nil {
+		return nil, kvErr.GoError()
+	}
+
+	if kvDBRes == nil {
+		return nil, errors.AssertionFailedf("unexpected nil response for post import row count request")
+	}
+
+	if len(kvDBRes.Responses) != 1 {
+		return nil, errors.AssertionFailedf("expected 1 response, got %d", len(kvDBRes.Responses))
+	}
+
+	exportRes, ok := kvDBRes.Responses[0].GetInner().(*kvpb.ExportResponse)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected ExportResponse, got %T", kvDBRes.Responses[0].GetInner())
+	}
+
+	res := make(map[string]int64)
+	tblID := uint64(tblDesc.GetID())
+
+	allIndexes := tblDesc.AllIndexes()
+
+	for _, f := range exportRes.Files {
+		for idxID, count := range f.Exported.EntryCounts {
+			decodedIdxID, err := kvpb.DecodeIndexID(idxID, tblID)
+			if err != nil {
+				return nil, errors.Wrap(err, "decoding index ID in export response")
+			}
+			indexName, err := indexIDToName(allIndexes, decodedIdxID)
+			if err != nil {
+				return nil, errors.Wrapf(err, "resolve index name for table %s", tblDesc.GetName())
+			}
+			if _, ok := res[indexName]; ok {
+				return nil, errors.AssertionFailedf("duplicate index ID %d in export response", idxID)
+			}
+			res[indexName] = count
+		}
+	}
+
+	return res, nil
+}
+
+func indexIDToName(allIdxes []catalog.Index, idx uint64) (string, error) {
+	for _, i := range allIdxes {
+		if i.GetID() == descpb.IndexID(idx) {
+			return i.GetName(), nil
+		}
+	}
+	return "", errors.AssertionFailedf("index %d not found", idx)
 }
 
 // prepareTablesForIngestion prepares table descriptors for the ingestion
