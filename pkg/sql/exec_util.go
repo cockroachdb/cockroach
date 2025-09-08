@@ -759,6 +759,13 @@ var costScansWithDefaultColSize = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+var optimizerIgnoreRowWidth = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	`sql.defaults.optimizer_ignore_row_width.enabled`,
+	"setting to true ignores the number of columns and bytes per column when costing plans",
+	false,
+	settings.WithPublic)
+
 var enableSuperRegions = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.super_regions.enabled",
@@ -4027,6 +4034,10 @@ func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsOnlyOnMRMutations(
 // is fully supported.
 func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {
 	m.data.CostScansWithDefaultColSize = val
+}
+
+func (m *sessionDataMutator) SetOptimizerIgnoreRowWidth(val bool) {
+	m.data.OptimizerIgnoreRowWidth = val
 }
 
 func (m *sessionDataMutator) SetEnableImplicitTransactionForBatchStatements(val bool) {

@@ -325,6 +325,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().CostScansWithDefaultColSize = false
 	notStale()
 
+	// Stale optimizer ignore row width.
+	evalCtx.SessionData().OptimizerIgnoreRowWidth = true
+	stale()
+	evalCtx.SessionData().OptimizerIgnoreRowWidth = false
+	notStale()
+
 	// Stale unconstrained non-covering index scan enabled.
 	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = true
 	stale()

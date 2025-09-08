@@ -164,6 +164,7 @@ type Memo struct {
 	txnRowsReadErr                             int64
 	nullOrderedLast                            bool
 	costScansWithDefaultColSize                bool
+	ignoreRowWidth                             bool
 	allowUnconstrainedNonCoveringIndexScan     bool
 	testingOptimizerRandomSeed                 int64
 	testingOptimizerCostPerturbation           float64
@@ -271,6 +272,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		txnRowsReadErr:                             evalCtx.SessionData().TxnRowsReadErr,
 		nullOrderedLast:                            evalCtx.SessionData().NullOrderedLast,
 		costScansWithDefaultColSize:                evalCtx.SessionData().CostScansWithDefaultColSize,
+		ignoreRowWidth:                             evalCtx.SessionData().OptimizerIgnoreRowWidth,
 		allowUnconstrainedNonCoveringIndexScan:     evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled,
 		testingOptimizerRandomSeed:                 evalCtx.SessionData().TestingOptimizerRandomSeed,
 		testingOptimizerCostPerturbation:           evalCtx.SessionData().TestingOptimizerCostPerturbation,
@@ -446,6 +448,7 @@ func (m *Memo) IsStale(
 		m.txnRowsReadErr != evalCtx.SessionData().TxnRowsReadErr ||
 		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
 		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize ||
+		m.ignoreRowWidth != evalCtx.SessionData().OptimizerIgnoreRowWidth ||
 		m.allowUnconstrainedNonCoveringIndexScan != evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled ||
 		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
 		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||

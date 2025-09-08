@@ -2565,6 +2565,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_ignore_row_width`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_ignore_row_width`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`optimizer_ignore_row_width`, s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerIgnoreRowWidth(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerIgnoreRowWidth), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(optimizerIgnoreRowWidth.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`default_transaction_quality_of_service`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`default_transaction_quality_of_service`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

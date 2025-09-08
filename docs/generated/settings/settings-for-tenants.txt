@@ -250,6 +250,9 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.on_update_rehome_row.enabled	boolean	true	"default value for on_update_rehome_row; enables ON UPDATE rehome_row() expressions to trigger on updates
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
+sql.defaults.optimizer_ignore_row_width.enabled	boolean	false	"setting to true ignores the number of columns and bytes per column when costing plans
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.optimizer_use_histograms.enabled	boolean	true	"default value for optimizer_use_histograms session setting; enables usage of histograms in the optimizer by default
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
