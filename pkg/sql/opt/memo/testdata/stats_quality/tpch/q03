@@ -177,89 +177,27 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 {o_shippriority}  493436.00      16.17 <==      1.00                1.00                0.00            1.00
 
 ----Stats for q3_lookup_join_4----
-column_names       row_count  distinct_count  null_count
-{c_custkey}        30519      8643            0
-{c_mktsegment}     30519      1               0
-{l_discount}       30519      11              0
-{l_extendedprice}  30519      30042           0
-{l_orderkey}       30519      11611           0
-{l_shipdate}       30519      120             0
-{o_custkey}        30519      8643            0
-{o_orderdate}      30519      120             0
-{o_orderkey}       30519      11611           0
-{o_shippriority}   30519      1               0
-~~~~
-column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}        493436.00      16.17 <==      30523.00            3.53 <==            0.00            1.00
-{c_mktsegment}     493436.00      16.17 <==      1.00                1.00                0.00            1.00
-{l_discount}       493436.00      16.17 <==      11.00               1.00                0.00            1.00
-{l_extendedprice}  493436.00      16.17 <==      362999.00           12.08 <==           0.00            1.00
-{l_orderkey}       493436.00      16.17 <==      358457.00           30.87 <==           0.00            1.00
-{l_shipdate}       493436.00      16.17 <==      1355.00             11.29 <==           0.00            1.00
-{o_custkey}        493436.00      16.17 <==      30523.00            3.53 <==            0.00            1.00
-{o_orderdate}      493436.00      16.17 <==      1169.00             9.74 <==            0.00            1.00
-{o_orderkey}       493436.00      16.17 <==      358457.00           30.87 <==           0.00            1.00
-{o_shippriority}   493436.00      16.17 <==      1.00                1.00                0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q3_inner_join_5----
-column_names      row_count  distinct_count  null_count
-{c_custkey}       147126     20129           0
-{c_mktsegment}    147126     1               0
-{o_custkey}       147126     20129           0
-{o_orderdate}     147126     1169            0
-{o_orderkey}      147126     145236          0
-{o_shippriority}  147126     1               0
-~~~~
-column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}       222935.00      1.52           30523.00            1.52                0.00            1.00
-{c_mktsegment}    222935.00      1.52           1.00                1.00                0.00            1.00
-{o_custkey}       222935.00      1.52           30523.00            1.52                0.00            1.00
-{o_orderdate}     222935.00      1.52           1169.00             1.00                0.00            1.00
-{o_orderkey}      222935.00      1.52           192056.00           1.32                0.00            1.00
-{o_shippriority}  222935.00      1.52           1.00                1.00                0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q3_select_6----
-column_names      row_count  distinct_count  null_count
-{o_custkey}       727305     99492           0
-{o_orderdate}     727305     1169            0
-{o_orderkey}      727305     727305          0
-{o_shippriority}  727305     1               0
-~~~~
-column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_custkey}       728580.00      1.00           99841.00            1.00                0.00            1.00
-{o_orderdate}     728580.00      1.00           1169.00             1.00                0.00            1.00
-{o_orderkey}      728580.00      1.00           728580.00           1.00                0.00            1.00
-{o_shippriority}  728580.00      1.00           1.00                1.00                0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q3_scan_7----
-column_names      row_count  distinct_count  null_count
-{o_custkey}       1500000    99846           0
-{o_orderdate}     1500000    2406            0
-{o_orderkey}      1500000    1500000         0
-{o_shippriority}  1500000    1               0
-~~~~
-column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_custkey}       1500000.00     1.00           99846.00            1.00                0.00            1.00
-{o_orderdate}     1500000.00     1.00           2406.00             1.00                0.00            1.00
-{o_orderkey}      1500000.00     1.00           1500000.00          1.00                0.00            1.00
-{o_shippriority}  1500000.00     1.00           1.00                1.00                0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q3_select_8----
-column_names    row_count  distinct_count  null_count
-{c_custkey}     30142      30101           0
-{c_mktsegment}  30142      1               0
-~~~~
-column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}     30550.00       1.01           30523.00            1.01                0.00            1.00
-{c_mktsegment}  30550.00       1.01           1.00                1.00                0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q3_scan_9----
-column_names    row_count  distinct_count  null_count
-{c_custkey}     150000     148813          0
-{c_mktsegment}  150000     5               0
-~~~~
-column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}     150000.00      1.00           148813.00           1.00                0.00            1.00
-{c_mktsegment}  150000.00      1.00           5.00                1.00                0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 ----
 ----

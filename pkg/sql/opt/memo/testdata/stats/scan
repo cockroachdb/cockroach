@@ -2382,12 +2382,12 @@ SELECT * FROM a_check WHERE s < 'a'
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
- ├── stats: [rows=1]
+ ├── stats: [rows=5]
  ├── key: (1)
  ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  └── select
       ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
-      ├── stats: [rows=1, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=5, distinct(3)=1, null(3)=0]
       │   histogram(3)=
       ├── key: (1)
       ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
