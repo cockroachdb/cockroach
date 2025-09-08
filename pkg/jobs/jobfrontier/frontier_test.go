@@ -54,7 +54,10 @@ func TestFrontier(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 	sp := func(i int) roachpb.Span {
-		return roachpb.Span{Key: s.Codec().TablePrefix(100 + uint32(i)), EndKey: s.Codec().TablePrefix(101 + uint32(i))}
+		return roachpb.Span{
+			Key:    s.Codec().TablePrefix(100 + uint32(i)),
+			EndKey: s.Codec().TablePrefix(101 + uint32(i)),
+		}
 	}
 	sp1, sp2, sp3 := sp(0), sp(1), sp(2)
 
@@ -77,6 +80,17 @@ func TestFrontier(t *testing.T) {
 				require.Equal(t, 3, countEntries(loadedFrontier))
 				checkFrontierContainsSpan(t, loadedFrontier, sp1, ts1)
 				checkFrontierContainsSpan(t, loadedFrontier, sp3, ts1)
+
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, "basic")
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t,
+					[]jobspb.ResolvedSpan{
+						{Span: sp1, Timestamp: ts1},
+						{Span: sp2},
+						{Span: sp3, Timestamp: ts1},
+					},
+					spans)
 			},
 		},
 		{
@@ -84,6 +98,10 @@ func TestFrontier(t *testing.T) {
 			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID, f span.Frontier) {},
 			check: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
 				_, found, err := Get(ctx, txn, jobID, "nonexistent")
+				require.NoError(t, err)
+				require.False(t, found)
+
+				_, found, err = GetResolvedSpans(ctx, txn, jobID, "nonexistent")
 				require.NoError(t, err)
 				require.False(t, found)
 			},
@@ -106,6 +124,17 @@ func TestFrontier(t *testing.T) {
 				checkFrontierContainsSpan(t, loadedFrontier, sp1, ts1)
 				checkFrontierContainsSpan(t, loadedFrontier, sp2, ts2)
 				checkFrontierContainsSpan(t, loadedFrontier, sp3, ts1)
+
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, "multi")
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t,
+					[]jobspb.ResolvedSpan{
+						{Span: sp1, Timestamp: ts1},
+						{Span: sp2, Timestamp: ts2},
+						{Span: sp3, Timestamp: ts1},
+					},
+					spans)
 			},
 		},
 		{
@@ -116,6 +145,10 @@ func TestFrontier(t *testing.T) {
 			},
 			check: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
 				_, found, err := Get(ctx, txn, jobID, "deleteme")
+				require.NoError(t, err)
+				require.False(t, found)
+
+				_, found, err = GetResolvedSpans(ctx, txn, jobID, "deleteme")
 				require.NoError(t, err)
 				require.False(t, found)
 			},
@@ -135,6 +168,15 @@ func TestFrontier(t *testing.T) {
 				require.True(t, found)
 				require.Equal(t, 1, countEntries(loadedFrontier))
 				checkFrontierContainsSpan(t, loadedFrontier, sp2, ts2)
+
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, "overwrite")
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t,
+					[]jobspb.ResolvedSpan{
+						{Span: sp2, Timestamp: ts2},
+					},
+					spans)
 			},
 		},
 	}
@@ -255,6 +297,167 @@ func TestStoreChunked(t *testing.T) {
 						}
 					}
 					require.True(t, found, "span %d should be found in loaded frontier", j)
+				}
+				return nil
+			}))
+		})
+	}
+}
+
+func TestGetAllResolvedSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	sp := func(i int) roachpb.Span {
+		return roachpb.Span{
+			Key:    s.Codec().TablePrefix(100 + uint32(i)),
+			EndKey: s.Codec().TablePrefix(101 + uint32(i)),
+		}
+	}
+	sp1, sp2, sp3 := sp(0), sp(1), sp(2)
+
+	ts1, ts2 := hlc.Timestamp{WallTime: 100, Logical: 1}, hlc.Timestamp{WallTime: 200, Logical: 2}
+
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T, txn isql.Txn, jobID jobspb.JobID)
+		expected []jobspb.ResolvedSpan
+	}{
+		{
+			name:     "no frontiers",
+			setup:    func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {},
+			expected: nil,
+		},
+		{
+			name: "single frontier",
+			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
+				f, err := span.MakeFrontier(sp1, sp2, sp3)
+				require.NoError(t, err)
+				_, err = f.Forward(sp1, ts1)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "single", f))
+			},
+			expected: []jobspb.ResolvedSpan{
+				{Span: sp1, Timestamp: ts1},
+				{Span: sp2},
+				{Span: sp3},
+			},
+		},
+		{
+			name: "multiple frontiers",
+			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
+				// First frontier with sp1@ts1 and sp2@zero.
+				f1, err := span.MakeFrontier(sp1, sp2)
+				require.NoError(t, err)
+				_, err = f1.Forward(sp1, ts1)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "frontier1", f1))
+
+				// Second frontier with sp3@ts2.
+				f2, err := span.MakeFrontier(sp3)
+				require.NoError(t, err)
+				_, err = f2.Forward(sp3, ts2)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "frontier2", f2))
+			},
+			expected: []jobspb.ResolvedSpan{
+				{Span: sp1, Timestamp: ts1},
+				{Span: sp2},
+				{Span: sp3, Timestamp: ts2},
+			},
+		},
+		{
+			name: "multiple frontiers with overlapping spans",
+			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
+				// First frontier with sp1@ts1.
+				f1, err := span.MakeFrontier(sp1)
+				require.NoError(t, err)
+				_, err = f1.Forward(sp1, ts1)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "overlap1", f1))
+
+				// Second frontier with sp1@ts2 (different timestamp) and sp2@zero.
+				f2, err := span.MakeFrontier(sp1, sp2)
+				require.NoError(t, err)
+				_, err = f2.Forward(sp1, ts2)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "overlap2", f2))
+			},
+			expected: []jobspb.ResolvedSpan{
+				{Span: sp1, Timestamp: ts1},
+				{Span: sp1, Timestamp: ts2},
+				{Span: sp2},
+			},
+		},
+		{
+			name: "multiple frontiers with some deleted",
+			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
+				// Store first frontier with sp1@ts1.
+				f1, err := span.MakeFrontier(sp1)
+				require.NoError(t, err)
+				_, err = f1.Forward(sp1, ts1)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "keep", f1))
+
+				// Store second frontier with sp2@ts2 then delete it.
+				f2, err := span.MakeFrontier(sp2)
+				require.NoError(t, err)
+				_, err = f2.Forward(sp2, ts2)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "delete", f2))
+				require.NoError(t, Delete(ctx, txn, jobID, "delete"))
+
+				// Store third frontier with sp3@ts1.
+				f3, err := span.MakeFrontier(sp3)
+				require.NoError(t, err)
+				_, err = f3.Forward(sp3, ts1)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "also_keep", f3))
+			},
+			expected: []jobspb.ResolvedSpan{
+				{Span: sp1, Timestamp: ts1},
+				{Span: sp3, Timestamp: ts1},
+			},
+		},
+		{
+			name: "empty frontiers",
+			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
+				// Store a frontier with no spans forwarded.
+				f, err := span.MakeFrontier(sp1, sp2, sp3)
+				require.NoError(t, err)
+				require.NoError(t, Store(ctx, txn, jobID, "empty", f))
+			},
+			expected: []jobspb.ResolvedSpan{
+				{Span: sp1},
+				{Span: sp2},
+				{Span: sp3},
+			},
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			jobID := jobspb.JobID(3000 + i)
+
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				tc.setup(t, txn, jobID)
+				return nil
+			}))
+
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				spans, found, err := GetAllResolvedSpans(ctx, txn, jobID)
+				require.NoError(t, err)
+				if len(tc.expected) > 0 {
+					require.True(t, found)
+					require.ElementsMatch(t, tc.expected, spans)
+				} else {
+					require.False(t, found)
+					require.Empty(t, spans)
 				}
 				return nil
 			}))
