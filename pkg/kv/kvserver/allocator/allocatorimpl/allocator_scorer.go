@@ -342,10 +342,6 @@ type ScatterScorerOptions struct {
 
 var _ ScorerOptions = &ScatterScorerOptions{}
 
-func (o *ScatterScorerOptions) getIOOverloadOptions() IOOverloadOptions {
-	return o.RangeCountScorerOptions.IOOverloadOptions
-}
-
 func (o *ScatterScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, allocRand allocatorRand,
 ) (perturbedSL storepool.StoreList) {
@@ -360,36 +356,45 @@ func (o *ScatterScorerOptions) maybeJitterStoreStats(
 	return storepool.MakeStoreList(perturbedStoreDescs)
 }
 
+// BaseScorerOptions is the base scorer options that is embedded in
+// every scorer option.
+type BaseScorerOptions struct {
+	IOOverload    IOOverloadOptions
+	DiskCapacity  DiskCapacityOptions
+	Deterministic bool
+}
+
+func (bo BaseScorerOptions) getIOOverloadOptions() IOOverloadOptions {
+	return bo.IOOverload
+}
+
+func (bo BaseScorerOptions) getDiskOptions() DiskCapacityOptions {
+	return bo.DiskCapacity
+}
+
+func (bo BaseScorerOptions) deterministicForTesting() bool {
+	return bo.Deterministic
+}
+
+// maybeJitterStoreStats returns the provided store list since that is the
+// default behavior. ScatterScorerOptions is the only scorer option that jitters
+// store stats to rebalance replicas across stores randomly.
+func (bo BaseScorerOptions) maybeJitterStoreStats(
+	sl storepool.StoreList, _ allocatorRand,
+) storepool.StoreList {
+	return sl
+}
+
 // RangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on range counts.
 // This means that the resulting rebalancing decisions will further the goal of
 // converging range counts across stores in the cluster.
 type RangeCountScorerOptions struct {
-	IOOverloadOptions
-	DiskCapacityOptions
-	deterministic           bool
+	BaseScorerOptions
 	rangeRebalanceThreshold float64
 }
 
 var _ ScorerOptions = &RangeCountScorerOptions{}
-
-func (o *RangeCountScorerOptions) getIOOverloadOptions() IOOverloadOptions {
-	return o.IOOverloadOptions
-}
-
-func (o *RangeCountScorerOptions) getDiskOptions() DiskCapacityOptions {
-	return o.DiskCapacityOptions
-}
-
-func (o *RangeCountScorerOptions) maybeJitterStoreStats(
-	sl storepool.StoreList, _ allocatorRand,
-) (perturbedSL storepool.StoreList) {
-	return sl
-}
-
-func (o *RangeCountScorerOptions) deterministicForTesting() bool {
-	return o.deterministic
-}
 
 func (o RangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
@@ -491,10 +496,8 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
 type LoadScorerOptions struct {
-	IOOverloadOptions IOOverloadOptions
-	DiskOptions       DiskCapacityOptions
-	Deterministic     bool
-	LoadDims          []load.Dimension
+	BaseScorerOptions
+	LoadDims []load.Dimension
 
 	// LoadThreshold and MinLoadThreshold track the threshold beyond which a
 	// store should be considered under/overfull and the minimum absolute
@@ -528,23 +531,7 @@ type LoadScorerOptions struct {
 	RebalanceImpact load.Load
 }
 
-func (o *LoadScorerOptions) getIOOverloadOptions() IOOverloadOptions {
-	return o.IOOverloadOptions
-}
-
-func (o *LoadScorerOptions) getDiskOptions() DiskCapacityOptions {
-	return o.DiskOptions
-}
-
-func (o *LoadScorerOptions) maybeJitterStoreStats(
-	sl storepool.StoreList, _ allocatorRand,
-) storepool.StoreList {
-	return sl
-}
-
-func (o *LoadScorerOptions) deterministicForTesting() bool {
-	return o.Deterministic
-}
+var _ ScorerOptions = &LoadScorerOptions{}
 
 // shouldRebalanceBasedOnThresholds tries to determine if, within the given
 // equivalenceClass `eqClass`, rebalancing a replica from one of the existing

@@ -2056,9 +2056,11 @@ func (a Allocator) RebalanceNonVoter(
 // machinery to achieve range count convergence.
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
-		IOOverloadOptions:       a.IOOverloadOptions(),
-		DiskCapacityOptions:     a.DiskOptions(),
-		deterministic:           a.deterministic,
+		BaseScorerOptions: BaseScorerOptions{
+			IOOverload:    a.IOOverloadOptions(),
+			DiskCapacity:  a.DiskOptions(),
+			Deterministic: a.deterministic,
+		},
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
 	}
 }
@@ -2067,9 +2069,11 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerOptions {
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
-			IOOverloadOptions:       a.IOOverloadOptions(),
-			DiskCapacityOptions:     a.DiskOptions(),
-			deterministic:           a.deterministic,
+			BaseScorerOptions: BaseScorerOptions{
+				IOOverload:    a.IOOverloadOptions(),
+				DiskCapacity:  a.DiskOptions(),
+				Deterministic: a.deterministic,
+			},
 			rangeRebalanceThreshold: 0,
 		},
 		// We set jitter to be equal to the padding around replica-count rebalancing
@@ -2518,9 +2522,11 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&LoadScorerOptions{
-				IOOverloadOptions:            a.IOOverloadOptions(),
-				DiskOptions:                  a.DiskOptions(),
-				Deterministic:                a.deterministic,
+				BaseScorerOptions: BaseScorerOptions{
+					IOOverload:    a.IOOverloadOptions(),
+					DiskCapacity:  a.DiskOptions(),
+					Deterministic: a.deterministic,
+				},
 				LoadDims:                     opts.LoadDimensions,
 				LoadThreshold:                LoadThresholds(&a.st.SV, opts.LoadDimensions...),
 				MinLoadThreshold:             LoadMinThresholds(opts.LoadDimensions...),

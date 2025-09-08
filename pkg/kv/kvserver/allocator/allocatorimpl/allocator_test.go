@@ -1310,7 +1310,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	options := a.ScorerOptions(ctx)
-	options.DiskCapacityOptions = testingDiskCapacityOptions
+	options.BaseScorerOptions.DiskCapacity = testingDiskCapacityOptions
 
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
@@ -1708,7 +1708,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 			gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 			var rangeUsageInfo allocator.RangeUsageInfo
 			options := TestingQPSLoadScorerOptions(100, 0.2)
-			options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
+			options.BaseScorerOptions.IOOverload = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
 			add, remove, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,
@@ -1822,7 +1822,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		options := TestingQPSLoadScorerOptions(0, 0.1)
-		options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
+		options.BaseScorerOptions.IOOverload = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
 		remove, _, err := a.RemoveVoter(
 			ctx,
 			sp,
@@ -4924,7 +4924,7 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 			sg.GossipStores(test.stores, t)
 			// Enable read disk health checking in candidate exclusion.
 			options := a.ScorerOptions(ctx)
-			options.IOOverloadOptions = IOOverloadOptions{
+			options.BaseScorerOptions.IOOverload = IOOverloadOptions{
 				ReplicaEnforcementLevel:    test.enforcement,
 				ReplicaIOOverloadThreshold: 1,
 				UseIOThresholdMax:          true,
@@ -9071,7 +9071,7 @@ func qpsBasedRebalanceFn(
 	)
 	if ok {
 		log.Dev.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
-		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS, opts.DiskOptions)
+		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS, opts.BaseScorerOptions.DiskCapacity)
 	}
 }
 
@@ -9476,8 +9476,10 @@ func TestingQPSLoadScorerOptions(
 	qpsPerReplica float64, qpsRebalanceThreshold float64,
 ) *LoadScorerOptions {
 	options := &LoadScorerOptions{
-		DiskOptions:                  defaultDiskCapacityOptions(),
-		Deterministic:                true,
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity:  defaultDiskCapacityOptions(),
+			Deterministic: true,
+		},
 		LoadDims:                     []load.Dimension{load.Queries},
 		LoadThreshold:                MakeQPSOnlyDim(qpsRebalanceThreshold),
 		MinLoadThreshold:             LoadMinThresholds(load.Queries),
