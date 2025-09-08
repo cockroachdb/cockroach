@@ -2673,7 +2673,13 @@ func (d BackupRestoreTestDriver) getORDownloadJobID(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand,
 ) (int, error) {
 	var downloadJobID int
-	if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
+	if err := d.testUtils.QueryRow(
+		ctx,
+		rng,
+		`SELECT job_id FROM [SHOW JOBS]
+		WHERE description LIKE '%Background Data Download%' AND job_type = 'RESTORE'
+		ORDER BY created DESC LIMIT 1`,
+	).Scan(&downloadJobID); err != nil {
 		return 0, err
 	}
 	return downloadJobID, nil
