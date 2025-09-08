@@ -57,7 +57,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 		},
 		{
 			name:   "schema-object",
-			target: ptpb.MakeSchemaObjectsTarget([]descpb.ID{1, 2}),
+			target: ptpb.MakeSchemaObjectsTarget([]descpb.ID{1, 3}),
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

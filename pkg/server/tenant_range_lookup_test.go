@@ -43,48 +43,48 @@ func TestFilterRangeLookupResponseForTenant(t *testing.T) {
 			descs: []roachpb.RangeDescriptor{
 				mkRangeDescriptor(mkKey(1, "a"), mkKey(1, "b")),
 				mkRangeDescriptor(mkKey(1, "b"), mkKey(1, "z")),
-				mkRangeDescriptor(mkKey(2, "z"), mkKey(2, "")),
-				mkRangeDescriptor(mkKey(2, ""), mkKey(2, "a")),
-				mkRangeDescriptor(mkKey(2, "a"), mkKey(3, "")),
-				mkRangeDescriptor(mkKey(3, ""), mkKey(4, "")),
+				mkRangeDescriptor(mkKey(3, "z"), mkKey(3, "")),
+				mkRangeDescriptor(mkKey(3, ""), mkKey(3, "a")),
+				mkRangeDescriptor(mkKey(3, "a"), mkKey(4, "")),
+				mkRangeDescriptor(mkKey(4, ""), mkKey(5, "")),
 			},
 			exp: 6,
 		},
-		// tenant 2 is a normal secondary tenant and can only see its own data.
+		// tenant 3 is a normal secondary tenant and can only see its own data.
 		{
 			name: "filter to tenant data",
-			id:   roachpb.MustMakeTenantID(2),
+			id:   roachpb.MustMakeTenantID(3),
 			descs: []roachpb.RangeDescriptor{
-				mkRangeDescriptor(mkKey(2, "a"), mkKey(2, "b")),
-				mkRangeDescriptor(mkKey(2, "b"), mkKey(2, "z")),
-				mkRangeDescriptor(mkKey(2, "z"), mkKey(3, "")),
-				mkRangeDescriptor(mkKey(3, ""), mkKey(3, "a")),
+				mkRangeDescriptor(mkKey(3, "a"), mkKey(3, "b")),
+				mkRangeDescriptor(mkKey(3, "b"), mkKey(3, "z")),
+				mkRangeDescriptor(mkKey(3, "z"), mkKey(4, "")),
+				mkRangeDescriptor(mkKey(4, ""), mkKey(4, "a")),
 			},
 			exp: 3,
 		},
-		// tenant 2 is a normal secondary tenant and can only see its own data,
+		// tenant 3 is a normal secondary tenant and can only see its own data,
 		// but this includes the case where the range overlaps with multiple
 		// tenants.
 		{
 			name: "filter to tenant data even though range crosses tenants",
-			id:   roachpb.MustMakeTenantID(2),
+			id:   roachpb.MustMakeTenantID(3),
 			descs: []roachpb.RangeDescriptor{
-				mkRangeDescriptor(mkKey(2, "a"), mkKey(2, "b")),
-				mkRangeDescriptor(mkKey(2, "b"), mkKey(2, "z")),
-				mkRangeDescriptor(mkKey(2, "z"), mkKey(4, "")),
-				mkRangeDescriptor(mkKey(4, ""), mkKey(4, "a")),
+				mkRangeDescriptor(mkKey(3, "a"), mkKey(3, "b")),
+				mkRangeDescriptor(mkKey(3, "b"), mkKey(3, "z")),
+				mkRangeDescriptor(mkKey(3, "z"), mkKey(5, "")),
+				mkRangeDescriptor(mkKey(5, ""), mkKey(5, "a")),
 			},
 			exp: 3,
 		},
 		// If there is no tenant ID in the context, only one result should be
 		// returned.
 		{
-			id: roachpb.MustMakeTenantID(2),
+			id: roachpb.MustMakeTenantID(3),
 			descs: []roachpb.RangeDescriptor{
-				mkRangeDescriptor(mkKey(2, "a"), mkKey(2, "b")),
-				mkRangeDescriptor(mkKey(2, "b"), mkKey(2, "z")),
-				mkRangeDescriptor(mkKey(2, "z"), mkKey(3, "")),
-				mkRangeDescriptor(mkKey(3, ""), mkKey(3, "a")),
+				mkRangeDescriptor(mkKey(3, "a"), mkKey(3, "b")),
+				mkRangeDescriptor(mkKey(3, "b"), mkKey(3, "z")),
+				mkRangeDescriptor(mkKey(3, "z"), mkKey(4, "")),
+				mkRangeDescriptor(mkKey(4, ""), mkKey(4, "a")),
 			},
 			skipTenantContext: true,
 			exp:               0,
@@ -92,12 +92,12 @@ func TestFilterRangeLookupResponseForTenant(t *testing.T) {
 		// Other code should prevent a request that might return descriptors from
 		// another tenant, however, defensively this code should also filter them.
 		{
-			id: roachpb.MustMakeTenantID(3),
+			id: roachpb.MustMakeTenantID(4),
 			descs: []roachpb.RangeDescriptor{
-				mkRangeDescriptor(mkKey(2, "a"), mkKey(2, "b")),
-				mkRangeDescriptor(mkKey(2, "b"), mkKey(2, "z")),
-				mkRangeDescriptor(mkKey(2, "z"), mkKey(3, "")),
-				mkRangeDescriptor(mkKey(3, ""), mkKey(3, "a")),
+				mkRangeDescriptor(mkKey(3, "a"), mkKey(3, "b")),
+				mkRangeDescriptor(mkKey(3, "b"), mkKey(3, "z")),
+				mkRangeDescriptor(mkKey(3, "z"), mkKey(4, "")),
+				mkRangeDescriptor(mkKey(4, ""), mkKey(4, "a")),
 			},
 			exp: 0,
 		},
