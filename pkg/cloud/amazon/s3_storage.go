@@ -710,6 +710,11 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		if s.opts.usePathStyle {
 			options.UsePathStyle = true
 		}
+
+		if s.opts.skipChecksum {
+			// Try to skip checksums when it isn't required.
+			options.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+		}
 	})
 	u := manager.NewUploader(c, func(uploader *manager.Uploader) {
 		uploader.PartSize = cloud.WriteChunkSize.Get(&s.settings.SV)
