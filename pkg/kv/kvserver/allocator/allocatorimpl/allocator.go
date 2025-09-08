@@ -2065,6 +2065,18 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 	}
 }
 
+// BaseScorerOptionsWithNoConvergence returns the base scorer options with no
+// convergence heuristics.
+func (a *Allocator) BaseScorerOptionsWithNoConvergence() *BaseScorerOptionsNoConvergence {
+	return &BaseScorerOptionsNoConvergence{
+		BaseScorerOptions: BaseScorerOptions{
+			IOOverload:    a.IOOverloadOptions(),
+			DiskCapacity:  a.DiskOptions(),
+			Deterministic: a.deterministic,
+		},
+	}
+}
+
 // ScorerOptionsForScatter returns the scorer options for scattering purposes.
 func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerOptions {
 	return &ScatterScorerOptions{
