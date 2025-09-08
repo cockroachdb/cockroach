@@ -54,7 +54,10 @@ func TestFrontier(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 	sp := func(i int) roachpb.Span {
-		return roachpb.Span{Key: s.Codec().TablePrefix(100 + uint32(i)), EndKey: s.Codec().TablePrefix(101 + uint32(i))}
+		return roachpb.Span{
+			Key:    s.Codec().TablePrefix(100 + uint32(i)),
+			EndKey: s.Codec().TablePrefix(101 + uint32(i)),
+		}
 	}
 	sp1, sp2, sp3 := sp(0), sp(1), sp(2)
 
@@ -77,6 +80,17 @@ func TestFrontier(t *testing.T) {
 				require.Equal(t, 3, countEntries(loadedFrontier))
 				checkFrontierContainsSpan(t, loadedFrontier, sp1, ts1)
 				checkFrontierContainsSpan(t, loadedFrontier, sp3, ts1)
+
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, "basic")
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t,
+					[]jobspb.ResolvedSpan{
+						{Span: sp1, Timestamp: ts1},
+						{Span: sp2},
+						{Span: sp3, Timestamp: ts1},
+					},
+					spans)
 			},
 		},
 		{
@@ -84,6 +98,10 @@ func TestFrontier(t *testing.T) {
 			setup: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID, f span.Frontier) {},
 			check: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
 				_, found, err := Get(ctx, txn, jobID, "nonexistent")
+				require.NoError(t, err)
+				require.False(t, found)
+
+				_, found, err = GetResolvedSpans(ctx, txn, jobID, "nonexistent")
 				require.NoError(t, err)
 				require.False(t, found)
 			},
@@ -106,6 +124,17 @@ func TestFrontier(t *testing.T) {
 				checkFrontierContainsSpan(t, loadedFrontier, sp1, ts1)
 				checkFrontierContainsSpan(t, loadedFrontier, sp2, ts2)
 				checkFrontierContainsSpan(t, loadedFrontier, sp3, ts1)
+
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, "multi")
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t,
+					[]jobspb.ResolvedSpan{
+						{Span: sp1, Timestamp: ts1},
+						{Span: sp2, Timestamp: ts2},
+						{Span: sp3, Timestamp: ts1},
+					},
+					spans)
 			},
 		},
 		{
@@ -116,6 +145,10 @@ func TestFrontier(t *testing.T) {
 			},
 			check: func(t *testing.T, txn isql.Txn, jobID jobspb.JobID) {
 				_, found, err := Get(ctx, txn, jobID, "deleteme")
+				require.NoError(t, err)
+				require.False(t, found)
+
+				_, found, err = GetResolvedSpans(ctx, txn, jobID, "deleteme")
 				require.NoError(t, err)
 				require.False(t, found)
 			},
@@ -135,6 +168,15 @@ func TestFrontier(t *testing.T) {
 				require.True(t, found)
 				require.Equal(t, 1, countEntries(loadedFrontier))
 				checkFrontierContainsSpan(t, loadedFrontier, sp2, ts2)
+
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, "overwrite")
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t,
+					[]jobspb.ResolvedSpan{
+						{Span: sp2, Timestamp: ts2},
+					},
+					spans)
 			},
 		},
 	}
