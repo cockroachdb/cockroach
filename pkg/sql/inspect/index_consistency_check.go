@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -38,6 +38,7 @@ type indexConsistencyCheck struct {
 	flowCtx *execinfra.FlowCtx
 	tableID descpb.ID
 	indexID descpb.IndexID
+	asOf    hlc.Timestamp
 
 	tableDesc     catalog.TableDescriptor
 	secIndex      catalog.Index
@@ -194,9 +195,27 @@ func (c *indexConsistencyCheck) Start(
 		colNames(pkColumns), colNames(otherColumns), c.tableDesc.GetID(), c.secIndex, c.priIndex.GetID(), predicate,
 	)
 
-	// Store the query for error reporting
-	c.lastQuery = checkQuery
+	// Execute the query within a transaction that uses AS OF SYSTEM TIME
+	// TODO(148573): use a protected timestamp record for this timestamp.
+	beginQuery := fmt.Sprintf("BEGIN AS OF SYSTEM TIME %s", c.asOf.AsOfSystemTime())
 
+	// Store both the BEGIN statement and the main query for error reporting
+	c.lastQuery = fmt.Sprintf("%s;\n%s", beginQuery, checkQuery)
+
+	// Start transaction with ASOF time
+	_, err = c.flowCtx.Cfg.DB.Executor().ExecEx(
+		ctx, "inspect-begin-asof-txn", nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User:             username.NodeUserName(),
+			QualityOfService: &sessiondatapb.BulkLowQoS,
+		},
+		beginQuery,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Execute the actual query
 	it, err := c.flowCtx.Cfg.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
@@ -243,9 +262,8 @@ func (c *indexConsistencyCheck) Next(
 		details["query"] = c.lastQuery // Store the query that caused the error
 
 		return &inspectIssue{
-			ErrorType: InternalError,
-			// TODO(148573): Use the timestamp that we create a protected timestamp for.
-			AOST:       timeutil.Now(),
+			ErrorType:  InternalError,
+			AOST:       c.asOf.GoTime(),
 			DatabaseID: c.tableDesc.GetParentID(),
 			SchemaID:   c.tableDesc.GetParentSchemaID(),
 			ObjectID:   c.tableDesc.GetID(),
@@ -308,9 +326,8 @@ func (c *indexConsistencyCheck) Next(
 	details["index_name"] = c.secIndex.GetName()
 
 	return &inspectIssue{
-		ErrorType: errorType,
-		// TODO(148573): Use the timestamp that we create a protected timestamp for.
-		AOST:       timeutil.Now(),
+		ErrorType:  errorType,
+		AOST:       c.asOf.GoTime(),
 		DatabaseID: c.tableDesc.GetParentID(),
 		SchemaID:   c.tableDesc.GetParentSchemaID(),
 		ObjectID:   c.tableDesc.GetID(),

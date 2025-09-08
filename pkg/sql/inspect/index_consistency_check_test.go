@@ -149,6 +149,8 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 		// Each element corresponds to the issue at the same index in expectedIssues.
 		// For non-internal-error issues, the corresponding element should be nil.
 		expectedInternalErrorPatterns []map[string]string
+		// useTimestampBeforeCorruption uses a timestamp from before corruption is introduced
+		useTimestampBeforeCorruption bool
 	}{
 		{
 			desc: "happy path sanity",
@@ -236,6 +238,15 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			},
 			postIndexSQL: "DELETE FROM test.t", /* delete all rows to test hasRows=false code path */
 		},
+		{
+			desc:          "timestamp before corruption - no issues found",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a) STORING (c)",
+			},
+			danglingIndexEntryInsertQuery: "SELECT 9999, 99990, 999900, 'corrupt', 'e_corrupt', 9999.5", // Add dangling entry after timestamp
+			useTimestampBeforeCorruption:  true,                                                         // Use timestamp from before corruption
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			issueLogger.reset()
@@ -286,6 +297,19 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			// Execute any post-index SQL
 			if tc.postIndexSQL != "" {
 				r.Exec(t, tc.postIndexSQL)
+			}
+
+			// Get timestamp before corruption if needed
+			var expectedASOFTime time.Time
+
+			if tc.useTimestampBeforeCorruption {
+				// Get timestamp before corruption
+				r.QueryRow(t, "SELECT now()::timestamp").Scan(&expectedASOFTime)
+				expectedASOFTime = expectedASOFTime.UTC()
+
+				// Sleep for 1 millisecond to ensure corruption happens after timestamp
+				// This should be long enough to guarantee a different timestamp
+				time.Sleep(1 * time.Millisecond)
 			}
 
 			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
@@ -341,7 +365,18 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			// TODO(148365): Run INSPECT instead of SCRUB.
 			_, err = db.Exec(`SET enable_scrub_job=true`)
 			require.NoError(t, err)
-			_, err = db.Query(`EXPERIMENTAL SCRUB TABLE test.t WITH OPTIONS INDEX ALL`)
+
+			// If not using timestamp before corruption, get current timestamp
+			if !tc.useTimestampBeforeCorruption {
+				// Convert relative timestamp to absolute timestamp using CRDB
+				r.QueryRow(t, "SELECT (now() + '-1us')::timestamp").Scan(&expectedASOFTime)
+				expectedASOFTime = expectedASOFTime.UTC()
+			}
+
+			// Use the absolute timestamp in nanoseconds for inspect command
+			absoluteTimestamp := fmt.Sprintf("'%d'", expectedASOFTime.UnixNano())
+			scrubQuery := fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE test.t AS OF SYSTEM TIME %s WITH OPTIONS INDEX ALL`, absoluteTimestamp)
+			_, err = db.Query(scrubQuery)
 			if tc.expectedErrRegex == "" {
 				require.NoError(t, err)
 				require.Equal(t, 0, issueLogger.numIssuesFound())
@@ -380,7 +415,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				require.NotEqual(t, 0, foundIssue.DatabaseID, "expected issue to have a database ID: %s", expectedIssue)
 				require.NotEqual(t, 0, foundIssue.SchemaID, "expected issue to have a schema ID: %s", expectedIssue)
 				require.NotEqual(t, 0, foundIssue.ObjectID, "expected issue to have an object ID: %s", expectedIssue)
-				require.NotEqual(t, time.Time{}, foundIssue.AOST, "expected issue to have an AOST time: %s", expectedIssue)
+				require.Equal(t, expectedASOFTime, foundIssue.AOST.UTC())
 
 				// Additional validation for internal errors
 				if foundIssue.ErrorType == "internal_error" {
@@ -460,7 +495,7 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 	// TODO(148365): Run INSPECT instead of SCRUB.
 	_, err := db.Exec(`SET enable_scrub_job=true`)
 	require.NoError(t, err)
-	_, err = db.Query(`EXPERIMENTAL SCRUB TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
+	_, err = db.Query(`EXPERIMENTAL SCRUB TABLE test.reserved_table AS OF SYSTEM TIME '-1us' WITH OPTIONS INDEX ALL`)
 	require.NoError(t, err, "should succeed on table with reserved word column names")
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 
