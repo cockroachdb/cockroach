@@ -934,7 +934,7 @@ subtest end
 subtest import_into
 
 statement ok
-CREATE TABLE import_test (a INT PRIMARY KEY, v VECTOR(3))
+CREATE TABLE import_test (a INT PRIMARY KEY, v VECTOR(3)) WITH (schema_locked=false)
 
 statement ok
 INSERT INTO import_test VALUES (1, '[1, 2, 3]')

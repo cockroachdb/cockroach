@@ -1445,7 +1445,7 @@ CREATE TABLE statistics_agg_test (
   int_x int,
   dy decimal,
   dx decimal
-)
+) WITH (schema_locked=false);
 
 statement ok
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
@@ -2585,7 +2585,7 @@ CREATE TABLE string_agg_test (
   id INT PRIMARY KEY,
   company_id INT,
   employee STRING
-)
+) WITH (schema_locked=false);
 
 query IT colnames
 SELECT company_id, string_agg(employee, ',')
@@ -3176,7 +3176,7 @@ SELECT x, SUM (y) FROM t GROUP BY (x) ORDER BY SUM (y)
 subtest every
 
 statement ok
-CREATE TABLE t_every (x BOOL)
+CREATE TABLE t_every (x BOOL) WITH (schema_locked=false)
 
 query B
 SELECT every (x) FROM t_every

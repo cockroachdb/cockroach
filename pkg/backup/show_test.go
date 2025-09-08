@@ -552,23 +552,16 @@ func TestShowBackupTenantView(t *testing.T) {
 	showBackupQuery := "SELECT object_name, object_type, rows FROM [SHOW BACKUP FROM LATEST IN $1]"
 	tenant3.Exec(t, dataQuery)
 
-	// First, assert that SHOW BACKUPS on a tenant backup returns the same results if
-	// either the system tenant or tenant3 calls it.
-	tenantAddr, httpServerCleanup := makeInsecureHTTPServer(t)
-	defer httpServerCleanup()
-
-	tenant3.Exec(t, backupQuery, tenantAddr)
-	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, tenantAddr)
-	require.Equal(t, systemTenantShowRes, tenant3.QueryStr(t, showBackupQuery, tenantAddr))
+	const collectionURI = "nodelocal://1/backup"
+	tenant3.Exec(t, backupQuery, collectionURI)
+	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, collectionURI)
+	require.Equal(t, systemTenantShowRes, tenant3.QueryStr(t, showBackupQuery, collectionURI))
 
 	// If the system tenant created the same data, and conducted the same backup,
 	// the row counts should look the same.
-	systemAddr, httpServerCleanup2 := makeInsecureHTTPServer(t)
-	defer httpServerCleanup2()
-
 	systemDB.Exec(t, dataQuery)
-	systemDB.Exec(t, backupQuery, systemAddr)
-	require.Equal(t, systemTenantShowRes, systemDB.QueryStr(t, showBackupQuery, systemAddr))
+	systemDB.Exec(t, backupQuery, collectionURI)
+	require.Equal(t, systemTenantShowRes, systemDB.QueryStr(t, showBackupQuery, collectionURI))
 }
 
 func TestShowBackupTenants(t *testing.T) {

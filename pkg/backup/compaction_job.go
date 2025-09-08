@@ -770,9 +770,9 @@ func getBackupChain(
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, execCfg, &mem, defaultCollectionURI, baseStores, incStores, mkStore, resolvedSubdir,
+		ctx, execCfg, &mem, defaultCollectionURI, dest.To, baseStores, incStores, mkStore, resolvedSubdir,
 		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false /*includeSkipped */, true, /*includeCompacted */
+		user, false /*includeSkipped */, true /*includeCompacted */, len(dest.IncrementalStorage) > 0,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -829,6 +829,7 @@ func concludeBackupCompaction(
 			execCtx.User(),
 			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 			details,
+			backupManifest.RevisionStartTime,
 		),
 		"writing backup index metadata",
 	)

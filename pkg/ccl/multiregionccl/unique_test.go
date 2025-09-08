@@ -150,8 +150,10 @@ CREATE TABLE u (
 		r.Exec(t, `SELECT crdb_internal.revalidate_unique_constraint('u', 'u_v_key')`)
 
 		// Clean up.
-		_, err = db.Exec(`TRUNCATE test.t`)
-		require.NoError(t, err)
+		r.Exec(t, `ALTER TABLE test.t SET (schema_locked=false)`)
+		r.Exec(t, `TRUNCATE test.t`)
+		r.Exec(t, `ALTER TABLE test.t SET (schema_locked=true)`)
+
 	})
 
 	t.Run("validate_implicitly_partitioned_primary_index", func(t *testing.T) {
@@ -192,8 +194,9 @@ CREATE TABLE u (
 		r.Exec(t, `SELECT crdb_internal.revalidate_unique_constraint('u', 'u_v_key')`)
 
 		// Clean up.
-		_, err = db.Exec(`TRUNCATE test.u`)
-		require.NoError(t, err)
+		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=false)`)
+		r.Exec(t, `TRUNCATE test.u`)
+		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=true)`)
 	})
 
 	t.Run("validate_implicitly_partitioned_secondary_index", func(t *testing.T) {
@@ -234,8 +237,9 @@ CREATE TABLE u (
 		r.Exec(t, `SELECT crdb_internal.revalidate_unique_constraint('u', 'u_pkey')`)
 
 		// Clean up.
-		_, err = db.Exec(`TRUNCATE test.u`)
-		require.NoError(t, err)
+		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=false)`)
+		r.Exec(t, `TRUNCATE test.u`)
+		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=true)`)
 	})
 
 }

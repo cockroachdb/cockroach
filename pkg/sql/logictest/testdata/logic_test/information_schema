@@ -1572,6 +1572,18 @@ system              public             29_73_3_not_null                         
 system              public             29_73_4_not_null                                                                                                aost IS NOT NULL
 system              public             29_73_7_not_null                                                                                                id IS NOT NULL
 system              public             29_73_9_not_null                                                                                                details IS NOT NULL
+system              public             29_74_10_not_null                                                                                               redacted IS NOT NULL
+system              public             29_74_11_not_null                                                                                               username IS NOT NULL
+system              public             29_74_1_not_null                                                                                                id IS NOT NULL
+system              public             29_74_2_not_null                                                                                                completed IS NOT NULL
+system              public             29_74_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_74_4_not_null                                                                                                statement_fingerprint_ids IS NOT NULL
+system              public             29_74_6_not_null                                                                                                requested_at IS NOT NULL
+system              public             29_75_1_not_null                                                                                                id IS NOT NULL
+system              public             29_75_2_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_75_3_not_null                                                                                                statement_fingerprint_ids IS NOT NULL
+system              public             29_75_4_not_null                                                                                                transaction_fingerprint IS NOT NULL
+system              public             29_75_5_not_null                                                                                                collected_at IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -1582,6 +1594,7 @@ system              public             check_crdb_internal_created_at_database_i
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_last_updated_table_id_shard_16                                                              ((crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
+system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
@@ -1899,6 +1912,18 @@ system              public             29_73_3_not_null                         
 system              public             29_73_4_not_null                                                                                                aost IS NOT NULL
 system              public             29_73_7_not_null                                                                                                id IS NOT NULL
 system              public             29_73_9_not_null                                                                                                details IS NOT NULL
+system              public             29_74_10_not_null                                                                                               redacted IS NOT NULL
+system              public             29_74_11_not_null                                                                                               username IS NOT NULL
+system              public             29_74_1_not_null                                                                                                id IS NOT NULL
+system              public             29_74_2_not_null                                                                                                completed IS NOT NULL
+system              public             29_74_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_74_4_not_null                                                                                                statement_fingerprint_ids IS NOT NULL
+system              public             29_74_6_not_null                                                                                                requested_at IS NOT NULL
+system              public             29_75_1_not_null                                                                                                id IS NOT NULL
+system              public             29_75_2_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_75_3_not_null                                                                                                statement_fingerprint_ids IS NOT NULL
+system              public             29_75_4_not_null                                                                                                transaction_fingerprint IS NOT NULL
+system              public             29_75_5_not_null                                                                                                collected_at IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -1909,6 +1934,7 @@ system              public             check_crdb_internal_created_at_database_i
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_last_updated_table_id_shard_16                                                              ((crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
+system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))

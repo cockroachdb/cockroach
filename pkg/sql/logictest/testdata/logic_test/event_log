@@ -245,8 +245,15 @@ ORDER BY "timestamp", info
 # Truncate a table
 ##################
 
+
+statement ok
+ALTER TABLE a SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE a
+
+statement ok
+ALTER TABLE a RESET (schema_locked)
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'

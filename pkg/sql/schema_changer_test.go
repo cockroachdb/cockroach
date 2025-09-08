@@ -3885,7 +3885,7 @@ func TestTruncateInternals(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14')) WITH (schema_locked=false);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -3981,7 +3981,7 @@ func TestTruncateCompletion(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
 	sqlRunner.Exec(t, `CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);`)
-	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14'));`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14')) WITH (schema_locked=false);`)
 
 	sqlRunner.Exec(t, `INSERT INTO t.pi VALUES (3.14)`)
 
