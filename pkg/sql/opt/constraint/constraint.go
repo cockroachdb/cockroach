@@ -618,14 +618,14 @@ func (c *Constraint) ExactPrefix(ctx context.Context, evalCtx *eval.Context) int
 	}
 }
 
-// ConstrainedColumns returns the number of columns which are constrained by
+// ConstrainedColumnCount returns the number of columns which are constrained by
 // the Constraint. For example:
 //
 //	/a/b/c: [/1/1 - /1] [/3 - /3]
 //
 // has 2 constrained columns. This may be less than the total number of columns
 // in the constraint, especially if it represents an index constraint.
-func (c *Constraint) ConstrainedColumns(evalCtx *eval.Context) int {
+func (c *Constraint) ConstrainedColumnCount() int {
 	count := 0
 	for i := 0; i < c.Spans.Count(); i++ {
 		sp := c.Spans.Get(i)
@@ -638,8 +638,20 @@ func (c *Constraint) ConstrainedColumns(evalCtx *eval.Context) int {
 			count = end.Length()
 		}
 	}
-
 	return count
+}
+
+// ConstrainedColumns returns the set of columns which are constrained by
+// the Constraint. For example, for the constraint:
+//
+//	/a/b/c: [/1/1 - /1] [/3 - /3]
+//
+// ConstrainedColumns would return (a,b).
+func (c *Constraint) ConstrainedColumns() (cols opt.ColSet) {
+	for i, n := 0, c.ConstrainedColumnCount(); i < n; i++ {
+		cols.Add(c.Columns.Get(i).ID())
+	}
+	return cols
 }
 
 // Prefix returns the length of the longest prefix of columns for which all the
