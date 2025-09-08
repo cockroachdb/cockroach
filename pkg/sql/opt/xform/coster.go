@@ -1654,6 +1654,8 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, scannedCols opt.ColS
 		costFactor += latencyCostFactor * adjustment
 	}
 
+	return memo.Cost{C: costFactor}
+
 	// The number of the columns in the index matter because more columns means
 	// more data to scan. The number of columns we actually return also matters
 	// because that is the amount of data that we could potentially transfer over
