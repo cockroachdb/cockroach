@@ -741,6 +741,9 @@ message LocalOnlySessionData {
   bool optimizer_use_improved_hoist_join_project = 186;
   // EnableInspectCommand controls use of the INSPECT command.
   bool enable_inspect_command = 187;
+  // OptimizerIgnoreRowWidth controls whether to include number of columns and
+  // bytes per column when costing plans.
+  bool optimizer_ignore_row_width = 188;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -4029,6 +4029,10 @@ func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {
 	m.data.CostScansWithDefaultColSize = val
 }
 
+func (m *sessionDataMutator) SetOptimizerIgnoreRowWidth(val bool) {
+	m.data.OptimizerIgnoreRowWidth = val
+}
+
 func (m *sessionDataMutator) SetEnableImplicitTransactionForBatchStatements(val bool) {
 	m.data.EnableImplicitTransactionForBatchStatements = val
 }
