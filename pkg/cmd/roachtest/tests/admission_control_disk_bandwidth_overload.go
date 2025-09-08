@@ -69,12 +69,12 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
-			const provisionedBandwidth = 128 << 20 // 128 MiB
-			t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
+			const provisionedBandwidthMbs = 128
+			t.Status(fmt.Sprintf("limiting disk bandwidth to %d MB/s", provisionedBandwidthMbs))
 			staller := roachtestutil.MakeCgroupDiskStaller(t, c,
 				false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 			staller.Setup(ctx)
-			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth)
+			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidthMbs)
 
 			// TODO(aaditya): Extend this test to also limit reads once we have a
 			// mechanism to pace read traffic in AC.
@@ -135,11 +135,11 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 			defer db.Close()
 
-			const bandwidthLimit = 75
+			const bandwidthLimitMbs = 75
 			if _, err := db.ExecContext(
 				// We intentionally set this to much lower than the provisioned value
 				// above to clearly show that the bandwidth limiter works.
-				ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
+				ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
 				t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 			}
 
@@ -172,7 +172,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				}
 
 				// Allow a 5% room for error.
-				const bandwidthThreshold = bandwidthLimit * 1.05
+				const bandwidthThreshold = bandwidthLimitMbs * 1.05
 				const sampleCountForBW = 12
 				const collectionIntervalSeconds = 10.0
 				// Loop for ~20 minutes.
