@@ -252,6 +252,7 @@ func buildInspectCheckFactories(
 					flowCtx: flowCtx,
 					tableID: specCheck.TableID,
 					indexID: specCheck.IndexID,
+					asOf:    spec.InspectDetails.AsOf,
 				}
 			})
 

@@ -217,13 +217,21 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 func (n *scrubNode) startScrubTable(
 	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor, tableName *tree.TableName,
 ) error {
-	if p.extendedEvalCtx.SessionData().EnableScrubJob {
-		return n.runScrubTableJob(ctx, p, tableDesc)
-	}
-
 	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
 	if err != nil {
 		return err
+	}
+
+	if p.extendedEvalCtx.SessionData().EnableScrubJob {
+		if !p.extendedEvalCtx.TxnIsSingleStmt {
+			return pgerror.Newf(pgcode.InvalidTransactionState,
+				"cannot run within a multi-statement transaction")
+		}
+		if !hasTS {
+			return pgerror.Newf(pgcode.Syntax,
+				"SCRUB with inspect jobs requires AS OF SYSTEM TIME")
+		}
+		return n.runScrubTableJob(ctx, p, tableDesc, ts)
 	}
 	// Process SCRUB options. These are only present during a SCRUB TABLE
 	// statement.
@@ -466,7 +474,7 @@ func createConstraintCheckOperations(
 }
 
 func (n *scrubNode) runScrubTableJob(
-	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor,
+	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor, asOf hlc.Timestamp,
 ) error {
 	// Consistency check is done async via a job.
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
@@ -490,16 +498,12 @@ func (n *scrubNode) runScrubTableJob(
 					IndexID: secIndexes[0].GetID(),
 				},
 			},
+			AsOf: asOf,
 		},
 		Progress:      jobspb.InspectProgress{},
 		CreatedBy:     nil,
 		Username:      username.NodeUserName(),
 		DescriptorIDs: descpb.IDs{tableDesc.GetID()},
-	}
-
-	if !p.extendedEvalCtx.TxnIsSingleStmt {
-		return pgerror.Newf(pgcode.InvalidTransactionState,
-			"cannot run within a multi-statement transaction")
 	}
 
 	var sj *jobs.StartableJob
