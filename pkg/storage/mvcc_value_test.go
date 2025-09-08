@@ -291,15 +291,14 @@ func TestDecodeTieringAttributeFromMVCCValue(t *testing.T) {
 	var v MVCCValue
 	enc, err := EncodeMVCCValue(v)
 	require.NoError(t, err)
-	tieringAttr, err := DecodeTieringAttributeFromMVCCValue(enc)
+	tieringAttr, err := DecodeTieringAttributeFromValue(enc)
 	require.NoError(t, err)
 	assert.Equal(t, tieringAttr, uint64(0))
 
-	v.TieringAttribute = 123
-	v.Value.RawBytes = []byte{1, 2, 3}
+	v.Value.SetTupleAndTieringAttribute([]byte{1, 2, 3}, 123)
 	enc, err = EncodeMVCCValue(v)
 	require.NoError(t, err)
-	tieringAttr, err = DecodeTieringAttributeFromMVCCValue(enc)
+	tieringAttr, err = DecodeTieringAttributeFromValue(enc)
 	require.NoError(t, err)
 	assert.Equal(t, tieringAttr, uint64(123))
 }

@@ -2706,7 +2706,6 @@ func mvccPutInternal(
 	versionValue.OmitInRangefeeds = opts.OmitInRangefeeds
 	versionValue.ImportEpoch = opts.ImportEpoch
 	versionValue.OriginID = opts.OriginID
-	versionValue.TieringAttribute = value.TieringAttribute
 	if opts.OriginTimestamp.IsSet() {
 		versionValue.OriginTimestamp = opts.OriginTimestamp
 	}

@@ -412,8 +412,6 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 
 			case catpb.SystemColumnKind_TIERINGATTR:
 				table.tieringAttrOutputIdx = idx
-				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
-				rf.shouldRequestRawMVCCKeys = true
 			}
 		}
 	}
@@ -965,11 +963,15 @@ func (rf *Fetcher) processKV(
 		if vh.OriginTimestamp.IsEmpty() && table.rowLastModifiedWithoutOriginTimestamp.Less(kv.Value.Timestamp) {
 			table.rowLastModifiedWithoutOriginTimestamp = kv.Value.Timestamp
 		}
-		if table.rowLastTieringAttr != 0 && table.rowLastTieringAttr != int64(vh.TieringAttribute) {
+	}
+
+	if table.tieringAttrOutputIdx != noOutputColumn {
+		tieringAttribute := kv.Value.GetTieringAttribute()
+		if table.rowLastTieringAttr != 0 && table.rowLastTieringAttr != int64(tieringAttribute) {
 			return "", "", errors.AssertionFailedf("conflicting tiering attributes %d, %d for the same row",
-				table.rowLastTieringAttr, vh.TieringAttribute)
+				table.rowLastTieringAttr, tieringAttribute)
 		}
-		table.rowLastTieringAttr = int64(vh.TieringAttribute)
+		table.rowLastTieringAttr = int64(tieringAttribute)
 	}
 
 	if len(table.spec.FetchedColumns) == 0 {

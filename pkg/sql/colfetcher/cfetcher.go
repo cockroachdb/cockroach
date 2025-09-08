@@ -905,7 +905,10 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
 					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
 				}
-				cf.table.rowLastTieringAttr = int64(vh.TieringAttribute)
+			}
+
+			if cf.table.tieringAttrOutputIdx != noOutputColumn {
+				cf.table.rowLastTieringAttr = int64(cf.machine.nextKV.Value.GetTieringAttribute())
 			}
 
 			// If the index has only one column family, then the next KV will
@@ -984,9 +987,11 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				if vh.OriginTimestamp.IsEmpty() && cf.table.rowLastModifiedWithoutOriginTimestamp.Less(cf.machine.nextKV.Value.Timestamp) {
 					cf.table.rowLastModifiedWithoutOriginTimestamp = cf.machine.nextKV.Value.Timestamp
 				}
-				if cf.table.rowLastTieringAttr != int64(vh.TieringAttribute) {
+			}
+			if cf.table.tieringAttrOutputIdx != noOutputColumn {
+				if tieringAttr := int64(kv.Value.GetTieringAttribute()); cf.table.rowLastTieringAttr != tieringAttr {
 					return nil, errors.AssertionFailedf("conflicting tiering attributes %d, %d for the same row",
-						cf.table.rowLastTieringAttr, vh.TieringAttribute)
+						cf.table.rowLastTieringAttr, tieringAttr)
 				}
 			}
 
@@ -1160,7 +1165,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		// table.row value gets overwritten.
 
 		switch val.GetTag() {
-		case roachpb.ValueType_TUPLE:
+		case roachpb.ValueType_TUPLE, roachpb.ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_4, roachpb.ValueType_TUPLE_WITH_TIERING_ATTRIBUTE_8:
 			// In this case, we don't need to decode the column family ID, because
 			// the ValueType_TUPLE encoding includes the column id with every encoded
 			// column value.
