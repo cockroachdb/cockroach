@@ -1274,11 +1274,14 @@ top-k
       │    │    └── project
       │    │         ├── columns: channel:172!null col_name:173!null ws_ext_sales_price:105 item.i_category:130 date_dim.d_year:148 date_dim.d_qoy:152
       │    │         ├── fd: ()-->(172,173)
-      │    │         ├── inner-join (lookup date_dim)
+      │    │         ├── inner-join (hash)
       │    │         │    ├── columns: ws_sold_date_sk:82!null ws_item_sk:85!null ws_promo_sk:98 ws_ext_sales_price:105 i_item_sk:118!null item.i_category:130 d_date_sk:142!null date_dim.d_year:148 date_dim.d_qoy:152
-      │    │         │    ├── key columns: [82] = [142]
-      │    │         │    ├── lookup columns are key
+      │    │         │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
       │    │         │    ├── fd: ()-->(98), (118)-->(130), (142)-->(148,152), (85)==(118), (118)==(85), (82)==(142), (142)==(82)
+      │    │         │    ├── scan date_dim
+      │    │         │    │    ├── columns: d_date_sk:142!null date_dim.d_year:148 date_dim.d_qoy:152
+      │    │         │    │    ├── key: (142)
+      │    │         │    │    └── fd: (142)-->(148,152)
       │    │         │    ├── inner-join (lookup item)
       │    │         │    │    ├── columns: ws_sold_date_sk:82 ws_item_sk:85!null ws_promo_sk:98 ws_ext_sales_price:105 i_item_sk:118!null item.i_category:130
       │    │         │    │    ├── key columns: [85] = [118]
@@ -1292,7 +1295,8 @@ top-k
       │    │         │    │    │    └── filters
       │    │         │    │    │         └── ws_promo_sk:98 IS NULL [outer=(98), constraints=(/98: [/NULL - /NULL]; tight), fd=()-->(98)]
       │    │         │    │    └── filters (true)
-      │    │         │    └── filters (true)
+      │    │         │    └── filters
+      │    │         │         └── ws_sold_date_sk:82 = d_date_sk:142 [outer=(82,142), constraints=(/82: (/NULL - ]; /142: (/NULL - ]), fd=(82)==(142), (142)==(82)]
       │    │         └── projections
       │    │              ├── 'web' [as=channel:172]
       │    │              └── 'ws_promo_sk' [as=col_name:173]

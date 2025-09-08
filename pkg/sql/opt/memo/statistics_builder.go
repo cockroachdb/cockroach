@@ -4566,7 +4566,7 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		// Possibly clamp the selectivity to a higher value to avoid overly
 		// optimistic estimates.
 		pessimisticSel := sb.pessimisticSelForHistogram(
-			oldCount, newCount, inputColStat.DistinctCount, colStat.DistinctCount, inputStats.RowCount,
+			oldHist, newHist, inputColStat.DistinctCount, colStat.DistinctCount, inputStats.RowCount,
 		)
 		predicateSelectivity = props.MaxSelectivity(predicateSelectivity, pessimisticSel)
 
@@ -4585,9 +4585,12 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 // possibility that the histogram is missing values due to sampling or
 // staleness. See also histogramPessimisticThreshold.
 func (sb *statisticsBuilder) pessimisticSelForHistogram(
-	oldHistValues, newHistValues, oldDistinct, newDistinct, tableRowCount float64,
+	oldHist, newHist *props.Histogram, oldDistinct, newDistinct, tableRowCount float64,
 ) props.Selectivity {
 	// TODO(drewk): add a version gate here.
+	clamp := props.ZeroSelectivity
+	oldHistValues, newHistValues := oldHist.ValuesCount(), newHist.ValuesCount()
+
 	// Calculate the expected number of out-of-histogram values that will pass
 	// through the filters.
 	pessimisticThreshold := tableRowCount * histogramPessimisticThreshold
@@ -4595,7 +4598,7 @@ func (sb *statisticsBuilder) pessimisticSelForHistogram(
 		// NOTE: columns with histograms are skipped when considering distinct
 		// counts in selectivityFromSingleColDistinctCounts, so this doesn't
 		// double count the effect of the predicate.
-		pessimisticSel := props.MakeSelectivityFromFraction(newDistinct, oldDistinct)
+		clamp = props.MakeSelectivityFromFraction(newDistinct, oldDistinct)
 
 		// Cap the selectivity so that the row count estimate is no more than the
 		// pessimistic threshold. This can result in a lower estimate if the
@@ -4607,11 +4610,22 @@ func (sb *statisticsBuilder) pessimisticSelForHistogram(
 		// selectivity, since an inverted index can have more rows than the primary
 		// key.
 		inputRowCount := max(tableRowCount, oldHistValues)
-		return props.MinSelectivity(pessimisticSel,
+		clamp = props.MinSelectivity(clamp,
 			props.MakeSelectivityFromFraction(pessimisticThreshold, inputRowCount),
 		)
 	}
-	return props.ZeroSelectivity
+
+	tightUpperBound, tightLowerBound := newHist.TightBounds()
+	if !tightUpperBound || !tightLowerBound {
+		// Similar to Postgres, ratchet the selectivity estimate towards 1/100th
+		// of the average histogram bucket size if the filters do not bound the
+		// values above and below. This accounts for the possibility that the
+		// histogram missed extreme values due to sampling or staleness.
+		clamp = props.MaxSelectivity(clamp,
+			props.MakeSelectivityFromFraction(1, float64(oldHist.BucketCount())*100),
+		)
+	}
+	return clamp
 }
 
 // selectivityFromConstrainedCols calculates the selectivity from the
