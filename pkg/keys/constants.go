@@ -429,6 +429,7 @@ const (
 	DescriptorTablePrimaryKeyIndexID         = 1
 	DescriptorTableDescriptorColID           = 2
 	DescriptorTableDescriptorColFamID        = 2
+	DescriptorTableDescriptorUpdateIndexID   = 2
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
 	CommentsTablePrimaryKeyIndexID           = 1
