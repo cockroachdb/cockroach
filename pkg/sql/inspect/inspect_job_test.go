@@ -107,7 +107,7 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 					onInspectErrorToReturn.Store(&tc.onStartError)
 					defer func() { onInspectErrorToReturn.Store(nil) }()
 				}
-				_, err := db.Exec("EXPERIMENTAL SCRUB TABLE db.t")
+				_, err := db.Exec("EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1us'")
 				pauseJobStart.Store(false)
 				if tc.expectedErrRegex != "" {
 					require.Error(t, err)

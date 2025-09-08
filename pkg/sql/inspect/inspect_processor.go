@@ -218,6 +218,9 @@ func (p *inspectProcessor) processSpan(
 func newInspectProcessor(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, spec execinfrapb.InspectSpec,
 ) (execinfra.Processor, error) {
+	if spec.InspectDetails.AsOf.IsEmpty() {
+		return nil, errors.AssertionFailedf("ASOF time must be set for INSPECT")
+	}
 	checkFactories, err := buildInspectCheckFactories(flowCtx, spec)
 	if err != nil {
 		return nil, err
@@ -252,6 +255,7 @@ func buildInspectCheckFactories(
 					flowCtx: flowCtx,
 					tableID: specCheck.TableID,
 					indexID: specCheck.IndexID,
+					asOf:    spec.InspectDetails.AsOf,
 				}
 			})
 
