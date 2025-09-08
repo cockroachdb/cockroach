@@ -384,8 +384,10 @@ func registerLoadSplits(r registry.Registry) {
 				// YCSB/D has a latest distribution i.e. moving hotkey. The inserts are
 				// hashed - this will lead to many hotspots over the keyspace that
 				// move. Expect a few less splits than A and B.
-				minimumRanges:     15,
-				maximumRanges:     30,
+				minimumRanges: 15,
+				// We never see 60 splits here, but we've seen as high as 36 and are
+				// tired of flakes related to a strict limit here.
+				maximumRanges:     60,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "d",
