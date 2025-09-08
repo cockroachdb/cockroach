@@ -68,9 +68,9 @@ type ManagerTestingKnobs struct {
 	// has been reset.
 	RangeFeedResetChannel chan struct{}
 
-	// TestingOnRangeFeedCheckPoint is invoked when a range feed checkpoint is
+	// TestingOnUpdateReadTimestamp is invoked when a range feed checkpoint is
 	// hit.
-	TestingOnRangeFeedCheckPoint func()
+	TestingOnUpdateReadTimestamp func(timestamp hlc.Timestamp)
 
 	LeaseStoreTestingKnobs StorageTestingKnobs
 }

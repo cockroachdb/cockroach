@@ -6659,7 +6659,6 @@ INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510,
 	tenant10.Exec(t, `BACKUP DATABASE baz INTO 'userfile://defaultdb.myfililes/test4' with revision_history`)
 	expected = nil
 	for _, resume := range []exportResumePoint{
-		{mkSpan(id2, "/Tenant/10/Table/3", "/Tenant/10/Table/4"), withoutTS},
 		{mkSpan(id2, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
 		{mkSpan(id2, "/Tenant/10/Table/:id/1/210", "/Tenant/10/Table/:id/2"), withoutTS},
 		// We have two entries for 210 because of history and super small table
