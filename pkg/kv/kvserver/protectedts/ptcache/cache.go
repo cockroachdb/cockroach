@@ -188,8 +188,12 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 				return
 			}
 			res := future.WaitForResult(ctx)
-			if res.Err != nil && ctx.Err() != nil {
-				log.Dev.Errorf(ctx, "failed to refresh protected timestamps: %v", res.Err)
+			if res.Err != nil {
+				// We expect an error if the context was cancelled, we don't want to log
+				// in that case.
+				if ctx.Err() == nil {
+					log.Dev.Errorf(ctx, "failed to refresh protected timestamps: %v", res.Err)
+				}
 			}
 			timer.Reset(protectedts.PollInterval.Get(&c.settings.SV))
 			lastReset = timeutil.Now()
