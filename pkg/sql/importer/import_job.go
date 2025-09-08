@@ -374,25 +374,29 @@ func postImportRowCounts(
 	}
 
 	res := make(map[uint64]int64)
-	tblID := uint64(tblDesc.GetID())
+	// tblID := uint64(tblDesc.GetID())
 
-	allIndexes := tblDesc.AllIndexes()
-	idxToName := bulkOpSummaryIndexIDToNameMap(tblID, allIndexes)
+	// allIndexes := tblDesc.AllIndexes()
+	// idxToName := bulkOpSummaryIndexIDToNameMap(tblID, allIndexes)
 
 	for _, f := range exportRes.Files {
 		for idxID, count := range f.Exported.EntryCounts {
-			if _, ok := res[idxID]; ok {
-				// TODO(janexing): better organization of error messages.
-				if indexName, ok := idxToName[idxID]; ok {
-					for fileIdx, exportedFile := range exportRes.Files {
-						fmt.Printf("exported file: %d, entry counts: %+v\n", fileIdx, exportedFile.Exported.EntryCounts)
-					}
-					return nil, errors.AssertionFailedf("duplicate index %s in export response", indexName)
-				} else {
-					return nil, errors.Wrapf(errors.AssertionFailedf("duplicate index %d in export response", idxID), "index name unknown")
-				}
+			//if _, ok := res[idxID]; ok {
+			//	// TODO(janexing): better organization of error messages.
+			//	if indexName, ok := idxToName[idxID]; ok {
+			//		for fileIdx, exportedFile := range exportRes.Files {
+			//			fmt.Printf("exported file: %d, entry counts: %+v\n", fileIdx, exportedFile.Exported.EntryCounts)
+			//		}
+			//		return nil, errors.AssertionFailedf("duplicate index %s in export response", indexName)
+			//	} else {
+			//		return nil, errors.Wrapf(errors.AssertionFailedf("duplicate index %d in export response", idxID), "index name unknown")
+			//	}
+			//}
+			if _, ok := res[idxID]; !ok {
+				res[idxID] = count
+			} else {
+				res[idxID] += count
 			}
-			res[idxID] = count
 		}
 	}
 
