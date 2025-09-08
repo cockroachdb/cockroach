@@ -648,6 +648,7 @@ func NewColIndexJoin(
 		shouldCollectStats,
 		false, /* alwaysReallocate */
 		txn,
+		flowCtx.Codec().TenantID,
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcher, tableArgs,
