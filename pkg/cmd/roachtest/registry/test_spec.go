@@ -309,8 +309,6 @@ func (w WriteOptimizationType) String() string {
 		return "pipelining"
 	case Buffering:
 		return "buffering"
-	case PipeliningBuffering:
-		return "pipelining-buffering"
 	default:
 		return fmt.Sprintf("writeoptimization-%d", w)
 	}
@@ -319,12 +317,10 @@ func (w WriteOptimizationType) String() string {
 const (
 	// DefaultWriteOptimization uses the default cluster settings.
 	DefaultWriteOptimization = WriteOptimizationType(iota)
-	// Pipelining uses write pipelining.
+	// Pipelining uses write pipelining, and disables buffering.
 	Pipelining
-	// Buffering uses client-side write buffering.
+	// Buffering uses client-side write buffering, and disabled pipelining.
 	Buffering
-	// PipeliningBuffering uses both buffering and pipelining.
-	PipeliningBuffering
 )
 
 // CloudSet represents a set of clouds.
