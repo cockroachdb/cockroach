@@ -4616,6 +4616,17 @@ func (sb *statisticsBuilder) clampSelForHistogram(
 		)
 		clampedSel = props.MaxSelectivity(clampedSel, resClamp)
 	}
+
+	tightUpperBound, tightLowerBound := newHist.TightBounds()
+	if sb.evalCtx.SessionData().OptimizerClampInequalitySelectivity &&
+		(!tightUpperBound || !tightLowerBound) {
+		// Similar to Postgres, assume that an open-ended inequality predicate will
+		// scan at least 1/100th of the average number of rows in a histogram
+		// bucket. This accounts for the possibility that the histogram missed
+		// extreme values due to sampling or staleness.
+		inequalityClamp := props.MakeSelectivityFromFraction(1, float64(oldHist.BucketCount())*100)
+		clampedSel = props.MaxSelectivity(clampedSel, inequalityClamp)
+	}
 	return clampedSel
 }
 
