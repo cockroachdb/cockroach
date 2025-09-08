@@ -498,6 +498,9 @@ func ingestKvs(
 			case <-done:
 				return ctx.Err()
 			case <-stopProgress:
+				_ = pkIndexAdder.Flush(ctx)
+				_ = indexAdder.Flush(ctx)
+				pushProgress(ctx)
 				return nil
 			case <-tick.C:
 				pushProgress(ctx)
