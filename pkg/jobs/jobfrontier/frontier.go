@@ -11,9 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
@@ -32,15 +30,15 @@ func Get(
 ) (span.Frontier, bool, error) {
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
 
-	// Read all persisted entries, both as entries and as plain spans; we need the
-	// latter form to construct the frontier and the former to advance it.
-	// TODO(dt): we could avoid duplicate allocation here if we added an API to
-	// construct frontier directly from entries.
-	var entries []frontierEntry
-	var spans []roachpb.Span
-
 	keyPrefix := frontierPrefix + name + shardSep
 
+	// Construct frontier to track the set of spans found and advance it to their
+	// persisted timestamps. This implies we persist zero-timestamp spans to keep
+	// the set of tracked spans even if they do not have progress.
+	frontier, err := span.MakeFrontier()
+	if err != nil {
+		return nil, false, err
+	}
 	var found bool
 	if err := infoStorage.Iterate(ctx, keyPrefix, func(_ string, value []byte) error {
 		found = true
@@ -49,28 +47,42 @@ func Get(
 			return err
 		}
 		for _, sp := range r.ResolvedSpans {
-			entries = append(entries, frontierEntry{Span: sp.Span, Timestamp: sp.Timestamp})
-			spans = append(spans, sp.Span)
+			if err := frontier.AddSpansAt(sp.Timestamp, sp.Span); err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil || !found {
 		return nil, false, err
 	}
 
-	// Construct frontier to track the set of spans found and advance it to their
-	// persisted timestamps. This implies we perist zero-timestamp spans to keep
-	// the set of tracked spans even if they do not have progress.
-	frontier, err := span.MakeFrontier(spans...)
-	if err != nil {
+	return frontier, found, nil
+}
+
+// GetResolvedSpans is like Get except it returns the resolved spans directly
+// so that callers can decide what to do with them.
+func GetResolvedSpans(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, name string,
+) ([]jobspb.ResolvedSpan, bool, error) {
+	infoStorage := jobs.InfoStorageForJob(txn, jobID)
+
+	keyPrefix := frontierPrefix + name + shardSep
+
+	var found bool
+	var spans []jobspb.ResolvedSpan
+	if err := infoStorage.Iterate(ctx, keyPrefix, func(_ string, value []byte) error {
+		found = true
+		var r jobspb.ResolvedSpans
+		if err := protoutil.Unmarshal(value, &r); err != nil {
+			return err
+		}
+		spans = append(spans, r.ResolvedSpans...)
+		return nil
+	}); err != nil || !found {
 		return nil, false, err
 	}
-	for _, entry := range entries {
-		if _, err := frontier.Forward(entry.Span, entry.Timestamp); err != nil {
-			return nil, false, err
-		}
-	}
 
-	return frontier, true, nil
+	return spans, found, nil
 }
 
 // Store persists a frontier's current state to storage.
@@ -167,11 +179,4 @@ func deleteEntries(ctx context.Context, infoStorage jobs.InfoStorage, name strin
 	startKey := frontierPrefix + name + shardSep
 	endKey := frontierPrefix + name + string(rune(shardSep[0])+1)
 	return infoStorage.DeleteRange(ctx, startKey, endKey, 0 /* no limit */)
-}
-
-// frontierEntry represents a single persisted frontier entry.
-// This is used internally for serialization but may be useful for testing.
-type frontierEntry struct {
-	Span      roachpb.Span
-	Timestamp hlc.Timestamp
 }
