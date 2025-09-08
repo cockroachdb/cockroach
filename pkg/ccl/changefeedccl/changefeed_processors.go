@@ -1830,8 +1830,13 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 	}
 
-	if err := cf.maybePersistFrontier(ctx); err != nil {
+	persistedFrontier, err := cf.maybePersistFrontier(ctx)
+	if err != nil {
 		return false, err
+	}
+
+	if persistedFrontier {
+		cf.updateProgressSkewMetrics()
 	}
 
 	// TODO(#153462): Determine if this return value should return true
@@ -1911,25 +1916,25 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return nil
 }
 
-func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
+func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) (bool, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
 	defer sp.Finish()
 
 	if cf.spec.JobID == 0 ||
 		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
 		!cf.frontierPersistenceLimiter.canSave(ctx) {
-		return nil
+		return false, nil
 	}
 
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
 	}); err != nil {
-		return err
+		return false, err
 	}
 	persistDuration := timer()
 	cf.frontierPersistenceLimiter.doneSave(persistDuration)
-	return nil
+	return true, nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
@@ -2261,6 +2266,21 @@ func (cf *changeFrontier) maybeEmitResolved(ctx context.Context, newResolved hlc
 	}
 	cf.lastEmitResolved = newResolved.GoTime()
 	return nil
+}
+
+// updateProgressSkewMetrics updates the progress skew metrics.
+func (cf *changeFrontier) updateProgressSkewMetrics() {
+	minTS := cf.frontier.Frontier()
+	maxSpanTS := cf.frontier.LatestTS()
+	maxTableTS := minTS
+	for _, f := range cf.frontier.Frontiers() {
+		tableTS := f.Frontier()
+		if tableTS.After(maxTableTS) {
+			maxTableTS = tableTS
+		}
+	}
+
+	cf.sliMetrics.setFastestTS(cf.sliMetricsID, maxSpanTS, maxTableTS)
 }
 
 func frontierIsBehind(frontier hlc.Timestamp, sv *settings.Values) bool {
