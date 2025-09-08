@@ -5,7 +5,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/errors"
+)
 
 // ObjectName is a common interface for qualified object names.
 type ObjectName interface {
@@ -179,6 +182,17 @@ type UnresolvedObjectName struct {
 
 // UnresolvedObjectName implements TableExpr.
 func (*UnresolvedObjectName) tableExpr() {}
+
+// InputCount implements the WalkableTreeNode interface.
+func (node *UnresolvedObjectName) InputCount() int { return 0 }
+
+// Input implements the WalkableTreeNode interface.
+func (node *UnresolvedObjectName) Input(i int) WalkableTreeNode { return nil }
+
+// SetChild implements the WalkableTreeNode interface.
+func (node *UnresolvedObjectName) SetChild(i int, w WalkableTreeNode) error {
+	return errors.Newf("index out of range: %d", i)
+}
 
 // NewUnresolvedObjectName creates an unresolved object name, verifying that it
 // is well-formed.

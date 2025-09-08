@@ -363,6 +363,18 @@ func (p *DummyEvalPlanner) ExtendHistoryRetention(ctx context.Context, id jobspb
 	return errors.WithStack(errEvalPlanner)
 }
 
+func (*DummyEvalPlanner) HintSetting(
+	ctx context.Context, queryFingerprint, settingName, settingValue string,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+func (*DummyEvalPlanner) HintAST(
+	ctx context.Context, queryFingerprint, hintedFingerprint string,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

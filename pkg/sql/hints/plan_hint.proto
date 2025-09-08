@@ -1,0 +1,41 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package hints;
+
+import "gogoproto/gogo.proto";
+
+// PlanHints consolidates the "external" plan hints that can be applied to
+// queries with a given fingerprint using the system.plan_hints table.
+message PlanHints {
+  // Settings is a list of SET statements to run before planning the query.
+  repeated SettingHint settings = 1;
+
+  // AstHint allows annotating the query AST with hints like index names and
+  // join algorithms by providing a hinted version of the same query fingerprint.
+  AstHint ast_hint = 2;
+}
+
+// SettingHint allows a SET statement like "set reorder_joins_limit = 1" to be
+// run before planning and executing a query.
+message SettingHint {
+  string setting_name = 1;
+  string setting_value = 2;
+}
+
+// AstHint stores a hinted query fingerprint equivalent to the matched query
+// fingerprint, with hints applied. E.g., for fingerprint:
+//   'SELECT * FROM ab INNER JOIN xy ON a = x AND y = _'
+// The hinted fingerprint might be:
+//   'SELECT * FROM ab INNER HASH JOIN xy@secondary_idx ON a = x AND y = _'
+message AstHint {
+  string hinted_fingerprint = 1;
+}

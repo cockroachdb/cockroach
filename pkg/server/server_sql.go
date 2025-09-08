@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -1040,6 +1041,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
+		PlanHintsCache:             hints.NewPlanHintsCache(cfg.PlanHintsCacheSize, cfg.internalDB),
 		VecIndexManager:            vecIndexManager,
 		RowMetrics:                 &rowMetrics,
 		InternalRowMetrics:         &internalRowMetrics,
@@ -1764,6 +1766,11 @@ func (s *SQLServer) preStart(
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+		return err
+	}
+	if err = s.execCfg.PlanHintsCache.Start(
+		ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory, s.execCfg.SystemTableIDResolver,
+	); err != nil {
 		return err
 	}
 
