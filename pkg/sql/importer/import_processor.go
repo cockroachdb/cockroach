@@ -431,10 +431,10 @@ func ingestKvs(
 	pkIndexAdder.SetOnFlush(func(summary kvpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
-			bulkSummaryMu.Lock()
-			bulkSummaryMu.summary.Add(summary)
-			bulkSummaryMu.Unlock()
 		}
+		bulkSummaryMu.Lock()
+		bulkSummaryMu.summary.Add(summary)
+		bulkSummaryMu.Unlock()
 		if indexAdder.IsEmpty() {
 			for i, emitted := range writtenRow {
 				atomic.StoreInt64(&idxFlushedRow[i], emitted)
@@ -444,10 +444,10 @@ func ingestKvs(
 	indexAdder.SetOnFlush(func(summary kvpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
-			bulkSummaryMu.Lock()
-			bulkSummaryMu.summary.Add(summary)
-			bulkSummaryMu.Unlock()
 		}
+		bulkSummaryMu.Lock()
+		bulkSummaryMu.summary.Add(summary)
+		bulkSummaryMu.Unlock()
 	})
 
 	// offsets maps input file ID to a slot in our progress tracking slices.
@@ -473,12 +473,12 @@ func ingestKvs(
 				prog.ResumePos[file] = idx
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
-			// Write down the summary of how much we've ingested since the last update.
-			bulkSummaryMu.Lock()
-			prog.BulkSummary = bulkSummaryMu.summary
-			bulkSummaryMu.summary.Reset()
-			bulkSummaryMu.Unlock()
 		}
+		// Write down the summary of how much we've ingested since the last update.
+		bulkSummaryMu.Lock()
+		prog.BulkSummary = bulkSummaryMu.summary
+		bulkSummaryMu.summary.Reset()
+		bulkSummaryMu.Unlock()
 		select {
 		case progCh <- prog:
 		case <-ctx.Done():
