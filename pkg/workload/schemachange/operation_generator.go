@@ -5434,6 +5434,10 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
+	schemaName, err := og.randSchema(ctx, tx, og.alwaysExisting())
+	if err != nil {
+		return nil, err
+	}
 	triggerFunctionName := fmt.Sprintf("trigger_function_%s", og.newUniqueSeqNumSuffix())
 
 	// Try to generate a random SELECT statement for more complex dependencies
@@ -5443,7 +5447,13 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	}
 	// Our trigger function will always return the original value to avoid
 	// breaking inserts.
-	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
+	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s.%s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, schemaName, triggerFunctionName, selectStmt.sql)
+
+	// Check if the routine already exists.
+	routineAlreadyExists, err := og.fnExistsByName(ctx, tx, schemaName, triggerFunctionName)
+	if err != nil {
+		return nil, err
+	}
 
 	og.LogMessage(fmt.Sprintf("Created trigger function %s", triggerFunction))
 
@@ -5475,7 +5485,6 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	// Build the SQL statement
 	sqlStatement := fmt.Sprintf("%s;CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
 		triggerFunction, triggerName, triggerActionTime, eventClause, tableName, triggerFunctionName)
-
 	og.LogMessage(fmt.Sprintf("createTrigger: %s", sqlStatement))
 
 	opStmt := makeOpStmt(OpStmtDDL)
@@ -5487,6 +5496,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		// It does not catch cases where the select statement in the trigger function
 		// has a select query on a table that doesn't exist.
 		{code: pgcode.UndefinedTable, condition: !triggerTableExists},
+		{code: pgcode.DuplicateFunction, condition: routineAlreadyExists},
 	})
 
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
