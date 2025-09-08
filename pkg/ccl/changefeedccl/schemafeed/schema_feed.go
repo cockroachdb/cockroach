@@ -831,7 +831,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	}
 	codec := tf.leaseMgr.Codec()
 	start := crtime.NowMono()
-	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
+	span := roachpb.Span{Key: codec.IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)}
 	span.EndKey = span.Key.PrefixEnd()
 
 	tf.mu.Lock()
