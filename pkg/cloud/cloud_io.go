@@ -100,7 +100,7 @@ func MakeHTTPClient(
 	if err != nil {
 		return nil, err
 	}
-	return MakeHTTPClientForTransport(maybeAddLogging(t))
+	return MakeHTTPClientForTransport(t)
 }
 
 // MakeHTTPClientForTransport creates a new http.Client with the given
@@ -146,6 +146,7 @@ func MakeTransport(
 	if config.HttpMiddleware != nil {
 		roundTripper = config.HttpMiddleware(roundTripper)
 	}
+	roundTripper = maybeAddLogging(roundTripper)
 	return roundTripper, nil
 }
 

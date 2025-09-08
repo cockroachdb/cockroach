@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
@@ -295,6 +297,49 @@ func TestGCSAssumeRole(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestGCSFaultInjection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if !cloudtestutils.IsImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
+
+	bucket := os.Getenv("GOOGLE_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
+	}
+
+	// Enable cloud transport logging.
+	defer log.Scope(t).Close(t)
+	prevVModule := log.GetVModule()
+	defer func() { _ = log.SetVModule(prevVModule) }()
+	require.NoError(t, log.SetVModule("cloud_logging_transport=1"))
+
+	testID := cloudtestutils.NewTestID()
+	uri := fmt.Sprintf("gs://%s/%d-fault-injection-test?AUTH=implicit", bucket, testID)
+
+	// Inject faults for 15-45 seconds after the storage is opened.
+	middleware := cloudtestutils.BrownoutMiddleware(time.Second*15, time.Second*45)
+
+	conf, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
+	require.NoError(t, err)
+
+	args := cloud.EarlyBootExternalStorageContext{
+		IOConf:          base.ExternalIODirConfig{},
+		Settings:        cluster.MakeTestingClusterSettings(),
+		Options:         nil,
+		Limiters:        nil,
+		MetricsRecorder: cloud.NilMetrics,
+		HttpMiddleware:  middleware,
+	}
+
+	storage, err := makeGCSStorage(context.Background(), args, conf)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	cloudtestutils.RunCloudNemesisTest(t, storage)
 }
 
 func TestAntagonisticGCSRead(t *testing.T) {
