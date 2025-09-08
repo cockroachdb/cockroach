@@ -4612,11 +4612,23 @@ func (sb *statisticsBuilder) pessimisticSelForHistogram(
 		// pessimistic threshold. This can result in a lower estimate if the
 		// multiplicities of the filtered values really are low compared to the
 		// average multiplicity.
-		return props.MinSelectivity(clamp,
+		clamp = props.MinSelectivity(clamp,
 			props.MakeSelectivityFromFraction(oldHist.Resolution(), s.RowCount),
 		)
 	}
-	return props.ZeroSelectivity
+
+	tightUpperBound, tightLowerBound := newHist.TightBounds()
+	if sb.evalCtx.SessionData().OptimizerClampInequalitySelectivity &&
+		(!tightUpperBound || !tightLowerBound) {
+		// Similar to Postgres, ratchet the selectivity estimate towards 1/100th
+		// of the average histogram bucket size if the filters do not bound the
+		// values above and below. This accounts for the possibility that the
+		// histogram missed extreme values due to sampling or staleness.
+		clamp = props.MaxSelectivity(clamp,
+			props.MakeSelectivityFromFraction(1, float64(oldHist.BucketCount())*100),
+		)
+	}
+	return clamp
 }
 
 // selectivityFromConstrainedCols calculates the selectivity from the
