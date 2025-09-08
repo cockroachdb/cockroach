@@ -100,6 +100,19 @@ const (
 	// multiplicity >= row_count/10000. Cardinality estimates below this threshold
 	// are increasingly likely to be inaccurate. See also computeNumberSamples.
 	histogramPessimisticThreshold = 1.0 / 10000.0
+
+	// histogramInequalityMinSelectivity determines the minimum selectivity
+	// estimate that can be derived from an unbounded (above or below) inequality
+	// used to filter a histogram. Similar to histogramPessimisticThreshold, this
+	// is to avoid over-fitting to a stale or inaccurate histogram.
+	//
+	// The value (1 in 10,000) was chosen based on similar logic in Postgres,
+	// which caps the selectivity to (1 / bucket_count*100). Postgres uses 100
+	// histogram buckets by default, so the number comes out to 10,000. We avoid
+	// using the number of histogram buckets directly to avoid arbitrary
+	// variation in the selectivity cap depending on user settings and partial
+	// stat collections.
+	histogramUnboundedInequalityMinSelectivity = 1.0 / 10000.0
 )
 
 // statisticsBuilder is responsible for building the statistics that are
@@ -4625,6 +4638,16 @@ func (sb *statisticsBuilder) clampSelForHistogram(
 			props.MakeSelectivityFromFraction(oldHist.Resolution(), s.RowCount),
 		)
 		clampedSel = props.MaxSelectivity(clampedSel, resClamp)
+	}
+
+	tightUpperBound, tightLowerBound := newHist.TightBounds()
+	if sb.evalCtx.SessionData().OptimizerClampInequalitySelectivity &&
+		(!tightUpperBound || !tightLowerBound) {
+		// Similar to Postgres, assume that an open-ended inequality predicate will
+		// scan at least 1/10000th of the table. This accounts for the possibility
+		// that the histogram missed extreme values due to sampling or staleness.
+		inequalityClamp := props.MakeSelectivity(histogramUnboundedInequalityMinSelectivity)
+		clampedSel = props.MaxSelectivity(clampedSel, inequalityClamp)
 	}
 	return clampedSel
 }
