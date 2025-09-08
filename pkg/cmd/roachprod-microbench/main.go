@@ -121,11 +121,12 @@ func makeRunCommand() *cobra.Command {
 }
 
 func makeStageCommand() *cobra.Command {
+	longRetries := true
 	runCmdFunc := func(cmd *cobra.Command, args []string) error {
 		cluster := args[0]
 		src := args[1]
 		dest := args[2]
-		return stage(cluster, src, dest)
+		return stage(cluster, src, dest, longRetries)
 	}
 
 	cmd := &cobra.Command{
@@ -139,6 +140,7 @@ The source can be a local path or a GCS URI.`,
 		RunE: runCmdFunc,
 	}
 	cmd.Flags().BoolVar(&roachprodConfig.Quiet, "quiet", roachprodConfig.Quiet, "suppress roachprod progress output")
+	cmd.Flags().BoolVar(&longRetries, "long-retries", longRetries, "use longer retry intervals to handle transient errors (for use with recoverable managed instances)")
 	return cmd
 }
 
