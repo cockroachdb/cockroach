@@ -79,6 +79,7 @@ type TestCluster struct {
 	clusterArgs base.TestClusterArgs
 
 	defaultTestTenantOptions base.DefaultTestTenantOptions
+	defaultDRPCOption        base.DefaultTestDRPCOption
 
 	t serverutils.TestFataler
 }
@@ -260,6 +261,40 @@ func PrintTimings(testMain time.Duration) {
 	}
 }
 
+// validateDefaultTestTenant checks that per-server args don't override
+// the top-level DefaultTestTenant setting inconsistently.
+func (tc *TestCluster) validateDefaultTestTenant(
+	t serverutils.TestFataler, nodes int, defaultTestTenantOptions base.DefaultTestTenantOptions,
+) {
+	for i := range nodes {
+		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
+			args.DefaultTestTenant != (base.DefaultTestTenantOptions{}) &&
+			args.DefaultTestTenant != defaultTestTenantOptions {
+			tc.Stopper().Stop(context.Background())
+			t.Fatalf("improper use of DefaultTestTenantOptions in per-server args: %v vs %v\n"+
+				"Tip: use the top-level ServerArgs to set the default test tenant options.",
+				args.DefaultTestTenant, defaultTestTenantOptions)
+		}
+	}
+}
+
+// validateDefaultDRPCOption checks that per-server args don't override
+// the top-level DefaultDRPCOption setting inconsistently.
+func (tc *TestCluster) validateDefaultDRPCOption(
+	t serverutils.TestFataler, nodes int, defaultDRPCOption base.DefaultTestDRPCOption,
+) {
+	for i := range nodes {
+		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
+			args.DefaultDRPCOption != base.TestDRPCUnset &&
+			args.DefaultDRPCOption != defaultDRPCOption {
+			tc.Stopper().Stop(context.Background())
+			t.Fatalf("improper use of DefaultDRPCOption in per-server args: %v vs %v\n"+
+				"Tip: use the top-level ServerArgs to set the default DRPC option.",
+				args.DefaultDRPCOption, defaultDRPCOption)
+		}
+	}
+}
+
 // StartTestCluster creates and starts up a TestCluster made up of `nodes`
 // in-memory testing servers.
 // The cluster should be stopped using TestCluster.Stopper().Stop().
@@ -314,22 +349,17 @@ func NewTestCluster(
 		noLocalities = false
 	}
 
-	// Find out how to do the default test tenant.
-	// The choice should be made by the top-level ServerArgs.
+	// Find out how to do the default test tenant. The choice should be made by
+	// the top-level ServerArgs.
 	defaultTestTenantOptions := tc.clusterArgs.ServerArgs.DefaultTestTenant
-	// API check: verify that no non-default choice was made via per-server args,
-	// and inform the user otherwise.
-	for i := 0; i < nodes; i++ {
-		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
-			args.DefaultTestTenant != (base.DefaultTestTenantOptions{}) &&
-			args.DefaultTestTenant != defaultTestTenantOptions {
-			tc.Stopper().Stop(context.Background())
-			t.Fatalf("improper use of DefaultTestTenantOptions in per-server args: %v vs %v\n"+
-				"Tip: use the top-level ServerArgs to set the default test tenant options.",
-				args.DefaultTestTenant, defaultTestTenantOptions)
-		}
-	}
+	tc.validateDefaultTestTenant(t, nodes, defaultTestTenantOptions)
 	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(t, defaultTestTenantOptions)
+
+	// Find out how to do the default DRPC option. The choice should be made by
+	// the top-level ServerArgs.
+	defaultDRPCOption := tc.clusterArgs.ServerArgs.DefaultDRPCOption
+	tc.validateDefaultDRPCOption(t, nodes, defaultDRPCOption)
+	tc.defaultDRPCOption = serverutils.ResolveTestDRPCOption(context.Background(), t, defaultDRPCOption)
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
@@ -345,8 +375,6 @@ func NewTestCluster(
 		if serverArgs.Settings != nil && nodes > 1 {
 			serverArgs.Settings = cluster.TestingCloneClusterSettings(serverArgs.Settings)
 		}
-
-		serverutils.TryEnableDRPCSetting(context.Background(), t, &serverArgs)
 
 		// If a reusable listener registry is provided, create reusable listeners
 		// for every server that doesn't have a custom listener provided. (Only
@@ -650,9 +678,10 @@ func (tc *TestCluster) AddServer(
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
-	// Inject the decision that was made about whether or not to start a
-	// test tenant server, into this new server's configuration.
+	// Inject the decisions that were made about test configuration
+	// into this new server's configuration.
 	serverArgs.DefaultTestTenant = tc.defaultTestTenantOptions
+	serverArgs.DefaultDRPCOption = tc.defaultDRPCOption
 
 	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
