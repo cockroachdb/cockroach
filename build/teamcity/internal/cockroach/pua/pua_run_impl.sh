@@ -88,7 +88,7 @@ elif [[ "$config" == "multi_region" ]]; then
   CLUSTER=drt-pua-15
   WORKLOAD=workload-pua-15
   ZONE_NODE=3-4
-  config_file="pkg/cmd/drtprod/configs/drt_pua_15.yaml"
+  config_file="pkg/cmd/drtprod/configs/drt_pua_mr.yaml"
 else
   echo "Error: Invalid PUA_CONFIG value: '$config'. Must be 'single_region' or 'multi_region'." >&2
   exit 1
