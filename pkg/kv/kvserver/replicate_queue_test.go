@@ -176,10 +176,15 @@ func TestReplicateQueueRebalance(t *testing.T) {
 // rebalances the replicas and leases.
 func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRace(t)
-	skip.UnderShort(t)
-	skip.UnderDeadlock(t)
+	skip.UnderDuress(t) // eight stores is too much under duress
+	scope := log.Scope(t)
+	defer scope.Close(t)
+
+	// The test exhibited an interesting failure mode that we want
+	// to be able to better investigate should it reoccur.
+	// See: https://github.com/cockroachdb/cockroach/issues/153137
+	// and https://cockroachlabs.slack.com/archives/G01G8LK77DK/p1757330830964639.
+	defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
 
 	testCases := []struct {
 		name          string
