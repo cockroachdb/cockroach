@@ -384,6 +384,9 @@ func postImportRowCounts(
 			if _, ok := res[idxID]; ok {
 				// TODO(janexing): better organization of error messages.
 				if indexName, ok := idxToName[idxID]; ok {
+					for fileIdx, exportedFile := range exportRes.Files {
+						fmt.Printf("exported file: %d, entry counts: %+v\n", fileIdx, exportedFile.Exported.EntryCounts)
+					}
 					return nil, errors.AssertionFailedf("duplicate index %s in export response", indexName)
 				} else {
 					return nil, errors.Wrapf(errors.AssertionFailedf("duplicate index %d in export response", idxID), "index name unknown")
