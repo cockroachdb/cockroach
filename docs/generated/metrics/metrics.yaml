@@ -1725,6 +1725,22 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: changefeed.progress_skew.span
+      exported_name: changefeed_progress_skew_span
+      description: The time difference between the fastest and slowest span's resolved timestamp
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.progress_skew.table
+      exported_name: changefeed_progress_skew_table
+      description: The time difference between the fastest and slowest table's resolved timestamp
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: changefeed.queue_time_nanos
       exported_name: changefeed_queue_time_nanos
       description: Time KV event spent waiting to be processed
