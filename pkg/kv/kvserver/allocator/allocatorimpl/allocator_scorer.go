@@ -401,6 +401,69 @@ func (bo BaseScorerOptions) adjustRangeCountForScoring(rangeCount int) int {
 	return rangeCount
 }
 
+// BaseScorerOptionsNoConvergence is the base scorer options that does not
+// involve any heuristics or convergence scoring.
+//
+// It assigns the same score to all stores, effectively treating candidates
+// within the same equivalence class the same and disabling range-count based
+// convergence rebalancing.
+//
+// Note that this new scorer option is applied used in
+// ReplicaPlanner.considerRebalance and ReplicaPlanner.ShouldPlanChange. As a
+// result, range-count based rebalancing is disabled during rebalancing, but
+// range count is still considered when allocator adds new replicas (such as
+// AllocateVoter), choosing a rebalance target in the old store rebalancer
+// (StoreRebalancer.applyRangeRebalance), and when removing replicas
+// (Allocator.RemoveVoter).
+type BaseScorerOptionsNoConvergence struct {
+	BaseScorerOptions
+}
+
+var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
+
+// adjustRangeCountForScoring returns 0 since BaseScorerOptionsNoConvergence
+// does not want to consider range count in its scoring.
+func (bnc BaseScorerOptionsNoConvergence) adjustRangeCountForScoring(_ int) int {
+	return 0
+}
+
+// shouldRebalanceBasedOnThresholds returns false since
+// BaseScorerOptionsNoConvergence does not involve any heuristics that evaluate
+// stores within an equivalence class. If no rebalancing is needed based on
+// other attributes (e.g. valid, disk fullness, constraints, diversity score),
+// no rebalancing is done.
+func (bnc BaseScorerOptionsNoConvergence) shouldRebalanceBasedOnThresholds(
+	_ context.Context, _ equivalenceClass, _ AllocatorMetrics,
+) bool {
+	return false
+}
+
+// balanceScore returns aroundTheMean for every store so that
+// BaseScorerOptionsNoConvergence does not take store fullness into account.
+func (bnc BaseScorerOptionsNoConvergence) balanceScore(
+	_ storepool.StoreList, _ roachpb.StoreCapacity,
+) balanceStatus {
+	return aroundTheMean
+}
+
+// Note that the following three methods all return 0 for every store so that
+// BaseScorerOptionsNoConvergence does not take convergence score into account.
+// Important to keep them the same value since we may compare convergence score
+// between rebalanceFrom and rebalanceTo stores.
+func (bnc BaseScorerOptionsNoConvergence) rebalanceFromConvergesScore(_ equivalenceClass) int {
+	return 0
+}
+func (bnc BaseScorerOptionsNoConvergence) rebalanceToConvergesScore(
+	_ equivalenceClass, _ roachpb.StoreDescriptor,
+) int {
+	return 0
+}
+func (bnc BaseScorerOptionsNoConvergence) removalMaximallyConvergesScore(
+	_ storepool.StoreList, _ roachpb.StoreDescriptor,
+) int {
+	return 0
+}
+
 // RangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on range counts.
 // This means that the resulting rebalancing decisions will further the goal of
