@@ -35,7 +35,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/1/1         {1}       1
+<before:/Table/73>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -3411,76 +3411,36 @@ NULL  {m}  1000  1000  true
 NULL  {n}  1000  50    true
 NULL  {o}  1000  33    true
 
+# All we care about is the row counts, so don't error if other parts of the explain output change
 query T retry
-EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9] WHERE info LIKE '%estimated row count:%'
 ----
-distribution: full
-vectorized: true
-·
-• render
-│
-└── • filter
     │ estimated row count: 1
-    │ filter: n = 1
-    │
-    └── • scan
           estimated row count: 18 (1.8% of the table; stats collected <hidden> ago)
-          table: mno@mno_o_idx
-          spans: [/9 - /9]
 
+# All we care about is the row counts, so don't error if other parts of the explain output change
 query T
-EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11] WHERE info LIKE '%estimated row count:%'
 ----
-distribution: full
-vectorized: true
-·
-• render
-│
-└── • filter
     │ estimated row count: 1
-    │ filter: sqrt(m::FLOAT8)::INT8 = 11
-    │
-    └── • scan
           estimated row count: 20 (2.0% of the table; stats collected <hidden> ago)
-          table: mno@mno_n_idx
-          spans: [/1 - /1]
 
 statement ok
 SET optimizer_use_virtual_computed_column_stats = false
 
+# All we care about is the row counts, so don't error if other parts of the explain output change
 query T
-EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9] WHERE info LIKE '%estimated row count:%'
 ----
-distribution: full
-vectorized: true
-·
-• render
-│
-└── • filter
     │ estimated row count: 7
-    │ filter: n = 1
-    │
-    └── • scan
           estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
-          table: mno@mno_o_idx
-          spans: [/9 - /9]
 
+# All we care about is the row counts, so don't error if other parts of the explain output change
 query T
-EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11
+SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11] WHERE info LIKE '%estimated row count:%'
 ----
-distribution: full
-vectorized: true
-·
-• render
-│
-└── • filter
     │ estimated row count: 7
-    │ filter: n = 1
-    │
-    └── • scan
           estimated row count: 10 (1.0% of the table; stats collected <hidden> ago)
-          table: mno@mno_o_idx
-          spans: [/11 - /11]
 
 # Regression for not setting the TypeResolver on the SemaContext when dealing
 # with stats on virtual computed columns (#122312).
@@ -3577,19 +3537,12 @@ column_names  row_count  null_count  distinct_count  avg_size  has_histogram
 {b}           2          0           2               8         true
 {c}           2          0           2               8         true
 
+# All we care about is the row counts, so don't error if other parts of the explain output change
 query T retry
-EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1
+SELECT info FROM [EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1] WHERE info LIKE '%estimated row count:%'
 ----
-distribution: full
-vectorized: true
-·
-• group (scalar)
 │ estimated row count: 1
-│
-└── • scan
       estimated row count: 2 (100% of the table; stats collected <hidden> ago)
-      table: t138809@t138809_pkey
-      spans: [/1 - ]
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.root..1'
@@ -3597,19 +3550,12 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.root..1'
 statement error job \d+ was paused before it completed with reason: pause point "schemachanger\.root\.\.1" hit
 ALTER TABLE t138809 DROP COLUMN c
 
+# All we care about is the row counts, so don't error if other parts of the explain output change
 query T
-EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1
+SELECT info FROM [EXPLAIN SELECT count(*) FROM t138809 WHERE b > 1] WHERE info LIKE '%estimated row count:%'
 ----
-distribution: full
-vectorized: true
-·
-• group (scalar)
 │ estimated row count: 1
-│
-└── • scan
       estimated row count: 2 (100% of the table; stats collected <hidden> ago)
-      table: t138809@t138809_pkey
-      spans: [/1 - ]
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = DEFAULT

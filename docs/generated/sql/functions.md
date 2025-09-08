@@ -39,6 +39,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: jsonb[], elem: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: ltree[], elem: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -86,6 +88,8 @@
 <tr><td><a name="array_cat"></a><code>array_cat(left: geometry[], right: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: jsonb[], right: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: ltree[], right: ltree[]) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
@@ -175,6 +179,10 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: jsonb[], elem: jsonb, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: ltree[], elem: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: ltree[], elem: ltree, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
@@ -235,6 +243,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: jsonb[], elem: jsonb) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: ltree[], elem: ltree) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
@@ -282,6 +292,8 @@
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: geometry, array: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: jsonb, array: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: ltree, array: ltree[]) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: oid, array: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
@@ -331,6 +343,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: jsonb[], elem: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: ltree[], elem: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
@@ -378,6 +392,8 @@
 <tr><td><a name="array_replace"></a><code>array_replace(array: geometry[], toreplace: geometry, replacewith: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: jsonb[], toreplace: jsonb, replacewith: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: ltree[], toreplace: ltree, replacewith: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: oid[], toreplace: oid, replacewith: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -1052,6 +1068,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein_less_equal"></a><code>levenshtein_less_equal(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>, max_d: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. If actual distance is less or equal then max_d, then it returns the distance. Otherwise this function returns a value greater than max_d. The maximum length of the input strings is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein_less_equal"></a><code>levenshtein_less_equal(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, max_d: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. If actual distance is less or equal then max_d, then it returns the distance. Otherwise this function returns a value greater than max_d. The maximum length of the input strings is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="metaphone"></a><code>metaphone(source: <a href="string.html">string</a>, max_output_length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Metaphone code. Maximum input length is 255 characters</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
@@ -1344,6 +1364,33 @@ argument must be a JSON object, and its fields provide named values
 to be substituted into the jsonpath expression. If the silent argument is true, the
 function suppresses the following errors: missing object field or
 array element, unexpected JSON item type, datetime and numeric errors.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
+### LTree functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="index"></a><code>index(a: ltree, b: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>; -1 if not found</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="index"></a><code>index(a: ltree, b: ltree, offset: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>, starting at <code>offset</code>; -1 if not found</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lca"></a><code>lca(ltree, ltree, ltree...) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lca"></a><code>lca(ltree[]: ltree[]) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ltree2text"></a><code>ltree2text(ltree: ltree) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>cast <code>ltree</code> to text</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="nlevel"></a><code>nlevel(ltree: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>number of labels in path <code>ltree</code></p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subltree"></a><code>subltree(ltree: ltree, start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> from position <code>start</code> to position <code>end</code>-1 (counting from 0)</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, extending to end of path. If <code>offset</code> is negative, subpath starts that far from the end of the path.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, length <code>length</code>. If <code>offset</code> is negative, subpath starts that far from the end of the path. If <code>length</code> is negative, leaves that many labels off the end of the path.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="text2ltree"></a><code>text2ltree(text: <a href="string.html">string</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>cast <code>text</code> to ltree</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 

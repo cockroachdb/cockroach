@@ -7,6 +7,8 @@ package prep
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -116,7 +118,7 @@ func (p *Statement) MemoryEstimate() int64 {
 
 func (p *Statement) DecRef(ctx context.Context) {
 	if p.refCount <= 0 {
-		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+		log.Dev.Fatal(ctx, "corrupt PreparedStatement refcount")
 	}
 	p.refCount--
 	if p.refCount == 0 {
@@ -126,7 +128,7 @@ func (p *Statement) DecRef(ctx context.Context) {
 
 func (p *Statement) IncRef(ctx context.Context) {
 	if p.refCount <= 0 {
-		log.Fatal(ctx, "corrupt PreparedStatement refcount")
+		log.Dev.Fatal(ctx, "corrupt PreparedStatement refcount")
 	}
 	p.refCount++
 }
@@ -211,6 +213,42 @@ func (p *planCosts) avgCustom() memo.Cost {
 		sum += p.custom.costs[i].C
 	}
 	return memo.Cost{C: sum / float64(p.custom.length)}
+}
+
+// Summary returns a single-line string summarizing the custom and generic plan
+// costs and full scan counts. The format for custom costs is:
+//
+//	average_custom_cost [num_custom_costs]{custom_cost_0:full_scan_count ...}
+//
+// The format for generic costs is:
+//
+//	generic_cost:generic_full_scan_count
+//
+// A full example:
+//
+//	custom costs: 1.23 [3]{1.23:0 1.23:0 1.23:0}, generic cost: 4.56:1
+func (p *planCosts) Summary() string {
+	var sb strings.Builder
+	sb.WriteString("custom costs: ")
+	if p.custom.length > 0 {
+		sb.WriteString(fmt.Sprintf("%.9g [%d]{", p.avgCustom().C, p.custom.length))
+		for i := 0; i < p.custom.length; i++ {
+			if i > 0 {
+				sb.WriteByte(' ')
+			}
+			sb.WriteString(fmt.Sprintf("%.9g:%d", p.custom.costs[i].C, p.custom.costs[i].FullScanCount()))
+		}
+		sb.WriteByte('}')
+	} else {
+		sb.WriteString("none")
+	}
+	sb.WriteString(", generic cost: ")
+	if p.HasGeneric() {
+		sb.WriteString(fmt.Sprintf("%.9g:%d", p.generic.C, p.generic.FullScanCount()))
+	} else {
+		sb.WriteString("none")
+	}
+	return sb.String()
 }
 
 // Reset clears any previously set costs.

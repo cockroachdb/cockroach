@@ -597,6 +597,11 @@ type OTLPDefaults struct {
 	// Set to "grpc" by default.
 	Mode *string `yaml:",omitempty"`
 
+	// Headers is a list of headers to attach to each gRPC or HTTP request depending
+	// on the mode selected, the sink adds the standard headers so this option should
+	// only be used for specific headers like api keys which the downstream app expects.
+	Headers map[string]string `yaml:",omitempty,flow"`
+
 	// Compression can be "none" or "gzip" to enable gzip compression.
 	// Set to "gzip" by default.
 	Compression *string `yaml:",omitempty"`

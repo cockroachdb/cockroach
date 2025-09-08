@@ -549,6 +549,10 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
 deps
 DROP INDEX idx3 CASCADE
 ----
+- from: [CheckConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [5]}, ABSENT]
+  to:   [ColumnName:{DescID: 105, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT]
+  kind: Precedence
+  rule: non-indexed backed constraint should be cleaned up before column name references
 - from: [CheckConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [5]}, PUBLIC]
   to:   [CheckConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [5]}, VALIDATED]
   kind: PreviousTransactionPrecedence

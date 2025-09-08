@@ -365,7 +365,7 @@ func (p *ScheduledProcessor) Register(
 			return nil
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
-			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+			log.Dev.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
 		// Add the new registration to the registry.
@@ -631,7 +631,7 @@ func runRequest[T interface{}](
 		if buildutil.CrdbTestBuild {
 			select {
 			case <-p.stoppedC:
-				log.Fatalf(ctx, "processing request on stopped processor")
+				log.Dev.Fatalf(ctx, "processing request on stopped processor")
 			default:
 			}
 		}
@@ -695,7 +695,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
 			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
+				log.Dev.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
 					err,
@@ -704,7 +704,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 		}
 		close(e.sync.c)
 	default:
-		log.Fatalf(ctx, "missing event variant: %+v", e)
+		log.Dev.Fatalf(ctx, "missing event variant: %+v", e)
 	}
 }
 
@@ -742,7 +742,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 			// No updates to publish.
 
 		default:
-			log.Fatalf(ctx, "unknown logical op %T", t)
+			log.Dev.Fatalf(ctx, "unknown logical op %T", t)
 		}
 
 		// Determine whether the operation caused the resolved timestamp to
@@ -786,7 +786,7 @@ func (p *ScheduledProcessor) publishValue(
 	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
-		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
+		log.Dev.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
 	}
 
 	var prevVal roachpb.Value
@@ -813,7 +813,7 @@ func (p *ScheduledProcessor) publishDeleteRange(
 ) {
 	span := roachpb.Span{Key: startKey, EndKey: endKey}
 	if !p.Span.ContainsKeyRange(roachpb.RKey(startKey), roachpb.RKey(endKey)) {
-		log.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
+		log.Dev.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
 	}
 
 	var event kvpb.RangeFeedEvent
@@ -832,10 +832,10 @@ func (p *ScheduledProcessor) publishSSTable(
 	alloc *SharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
-		log.Fatalf(ctx, "received SSTable without span")
+		log.Dev.Fatalf(ctx, "received SSTable without span")
 	}
 	if sstWTS.IsEmpty() {
-		log.Fatalf(ctx, "received SSTable without write timestamp")
+		log.Dev.Fatalf(ctx, "received SSTable without write timestamp")
 	}
 	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
 		SST: &kvpb.RangeFeedSSTable{

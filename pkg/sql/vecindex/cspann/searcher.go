@@ -412,7 +412,7 @@ func (s *levelSearcher) searchChildPartitions(
 
 	// Search all partitions in parallel.
 	err := s.idxCtx.txn.SearchPartitions(
-		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.query.Randomized(), &s.searchSet)
+		ctx, s.idxCtx.treeKey, s.idxCtx.tempToSearch, s.idxCtx.query.Transformed(), &s.searchSet)
 	if err != nil {
 		return InvalidLevel, errors.Wrapf(err, "searching level %d", s.level)
 	}
@@ -451,11 +451,14 @@ func (s *levelSearcher) searchChildPartitions(
 		}
 
 		// Enqueue background fixup if a split or merge operation needs to be
-		// started or continued after stalling.
+		// started or continued after stalling. Split if the partition is over-
+		// sized. Merge if the partition is under-sized and if there are multiple
+		// search partitions, indicating there are siblings/cousins.
 		state := s.idxCtx.tempToSearch[i].StateDetails
 		needSplit := count > s.idx.options.MaxPartitionSize
 		needSplit = needSplit || state.MaybeSplitStalled(s.idx.options.StalledOpTimeout())
-		needMerge := count < s.idx.options.MinPartitionSize && partitionKey != RootKey
+		needMerge := count < s.idx.options.MinPartitionSize && len(parentResults) > 1 &&
+			state.State.AllowMerge()
 		needMerge = needMerge || state.MaybeMergeStalled(s.idx.options.StalledOpTimeout())
 		if needSplit {
 			s.idx.fixups.AddSplit(ctx, s.idxCtx.treeKey,

@@ -1145,14 +1145,14 @@ func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	expectedStats := dataItems.liveDistribution().setupTest(t, ctrlEng, desc)
 
 	if log.V(1) {
-		log.Info(ctx, "Expected data:")
+		log.Dev.Info(ctx, "Expected data:")
 		for _, l := range formatTable(engineData(t, ctrlEng, desc), tablePrefix) {
-			log.Infof(ctx, "%s", l)
+			log.Dev.Infof(ctx, "%s", l)
 		}
 
-		log.Info(ctx, "Actual data:")
+		log.Dev.Info(ctx, "Actual data:")
 		for _, l := range formatTable(engineData(t, eng, desc), tablePrefix) {
-			log.Infof(ctx, "%s", l)
+			log.Dev.Infof(ctx, "%s", l)
 		}
 	}
 

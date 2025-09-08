@@ -395,7 +395,7 @@ func (ij *invertedJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		case ijEmittingRows:
 			ij.runningState, row, meta = ij.emitRow()
 		default:
-			log.Fatalf(ij.Ctx(), "unsupported state: %d", ij.runningState)
+			log.Dev.Fatalf(ij.Ctx(), "unsupported state: %d", ij.runningState)
 		}
 		if row == nil && meta == nil {
 			continue

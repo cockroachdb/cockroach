@@ -385,7 +385,7 @@ func TestCrossJoiner(t *testing.T) {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range getCJTestCases() {
 			for _, tc := range tc.mutateTypes() {
-				log.Infof(ctx, "spillForced=%t", spillForced)
+				log.Dev.Infof(ctx, "spillForced=%t", spillForced)
 				runHashJoinTestCase(t, tc, nil /* rng */, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{

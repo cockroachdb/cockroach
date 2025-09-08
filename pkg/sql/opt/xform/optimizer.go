@@ -8,6 +8,7 @@ package xform
 import (
 	"context"
 	"math/rand"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -133,6 +134,16 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 
+	var disabledRules RuleSet
+	// If the DisableOptimizerRules session variable is set, then disable
+	// the specified rules.
+	if ruleNames := evalCtx.SessionData().DisableOptimizerRules; len(ruleNames) > 0 {
+		for _, ruleName := range ruleNames {
+			if rule, ok := opt.RuleNameMap[strings.ToLower(ruleName)]; ok {
+				disabledRules.Add(int(rule))
+			}
+		}
+	}
 	if seed := evalCtx.SessionData().TestingOptimizerRandomSeed; seed != 0 {
 		o.rng = rand.New(rand.NewSource(seed))
 	}
@@ -153,7 +164,10 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng, o)
 	o.coster = &o.defaultCoster
 	if disableRuleProbability > 0 {
-		o.disableRulesRandom(disableRuleProbability)
+		o.disableRulesRandom(disableRuleProbability, &disabledRules)
+	}
+	if disabledRules.Len() > 0 {
+		o.disableRules(disabledRules)
 	}
 }
 
@@ -261,7 +275,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	o.optimizeRootWithProps()
 
 	// Now optimize the entire expression tree.
-	root := o.mem.RootExpr().(memo.RelExpr)
+	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
 	o.optimizeGroup(root, rootProps)
 
@@ -922,10 +936,7 @@ func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required
 // properties required of it. This may trigger the creation of a new root and
 // new properties.
 func (o *Optimizer) optimizeRootWithProps() {
-	root, ok := o.mem.RootExpr().(memo.RelExpr)
-	if !ok {
-		panic(errors.AssertionFailedf("Optimize can only be called on relational root expressions"))
-	}
+	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
 
 	// [SimplifyRootOrdering]
@@ -1067,7 +1078,7 @@ func (a *groupStateAlloc) allocate() *groupState {
 }
 
 // disableRulesRandom disables rules with the given probability for testing.
-func (o *Optimizer) disableRulesRandom(probability float64) {
+func (o *Optimizer) disableRulesRandom(probability float64, disabledRules *RuleSet) {
 	essentialRules := intsets.MakeFast(
 		// Needed to prevent constraint building from failing.
 		int(opt.NormalizeInConst),
@@ -1115,7 +1126,6 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		int(opt.ConvertUncorrelatedExistsToCoalesceSubquery),
 	)
 
-	var disabledRules RuleSet
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
 		var r float64
 		if o.rng == nil {
@@ -1127,12 +1137,14 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 			disabledRules.Add(int(i))
 		}
 	}
+}
 
+func (o *Optimizer) disableRules(disabledRules RuleSet) {
 	o.f.SetDisabledRules(disabledRules)
 
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if disabledRules.Contains(int(ruleName)) {
-			log.Infof(o.ctx, "disabled rule matched: %s", ruleName.String())
+			log.VEventf(o.ctx, 2, "disabled rule matched: %s", ruleName.String())
 			return false
 		}
 		return true

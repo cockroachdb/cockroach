@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -253,7 +253,7 @@ func (desc *immutable) ValidateForwardReferences(
 	}
 
 	for _, depID := range desc.DependsOn {
-		vea.Report(catalog.ValidateOutboundTableRef(depID, vdg))
+		vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), depID, vdg))
 	}
 
 	for _, typeID := range desc.DependsOnTypes {
@@ -986,7 +986,7 @@ func (desc *immutable) ToRoutineObj() (*tree.RoutineObj, error) {
 		}
 		if p.DefaultExpr != nil {
 			var err error
-			ret.Params[i].DefaultVal, err = parser.ParseExpr(*p.DefaultExpr)
+			ret.Params[i].DefaultVal, err = parserutils.ParseExpr(*p.DefaultExpr)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", p.Name)
 			}
@@ -1048,7 +1048,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 			Class: class,
 		}
 		if param.DefaultExpr != nil {
-			routineParam.DefaultVal, err = parser.ParseExpr(*param.DefaultExpr)
+			routineParam.DefaultVal, err = parserutils.ParseExpr(*param.DefaultExpr)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", param.Name)
 			}
@@ -1127,7 +1127,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 			Class: ToTreeRoutineParamClass(desc.Params[i].Class),
 		}
 		if desc.Params[i].DefaultExpr != nil {
-			ret.Params[i].DefaultVal, err = parser.ParseExpr(*desc.Params[i].DefaultExpr)
+			ret.Params[i].DefaultVal, err = parserutils.ParseExpr(*desc.Params[i].DefaultExpr)
 			if err != nil {
 				return nil, err
 			}

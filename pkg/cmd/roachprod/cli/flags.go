@@ -47,12 +47,13 @@ var (
 	listJSON              bool
 	listMine              bool
 	listPattern           string
-	isSecure              bool // Set based on the values passed to --secure and --insecure
-	secure                = false
-	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", true)
+	isSecure              install.ComplexSecureOption // Set based on the values passed to --secure and --insecure
+	secure                = true
+	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
 	virtualClusterName    string
 	sqlInstance           int
 	extraSSHOptions       = ""
+	exportSSHConfig       string
 	nodeEnv               []string
 	tag                   string
 	external              = false
@@ -217,6 +218,8 @@ func initListCmdFlags(listCmd *cobra.Command) {
 		"mine", "m", false, "Show only clusters belonging to the current user")
 	listCmd.Flags().StringVar(&listPattern,
 		"pattern", "", "Show only clusters matching the regex pattern. Empty string matches everything.")
+	listCmd.Flags().StringVar(&exportSSHConfig,
+		"export-ssh-config", os.Getenv("ROACHPROD_EXPORT_SSH_CONFIG"), "export the SSH config for listed clusters (only when pattern or mine is specified")
 }
 
 func initAdminurlCmdFlags(adminurlCmd *cobra.Command) {
@@ -271,7 +274,6 @@ func initSyncCmdFlags(syncCmd *cobra.Command) {
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 	syncCmd.Flags().StringArrayVarP(&listOpts.IncludeProviders, "clouds", "c",
 		make([]string, 0), "Specify the cloud providers when syncing. Important: Use this flag only if you are certain that you want to sync with a specific cloud. All DNS host entries for other clouds will be erased from the DNS zone.")
-
 }
 
 func initStageCmdFlags(stageCmd *cobra.Command) {

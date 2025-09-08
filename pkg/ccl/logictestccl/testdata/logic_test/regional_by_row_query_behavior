@@ -266,7 +266,7 @@ ap-southeast-2  23
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
-<before:/Table/72>  …
+<before:/Table/73>  …
 
 query TIIII
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
@@ -404,7 +404,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX r
 ORDER BY 1
 ----
 start_key           end_key               replicas  lease_holder
-<before:/Table/72>  …/"\x80"/0            {1}       1
+<before:/Table/73>  …/"\x80"/0            {1}       1
 …/"\x80"/0          …/"\xc0"/0            {4}       4
 …/"\xc0"/0          <after:/Table/110/5>  {7}       7
 
@@ -1746,10 +1746,8 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │               │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column2 = pk)
 │               │ locking strength: for update
 │               │
-│               └── • render
-│                   │
-│                   └── • values
-│                         size: 5 columns, 2 rows
+│               └── • values
+│                     size: 5 columns, 2 rows
 │
 ├── • constraint-check
 │   │

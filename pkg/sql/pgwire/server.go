@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -224,6 +224,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	AuthLDAPConnLatencyInternal = metric.Metadata{
+		Name:        "auth.ldap.conn.latency.internal",
+		Help:        "Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 const (
@@ -377,6 +383,7 @@ type tenantSpecificMetrics struct {
 	AuthLDAPConnLatency         metric.IHistogram
 	AuthGSSConnLatency          metric.IHistogram
 	AuthScramConnLatency        metric.IHistogram
+	AuthLDAPConnLatencyInternal metric.IHistogram
 }
 
 func newTenantSpecificMetrics(
@@ -411,6 +418,8 @@ func newTenantSpecificMetrics(
 			getHistogramOptionsForIOLatency(AuthGSSConnLatency, histogramWindow)),
 		AuthScramConnLatency: metric.NewHistogram(
 			getHistogramOptionsForIOLatency(AuthScramConnLatency, histogramWindow)),
+		AuthLDAPConnLatencyInternal: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, histogramWindow)),
 	}
 }
 
@@ -541,6 +550,7 @@ func (s *Server) Metrics() []interface{} {
 		&s.SQLServer.ServerMetrics.StatsMetrics,
 		&s.SQLServer.ServerMetrics.ContentionSubsystemMetrics,
 		&s.SQLServer.ServerMetrics.InsightsMetrics,
+		&s.SQLServer.ServerMetrics.IngesterMetrics,
 	}
 }
 
@@ -958,7 +968,7 @@ func (s *Server) ServeConn(
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	if log.V(2) {
-		log.Infof(ctx, "new connection with options: %+v", sArgs)
+		log.Dev.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
 	ctx, cancelConn := context.WithCancel(ctx)
@@ -1265,7 +1275,7 @@ func (s *Server) serveImpl(
 			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
 			if err != nil {
 				if pgwirebase.IsMessageTooBigError(err) {
-					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
+					log.Dev.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
 
 					// Slurp the remaining bytes.
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
@@ -1305,7 +1315,7 @@ func (s *Server) serveImpl(
 
 			if ignoreUntilSync {
 				if typ != pgwirebase.ClientMsgSync {
-					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+					log.Dev.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
 					return false, isSimpleQuery, nil
 				}
 				ignoreUntilSync = false
@@ -1340,7 +1350,7 @@ func (s *Server) serveImpl(
 				return true, isSimpleQuery, c.writeErr(ctx, err, &c.writerState.buf)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
-					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
+					ctx, &c.readBuf, timeReceived, parserutils.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
 				); err != nil {
 					return false, isSimpleQuery, err
 				}
@@ -1371,7 +1381,7 @@ func (s *Server) serveImpl(
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
 					return false, isSimpleQuery, err
 				}
-				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+				return false, isSimpleQuery, c.handleParse(ctx, parserutils.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {

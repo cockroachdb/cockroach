@@ -106,7 +106,7 @@ func (c *cliContext) makeTenantSQLClient(
 		// is supported until we actually try to make a connection.
 		if err := conn.EnsureConn(ctx); err != nil && shouldTryWithoutTenantName(tenantName, err) {
 			if err := conn.Close(); err != nil {
-				log.VInfof(ctx, 2, "close err: %v", err)
+				log.Dev.VInfof(ctx, 2, "close err: %v", err)
 			}
 			return c.makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
 		}
@@ -157,7 +157,7 @@ func makeSQLClientForBaseURL(
 	sqlURL := baseURL.ToPQ().String()
 
 	if log.V(2) {
-		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
+		log.Dev.Infof(context.Background(), "connecting with URL: %s", sqlURL)
 	}
 
 	return sqlCtx.MakeConn(sqlURL)

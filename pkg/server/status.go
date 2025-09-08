@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -73,7 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -86,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/pprof/profile"
@@ -393,21 +395,68 @@ func (b *baseStatusServer) localExecutionInsights(
 ) (*serverpb.ListExecutionInsightsResponse, error) {
 	var response serverpb.ListExecutionInsightsResponse
 
+	highContentionInsights := make(map[uuid.UUID]insightspb.Insight, 0)
 	reader := b.sqlServer.pgServer.SQLServer.GetInsightsReader()
-	reader.IterateInsights(ctx, func(ctx context.Context, insight *insights.Insight) {
+	reader.IterateInsights(ctx, func(ctx context.Context, insight *insightspb.Insight) {
 		if insight == nil {
 			return
 		}
 
-		insightsCopy := *insight
 		// Copy statements slice - these insights objects can be read concurrently.
-		insightsCopy.Statements = make([]*insights.Statement, len(insight.Statements))
+		insightsCopy := *insight
+		insightsCopy.Statements = make([]*insightspb.Statement, len(insight.Statements))
 		copy(insightsCopy.Statements, insight.Statements)
-
-		response.Insights = append(response.Insights, insightsCopy)
+		if insight.Transaction != nil && slices.Contains(insight.Transaction.Causes, insightspb.Cause_HighContention) {
+			// Collect high contention insights seperately, they need additional validation / filtering.
+			// If it is valid we will add it to the response later.
+			highContentionInsights[insightsCopy.Transaction.ID] = insightsCopy
+		} else {
+			// All other insights are included in the response.
+			response.Insights = append(response.Insights, insightsCopy)
+		}
 	})
 
+	// Validating contention insights involves iterating through the contention events registry.
+	// Only do so if we have insights to validate.
+	if len(highContentionInsights) > 0 {
+		// Include only the valid high contention insights in the response.
+		valid, err := validContentionInsights(b.sqlServer.execCfg.ContentionRegistry, highContentionInsights)
+		if err != nil {
+			return nil, errors.Wrap(err, "validating contention insights")
+		}
+
+		for validInsightTxnID := range valid {
+			response.Insights = append(response.Insights, highContentionInsights[validInsightTxnID])
+		}
+	}
+
 	return &response, nil
+}
+
+// validContentionInsights iterates through the contention event registry and checks the
+// events that are related to the passed in (contention) insights. The insights that have
+// valid (resolved BlockingTxnFingerprintID) contention events are returned.
+func validContentionInsights(
+	registry *contention.Registry, contentionInsights map[uuid.UUID]insightspb.Insight,
+) (map[uuid.UUID]bool, error) {
+	valid := make(map[uuid.UUID]bool, len(contentionInsights))
+	err := registry.ForEachEvent(func(event *contentionpb.ExtendedContentionEvent) error {
+		// If we have already determined an execution (insight) to be valid, no work to do.
+		if ok := valid[event.WaitingTxnID]; ok {
+			return nil
+		}
+		// We are interested in the contention events that are related to our insights.
+		if _, ok := contentionInsights[event.WaitingTxnID]; ok {
+			// If the event has the blocking transaction fingerprint ID resolved, we consider it
+			// valid for the insights response (since the insight response already has the waiting
+			// transaction fingerprint ID).
+			if event.BlockingTxnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
+				valid[event.WaitingTxnID] = true
+			}
+		}
+		return nil
+	})
+	return valid, err
 }
 
 func (b *baseStatusServer) localTxnIDResolution(
@@ -2425,7 +2474,7 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
@@ -4074,7 +4123,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		cmd.Stderr = &errBuf
 		output, err := cmd.Output()
 		if err != nil {
-			log.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
+			log.Dev.Warningf(ctx, "failed to get system information: %v\nstderr: %v",
 				err, errBuf.String())
 			return
 		}
@@ -4084,7 +4133,7 @@ func (si *systemInfoOnce) systemInfo(ctx context.Context) serverpb.SystemInfo {
 		cmd.Stderr = &errBuf
 		output, err = cmd.Output()
 		if err != nil {
-			log.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
+			log.Dev.Warningf(ctx, "failed to get kernel information: %v\nstderr: %v",
 				err, errBuf.String())
 			return
 		}

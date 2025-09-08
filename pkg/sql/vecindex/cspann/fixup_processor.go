@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/crlib/crtime"
-	"github.com/cockroachdb/errors"
 )
 
 // fixupType enumerates the different kinds of fixups.
@@ -179,9 +178,10 @@ type FixupProcessor struct {
 		// fixups. Only once the channel is closed will they begin processing.
 		// This is used for testing.
 		suspended chan struct{}
-		// discardFixups, if true, causes the processor to discard any queued
-		// fixups rather than processing them. This is used for testing.
-		discardFixups bool
+		// fixupsDone is created when the caller to Process() is waiting for
+		// pending fixups to be processed. It is closed when all fixups have been
+		// processed.
+		fixupsDone chan struct{}
 		// waitForFixups broadcasts to any waiters when all fixups are processed.
 		// This is used for testing.
 		waitForFixups sync.Cond
@@ -220,7 +220,7 @@ func (fp *FixupProcessor) Init(
 	if index.options.IsDeterministic {
 		// A deterministic index should be suspended until an explicit call to
 		// Process is called.
-		fp.Suspend()
+		fp.mu.suspended = make(chan struct{})
 	}
 }
 
@@ -341,48 +341,67 @@ func (fp *FixupProcessor) AddMerge(
 	})
 }
 
-// Suspend blocks all background workers from processing fixups until Process is
-// called to let them run. This is useful for testing.
-func (fp *FixupProcessor) Suspend() {
-	fp.mu.Lock()
-	defer fp.mu.Unlock()
-
-	if fp.mu.suspended != nil {
-		panic(errors.AssertionFailedf("fixup processor was already suspended"))
-	}
-
-	fp.mu.suspended = make(chan struct{})
-}
-
 // Process waits until all pending fixups have been processed by background
 // workers. If background workers have been suspended, they are temporarily
 // allowed to run until all fixups have been processed. This is useful for
 // testing.
-func (fp *FixupProcessor) Process(discard bool) {
+//
+// nolint:deferunlockcheck
+func (fp *FixupProcessor) Process(ctx context.Context) error {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
-	fp.mu.discardFixups = discard
-
-	suspended := fp.mu.suspended
-	if suspended != nil {
-		// Signal any waiting background workers that they can process fixups.
-		close(fp.mu.suspended)
-		fp.mu.suspended = nil
+	if len(fp.mu.pendingFixups) == 0 {
+		// No pending fixups to process.
+		return nil
 	}
 
-	// Wait for all fixups to be processed. Note that this uses a sync.Cond, which
-	// will unlock the mutex while waiting.
-	for len(fp.mu.pendingFixups) > 0 {
-		fp.mu.waitForFixups.Wait()
+	// Check whether another goroutine has already called Process.
+	fixupsDone := fp.mu.fixupsDone
+	if fixupsDone == nil {
+		// Create the channel that will be closed once all fixups have been
+		// processed.
+		fixupsDone = make(chan struct{})
+		fp.mu.fixupsDone = fixupsDone
+
+		// Signal any waiting background workers that they can process fixups and
+		// create a new suspended channel to replace the closed one.
+		suspended := fp.mu.suspended
+		if suspended != nil {
+			close(fp.mu.suspended)
+			fp.mu.suspended = make(chan struct{})
+		}
 	}
 
-	fp.mu.discardFixups = false
+	func() {
+		// Unlock while waiting for fixups to be processed.
+		fp.mu.Unlock()
+		defer fp.mu.Lock()
 
-	// Re-suspend the fixup processor if it was suspended.
-	if suspended != nil {
-		fp.mu.suspended = make(chan struct{})
-	}
+		select {
+		case <-fixupsDone:
+			// All fixups processed.
+			break
+
+		case <-ctx.Done():
+			// Context canceled.
+			break
+
+		case <-fp.initCtx.Done():
+			// Processor has been quiesced.
+			break
+		}
+	}()
+
+	return nil
+}
+
+// Discard pops all unprocessed fixups from the queue and discards them. This is
+// useful for testing.
+func (fp *FixupProcessor) Discard(ctx context.Context) {
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+	fp.discardFixupsLocked()
 }
 
 // addFixup enqueues the given fixup for later processing, assuming there is not
@@ -402,7 +421,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	if len(fp.mu.pendingFixups) >= maxFixups {
 		// Don't enqueue the fixup.
 		if fp.fixupsLimitHit.ShouldLog() {
-			log.Warning(ctx, "reached limit of unprocessed fixups")
+			log.Dev.Warning(ctx, "reached limit of unprocessed fixups")
 		}
 		return
 	}
@@ -448,60 +467,68 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	err := fp.stopper.RunAsyncTask(fp.initCtx, taskName, worker.Start)
 	if err != nil {
 		// Log error and continue.
-		log.Errorf(ctx, "error starting vector index background worker: %v", err)
+		log.Dev.Errorf(ctx, "error starting vector index background worker: %v", err)
 	}
 }
 
 // nextFixup fetches the next fixup in the queue so that it can be processed by
 // a background worker. It blocks until there is a fixup available (ok=true) or
-// until the processor shuts down (ok=false).
+// until the context is canceled or the processor shuts down (ok=false).
 func (fp *FixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
+	var suspended, fixupsDone chan struct{}
 	for {
+		// Within the scope of the mutex, check whether processor is suspended.
+		suspended, fixupsDone = func() (chan struct{}, chan struct{}) {
+			fp.mu.Lock()
+			defer fp.mu.Unlock()
+			return fp.mu.suspended, fp.mu.fixupsDone
+		}()
+
+		if suspended != nil && fixupsDone == nil {
+			// Processor is suspended, so wait until it is resumed.
+			select {
+			case <-suspended:
+				// Jump back to top of loop to get the fixupsDone channel.
+				continue
+
+			case <-ctx.Done():
+				return fixup{}, false
+
+			case <-fp.initCtx.Done():
+				// Processor is shutting down.
+				return fixup{}, false
+			}
+		}
+
+		// Get the next fixup.
 		select {
 		case next = <-fp.fixups:
-			// Within the scope of the mutex, increment running workers and check
-			// whether processor is suspended.
-			discard, suspended := func() (bool, chan struct{}) {
+			func() {
+				// Increment running workers.
 				fp.mu.Lock()
 				defer fp.mu.Unlock()
 				fp.mu.runningWorkers++
-				return fp.mu.discardFixups, fp.mu.suspended
 			}()
-			if suspended != nil {
-				// Can't process the fixup until the processor is resumed, so wait
-				// until that happens.
-				select {
-				case <-suspended:
-					break
-
-				case <-ctx.Done():
-					return fixup{}, false
-				}
-
-				// Re-check the discard flag, in case it was set.
-				discard = func() bool {
-					fp.mu.Lock()
-					defer fp.mu.Unlock()
-					return fp.mu.discardFixups
-				}()
-			}
-
-			// Always process fixup if it's single-stepping.
-			if discard && !next.SingleStep {
-				fp.removeFixup(next)
-				continue
-			}
 			return next, true
+
+		case <-fixupsDone:
+			// Other goroutines have processed the fixups, so jump back to top of
+			// loop to suspend again.
+			continue
 
 		case <-ctx.Done():
 			// Context was canceled, abort.
+			return fixup{}, false
+
+		case <-fp.initCtx.Done():
+			// Processor is shutting down.
 			return fixup{}, false
 		}
 	}
 }
 
 // removeFixup removes a pending fixup that has been processed by a worker.
-func (fp *FixupProcessor) removeFixup(toRemove fixup) {
+func (fp *FixupProcessor) removeFixup(ctx context.Context, toRemove fixup) {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
@@ -520,8 +547,33 @@ func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 		}
 	}
 
+	// If single-stepping, discard all fixups that might have been triggered
+	// while processing this fixup.
+	if toRemove.SingleStep {
+		fp.discardFixupsLocked()
+	}
+
 	// If there are no more pending fixups, notify any waiters.
-	if len(fp.mu.pendingFixups) == 0 {
-		fp.mu.waitForFixups.Broadcast()
+	if fp.mu.fixupsDone != nil && len(fp.mu.pendingFixups) == 0 {
+		close(fp.mu.fixupsDone)
+		fp.mu.fixupsDone = nil
+	}
+}
+
+// discardFixupsLocked pops all unprocessed fixups from the queue and discards
+// them. Note that any in-progress fixups are not affected.
+//
+// NOTE: Caller must have acquired the fp.mu lock.
+func (fp *FixupProcessor) discardFixupsLocked() {
+	for {
+		select {
+		case next := <-fp.fixups:
+			// Remove from the map.
+			delete(fp.mu.pendingFixups, next.CachedKey)
+
+		default:
+			// No more unprocessed fixups.
+			return
+		}
 	}
 }

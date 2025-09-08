@@ -18,30 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
-
-// testInspectLogger is a test implementation of inspectLogger that collects issues in memory.
-type testInspectLogger struct {
-	mu     syncutil.Mutex
-	issues []*inspectIssue
-}
-
-// logIssue implements the inspectLogger interface.
-func (l *testInspectLogger) logIssue(_ context.Context, issue *inspectIssue) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.issues = append(l.issues, issue)
-	return nil
-}
-
-// getIssues returns the issues that have been emitted to the logger.
-func (l *testInspectLogger) getIssues() []*inspectIssue {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]*inspectIssue(nil), l.issues...)
-}
 
 // testingSpanSourceMode defines behavior for test only span sources.
 // It is used to simulate producer-side edge cases.
@@ -144,7 +122,7 @@ func (t *testingInspectCheck) Started() bool {
 func (t *testingInspectCheck) Start(
 	ctx context.Context, _ *execinfra.ServerConfig, _ roachpb.Span, workerIndex int,
 ) error {
-	log.Infof(ctx, "Worker index %d given span", workerIndex)
+	log.Dev.Infof(ctx, "Worker index %d given span", workerIndex)
 	t.started = true
 	t.index = workerIndex
 	t.iteration = 0
@@ -162,13 +140,13 @@ func (t *testingInspectCheck) Next(
 	switch cfg.mode {
 	case checkModeFailsAfterN:
 		if cfg.failAfter == 0 || t.iteration >= cfg.failAfter {
-			log.Infof(ctx, "Worker %d failing via test check", t.index)
+			log.Dev.Infof(ctx, "Worker %d failing via test check", t.index)
 			return nil, errors.New("worker failure triggered by test check")
 		}
 		time.Sleep(10 * time.Millisecond)
 
 	case checkModeBlocksUntilCancel:
-		log.Infof(ctx, "Worker %d blocking until cancelled", t.index)
+		log.Dev.Infof(ctx, "Worker %d blocking until cancelled", t.index)
 		for {
 			select {
 			case <-ctx.Done():
@@ -184,7 +162,7 @@ func (t *testingInspectCheck) Next(
 
 	if t.issueCursor < len(cfg.issues) {
 		issue := cfg.issues[t.issueCursor]
-		log.Infof(ctx, "Worker %d emitting issue: %+v", t.index, issue)
+		log.Dev.Infof(ctx, "Worker %d emitting issue: %+v", t.index, issue)
 		t.issueCursor++
 		return issue, nil
 	}
@@ -243,9 +221,9 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 // makeProcessor will create an inspect processor for test.
 func makeProcessor(
 	t *testing.T, checkFactory inspectCheckFactory, src spanSource, concurrency int,
-) (*inspectProcessor, *testInspectLogger) {
+) (*inspectProcessor, *testIssueCollector) {
 	t.Helper()
-	logger := &testInspectLogger{}
+	logger := &testIssueCollector{}
 	proc := &inspectProcessor{
 		spec:           execinfrapb.InspectSpec{},
 		checkFactories: []inspectCheckFactory{checkFactory},
@@ -366,7 +344,7 @@ func TestInspectProcessor_EmitIssues(t *testing.T) {
 	}
 	proc, logger := makeProcessor(t, factory, spanSrc, 1)
 
-	runProcessorAndWait(t, proc, false)
+	runProcessorAndWait(t, proc, true /* expectErr */)
 
-	require.Len(t, logger.getIssues(), 2)
+	require.Equal(t, 2, logger.numIssuesFound())
 }

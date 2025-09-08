@@ -430,22 +430,21 @@ done
 	}
 
 	if !zipCtx.includeRunningJobTraces {
-		zr.info("NOTE: Omitted traces of running jobs from this debug zip bundle." +
-			" Use the --" + cliflags.ZipIncludeRunningJobTraces.Name + " flag to enable the fetching of this" +
-			" data.")
+		zr.info("NOTE: Omitted traces of running jobs from this debug zip bundle."+
+			" Use the --%s flag to enable the fetching of this"+
+			" data.", cliflags.ZipIncludeRunningJobTraces.Name)
 	}
 
 	if !zipCtx.includeStacks {
-		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle." +
-			" Use the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag to enable the fetching of this" +
-			" data.")
+		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle."+
+			" Use the --%s flag to enable the fetching of this"+
+			" data.", cliflags.ZipIncludeGoroutineStacks.Name)
 	}
 
 	// TODO(obs-infra): remove deprecation warning once process completed in v23.2.
 	if zipCtx.redactLogs {
-		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
-			" flag has been deprecated in favor of the --" + cliflags.ZipRedact.Name + " flag. " +
-			"The flag has been interpreted as --" + cliflags.ZipRedact.Name + " instead.")
+		zr.info("WARNING: The --%s flag has been deprecated in favor of the --%s flag. "+
+			"The flag has been interpreted as --%s instead.", cliflags.ZipRedactLogs.Name, cliflags.ZipRedact.Name, cliflags.ZipRedact.Name)
 	}
 
 	return nil
@@ -522,7 +521,7 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 			inflightTraceZipper := tracezipper.MakeSQLConnInflightTraceZipper(zc.firstNodeSQLConn.GetDriverConn())
 			jobZip, err := inflightTraceZipper.Zip(ctx, int64(jobTrace.traceID))
 			if err != nil {
-				log.Warningf(ctx, "failed to collect inflight trace zip for job %d: %v", jobTrace.jobID, err)
+				log.Dev.Warningf(ctx, "failed to collect inflight trace zip for job %d: %v", jobTrace.jobID, err)
 				continue
 			}
 
@@ -530,7 +529,7 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 			name := fmt.Sprintf("%s/jobs/%d/%s/trace.zip", zc.prefix, jobTrace.jobID, ts)
 			s := zc.clusterPrinter.start(redact.Sprintf("requesting traces for job %d", jobTrace.jobID))
 			if err := zc.z.createRaw(s, name, jobZip); err != nil {
-				log.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
+				log.Dev.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
 					jobTrace.jobID, name, err)
 				continue
 			}

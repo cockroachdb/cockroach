@@ -512,7 +512,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		desc1 := ld1.Underlying().(catalog.TableDescriptor)
 		if !desc1.IsSchemaLocked() {
 			if log.V(2) {
-				log.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
+				log.Changefeed.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
 			}
 			return false, nil
 		}
@@ -530,7 +530,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		desc2 := ld2.Underlying().(catalog.TableDescriptor)
 		if desc1.GetVersion() != desc2.GetVersion() {
 			if log.V(1) {
-				log.Infof(ctx,
+				log.Changefeed.Infof(ctx,
 					"desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
 					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
 			}
@@ -547,7 +547,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		// We swallow any non-terminal errors so that the slow path can be tried
 		// after we resume polling.
 		if log.V(1) {
-			log.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
+			log.Changefeed.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
 		}
 		return nil
 	}
@@ -570,7 +570,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 // transactionally).
 func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	if log.V(1) {
-		log.Infof(ctx, "waiting for frontier to reach %s", ts)
+		log.Changefeed.Infof(ctx, "waiting for frontier to reach %s", ts)
 	}
 
 	waitCh, needToWait := func() (<-chan error, bool) {
@@ -587,14 +587,14 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 		if needToWait {
 			waited := timeutil.Since(start)
 			if log.V(1) {
-				log.Infof(ctx, "waited %s for frontier to reach %s: err=%v", waited, ts, err)
+				log.Changefeed.Infof(ctx, "waited %s for frontier to reach %s: err=%v", waited, ts, err)
 			}
 			if tf.metrics != nil {
 				tf.metrics.TableMetadataNanos.Inc(waited.Nanoseconds())
 			}
 		} else {
 			if log.V(1) {
-				log.Infof(ctx, "fastpath taken when waiting for %s", ts)
+				log.Changefeed.Infof(ctx, "fastpath taken when waiting for %s", ts)
 			}
 		}
 		return err
@@ -826,7 +826,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	ctx context.Context, startTS, endTS hlc.Timestamp,
 ) ([]catalog.Descriptor, error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
+		log.Changefeed.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
 	codec := tf.leaseMgr.Codec()
 	start := timeutil.Now()
@@ -841,7 +841,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 		res, err := sendExportRequestWithPriorityOverride(
 			ctx, tf.settings, tf.db.KV().NonTransactionalSender(), span, startTS, endTS)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
+			log.Changefeed.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
 		}
 		if err != nil {
 			return nil, err

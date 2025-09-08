@@ -97,6 +97,7 @@ ALTER TABLE grandchild2 SPLIT AT SELECT pid1, pid1 + 40, pid1, pid1 FROM
 generate_series(2, 38, 4) AS g(pid1)
 
 # Relocate the twenty parts to the five nodes.
+retry
 statement ok
 ALTER TABLE grandchild2 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[((i-1)/2)::INT%5+1], i, i+20, i, i FROM generate_series(1, 39, 2) AS g(i)
@@ -107,7 +108,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE p
 ORDER BY 1
 ----
 start_key           end_key                    replicas  lease_holder
-<before:/Table/72>  …/1/8                      {1}       1
+<before:/Table/73>  …/1/8                      {1}       1
 …/1/16              …/1/24                     {1}       1
 …/1/24              …/1/32                     {1}       1
 …/1/32              <after:/Table/108/1/4/44>  {1}       1
@@ -746,6 +747,7 @@ statement ok
 ALTER TABLE outer_p1 SPLIT AT
   SELECT i FROM generate_series(0, 40, 5) AS g(i)
 
+retry
 statement ok
 ALTER TABLE outer_p1 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)

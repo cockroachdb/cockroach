@@ -1211,7 +1211,7 @@ func (c *conn) writeRowDescription(
 	c.msgBuilder.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Infof(ctx, "pgwire: writing column %s of type: %s", column.Name, column.Typ)
+			log.Dev.Infof(ctx, "pgwire: writing column %s of type: %s", column.Name, column.Typ)
 		}
 		c.msgBuilder.writeTerminatedString(column.Name)
 		typ := pgTypeForParserType(column.Typ)

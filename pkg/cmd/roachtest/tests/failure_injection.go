@@ -65,7 +65,7 @@ type failureSmokeTest struct {
 func (t *failureSmokeTest) run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster,
 ) (err error) {
-	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName, failures.ReplicationFactor(3))
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName, false /* disableStateValidation */, failures.ReplicationFactor(3))
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func (t *failureSmokeTest) run(
 }
 
 func (t *failureSmokeTest) noopRun(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
-	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName)
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName, false /* disableStateValidation */)
 	if err != nil {
 		return err
 	}

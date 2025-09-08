@@ -4527,15 +4527,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 +HINT:  try \h REVOKE
  DROP OWNED BY regress_priv_user1;
  DROP USER regress_priv_user1;
++ERROR:  role regress_priv_user1 cannot be dropped because some objects depend on it
++owner of default privileges that revokes privileges of routines from public in database root
++owner of default privileges that revokes privileges of types from public in database root
++HINT:  USE root; ALTER DEFAULT PRIVILEGES FOR ROLE regress_priv_user1 GRANT EXECUTE ON ROUTINES TO public;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE regress_priv_user1 GRANT USAGE ON TYPES TO public;
  DROP USER regress_priv_user2;
 +ERROR:  role regress_priv_user2 cannot be dropped because some objects depend on it
-+privileges for default privileges on new  belonging to role test_admin in database root
 +privileges for default privileges on new relations belonging to role test_admin in database root
++privileges for default privileges on new routines belonging to role test_admin in database root
 +privileges for default privileges on new schemas belonging to role test_admin in database root
 +privileges for default privileges on new sequences belonging to role test_admin in database root
 +privileges for default privileges on new types belonging to role test_admin in database root
-+HINT:  USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON ROUTINES FROM regress_priv_user2;
-+USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON TABLES FROM regress_priv_user2;
++HINT:  USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON TABLES FROM regress_priv_user2;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON ROUTINES FROM regress_priv_user2;
 +USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON SCHEMAS FROM regress_priv_user2;
 +USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON SEQUENCES FROM regress_priv_user2;
 +USE root; ALTER DEFAULT PRIVILEGES FOR ROLE test_admin REVOKE ALL ON TYPES FROM regress_priv_user2;

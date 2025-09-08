@@ -16,10 +16,12 @@ public  descriptor_id_seq    sequence  node  NULL
 public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
-69
+70
 
 # Verify we can read ID on its own (see #58614).
 query I

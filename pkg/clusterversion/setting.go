@@ -111,7 +111,7 @@ func (cv *clusterVersionSetting) activeVersion(
 ) ClusterVersion {
 	ver := cv.activeVersionOrEmpty(ctx, sv)
 	if ver == (ClusterVersion{}) {
-		log.Fatalf(ctx, "version not initialized")
+		log.Dev.Fatalf(ctx, "version not initialized")
 	}
 	return ver
 }
@@ -190,7 +190,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 		// Instead, we crash. Not being able to update our version to what the
 		// rest of the cluster is running is a serious issue.
 		if retErr != nil {
-			log.Fatalf(ctx, "failed to validate version upgrade: %s", retErr)
+			log.Dev.Fatalf(ctx, "failed to validate version upgrade: %s", retErr)
 		}
 	}()
 

@@ -1302,20 +1302,50 @@ func TestIncompatibleVersion(t *testing.T) {
 	p.Close()
 
 	// Overwrite the min version file with an unsupported version.
-	version := roachpb.Version{Major: 21, Minor: 1}
-	b, err := protoutil.Marshal(&version)
+	ver := roachpb.Version{Major: 21, Minor: 1}
+	b, err := protoutil.Marshal(&ver)
 	require.NoError(t, err)
-	require.NoError(t, safeWriteToUnencryptedFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
-	env = mustInitTestEnv(t, memFS, "")
-	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
-	require.Error(t, err)
+	settings := cluster.MakeTestingClusterSettings()
+	_, err = fs.InitEnv(context.Background(), memFS, "", fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	msg := err.Error()
 	if !strings.Contains(msg, "is too old for running version") &&
 		!strings.Contains(msg, "cannot be opened by development version") {
 		t.Fatalf("unexpected error %v", err)
 	}
-	env.Close()
+}
+
+func TestPebbleClusterVersionTooNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
+
+	p, err := Open(ctx, env, cluster.MakeTestingClusterSettings())
+	require.NoError(t, err)
+	p.Close()
+
+	// Overwrite the min version file with a future version that's newer than the
+	// latest supported version. Use a development version higher than the current
+	// running version to ensure it will be considered "too new". We use a very
+	// high development version to avoid conflicts with the current version.
+	ver := roachpb.Version{Major: 1000030, Minor: 0}
+	b, err := protoutil.Marshal(&ver)
+	require.NoError(t, err)
+	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+
+	settings := cluster.MakeTestingClusterSettings()
+	_, err = fs.InitEnv(context.Background(), memFS, "", fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
+	require.Error(t, err)
+	msg := err.Error()
+	require.Contains(t, msg, "is too high for running version")
 }
 
 func TestNoMinVerFile(t *testing.T) {
@@ -1331,7 +1361,7 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, memFS.Remove(MinVersionFilename))
+	require.NoError(t, memFS.Remove(fs.MinVersionFilename))
 
 	// We are still allowed the open the store if we haven't written anything to it.
 	// This is useful in case the initial Open crashes right before writinng the
@@ -1347,7 +1377,7 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, memFS.Remove(MinVersionFilename))
+	require.NoError(t, memFS.Remove(fs.MinVersionFilename))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, st)
@@ -1601,6 +1631,56 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
 }
 
+func TestPebbleFormatVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	latestKey := pebbleFormatVersionKeys[0]
+	latestVersion := latestKey.Version()
+	latestFmv := pebbleFormatVersionMap[latestKey]
+
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+	require.Equal(t, minPebbleFormatVersionInCluster(latestVersion), latestFmv)
+
+	// We upgrade the pebble format as soon as we reach the fence version.
+	require.Equal(t, pebbleFormatVersion(latestVersion.FenceVersion()), latestFmv)
+	// But at the fence version, we don't have a guarantee that all nodes have
+	// upgraded.
+	require.Less(t, minPebbleFormatVersionInCluster(latestVersion.FenceVersion()), latestFmv)
+
+	require.Less(t, pebbleFormatVersion((latestKey - 1).Version()), latestFmv)
+	require.Less(t, minPebbleFormatVersionInCluster((latestKey - 1).Version()), latestFmv)
+
+	v := latestVersion
+	v.Minor++
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+	require.Equal(t, minPebbleFormatVersionInCluster(latestVersion), latestFmv)
+
+	require.Equal(t, pebbleFormatVersion(clusterversion.MinSupported.Version()), MinimumSupportedFormatVersion)
+	require.Equal(t, minPebbleFormatVersionInCluster(clusterversion.MinSupported.Version()), MinimumSupportedFormatVersion)
+
+	// Gather all possible versions since MinSupported.
+	var versions []roachpb.Version
+	for k := clusterversion.MinSupported + 1; k <= clusterversion.Latest; k++ {
+		versions = append(versions, k.Version().FenceVersion(), k.Version())
+	}
+
+	prevFMV := MinimumSupportedFormatVersion
+	for i, v := range versions {
+		fmv := pebbleFormatVersion(v)
+		if fmv != prevFMV {
+			require.True(t, v.IsFence())
+			// minPebbleFormatVersionInCluster() should return the previous format.
+			require.Equal(t, prevFMV, minPebbleFormatVersionInCluster(v))
+			// For the next version, minPebbleFormatVersionInCluster() should return
+			// the new format.
+			require.Equal(t, fmv, minPebbleFormatVersionInCluster(versions[i+1]))
+		} else {
+			require.Equal(t, fmv, minPebbleFormatVersionInCluster(v))
+		}
+		prevFMV = fmv
+	}
+}
+
 // delayFS injects a delay on each read.
 type delayFS struct {
 	vfs.FS
@@ -1638,7 +1718,10 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 
 		memFS := vfs.NewMem()
 		dFS := delayFS{FS: memFS}
-		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+		settings := cluster.MakeTestingClusterSettings()
+		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{
+			Version: settings.Version,
+		}, nil /* statsCollector */)
 		require.NoError(t, err)
 		// Tiny block cache, so all reads go to FS.
 		db, err := Open(ctx, e, cluster.MakeClusterSettings(), CacheSize(1024))
@@ -1713,7 +1796,10 @@ func TestPebbleCompactCancellation(t *testing.T) {
 	ctx := context.Background()
 	mem := vfs.NewMem()
 	bfs := &fs.BlockingWriteFSForTesting{FS: mem}
-	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+	settings := cluster.MakeTestingClusterSettings()
+	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	require.NoError(t, err)
 	db, err := Open(
 		ctx, e, cluster.MakeClusterSettings(), CacheSize(1024), MaxConcurrentCompactions(1),

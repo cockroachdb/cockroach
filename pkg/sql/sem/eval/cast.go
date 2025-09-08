@@ -503,6 +503,8 @@ func performCastWithoutPrecisionTruncation(
 			s = t.TSVector.String()
 		case *tree.DPGVector:
 			s = t.T.String()
+		case *tree.DLTree:
+			s = t.LTree.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
 		case *tree.DVoid:
@@ -615,12 +617,12 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DArray:
 			switch d.ParamTyp.Family() {
 			case types.FloatFamily, types.IntFamily, types.DecimalFamily:
+				if d.HasNulls() {
+					return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
+						"array must not contain nulls")
+				}
 				v := make(vector.T, len(d.Array))
 				for i, elem := range d.Array {
-					if elem == tree.DNull {
-						return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
-							"array must not contain nulls")
-					}
 					datum, err := performCast(ctx, evalCtx, elem, types.Float4, false)
 					if err != nil {
 						return nil, err
@@ -956,6 +958,21 @@ func performCastWithoutPrecisionTruncation(
 			return &tree.DTSVector{TSVector: vec}, nil
 		case *tree.DTSVector:
 			return d, nil
+		}
+	case types.LTreeFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			ltree, err := tree.ParseDLTree(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return ltree, nil
+		case *tree.DCollatedString:
+			ltree, err := tree.ParseDLTree(v.Contents)
+			if err != nil {
+				return nil, err
+			}
+			return ltree, nil
 		}
 	case types.ArrayFamily:
 		switch v := d.(type) {

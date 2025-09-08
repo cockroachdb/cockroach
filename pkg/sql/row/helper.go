@@ -113,6 +113,7 @@ type RowHelper struct {
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	metrics                      *rowinfra.Metrics
+	migrateLargeRowLog           bool
 }
 
 func NewRowHelper(
@@ -134,6 +135,7 @@ func NewRowHelper(
 		Indexes:                    indexes,
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
 		sd:                         sd,
+		migrateLargeRowLog:         log.ShouldMigrateEvent(sv),
 		metrics:                    metrics,
 		maxRowSizeLog:              uint32(maxRowSizeLog.Get(sv)),
 		maxRowSizeErr:              uint32(maxRowSizeErr.Get(sv)),
@@ -473,7 +475,10 @@ func (rh *RowHelper) CheckRowSize(
 		} else {
 			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
 		}
-		log.StructuredEvent(ctx, severity.INFO, event)
+		migrator := log.NewStructuredEventMigrator(func() bool {
+			return rh.migrateLargeRowLog
+		}, logpb.Channel_SQL_EXEC)
+		migrator.StructuredEvent(ctx, severity.INFO, event)
 	}
 	if shouldErr {
 		if rh.metrics != nil {

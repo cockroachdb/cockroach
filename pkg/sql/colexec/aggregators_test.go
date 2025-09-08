@@ -814,7 +814,7 @@ func TestAggregators(t *testing.T) {
 				// Filtering aggregation is only supported with hash aggregator.
 				continue
 			}
-			log.Infof(ctx, "%s/%s", tc.name, agg.name)
+			log.Dev.Infof(ctx, "%s/%s", tc.name, agg.name)
 			verifier := colexectestutils.OrderedVerifier
 			if tc.unorderedInput {
 				verifier = colexectestutils.UnorderedVerifier
@@ -856,7 +856,7 @@ func TestAggregatorRandom(t *testing.T) {
 		for _, numInputBatches := range []int{1, 2, 64} {
 			for _, hasNulls := range []bool{true, false} {
 				for _, agg := range aggTypesWithPartial {
-					log.Infof(context.Background(), "%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls)
+					log.Dev.Infof(context.Background(), "%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls)
 					nTuples := coldata.BatchSize() * numInputBatches
 					typs := []*types.T{types.Int, types.Float}
 					cols := []*coldata.Vec{

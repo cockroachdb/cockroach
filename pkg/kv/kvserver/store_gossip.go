@@ -153,7 +153,7 @@ func (s *Store) startGossip() {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
 							if cannotGossipEvery.ShouldLog() {
-								log.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
+								log.Dev.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
 							}
 							if !errors.Is(err, errPeriodicGossipsDisabled) {
 								continue
@@ -192,7 +192,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		// get the first system config, then periodically in the background
 		// (managed by the Node).
 		if err := s.ComputeMetrics(ctx); err != nil {
-			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
+			log.Dev.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
 	})
@@ -206,10 +206,10 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	now := s.cfg.Clock.NowAsClockTimestamp()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		if shouldQueue {
-			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			_ = s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
-			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			_ = s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 		}
@@ -347,7 +347,7 @@ func (s *StoreGossip) asyncGossipStore(ctx context.Context, reason string, useCa
 	gossipFn := func(ctx context.Context) {
 		log.VEventf(ctx, 2, "gossiping on %s", reason)
 		if err := s.GossipStore(ctx, useCached); err != nil {
-			log.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
+			log.Dev.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
 		}
 	}
 
@@ -361,7 +361,7 @@ func (s *StoreGossip) asyncGossipStore(ctx context.Context, reason string, useCa
 	if err := s.stopper.RunAsyncTask(
 		ctx, fmt.Sprintf("storage.Store: gossip on %s", reason), gossipFn,
 	); err != nil {
-		log.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
+		log.Dev.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
 	}
 }
 

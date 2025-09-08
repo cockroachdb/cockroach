@@ -252,7 +252,7 @@ func printTTLRateLimitNotice(ctx context.Context, p eval.ClientNoticeSender) {
 	p.BufferClientNotice(
 		ctx,
 		errors.WithDetail(
-			pgnotice.Newf("The TTL rate limit is per leaseholder per table."),
+			pgnotice.Newf("The TTL rate limit is per node per table."),
 			ttlDocDetail,
 		),
 	)
@@ -458,14 +458,15 @@ func writeSettingInternal(
 
 		if setting.IsUnsafe() {
 			// Also mention the change in the non-structured DEV log.
-			log.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
+			log.Dev.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
 		}
 
 		return logFn(ctx,
 			0, /* no target */
 			&eventpb.SetClusterSetting{
-				SettingName: string(name),
-				Value:       reportedValue,
+				SettingName:  string(name),
+				Value:        reportedValue,
+				DefaultValue: setting.DefaultString(),
 			})
 	}(); err != nil {
 		return "", err
@@ -708,7 +709,7 @@ func waitForSettingUpdate(
 		return nil
 	})
 	if err != nil {
-		log.Warningf(
+		log.Dev.Warningf(
 			ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
 			name, expectedEncodedValue, observed,
 		)

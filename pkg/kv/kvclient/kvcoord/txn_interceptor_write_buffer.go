@@ -59,7 +59,10 @@ var bufferedWritesGetTransformEnabled = settings.RegisterBoolSetting(
 )
 
 const defaultBufferSize = 1 << 22 // 4MB
-var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
+
+// BufferedWritesMaxBufferSize controls the per-txn buffer size. It's exported
+// only to be accessed from tests.
+var BufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.max_buffer_size",
 	"if non-zero, defines that maximum size of the "+
@@ -67,7 +70,7 @@ var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 	int64(metamorphic.ConstantWithTestRange("kv.transaction.write_buffering.max_buffer_size",
 		defaultBufferSize, // default
 		1,                 // min
-		defaultBufferSize, // max
+		10<<10,            // max, 10KiB
 	)),
 	settings.NonNegativeInt,
 	settings.WithPublic,
@@ -298,10 +301,10 @@ func (twb *txnWriteBuffer) SendLocked(
 	// Check if buffering writes from the supplied batch will run us over
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
-	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	maxSize := BufferedWritesMaxBufferSize.Get(&twb.st.SV)
 	bufSize := twb.estimateSize(ba, cfg) + twb.bufferSize
 
-	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
+	// NB: if BufferedWritesMaxBufferSize is set to 0 then we effectively disable
 	// any buffer limiting.
 	if maxSize != 0 && bufSize > maxSize {
 		twb.txnMetrics.TxnWriteBufferMemoryLimitExceeded.Inc(1)
@@ -433,7 +436,15 @@ func (twb *txnWriteBuffer) validateRequests(ba *kvpb.BatchRequest) error {
 			if t.OriginTimestamp.IsSet() {
 				return unsupportedOptionError(t.Method(), "OriginTimestamp")
 			}
+			assertTrue(ba.MaxSpanRequestKeys == 0 && ba.TargetBytes == 0, "unexpectedly found CPut in a BatchRequest with a limit")
 		case *kvpb.PutRequest:
+			// TODO(yuzefovich): the DistSender allows Puts to be in batches
+			// with limits, which can happen when we're forced to flush the
+			// buffered Puts, and the batch we piggy-back on has a limit set.
+			// However, SQL never constructs such a batch on its own, so we're
+			// asserting the expectations from SQL. Figure out how to reconcile
+			// this with more permissive DistSender-level checks.
+			assertTrue(ba.MaxSpanRequestKeys == 0 && ba.TargetBytes == 0, "unexpectedly found Put in a BatchRequest with a limit")
 		case *kvpb.DeleteRequest:
 		case *kvpb.GetRequest:
 			// ReturnRawMVCCValues is unsupported because we don't know how to serve
@@ -590,7 +601,7 @@ func (twb *txnWriteBuffer) adjustError(
 				// For requests that were not transformed, attributing an error to them
 				// shouldn't confuse the client.
 				if baIdx == pErr.Index.Index && record.transformed {
-					log.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+					log.Dev.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
 					pErr.Index = nil
 					return pErr
 				} else if baIdx == pErr.Index.Index {
@@ -615,7 +626,7 @@ func (twb *txnWriteBuffer) adjustErrorUponFlush(
 		if pErr.Index.Index < int32(numBuffered) {
 			// If the error belongs to a request because part of the buffer flush, nil
 			// out the index.
-			log.Warningf(ctx, "error index %d is part of the buffer flush", pErr.Index.Index)
+			log.Dev.Warningf(ctx, "error index %d is part of the buffer flush", pErr.Index.Index)
 			pErr.Index = nil
 		} else {
 			// Otherwise, adjust the error index to hide the impact of any flushed
@@ -1043,9 +1054,9 @@ func (twb *txnWriteBuffer) maybeMutateBatchMaxSpanRequestKeys(
 	}
 
 	// If the user has disabled a maximum buffer size, respect that.
-	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	maxSize := BufferedWritesMaxBufferSize.Get(&twb.st.SV)
 	if maxSize == 0 {
-		log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because %s=0", bufferedWritesMaxBufferSize.Name())
+		log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because %s=0", BufferedWritesMaxBufferSize.Name())
 		return
 	}
 
@@ -1302,7 +1313,7 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 	ctx context.Context, rr requestRecords, br *kvpb.BatchResponse,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
 	if rr.Empty() && br == nil {
-		log.Fatal(ctx, "unexpectedly found no transformations and no batch response")
+		log.Dev.Fatal(ctx, "unexpectedly found no transformations and no batch response")
 	} else if rr.Empty() {
 		return br, nil
 	}
@@ -1314,7 +1325,7 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 		brResp := kvpb.ResponseUnion{}
 		if !record.stripped {
 			if len(br.Responses) == 0 {
-				log.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
+				log.Dev.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
 			}
 			// If the request wasn't stripped from the batch we sent to KV, we
 			// received a response for it, which then needs to be combined with
@@ -1379,6 +1390,11 @@ func (rr requestRecord) toResp(
 			// We only use the response from KV if there wasn't already a
 			// buffered value for this key that our transaction wrote
 			// previously.
+			// TODO(yuzefovich): for completeness, we should check whether
+			// ResumeSpan is non-nil, in which case the response from KV is
+			// incomplete. This can happen when MaxSpanRequestKeys and/or
+			// TargetBytes limits are set on the batch, and SQL currently
+			// doesn't do that for batches with CPuts.
 			val = br.GetInner().(*kvpb.GetResponse).Value
 		}
 
@@ -1410,6 +1426,11 @@ func (rr requestRecord) toResp(
 
 	case *kvpb.PutRequest:
 		var dla *bufferedDurableLockAcquisition
+		// TODO(yuzefovich): for completeness, we should check whether
+		// ResumeSpan is non-nil if we transformed the request, in which case
+		// the response from KV is incomplete. This can happen when
+		// MaxSpanRequestKeys and/or TargetBytes limits are set on the batch,
+		// and SQL currently doesn't do that for batches with Puts.
 		if rr.transformed && exclusionTimestampRequired {
 			dla = &bufferedDurableLockAcquisition{
 				str: lock.Exclusive,
@@ -1423,11 +1444,11 @@ func (rr requestRecord) toResp(
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
 		// buffered values (if they exist).
-		var foundKey bool
+		var resp kvpb.DeleteResponse
 		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", req.Method(), req.Key)
-			foundKey = val.IsPresent()
+			resp.FoundKey = val.IsPresent()
 		} else if rr.transformed {
 			// We sent a GetRequest to the KV layer to acquire an exclusive lock
 			// on the key, populate FoundKey using the response.
@@ -1435,7 +1456,8 @@ func (rr requestRecord) toResp(
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
 			}
-			foundKey = getResp.Value.IsPresent()
+			resp.FoundKey = getResp.Value.IsPresent()
+			resp.ResumeSpan = getResp.ResumeSpan
 		} else {
 			// NB: If MustAcquireExclusiveLock wasn't set by the client then we
 			// eschew sending a Get request to the KV layer just to populate
@@ -1447,7 +1469,14 @@ func (rr requestRecord) toResp(
 			// TODO(arul): improve the FoundKey semantics to have callers opt
 			// into whether the care about the key being found. Alternatively,
 			// clarify the behaviour on DeleteRequest.
-			foundKey = false
+			resp.FoundKey = false
+		}
+
+		ru.MustSetInner(&resp)
+		if resp.ResumeSpan != nil {
+			// When the Get was incomplete, we haven't actually processed this
+			// Del, so we cannot buffer the write.
+			break
 		}
 
 		var dla *bufferedDurableLockAcquisition
@@ -1459,14 +1488,16 @@ func (rr requestRecord) toResp(
 			}
 		}
 
-		ru.MustSetInner(&kvpb.DeleteResponse{
-			FoundKey: foundKey,
-		})
 		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.GetRequest:
 		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
+			// TODO(yuzefovich): we're effectively ignoring the limits of
+			// BatchRequest when serving the Get from the buffer. We should
+			// consider setting the ResumeSpan if a limit has already been
+			// reached by this point. This will force us to set ResumeSpan on
+			// all remaining requests in the batch.
 			getResp := &kvpb.GetResponse{}
 			if val.IsPresent() {
 				getResp.Value = val
@@ -1741,12 +1772,20 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 
 	midTxnFlush := !hasEndTxn
 
+	// SkipLocked reads cannot be in a batch with basically anything else. If we
+	// encounter one, we need to flush our buffer in its own batch.
+	splitBatchRequired := ba.WaitPolicy == lock.WaitPolicy_SkipLocked
+
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
 	//
 	// TODO(ssd): We can maintain the revision count in the buffer as well to
 	// allocate this more accurately.
-	reqs := make([]kvpb.RequestUnion, 0, numKeysBuffered+len(ba.Requests))
+	numReqs := numKeysBuffered
+	if !splitBatchRequired {
+		numReqs += len(ba.Requests)
+	}
+	reqs := make([]kvpb.RequestUnion, 0, numReqs)
 	it := twb.buffer.MakeIter()
 	numRevisionsBuffered := 0
 	for it.First(); it.Valid(); it.Next() {
@@ -1776,16 +1815,31 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		}
 	})
 
-	ba = ba.ShallowCopy()
-	ba.Requests = append(reqs, ba.Requests...)
-	br, pErr := twb.wrapped.SendLocked(ctx, ba)
-	if pErr != nil {
-		return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
-	}
+	if splitBatchRequired {
+		log.VEventf(ctx, 2, "flushing buffer via separate batch")
+		flushBatch := ba.ShallowCopy()
+		flushBatch.WaitPolicy = 0
+		flushBatch.Requests = reqs
+		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
+		if pErr != nil {
+			pErr.Index = nil
+			return nil, pErr
+		}
 
-	// Strip out responses for all the flushed buffered writes.
-	br.Responses = br.Responses[numRevisionsBuffered:]
-	return br, nil
+		ba.UpdateTxn(br.Txn)
+		return twb.wrapped.SendLocked(ctx, ba)
+	} else {
+		ba = ba.ShallowCopy()
+		ba.Requests = append(reqs, ba.Requests...)
+		br, pErr := twb.wrapped.SendLocked(ctx, ba)
+		if pErr != nil {
+			return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
+		}
+
+		// Strip out responses for all the flushed buffered writes.
+		br.Responses = br.Responses[numRevisionsBuffered:]
+		return br, nil
+	}
 }
 
 // hasBufferedWrites returns whether the interceptor has buffered any writes
@@ -2424,8 +2478,6 @@ func (s *respIter) startKey() roachpb.Key {
 	// For ReverseScans, the EndKey of the ResumeSpan is updated to indicate the
 	// start key for the "next" page, which is exactly the last key that was
 	// reverse-scanned for the current response.
-	// TODO(yuzefovich): we should have some unit tests that exercise the
-	// ResumeSpan case.
 	if s.resumeSpan != nil {
 		return s.resumeSpan.EndKey
 	}
@@ -2496,6 +2548,11 @@ func makeRespSizeHelper(it *respIter) respSizeHelper {
 }
 
 func (h *respSizeHelper) acceptBuffer(key roachpb.Key, value *roachpb.Value) {
+	// TODO(yuzefovich): we're effectively ignoring the limits of BatchRequest
+	// when serving the reads from the buffer. We should consider checking how
+	// many keys and bytes have already been included to see whether we've
+	// reached a limit, and set the ResumeSpan if so (which can result in some
+	// wasted work by the server).
 	h.numKeys++
 	lenKV, _ := encKVLength(key, value)
 	h.numBytes += int64(lenKV)

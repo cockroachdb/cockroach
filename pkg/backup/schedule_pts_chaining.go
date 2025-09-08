@@ -185,7 +185,7 @@ func manageFullBackupPTSChaining(
 	)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "could not find dependent schedule with id %d",
+			log.Dev.Warningf(ctx, "could not find dependent schedule with id %d",
 				fullScheduleArgs.DependentScheduleID)
 			return nil
 		}
@@ -216,7 +216,7 @@ func manageFullBackupPTSChaining(
 	// inc schedule ID as the records' Meta. This ensures that even if the full
 	// schedule is dropped, the reconciliation job will not release the pts
 	// record stored on the inc schedule, and the chaining will continue.
-	log.Infof(ctx, "schedule %d is writing a protected timestamp record at %s",
+	log.Dev.Infof(ctx, "schedule %d is writing a protected timestamp record at %s",
 		scheduleID, backupDetails.EndTime.String())
 	ptsRecord, err := protectTimestampRecordForSchedule(
 		ctx, pts, targetToProtect, deprecatedSpansToProtect,
@@ -240,7 +240,7 @@ func manageFullBackupPTSChaining(
 	// about to release. Already running incremental backup jobs would have
 	// written their own pts record during planning, and should complete
 	// successfully.
-	log.Infof(ctx, "schedule %d is releasing a protected timestamp record held by the previous chain", scheduleID)
+	log.Dev.Infof(ctx, "schedule %d is releasing a protected timestamp record held by the previous chain", scheduleID)
 	if err := releaseProtectedTimestamp(
 		ctx, pts,
 		backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord,
@@ -271,7 +271,7 @@ func manageIncrementalBackupPTSChaining(
 	if ptsRecordID == nil {
 		return errors.AssertionFailedf("unexpected nil pts record id on incremental schedule %d", scheduleID)
 	}
-	log.Infof(ctx, "schedule %d is updating a protected timestamp record to %s", scheduleID, tsToProtect.String())
+	log.Dev.Infof(ctx, "schedule %d is updating a protected timestamp record to %s", scheduleID, tsToProtect.String())
 	err := pts.UpdateTimestamp(ctx, *ptsRecordID, tsToProtect)
 	// If we cannot find the pts record to update it is possible that a concurrent
 	// full backup has released the record, and written a new record on the
@@ -282,7 +282,7 @@ func manageIncrementalBackupPTSChaining(
 	// In such a scenario it is okay to do nothing since the next incremental on
 	// the new full backup will rely on the pts record written by the full backup.
 	if err != nil && errors.Is(err, protectedts.ErrNotExists) {
-		log.Warningf(ctx, "failed to update timestamp record %d since it does not exist", ptsRecordID)
+		log.Dev.Warningf(ctx, "failed to update timestamp record %d since it does not exist", ptsRecordID)
 		return nil //nolint:returnerrcheck
 	}
 	return err

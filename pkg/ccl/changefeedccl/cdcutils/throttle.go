@@ -113,7 +113,7 @@ func NodeLevelThrottler(sv *settings.Values, metrics *Metrics) *Throttler {
 		configStr := changefeedbase.NodeSinkThrottleConfig.Get(sv)
 		if configStr != "" {
 			if err := json.Unmarshal([]byte(configStr), &config); err != nil {
-				log.Errorf(context.Background(),
+				log.Changefeed.Errorf(context.Background(),
 					"failed to parse node throttle config %q: err=%v; throttling disabled", configStr, err)
 			}
 		}

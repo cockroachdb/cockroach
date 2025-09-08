@@ -896,10 +896,10 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	clusterID := s.rpcContext.LogicalClusterID.Get()
 	instanceID := s.sqlServer.SQLInstanceID()
 	if clusterID.Equal(uuid.Nil) {
-		log.Fatalf(ctx, "expected LogicalClusterID to be initialized after preStart")
+		log.Dev.Fatalf(ctx, "expected LogicalClusterID to be initialized after preStart")
 	}
 	if instanceID == 0 {
-		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
+		log.Dev.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
 	}
 
 	// Add more context to the Sentry reporter.
@@ -1397,7 +1397,7 @@ func makeNextLiveInstanceIDFn(
 	return func(ctx context.Context) base.SQLInstanceID {
 		instances, err := sqlInstanceProvider.GetAllInstances(ctx)
 		if err != nil {
-			log.Infof(ctx, "GetAllInstances failed: %v", err)
+			log.Dev.Infof(ctx, "GetAllInstances failed: %v", err)
 			return 0
 		}
 		if len(instances) == 0 {

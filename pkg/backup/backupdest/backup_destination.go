@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -220,7 +219,15 @@ func ResolveDest(
 	}
 	defer incrementalStore.Close()
 
-	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
+	rootStore, err := makeCloudStorage(ctx, collectionURI, user)
+	if err != nil {
+		return ResolvedDestination{}, err
+	}
+	defer rootStore.Close()
+	priors, err := FindAllIncrementalPaths(
+		ctx, execCfg, incrementalStore, rootStore,
+		chosenSuffix, OmitManifest, len(dest.IncrementalStorage) > 0,
+	)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -237,41 +244,40 @@ func ResolveDest(
 	}
 	prevBackupURIs = append([]string{plannedBackupDefaultURI}, prevBackupURIs...)
 
-	// Within the chosenSuffix dir, differentiate incremental backups with partName.
-	partName := endTime.GoTime().Format(backupbase.DateBasedIncFolderName)
-	if execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-		if startTime.IsEmpty() {
-			baseEncryptionOptions, err := backupencryption.GetEncryptionFromBase(
-				ctx, user, execCfg.DistSQLSrv.ExternalStorageFromURI, prevBackupURIs[0],
-				encryption, kmsEnv,
-			)
-			if err != nil {
-				return ResolvedDestination{}, err
-			}
-
-			// TODO (kev-cao): Once we have completed the backup directory index work, we
-			// can remove the need to read an entire backup manifest just to fetch the
-			// start time. We can instead read the metadata protobuf.
-			mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
-			defer mem.Close(ctx)
-			precedingBackupManifest, size, err := backupinfo.ReadBackupManifestFromURI(
-				ctx, &mem, prevBackupURIs[len(prevBackupURIs)-1], user,
-				execCfg.DistSQLSrv.ExternalStorageFromURI, baseEncryptionOptions, kmsEnv,
-			)
-			if err != nil {
-				return ResolvedDestination{}, err
-			}
-			if err := mem.Grow(ctx, size); err != nil {
-				return ResolvedDestination{}, err
-			}
-			defer mem.Shrink(ctx, size)
-			startTime = precedingBackupManifest.EndTime
-			if startTime.IsEmpty() {
-				return ResolvedDestination{}, errors.Errorf("empty end time in prior backup manifest")
-			}
+	// If startTime is not already set, we will find it via the previous backup
+	// manifest.
+	if startTime.IsEmpty() {
+		baseEncryptionOptions, err := backupencryption.GetEncryptionFromBase(
+			ctx, user, execCfg.DistSQLSrv.ExternalStorageFromURI, prevBackupURIs[0],
+			encryption, kmsEnv,
+		)
+		if err != nil {
+			return ResolvedDestination{}, err
 		}
-		partName = partName + "-" + startTime.GoTime().Format(backupbase.DateBasedIncFolderNameSuffix)
+
+		// TODO (kev-cao): Once we have completed the backup directory index work, we
+		// can remove the need to read an entire backup manifest just to fetch the
+		// start time. We can instead read the metadata protobuf.
+		mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+		defer mem.Close(ctx)
+		precedingBackupManifest, size, err := backupinfo.ReadBackupManifestFromURI(
+			ctx, &mem, prevBackupURIs[len(prevBackupURIs)-1], user,
+			execCfg.DistSQLSrv.ExternalStorageFromURI, baseEncryptionOptions, kmsEnv,
+		)
+		if err != nil {
+			return ResolvedDestination{}, err
+		}
+		if err := mem.Grow(ctx, size); err != nil {
+			return ResolvedDestination{}, err
+		}
+		defer mem.Shrink(ctx, size)
+		startTime = precedingBackupManifest.EndTime
+		if startTime.IsEmpty() {
+			return ResolvedDestination{}, errors.Errorf("empty end time in prior backup manifest")
+		}
 	}
+
+	partName := ConstructDateBasedIncrementalFolderName(startTime.GoTime(), endTime.GoTime())
 	defaultIncrementalsURI, urisByLocalityKV, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
 	if err != nil {
 		return ResolvedDestination{}, err
@@ -509,8 +515,12 @@ func GetURIsByLocalityKV(
 // ListFullBackupsInCollection lists full backup paths in the collection
 // of an export store
 func ListFullBackupsInCollection(
-	ctx context.Context, store cloud.ExternalStorage,
+	ctx context.Context, store cloud.ExternalStorage, useIndex bool,
 ) ([]string, error) {
+	if useIndex {
+		return ListSubdirsFromIndex(ctx, store)
+	}
+
 	var backupPaths []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
 		if backupPathRE.MatchString(f) {
@@ -539,10 +549,13 @@ func ListFullBackupsInCollection(
 // included in the result, otherwise they are filtered out.
 func ResolveBackupManifests(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	mem *mon.BoundAccount,
+	defaultCollectionURI string,
 	baseStores []cloud.ExternalStorage,
 	incStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
+	resolvedSubdir string,
 	fullyResolvedBaseDirectory []string,
 	fullyResolvedIncrementalsDirectory []string,
 	endTime hlc.Timestamp,
@@ -577,7 +590,23 @@ func ResolveBackupManifests(
 
 	var incrementalBackups []string
 	if len(incStores) > 0 {
-		incrementalBackups, err = FindPriorBackups(ctx, incStores[0], includeManifest)
+		rootStore, err := mkStore(ctx, defaultCollectionURI, user)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		defer rootStore.Close()
+		incrementalBackups, err = FindAllIncrementalPaths(
+			ctx,
+			execCfg,
+			incStores[0],
+			rootStore,
+			resolvedSubdir,
+			includeManifest,
+			// In the legacy path, there is no index to be used, so we may as well set
+			// customIncLocation to true rather than try to compute it from the
+			// parameters.
+			true,
+		)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -659,12 +688,18 @@ func ResolveBackupManifests(
 
 	totalMemSize := ownedMemSize
 	ownedMemSize = 0
-	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := backupinfo.ValidateEndTimeAndTruncate(
-		defaultURIs, mainBackupManifests, localityInfo, endTime, includeSkipped, includeCompacted,
+	manifestEntries, err := backupinfo.ZipBackupTreeEntries(
+		defaultURIs, mainBackupManifests, localityInfo,
 	)
-
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
-	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+	validatedEntries, err := backupinfo.ValidateEndTimeAndTruncate(
+		manifestEntries, endTime, includeSkipped, includeCompacted,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	uris, manifests, localityInfo := backupinfo.UnzipBackupTreeEntries(validatedEntries)
+	return uris, manifests, localityInfo, totalMemSize, nil
 }

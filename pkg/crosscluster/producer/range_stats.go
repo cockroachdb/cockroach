@@ -48,7 +48,7 @@ func startStatsPoller(
 		for {
 			stats, err := computeRangeStats(ctx, spans, frontier, ranges)
 			if err != nil {
-				log.Warningf(ctx, "event stream unable to calculate range stats: %v", err)
+				log.Dev.Warningf(ctx, "event stream unable to calculate range stats: %v", err)
 			} else {
 				poller.stats.Store(&stats)
 			}
@@ -108,7 +108,7 @@ func computeRangeStats(
 			}
 		}
 		if lazyIterator.Error() != nil {
-			return streampb.StreamEvent_RangeStats{}, err
+			return streampb.StreamEvent_RangeStats{}, lazyIterator.Error()
 		}
 	}
 	return stats, nil

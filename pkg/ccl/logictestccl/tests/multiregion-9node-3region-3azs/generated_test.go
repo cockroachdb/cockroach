@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 14
+const configIdx = 15
 
 var cclLogicTestDir string
 
@@ -284,6 +284,13 @@ func TestCCLLogic_regional_by_row_rename_column(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_rename_column")
+}
+
+func TestCCLLogic_regional_by_row_safe_updates(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_safe_updates")
 }
 
 func TestCCLLogic_regional_by_table_placement_restricted(

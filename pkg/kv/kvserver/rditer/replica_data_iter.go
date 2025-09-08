@@ -454,23 +454,45 @@ func IterateReplicaKeySpans(
 }
 
 // IterateReplicaKeySpansShared is a shared-replicate version of
-// IterateReplicaKeySpans. See definitions of this method for how it is
-// implemented.
+// IterateReplicaKeySpans. IterateReplicaKeySpansShared iterates over the
+// range's user key span, skipping any keys present in shared files. It calls
+// the appropriate visitor function for the type of key visited, namely, point
+// keys, range deletes and range keys. Shared files that are skipped during this
+// iteration are also surfaced through a dedicated visitor. Note that this
+// method only iterates over a range's user key span; IterateReplicaKeySpans
+// must be called to iterate over the other key spans.
 //
-// The impl of this method along with a comment is in
-// engineccl/shared_storage.go.
-var IterateReplicaKeySpansShared func(
+// If this method returns pebble.ErrInvalidSkipSharedIteration, only the shared
+// external visitors may have been invoked. In particular, no local data has
+// been visited yet.  The above contract appears true for the current
+// implementation of this method, but is likely untested.
+//
+// Must use a reader with consistent iterators.
+func IterateReplicaKeySpansShared(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	st *cluster.Settings,
-	clusterID uuid.UUID,
+	_ uuid.UUID,
 	reader storage.Reader,
 	visitPoint func(key *pebble.InternalKey, val pebble.LazyValue, info pebble.IteratorLevel) error,
 	visitRangeDel func(start, end []byte, seqNum pebble.SeqNum) error,
 	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 	visitExternalFile func(sst *pebble.ExternalFile) error,
-) error
+) error {
+	if !reader.ConsistentIterators() {
+		panic("reader must provide consistent iterators")
+	}
+	spans := Select(desc.RangeID, SelectOpts{
+		Ranged: SelectRangedOptions{
+			RSpan:    desc.RSpan(),
+			UserKeys: true,
+		},
+	})
+	span := spans[0]
+	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel,
+		visitRangeKey, visitSharedFile, visitExternalFile)
+}
 
 // IterateOptions instructs how points and ranges should be presented to visitor
 // and if iterators should be visited in forward or reverse order.

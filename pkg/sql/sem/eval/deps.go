@@ -285,6 +285,9 @@ type Planner interface {
 		force bool,
 	) error
 
+	// UnsafeDeleteComment is used to delete comments for a non-existent object.
+	UnsafeDeleteComment(ctx context.Context, objectID int64) error
+
 	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
 	// (false, nil) means that the user has NO admin role
@@ -455,6 +458,10 @@ type Planner interface {
 
 	// RetryCounter is the number of times this statement has been retried.
 	RetryCounter() int
+
+	// ProcessVectorIndexFixups waits until all outstanding fixups for the vector
+	// index with the given ID have been processed.
+	ProcessVectorIndexFixups(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

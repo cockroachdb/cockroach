@@ -42,16 +42,18 @@ func splitPreApply(
 	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
-		log.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
+		log.Dev.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
 			r.StoreID(), split)
 	}
 
-	// Check on the RHS, we need to ensure that it exists and has a minReplicaID
-	// less than or equal to the replica we're about to initialize.
+	// Obtain the RHS replica. In the common case, it exists and its ReplicaID
+	// matches the one in the split trigger. It is the uninitialized replica that
+	// has just been created or obtained in Replica.acquireSplitLock, and its
+	// raftMu is locked.
 	//
-	// The right hand side of the split was already created (and its raftMu
-	// acquired) in Replica.acquireSplitLock. It must be present here if it hasn't
-	// been removed in the meantime (handled below).
+	// In the less common case, the ReplicaID is already removed from this Store,
+	// and rightRepl is either nil or an uninitialized replica with a higher
+	// ReplicaID. Its raftMu is not locked.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 	// Check to see if we know that the RHS has already been removed from this
 	// store at the replica ID implied by the split.
@@ -76,20 +78,26 @@ func splitPreApply(
 		// it's always present).
 		var hs raftpb.HardState
 		if rightRepl != nil {
+			// TODO(pav-kv): rightRepl could have been destroyed by the time we get to
+			// lock it here. The HardState read-then-write appears risky in this case.
 			rightRepl.raftMu.Lock()
 			defer rightRepl.raftMu.Unlock()
 			// Assert that the rightRepl is not initialized. We're about to clear out
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.
 			if rightRepl.IsInitialized() {
-				log.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
+				log.Dev.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
 			var err error
 			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
 			if err != nil {
-				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
+				log.Dev.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
+		// TODO(#152199): the rightRepl == nil condition is flaky. There can be a
+		// racing replica creation for a higher ReplicaID, and it can subsequently
+		// update its HardState. Here, we can accidentally clear the HardState of
+		// that new replica.
 		if err := kvstorage.ClearRangeData(ctx, split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
 			// We know there isn't anything in these two replicated spans below in the
 			// right-hand side (before the current batch), so setting these options
@@ -99,33 +107,31 @@ func splitPreApply(
 			ClearReplicatedByRangeID: true,
 			// See the HardState write-back dance above and below.
 			//
-			// TODO(tbg): we don't actually want to touch the raft state of the right
-			// hand side replica since it's absent or a more recent replica than the
-			// split. Now that we have a boolean targeting the unreplicated
-			// RangeID-based keyspace, we can set this to false and remove the
-			// HardState+ReplicaID write-back. (The WriteBatch does not contain
-			// any writes to the unreplicated RangeID keyspace for the RHS, see
-			// splitTriggerHelper[^1]).
+			// TODO(tbg): we don't actually want to touch the raft state of the RHS
+			// replica since it's absent or a more recent one than in the split. Now
+			// that we have a bool targeting unreplicated RangeID-local keys, we can
+			// set it to false and remove the HardState+ReplicaID write-back. However,
+			// there can be historical split proposals with the RaftTruncatedState key
+			// set in splitTriggerHelper[^1]. We must first make sure that such
+			// proposals no longer exist, e.g. with a below-raft migration.
 			//
 			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
 			//
-			// See also:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/94933
+			// See also: https://github.com/cockroachdb/cockroach/issues/94933
 			ClearUnreplicatedByRangeID: true,
 		}); err != nil {
-			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+			log.Dev.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
 			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
 			// values. NB: rightRepl.raftMu is still locked since HardState was read,
 			// so it can't have been rewritten in the meantime (fixed in #75918).
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
-				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
+				log.Dev.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 			}
 			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
 				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
-				log.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
+				log.Dev.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
 			}
 		}
 		return
@@ -142,13 +148,13 @@ func splitPreApply(
 	// can't load the default Term and Vote values.
 	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{
 		Index: stateloader.RaftInitialLogIndex,
 		Term:  stateloader.RaftInitialLogTerm,
 	}); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	// Persist the closed timestamp.
 	//
@@ -163,7 +169,7 @@ func splitPreApply(
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
-		log.Fatalf(ctx, "%s", err)
+		log.Dev.Fatalf(ctx, "%s", err)
 	}
 }
 
@@ -183,7 +189,7 @@ func splitPostApply(
 	// to the store's replica map.
 	if err := r.store.SplitRange(ctx, r, rightReplOrNil, split); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
-		log.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
+		log.Dev.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
 	}
 
 	// Update store stats with difference in stats before and after split.
@@ -247,7 +253,7 @@ func prepareRightReplicaForSplit(
 	state, err := kvstorage.LoadReplicaState(
 		ctx, r.store.TODOEngine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	// Already holding raftMu, see above.
@@ -256,7 +262,7 @@ func prepareRightReplicaForSplit(
 	if err := rightRepl.initRaftMuLockedReplicaMuLocked(
 		state, false, /* waitForPrevLeaseToExpire */
 	); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	// Copy the minLeaseProposedTS from the LHS. loadRaftMuLockedReplicaMuLocked
@@ -328,7 +334,7 @@ func (s *Store) SplitRange(
 
 	// Acquire unreplicated locks on the RHS. We expect locksToAcquireOnRHS to be
 	// empty if UnreplicatedLockReliabilityUpgrade is false.
-	log.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
+	log.Dev.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
 	for _, l := range locksToAcquireOnRHS {
 		rightRepl.concMgr.OnLockAcquired(ctx, &l)
 	}

@@ -189,14 +189,14 @@ func (e *Writer) asyncWrite(ctx context.Context, ev logpb.EventPayload) {
 			// background context here.
 			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
 		}
-		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
+		log.Dev.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
 	}
 }
 
 func (e *Writer) syncWrite(ctx context.Context, entry logpb.EventPayload) {
 	query, args := e.prepareEventWrite([]logpb.EventPayload{entry})
 	if err := e.writeToSystemEventsTable(ctx, 1, query, args); err != nil {
-		log.Errorf(ctx, "Failed to write")
+		log.Dev.Errorf(ctx, "Failed to write")
 	}
 }
 
@@ -207,14 +207,14 @@ func (e *Writer) writeToSystemEventsTable(
 		query, args...,
 	)
 	if err != nil {
-		log.Errorf(ctx, "Failed to write to system.eventlog: %v", err)
+		log.Dev.Errorf(ctx, "Failed to write to system.eventlog: %v", err)
 		return err
 	}
 	if rows != numEntries {
-		log.Errorf(ctx, "Wrote %d events to system.eventlog", rows)
+		log.Dev.Errorf(ctx, "Wrote %d events to system.eventlog", rows)
 		return errors.AssertionFailedf("%d rows affected by log insertion; expected %d rows affected", rows, numEntries)
 	}
-	log.Infof(ctx, "Wrote %d events to system.eventlog", numEntries)
+	log.Dev.Infof(ctx, "Wrote %d events to system.eventlog", numEntries)
 	return nil
 }
 

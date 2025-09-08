@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 subtest grant_revoke
 
 statement ok

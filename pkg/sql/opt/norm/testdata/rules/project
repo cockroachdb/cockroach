@@ -2055,19 +2055,17 @@ SET ROLE alice;
 norm expect=PushLeakproofProjectionsIntoPermeableBarrier
 SELECT CASE WHEN y = 20 THEN 10 ELSE 0 END FROM rls
 ----
-barrier
+project
  ├── columns: case:6
- └── project
-      ├── columns: case:6
-      ├── select
-      │    ├── columns: y:2 alice_has_access:3!null
-      │    ├── fd: ()-->(3)
-      │    ├── scan rls
-      │    │    └── columns: y:2 alice_has_access:3
-      │    └── filters
-      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
-      └── projections
-           └── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]
+ ├── select
+ │    ├── columns: y:2 alice_has_access:3!null
+ │    ├── fd: ()-->(3)
+ │    ├── scan rls
+ │    │    └── columns: y:2 alice_has_access:3
+ │    └── filters
+ │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ └── projections
+      └── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]
 
 # Only some expressions in projection are leakproof
 norm expect-not=PushLeakproofProjectionsIntoPermeableBarrier
@@ -2122,23 +2120,19 @@ project
 norm expect=PushLeakproofProjectionsIntoPermeableBarrier
 SELECT x, y, CASE WHEN y = 20 THEN 10 ELSE 0 END FROM rls
 ----
-barrier
+project
  ├── columns: x:1!null y:2 case:6
  ├── key: (1)
  ├── fd: (1)-->(2), (2)-->(6)
- └── project
-      ├── columns: case:6 x:1!null y:2
-      ├── key: (1)
-      ├── fd: (1)-->(2), (2)-->(6)
-      ├── select
-      │    ├── columns: x:1!null y:2 alice_has_access:3!null
-      │    ├── key: (1)
-      │    ├── fd: ()-->(3), (1)-->(2)
-      │    ├── scan rls
-      │    │    ├── columns: x:1!null y:2 alice_has_access:3
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2,3)
-      │    └── filters
-      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
-      └── projections
-           └── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]
+ ├── select
+ │    ├── columns: x:1!null y:2 alice_has_access:3!null
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2)
+ │    ├── scan rls
+ │    │    ├── columns: x:1!null y:2 alice_has_access:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    └── filters
+ │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ └── projections
+      └── CASE WHEN y:2 = 20 THEN 10 ELSE 0 END [as=case:6, outer=(2)]

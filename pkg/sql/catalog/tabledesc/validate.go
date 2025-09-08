@@ -19,11 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,7 +94,7 @@ func (desc *wrapper) GetReferencedDescIDs(
 			// Skip trigger function bodies - they are handled below.
 			return nil
 		}
-		if parsedExpr, err := parser.ParseExpr(*expr); err == nil {
+		if parsedExpr, err := parserutils.ParseExpr(*expr); err == nil {
 			// ignore errors
 			tree.WalkExpr(visitor, parsedExpr)
 		}
@@ -248,7 +247,7 @@ func (desc *wrapper) ValidateForwardReferences(
 	for i := range desc.Triggers {
 		trigger := &desc.Triggers[i]
 		for _, id := range trigger.DependsOn {
-			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+			vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg))
 		}
 		for _, id := range trigger.DependsOnTypes {
 			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
@@ -264,7 +263,7 @@ func (desc *wrapper) ValidateForwardReferences(
 			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
 		}
 		for _, id := range policy.DependsOnRelations {
-			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
+			vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg))
 		}
 		for _, id := range policy.DependsOnFunctions {
 			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
@@ -282,11 +281,11 @@ func (desc *wrapper) ValidateBackReferences(
 	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
 		switch typ {
 		case catalog.SQLExpr:
-			_, err = parser.ParseExpr(*expr)
+			_, err = parserutils.ParseExpr(*expr)
 		case catalog.SQLStmt:
-			_, err = parser.Parse(*expr)
+			_, err = parserutils.Parse(*expr)
 		case catalog.PLpgSQLStmt:
-			_, err = plpgsqlparser.Parse(*expr)
+			_, err = parserutils.PLpgSQLParse(*expr)
 		}
 		vea.Report(err)
 		return nil
@@ -1263,7 +1262,7 @@ func (desc *wrapper) validateColumns() error {
 
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
-			expr, err := parser.ParseExpr(column.GetComputeExpr())
+			expr, err := parserutils.ParseExpr(column.GetComputeExpr())
 			if err != nil {
 				return err
 			}
@@ -1479,12 +1478,12 @@ func (desc *wrapper) validateTriggers() error {
 
 		// Verify that the WHEN expression and function body statements are valid.
 		if trigger.WhenExpr != "" {
-			_, err := parser.ParseExpr(trigger.WhenExpr)
+			_, err := parserutils.ParseExpr(trigger.WhenExpr)
 			if err != nil {
 				return err
 			}
 		}
-		_, err := plpgsqlparser.Parse(trigger.FuncBody)
+		_, err := parserutils.PLpgSQLParse(trigger.FuncBody)
 		if err != nil {
 			return err
 		}
@@ -1551,7 +1550,7 @@ func (desc *wrapper) validateCheckConstraints(
 		}
 
 		// Verify that the check's expression is valid.
-		expr, err := parser.ParseExpr(chk.GetExpr())
+		expr, err := parserutils.ParseExpr(chk.GetExpr())
 		if err != nil {
 			return err
 		}
@@ -1605,7 +1604,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		if c.IsPartial() {
-			expr, err := parser.ParseExpr(c.GetPredicate())
+			expr, err := parserutils.ParseExpr(c.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -1773,7 +1772,7 @@ func (desc *wrapper) validateTableIndexes(
 			}
 		}
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := parserutils.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -1896,7 +1895,15 @@ func (desc *wrapper) validateTableIndexes(
 					idx.GetName(), idx.IndexDesc().EncodingType, catenumpb.SecondaryIndexEncoding)
 			}
 		}
-
+		// Validate that HideForPrimaryKeyRecreate is only true if a schema
+		// change is active. At the end of a schema change, all public indexes
+		// should be visible.
+		if idx.IndexDesc().HideForPrimaryKeyRecreate &&
+			desc.GetDeclarativeSchemaChangerState() == nil &&
+			len(desc.GetMutations()) == 0 {
+			return errors.AssertionFailedf("index %q (%d) is hidden for a primary key"+
+				" recreate without a schema change", idx.GetName(), idx.GetID())
+		}
 		// Ensure that an index column ID shows up at most once in `keyColumnIDs`,
 		// `keySuffixColumnIDs`, and `storeColumnIDs`.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
@@ -2235,13 +2242,13 @@ func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
 // validatePolicyExprs will validate the expressions within the policy.
 func (desc *wrapper) validatePolicyExprs(p *descpb.PolicyDescriptor) error {
 	if p.WithCheckExpr != "" {
-		_, err := parser.ParseExpr(p.WithCheckExpr)
+		_, err := parserutils.ParseExpr(p.WithCheckExpr)
 		if err != nil {
 			return errors.Wrapf(err, "WITH CHECK expression %q is invalid", p.WithCheckExpr)
 		}
 	}
 	if p.UsingExpr != "" {
-		_, err := parser.ParseExpr(p.UsingExpr)
+		_, err := parserutils.ParseExpr(p.UsingExpr)
 		if err != nil {
 			return errors.Wrapf(err, "USING expression %q is invalid", p.UsingExpr)
 		}
@@ -2393,7 +2400,7 @@ func ValidateRBRTableUsingConstraint(
 		if !col.IsComputed() {
 			continue
 		}
-		expr, err := parser.ParseExpr(col.GetComputeExpr())
+		expr, err := parserutils.ParseExpr(col.GetComputeExpr())
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)

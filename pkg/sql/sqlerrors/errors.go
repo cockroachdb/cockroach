@@ -41,6 +41,11 @@ const (
 // information for users or app developers.
 const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region"
 
+// QueryNotRunningInHomeRegionMessagePrefix is the common message prefix for
+// erroring out queries with no home region when the enforce_home_region session
+// flag is set.
+const QueryNotRunningInHomeRegionMessagePrefix = "Query is not running in its home region"
+
 // NewSchemaChangeOnLockedTableErr creates an error signaling schema
 // change statement is attempted on a table with locked schema.
 func NewSchemaChangeOnLockedTableErr(tableName string) error {
@@ -661,6 +666,7 @@ var (
 	ErrNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
 	ErrNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	ErrNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
+	ErrUnsafeTableAccess = errors.WithHint(pgerror.New(pgcode.InsufficientPrivilege, "Access to crdb_internal and system is restricted."), "These interfaces are unsupported in production. To proceed, set the session variable allow_unsafe_internals = true (not recommended), or contact Cockroach Labs for a supported alternative.")
 )
 
 var ErrNoZoneConfigApplies = errors.New("no zone config applies")

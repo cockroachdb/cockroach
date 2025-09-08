@@ -226,7 +226,7 @@ func TestSingleNodeDocker(t *testing.T) {
 					return dn.showContainerLog(ctx, fmt.Sprintf("%s.log", test.testName))
 				},
 			); err != nil {
-				log.Warningf(ctx, "cannot show container log: %v", err)
+				log.Dev.Warningf(ctx, "cannot show container log: %v", err)
 			}
 
 			for _, qe := range test.sqlQueries {

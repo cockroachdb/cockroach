@@ -325,7 +325,7 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
 		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder.MarshalJSON() called before NodeID allocation")
+			log.Dev.Warning(context.TODO(), "MetricsRecorder.MarshalJSON() called before NodeID allocation")
 		}
 		return []byte("{}"), nil
 	}
@@ -368,7 +368,7 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 		if mr.mu.nodeRegistry == nil {
 			// We haven't yet processed initialization information; output nothing.
 			if log.V(1) {
-				log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
+				log.Dev.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 			}
 		}
 		pm.ScrapeRegistry(mr.mu.nodeRegistry, scrapeOptions...)
@@ -420,7 +420,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
+			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
 		}
 		return nil
 	}
@@ -505,7 +505,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
+			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
 		}
 		return nil, nil, nil
 	}
@@ -605,7 +605,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
+			log.Dev.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
 		}
 		return nil
 	}
@@ -618,7 +618,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 
 	systemMemory, _, err := GetTotalMemoryWithoutLogging()
 	if err != nil {
-		log.Errorf(ctx, "could not get total system memory: %v", err)
+		log.Dev.Errorf(ctx, "could not get total system memory: %v", err)
 	}
 
 	// Generate a node status with no store data.
@@ -659,7 +659,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor(ctx, false /* useCached */)
 		if err != nil {
-			log.Errorf(ctx, "could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Dev.Errorf(ctx, "could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
@@ -729,9 +729,9 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 	if log.V(2) {
 		statusJSON, err := json.Marshal(&nodeStatus)
 		if err != nil {
-			log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
+			log.Dev.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 		}
-		log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+		log.Dev.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 	}
 	return nil
 }
@@ -792,7 +792,7 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 	reg.Each(func(name string, mtr interface{}) {
 		if err := extractValue(name, mtr, fn); err != nil {
-			log.Warningf(context.TODO(), "%v", err)
+			log.Dev.Warningf(context.TODO(), "%v", err)
 			return
 		}
 	})
@@ -881,7 +881,7 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if warning != "" {
-		log.Infof(ctx, "%s", warning)
+		log.Dev.Infof(ctx, "%s", warning)
 	}
 	return memory, nil
 }

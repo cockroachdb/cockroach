@@ -13,10 +13,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,8 +58,15 @@ func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) ba
 	zoneCfg.NumVoters = proto.Int32(numVoters)
 
 	clusterSettings := cluster.MakeTestingClusterSettings()
-	kvserver.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, kvserver.LBRebalancingOff)
+	kvserverbase.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, kvserverbase.LBRebalancingOff)
 	kvserverbase.MergeQueueEnabled.Override(ctx, &clusterSettings.SV, false)
+
+	// Set allocator intervals to scan faster to help with recovery from race
+	// conditions between allocator and manual relocate operations.
+	allocator.LoadBasedRebalanceInterval.Override(ctx, &clusterSettings.SV, 100*time.Millisecond)
+	kvserver.MinLeaseTransferInterval.Override(ctx, &clusterSettings.SV, 100*time.Millisecond)
+	kvserver.MinIOOverloadLeaseShedInterval.Override(ctx, &clusterSettings.SV, 100*time.Millisecond)
+
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: clusterSettings,

@@ -259,6 +259,10 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	sb.SafeString("=== operation:")
 	sb.SafeString(redact.SafeString(sp.Operation))
 
+	if sp.GoroutineID != 0 {
+		sb.Printf(" gid:%d", sp.GoroutineID)
+	}
+
 	for _, tg := range sp.TagGroups {
 		var prefix redact.RedactableString
 		if tg.Name != AnonymousTagGroupName {
@@ -361,7 +365,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 // The format is described here: https://github.com/jaegertracing/jaeger-ui/issues/381#issuecomment-494150826
 //
 // The statement is passed in so it can be included in the trace.
-func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
+func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string, indent bool) (string, error) {
 	if len(r) == 0 {
 		return "", nil
 	}
@@ -515,11 +519,17 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 		// generated file doing more harm than good.
 		Comment: comment,
 	}
-	json, err := json.MarshalIndent(data, "" /* prefix */, "\t" /* indent */)
+	var out []byte
+	var err error
+	if indent {
+		out, err = json.MarshalIndent(data, "" /* prefix */, "\t" /* indent */)
+	} else {
+		out, err = json.Marshal(data)
+	}
 	if err != nil {
 		return "", err
 	}
-	return string(json), nil
+	return string(out), nil
 }
 
 // TraceCollection is the format accepted by the Jaegar upload feature, as per

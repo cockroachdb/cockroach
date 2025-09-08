@@ -317,11 +317,11 @@ func (h *txnHeartbeater) closeLocked() {
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
 func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	if h.loopInterval < 0 {
-		log.Infof(ctx, "coordinator heartbeat loop disabled")
+		log.Dev.Infof(ctx, "coordinator heartbeat loop disabled")
 		return
 	}
 	if h.mu.loopStarted {
-		log.Fatal(ctx, "attempting to start a second heartbeat loop")
+		log.Dev.Fatal(ctx, "attempting to start a second heartbeat loop")
 	}
 	log.VEventf(ctx, 2, kvbase.SpawningHeartbeatLoopMsg)
 	h.mu.loopStarted = true
@@ -459,15 +459,15 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 		// client needs to send a rollback.
 		return false
 	case roachpb.COMMITTED:
-		log.Fatalf(ctx, "txn committed but heartbeat loop hasn't been signaled to stop: %s", h.mu.txn)
+		log.Dev.Fatalf(ctx, "txn committed but heartbeat loop hasn't been signaled to stop: %s", h.mu.txn)
 	default:
-		log.Fatalf(ctx, "unexpected txn status in heartbeat loop: %s", h.mu.txn)
+		log.Dev.Fatalf(ctx, "unexpected txn status in heartbeat loop: %s", h.mu.txn)
 	}
 
 	// Clone the txn in order to put it in the heartbeat request.
 	txn := h.mu.txn.Clone()
 	if txn.Key == nil {
-		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
+		log.Dev.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = txn
@@ -632,7 +632,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		TaskName: taskName,
 	})
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		h.metrics.AsyncRollbacksFailed.Inc(1)
 		return
 	}

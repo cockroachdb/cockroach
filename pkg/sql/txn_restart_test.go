@@ -359,7 +359,7 @@ func (ta *TxnAborter) statementFilter(
 	ctx context.Context, _ *sessiondata.SessionData, stmt string, err error,
 ) {
 	ta.mu.Lock()
-	log.Infof(ctx, "statement filter running on: %s, with err=%v", stmt, err)
+	log.Dev.Infof(ctx, "statement filter running on: %s, with err=%v", stmt, err)
 	ri, ok := ta.mu.stmtsToAbort[stmt]
 	shouldAbort := false
 	if ok {
@@ -369,7 +369,7 @@ func (ta *TxnAborter) statementFilter(
 			ri.satisfied = true
 		}
 		if ri.abortCount > 0 && err == nil {
-			log.Infof(ctx, "TxnAborter aborting txn for statement %q", stmt)
+			log.Dev.Infof(ctx, "TxnAborter aborting txn for statement %q", stmt)
 			ri.abortCount--
 			shouldAbort = true
 		}
@@ -664,6 +664,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+	kvcoord.BufferedWritesMaxBufferSize.Override(ctx, &s.ClusterSettings().SV, 2<<10 /* 2KiB */)
 
 	{
 		pgURL, cleanup := s.PGUrl(t,
@@ -883,6 +884,7 @@ func TestTxnUserRestart(t *testing.T) {
 				srv, sqlDB, _ := serverutils.StartServer(t, params)
 				defer srv.Stopper().Stop(context.Background())
 				s := srv.ApplicationLayer()
+				kvcoord.BufferedWritesMaxBufferSize.Override(context.Background(), &s.ClusterSettings().SV, 2<<10 /* 2KiB */)
 
 				{
 					pgURL, cleanup := s.PGUrl(t,

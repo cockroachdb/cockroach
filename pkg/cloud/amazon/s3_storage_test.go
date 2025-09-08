@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -30,13 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func makeS3Storage(
-	ctx context.Context, uri string, user username.SQLUsername,
+	ctx context.Context, uri string, user username.SQLUsername, middleware cloud.HttpMiddleware,
 ) (cloud.ExternalStorage, error) {
 	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
@@ -44,18 +46,19 @@ func makeS3Storage(
 	}
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	// Setup a sink for the given args.
-	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		blobs.TestEmptyBlobClientFactory,
-		nil, /* db */
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	if err != nil {
-		return nil, err
+	// TODO(jeffswenson): remove this once we change the default to false.
+	enableClientRetryTokenBucket.Override(ctx, &testSettings.SV, false)
+
+	args := cloud.EarlyBootExternalStorageContext{
+		IOConf:          base.ExternalIODirConfig{},
+		Settings:        testSettings,
+		Options:         nil,
+		Limiters:        nil,
+		MetricsRecorder: cloud.NilMetrics,
+		HttpMiddleware:  middleware,
 	}
 
-	return s, nil
+	return MakeS3Storage(ctx, args, conf)
 }
 
 // You can create an IAM that can access S3 in the AWS console, then
@@ -70,6 +73,7 @@ func skipIfNoDefaultConfig(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = cfg.Credentials.Retrieve(ctx)
 	if err != nil {
+		t.Logf("config: %+v", cfg)
 		skip.IgnoreLintf(t, "%s: %s", helpMsg, err)
 	}
 }
@@ -192,7 +196,7 @@ func TestPutS3(t *testing.T) {
 					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"unsupported-algorithm")
 
-				_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
+				_, err = makeS3Storage(ctx, invalidSSEModeURI, user, nil)
 				require.True(t, testutils.IsError(err, "unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256"))
 
 				// Specify aws:kms encryption mode but don't specify kms ID.
@@ -201,11 +205,42 @@ func TestPutS3(t *testing.T) {
 					bucket, "backup-test-sse-256",
 					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"aws:kms")
-				_, err = makeS3Storage(ctx, invalidKMSURI, user)
+				_, err = makeS3Storage(ctx, invalidKMSURI, user, nil)
 				require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
 			})
 		})
 	}
+}
+
+func TestS3FaultInjection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	skipIfNoDefaultConfig(t, ctx)
+
+	baseBucket := os.Getenv("AWS_S3_BUCKET")
+	if baseBucket == "" {
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
+	}
+
+	// Enable cloud transport logging.
+	defer log.Scope(t).Close(t)
+	prevVModule := log.GetVModule()
+	defer func() { _ = log.SetVModule(prevVModule) }()
+	require.NoError(t, log.SetVModule("cloud_logging_transport=1"))
+
+	uri := fmt.Sprintf(
+		"s3://%s/%d-fault-injection-test?AUTH=implicit",
+		baseBucket, cloudtestutils.NewTestID(),
+	)
+
+	// Inject faults for 15-45 seconds after the storage is opened.
+	middleware := cloudtestutils.BrownoutMiddleware(time.Second*15, time.Second*45)
+	storage, err := makeS3Storage(ctx, uri, username.RootUserName(), middleware)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	cloudtestutils.RunCloudNemesisTest(t, storage)
 }
 
 func TestPutS3AssumeRole(t *testing.T) {
@@ -476,7 +511,8 @@ func TestPutS3Endpoint(t *testing.T) {
 		testSettings := cluster.MakeTestingClusterSettings()
 		clientFactory := blobs.TestBlobServiceClient("")
 		// Force to fail quickly.
-		InjectTestingRetryMaxAttempts(1)
+
+		maxRetries.Override(ctx, &testSettings.SV, 1)
 		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 			nil, nil, cloud.NilMetrics)
 		if err != nil {

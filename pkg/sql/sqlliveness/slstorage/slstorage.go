@@ -387,7 +387,7 @@ func (s *Storage) deleteOrFetchSession(
 	}
 	if deleted {
 		s.metrics.SessionsDeleted.Inc(1)
-		log.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
+		log.Dev.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
 	}
 	return alive, expiration, nil
 }
@@ -420,7 +420,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	toCheck, err := s.fetchExpiredSessionIDs(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Errorf(ctx, "could not delete expired sessions: %v", err)
+			log.Dev.Errorf(ctx, "could not delete expired sessions: %v", err)
 		}
 		return
 	}
@@ -439,7 +439,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	}
 	for _, id := range toCheck {
 		if err := checkSession(id); err != nil {
-			log.Warningf(ctx, "failed to check on expired session %v: %v", id, err)
+			log.Dev.Warningf(ctx, "failed to check on expired session %v: %v", id, err)
 		}
 	}
 	s.metrics.SessionDeletionsRuns.Inc(1)
@@ -465,13 +465,13 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 			for i := range rows {
 				exp, err := decodeValue(rows[i])
 				if err != nil {
-					log.Warningf(ctx, "failed to decode row %s expiration: %v", rows[i].Key.String(), err)
+					log.Dev.Warningf(ctx, "failed to decode row %s expiration: %v", rows[i].Key.String(), err)
 					continue
 				}
 				if exp.Less(now) {
 					id, err := keyCodec.decode(rows[i].Key)
 					if err != nil {
-						log.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
+						log.Dev.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
 					}
 					toCheck = append(toCheck, id)
 				}
@@ -535,7 +535,7 @@ func (s *Storage) Insert(
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
-	log.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
+	log.Dev.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
 	s.metrics.WriteSuccesses.Inc(1)
 	return nil
 }

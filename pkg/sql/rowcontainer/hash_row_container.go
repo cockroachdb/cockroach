@@ -163,7 +163,7 @@ func (e *columnEncoder) encodeEqualityCols(
 	}
 	e.scratch = encoded[:0]
 	if hasNull {
-		log.Fatal(ctx, "cannot process rows with NULL in an equality column")
+		log.Dev.Fatal(ctx, "cannot process rows with NULL in an equality column")
 	}
 	return encoded, nil
 }
@@ -374,7 +374,7 @@ func (i *hashMemRowBucketIterator) Row() (tree.Datums, error) {
 // IsMarked implements the RowMarkerIterator interface.
 func (i *hashMemRowBucketIterator) IsMarked(ctx context.Context) bool {
 	if !i.container.shouldMark {
-		log.Fatal(ctx, "hash mem row container not set up for marking")
+		log.Dev.Fatal(ctx, "hash mem row container not set up for marking")
 	}
 	if i.container.marked == nil {
 		return false
@@ -386,7 +386,7 @@ func (i *hashMemRowBucketIterator) IsMarked(ctx context.Context) bool {
 // Mark implements the RowMarkerIterator interface.
 func (i *hashMemRowBucketIterator) Mark(ctx context.Context) error {
 	if !i.container.shouldMark {
-		log.Fatal(ctx, "hash mem row container not set up for marking")
+		log.Dev.Fatal(ctx, "hash mem row container not set up for marking")
 	}
 	if i.container.marked == nil {
 		if !i.container.markMemoryReserved {
@@ -688,7 +688,7 @@ func (i *hashDiskRowBucketIterator) Reset(ctx context.Context, row rowenc.EncDat
 // IsMarked implements the RowMarkerIterator interface.
 func (i *hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
 	if !i.container.shouldMark {
-		log.Fatal(ctx, "hash disk row container not set up for marking")
+		log.Dev.Fatal(ctx, "hash disk row container not set up for marking")
 	}
 	ok, err := i.diskRowIterator.Valid()
 	if !ok || err != nil {
@@ -702,7 +702,7 @@ func (i *hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
 // Mark implements the RowMarkerIterator interface.
 func (i *hashDiskRowBucketIterator) Mark(ctx context.Context) error {
 	if !i.container.shouldMark {
-		log.Fatal(ctx, "hash disk row container not set up for marking")
+		log.Dev.Fatal(ctx, "hash disk row container not set up for marking")
 	}
 	i.haveMarkedRows = true
 	markBytes := encodedTrue

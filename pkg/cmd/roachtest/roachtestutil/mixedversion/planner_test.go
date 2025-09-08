@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -126,7 +127,7 @@ func TestTestPlanner(t *testing.T) {
 			case "workload":
 				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
 				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
-				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd)
+				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd, false /* overrideBinary */)
 			case "background-command":
 				cmd := roachtestutil.NewCommand("./cockroach some-command")
 				mvt.BackgroundCommand(d.CmdArgs[0].Vals[0], nodes, cmd)
@@ -353,6 +354,76 @@ func Test_maxNumPlanSteps(t *testing.T) {
 	require.Nil(t, plan)
 }
 
+// TestNoConcurrentFailureInjections tests that failure injection
+// steps properly manage node availability. Specifically:
+// - Failure injection steps should only run if no other failure is currently injected.
+// - Failure recovery steps can only occur if there is an active failure injected.
+// - We can only bump the cluster version if no failures are currently injected.
+func TestNoConcurrentFailureInjections(t *testing.T) {
+	const numIterations = 500
+	rngSource := rand.NewSource(randutil.NewPseudoSeed())
+	// Set all failure injection mutator probabilities to 1.
+	var opts []CustomOption
+	for _, mutator := range failureInjectionMutators {
+		opts = append(opts, WithMutatorProbability(mutator.Name(), 1.0))
+	}
+	opts = append(opts, NumUpgrades(3))
+	getFailer := func(name string) (*failures.Failer, error) {
+		return nil, nil
+	}
+
+	for range numIterations {
+		mvt := newTest(opts...)
+		mvt._getFailer = getFailer
+		mvt.InMixedVersion("test hook", dummyHook)
+		// Use different seed for each iteration
+		mvt.prng = rand.New(rngSource)
+
+		plan, err := mvt.plan()
+		require.NoError(t, err)
+
+		isFailureInjected := false
+
+		var checkSteps func(steps []testStep)
+		checkSteps = func(steps []testStep) {
+			for _, step := range steps {
+				switch s := step.(type) {
+				case *singleStep:
+					switch s.impl.(type) {
+					case panicNodeStep:
+						require.False(t, isFailureInjected, "there should be no active failure when panicNodeStep runs")
+						isFailureInjected = true
+					case networkPartitionInjectStep:
+						require.False(t, isFailureInjected, "there should be no active failure when networkPartitionInjectStep runs")
+						isFailureInjected = true
+					case restartNodeStep:
+						require.True(t, isFailureInjected, "there is no active failure to recover from")
+						isFailureInjected = false
+					case networkPartitionRecoveryStep:
+						require.True(t, isFailureInjected, "there is no active failure to recover from")
+						isFailureInjected = false
+					case waitForStableClusterVersionStep:
+						require.False(t, isFailureInjected, "waitForStableClusterVersionStep cannot run under failure injection")
+					}
+				case sequentialRunStep:
+					checkSteps(s.steps)
+				case concurrentRunStep:
+					// Failure injection steps should never run concurrently with other steps, so treat concurrent
+					// steps as sequential for simplicity.
+					for _, delayedStepInterface := range s.delayedSteps {
+						ds := delayedStepInterface.(delayedStep)
+						checkSteps([]testStep{ds.step})
+					}
+				}
+			}
+		}
+
+		checkSteps(plan.Steps())
+
+		require.False(t, isFailureInjected, "all failure injections should be cleaned up at the end of the test")
+	}
+}
+
 // setDefaultVersions overrides the test's view of the current build
 // as well as the oldest supported version. This allows the test
 // output to remain stable as new versions are released and/or we bump
@@ -389,6 +460,7 @@ func newTest(options ...CustomOption) *Test {
 	defaultTestOverrides := []CustomOption{
 		EnabledDeploymentModes(SystemOnlyDeployment),
 		DisableSkipVersionUpgrades,
+		DisableAllFailureInjectionMutators(),
 	}
 
 	for _, fn := range defaultTestOverrides {
@@ -863,7 +935,7 @@ func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
 func (concurrentUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -872,7 +944,7 @@ func (concurrentUserHooksMutator) Generate(
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		InsertConcurrent(&testSingleStep{})
+		InsertConcurrent(&testSingleStep{}), nil
 }
 
 // removeUserHooksMutator is a test mutator that removes every
@@ -884,14 +956,14 @@ func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
 func (removeUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		Remove()
+		Remove(), nil
 }
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
@@ -935,6 +1007,7 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 	testOverrides := []CustomOption{
 		EnabledDeploymentModes(SeparateProcessDeployment),
 		DisableSkipVersionUpgrades,
+		DisableAllFailureInjectionMutators(),
 		MinUpgrades(5),
 		MaxUpgrades(5),
 	}
@@ -956,7 +1029,6 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	//
 	upgradePath := plan.Versions()
 	// Remove the last element as it's the current version which is a special case.
 	// The unit test framework hardcodes the current version which should have no

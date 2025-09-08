@@ -74,7 +74,7 @@ func (r *Replica) addToTSCacheChecked(
 	// production logic.
 	if st := r.CurrentLeaseStatus(ctx); st.IsValid() && st.OwnedBy(r.StoreID()) {
 		if exp := st.Expiration(); exp.LessEq(ts) {
-			log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+			log.Dev.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
 				"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
 				"cache update could be lost on a non-cooperative lease change.", ts, ba, br, pErr, exp)
 		}
@@ -134,7 +134,7 @@ func (r *Replica) updateTimestampCache(
 
 		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && kvpb.CanSkipLocked(req) && resp != nil {
 			if ba.IndexFetchSpec != nil {
-				log.Errorf(ctx, "%v", errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy"))
+				log.Dev.Errorf(ctx, "%v", errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy"))
 			}
 			// If the request is using a SkipLocked wait policy, it behaves as if run
 			// at a lower isolation level for any keys that it skips over. If the read
@@ -153,7 +153,7 @@ func (r *Replica) updateTimestampCache(
 			if err := kvpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
 				addToTSCache(key, nil, ts, txnID)
 			}, false /* includeLockedNonExisting */); err != nil {
-				log.Errorf(ctx, "error iterating over response keys while "+
+				log.Dev.Errorf(ctx, "error iterating over response keys while "+
 					"updating timestamp cache for ba=%v, br=%v: %v", ba, br, err)
 			}
 			continue
@@ -239,7 +239,7 @@ func (r *Replica) updateTimestampCache(
 				// timestamp was already below the prepared transaction's timestamp.
 				continue
 			default:
-				log.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
+				log.Dev.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
 			}
 
 			var key roachpb.Key

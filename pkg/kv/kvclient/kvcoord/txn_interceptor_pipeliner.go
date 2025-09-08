@@ -490,10 +490,10 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 
 	if log.V(3) {
 		for _, intent := range et.LockSpans {
-			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+			log.Dev.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 		}
 		for _, write := range et.InFlightWrites {
-			log.Infof(ctx, "in-flight: %d:%s (%s)", write.Sequence, write.Key, write.Strength)
+			log.Dev.Infof(ctx, "in-flight: %d:%s (%s)", write.Sequence, write.Key, write.Strength)
 		}
 	}
 	return ba, nil
@@ -736,7 +736,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// fine for now, but we add some observability to be aware of this happening.
 	if tp.ifWrites.byteSize() > maxBytes {
 		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.Warningf(ctx, "a transaction's in-flight writes and locking reads have "+
+			log.Dev.Warningf(ctx, "a transaction's in-flight writes and locking reads have "+
 				"exceeded the intent tracking limit (kv.transaction.max_intents_bytes). "+
 				"in-flight writes and locking reads size: %d bytes, txn: %s, ba: %s",
 				tp.ifWrites.byteSize(), ba.Txn, ba.Summary())
@@ -748,7 +748,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// number of ranged locking reads before sending the request.
 	if rejectTxnMaxCount > 0 && tp.writeCount > rejectTxnMaxCount {
 		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.Warningf(ctx, "a transaction has exceeded the maximum number of writes "+
+			log.Dev.Warningf(ctx, "a transaction has exceeded the maximum number of writes "+
 				"allowed by kv.transaction.max_intents_and_locks: "+
 				"count: %d, txn: %s, ba: %s", tp.writeCount, ba.Txn, ba.Summary())
 		}
@@ -782,7 +782,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, locksBudget)
 	if condensed && !alreadyCondensed {
 		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.Warningf(ctx,
+			log.Dev.Warningf(ctx,
 				"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
 					"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
 				ba.Txn, ba.Summary())
@@ -878,7 +878,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 					// Record any writes that were performed asynchronously. We'll
 					// need to prove that these succeeded sometime before we commit.
 					if span.EndKey != nil {
-						log.Fatalf(ctx, "unexpected multi-key intent pipelined")
+						log.Dev.Fatalf(ctx, "unexpected multi-key intent pipelined")
 					}
 					tp.ifWrites.insert(span.Key, seq, str)
 				} else {

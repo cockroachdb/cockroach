@@ -39,7 +39,7 @@ func registerSequelize(r registry.Registry) {
 		t.Status("setting up cockroach")
 		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {

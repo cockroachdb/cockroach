@@ -312,7 +312,7 @@ func (fr *FlowRegistry) RegisterFlow(
 				// principle, we could ForkSpan() beforehand, but we don't want to
 				// create the extra span every time.
 				timeoutCtx := tracing.ContextWithSpan(ctx, nil)
-				log.Errorf(
+				log.Dev.Errorf(
 					timeoutCtx,
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
 					id,

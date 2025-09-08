@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -588,7 +588,7 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 			// Skip trigger function bodies.
 			return nil
 		}
-		expr, err := parser.ParseExpr(*exprStr)
+		expr, err := parserutils.ParseExpr(*exprStr)
 		if err != nil {
 			return err
 		}

@@ -54,7 +54,7 @@ func (s *Store) getOrCreateReplica(
 	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	if id.ReplicaID == 0 {
-		log.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", id.RangeID)
+		log.Dev.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", id.RangeID)
 	}
 	// We need a retry loop as the replica we find in the map may be in the
 	// process of being removed or may need to be removed. Retries in the loop
@@ -90,20 +90,16 @@ func (s *Store) tryGetReplica(
 	if !found {
 		return nil, nil
 	}
-
 	repl.raftMu.Lock() // not unlocked on success
-	repl.mu.RLock()
 
 	// The current replica is removed, go back around.
-	if repl.mu.destroyStatus.Removed() {
-		repl.mu.RUnlock()
+	if repl.shMu.destroyStatus.Removed() {
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
 
 	// Drop messages from replicas we know to be too old.
-	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
-		repl.mu.RUnlock()
+	if fromReplicaIsTooOldRaftMuLocked(repl, creatingReplica) {
 		repl.raftMu.Unlock()
 		return nil, kvpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 	}
@@ -111,20 +107,18 @@ func (s *Store) tryGetReplica(
 	// The current replica needs to be removed, remove it and go back around.
 	if toTooOld := repl.replicaID < id.ReplicaID; toTooOld {
 		if shouldLog := log.V(1); shouldLog {
-			log.Infof(ctx, "found message for replica ID %d which is newer than %v",
+			log.Dev.Infof(ctx, "found message for replica ID %d which is newer than %v",
 				id.ReplicaID, repl)
 		}
 
-		repl.mu.RUnlock()
 		if err := s.removeReplicaRaftMuLocked(
 			ctx, repl, id.ReplicaID, "superseded by newer Replica",
 		); err != nil {
-			log.Fatalf(ctx, "failed to remove replica: %v", err)
+			log.Dev.Fatalf(ctx, "failed to remove replica: %v", err)
 		}
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
-	defer repl.mu.RUnlock()
 
 	if repl.replicaID > id.ReplicaID {
 		// The sender is behind and is sending to an old replica.
@@ -135,7 +129,7 @@ func (s *Store) tryGetReplica(
 	}
 	if repl.replicaID != id.ReplicaID {
 		// This case should have been caught by handleToReplicaTooOld.
-		log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+		log.Dev.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
 			id.ReplicaID, repl)
 	}
 	return repl, nil
@@ -224,11 +218,15 @@ func (s *Store) tryGetOrCreateReplica(
 	return repl, true, nil
 }
 
-// fromReplicaIsTooOldRLocked returns true if the creatingReplica is deemed to
-// be a member of the range which has been removed.
-// Assumes toReplica.mu is locked for (at least) reading.
-func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
-	toReplica.mu.AssertRHeld()
+// fromReplicaIsTooOldRaftMuLocked returns true if the creatingReplica is deemed
+// to be a member of the range which has been removed.
+//
+// Assumes toReplica.raftMu is locked. This could be relaxed to Replica.mu
+// locked for reads, but the only user of it holds raftMu.
+func fromReplicaIsTooOldRaftMuLocked(
+	toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor,
+) bool {
+	toReplica.raftMu.AssertHeld()
 	if fromReplica == nil {
 		return false
 	}

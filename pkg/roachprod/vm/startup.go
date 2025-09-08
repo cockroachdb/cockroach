@@ -181,7 +181,8 @@ const startupScriptFIPS = `
 {{ if .EnableFIPS }}
 sudo apt-get install -yq ubuntu-advantage-tools jq
 # Enable FIPS (in practice, it's often already enabled at this point).
-if [ $(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status') != '"enabled"' ]; then
+fips_status=$(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status')
+if [ "$fips_status" != '"enabled"' ]; then
 	sudo ua enable fips --assume-yes
 fi
 {{ end }}`

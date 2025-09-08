@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 10
+const configIdx = 11
 
 var logicTestDir string
 var cclLogicTestDir string
@@ -1259,6 +1259,13 @@ func TestTenantLogic_lookup_join_spans(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "lookup_join_spans")
+}
+
+func TestTenantLogic_ltree(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ltree")
 }
 
 func TestTenantLogic_manual_retry(

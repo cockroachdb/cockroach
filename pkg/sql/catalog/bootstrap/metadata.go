@@ -79,7 +79,7 @@ func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 	switch id := desc.GetID(); id {
 	case descpb.InvalidID:
 		if _, isTable := desc.(catalog.TableDescriptor); !isTable {
-			log.Fatalf(context.TODO(), "only system tables may have dynamic IDs, got %T for %s",
+			log.Dev.Fatalf(context.TODO(), "only system tables may have dynamic IDs, got %T for %s",
 				desc, desc.GetName())
 		}
 		mut := desc.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
@@ -87,7 +87,7 @@ func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 		desc = mut.ImmutableCopy()
 	default:
 		if ms.ids.Contains(id) {
-			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
+			log.Dev.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
 	}
 	ms.descs = append(ms.descs, desc)
@@ -183,7 +183,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Create descriptor metadata key.
 		descValue := roachpb.Value{}
 		if err := descValue.SetProto(desc.DescriptorProto()); err != nil {
-			log.Fatalf(context.TODO(), "could not marshal %v", desc)
+			log.Dev.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		add(catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()), descValue)
 
@@ -460,6 +460,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SystemJobMessageTable)
 	target.AddDescriptor(systemschema.PreparedTransactionsTable)
 
+	// Tables introduced in 25.4
+	target.AddDescriptor(systemschema.InspectErrorsTable)
+
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please
@@ -472,7 +475,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 62
+const NumSystemTablesForSystemTenant = 63
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.

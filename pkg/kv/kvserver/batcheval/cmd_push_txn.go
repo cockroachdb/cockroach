@@ -244,7 +244,7 @@ func PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
+		log.Dev.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
 			args.PusherTxn.Short(), redact.Safe(s),
 			redact.Safe(pushType),
 			args.PusheeTxn.Short(),
@@ -288,7 +288,7 @@ func PushTxn(
 	// if initiated by a PUSH_TIMESTAMP.
 	if pusheeStaging && pusherWins && pushType == kvpb.PUSH_TIMESTAMP {
 		if !pusheeStagingFailed && !build.IsRelease() {
-			log.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
+			log.Dev.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
 		}
 		pushType = kvpb.PUSH_ABORT
 	}

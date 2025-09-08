@@ -1255,6 +1255,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &ConcatJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.LTree,
+			ReturnType: types.LTree,
+			EvalOp:     &ConcatLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	// TODO(pmattis): Check that the shift is valid.
@@ -1423,6 +1430,24 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			RightType:  types.PGVector,
 			ReturnType: types.Float,
 			EvalOp:     &NegInnerProductVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
+	treebin.FirstContains: {overloads: []*BinOp{
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			ReturnType: types.LTree,
+			EvalOp:     &FirstContainsLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
+	treebin.FirstContainedBy: {overloads: []*BinOp{
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			ReturnType: types.LTree,
+			EvalOp:     &FirstContainedByLTreeOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},
@@ -1638,6 +1663,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.TSVector, types.TSVector, volatility.Immutable),
 		makeEqFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeEqFn(types.VarBit, types.VarBit, volatility.Leakproof),
+		makeEqFn(types.LTree, types.LTree, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeEqFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1702,6 +1728,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLtFn(types.VarBit, types.VarBit, volatility.Leakproof),
 		makeLtFn(types.Jsonb, types.Jsonb, volatility.Immutable),
+		makeLtFn(types.LTree, types.LTree, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1766,6 +1793,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeLeFn(types.VarBit, types.VarBit, volatility.Leakproof),
 		makeLeFn(types.Jsonb, types.Jsonb, volatility.Immutable),
+		makeLeFn(types.LTree, types.LTree, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1853,6 +1881,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.TSVector, types.TSVector, volatility.Immutable),
 		makeIsFn(types.Uuid, types.Uuid, volatility.Leakproof),
 		makeIsFn(types.VarBit, types.VarBit, volatility.Leakproof),
+		makeIsFn(types.LTree, types.LTree, volatility.Immutable),
 
 		// Mixed-type comparisons.
 		makeIsFn(types.Date, types.Timestamp, volatility.Immutable),
@@ -1909,6 +1938,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.Int, volatility.Leakproof),
 		makeEvalTupleIn(types.Interval, volatility.Leakproof),
 		makeEvalTupleIn(types.Jsonb, volatility.Leakproof),
+		makeEvalTupleIn(types.LTree, volatility.Immutable),
 		makeEvalTupleIn(types.Oid, volatility.Leakproof),
 		makeEvalTupleIn(types.PGLSN, volatility.Leakproof),
 		makeEvalTupleIn(types.PGVector, volatility.Leakproof),
@@ -2014,6 +2044,24 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			EvalOp:     &ContainsJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.LTree,
+			EvalOp:     &ContainsLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			EvalOp:     &ContainsLTreeArrayOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.MakeArray(types.LTree),
+			EvalOp:     &ContainedByLTreeArrayOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treecmp.ContainedBy: {overloads: []*CmpOp{
@@ -2027,6 +2075,24 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			LeftType:   types.Jsonb,
 			RightType:  types.Jsonb,
 			EvalOp:     &ContainedByJsonbOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.LTree,
+			EvalOp:     &ContainedByLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.MakeArray(types.LTree),
+			EvalOp:     &ContainsLTreeArrayOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			EvalOp:     &ContainedByLTreeArrayOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},

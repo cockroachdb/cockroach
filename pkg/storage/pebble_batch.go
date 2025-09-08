@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -307,21 +308,25 @@ func (wb *writeBatch) putMVCC(key MVCCKey, value MVCCValue) error {
 	// - encode the MVCC key and MVCC value directly into the Batch
 	// - call Finish on the deferred operation (which will index the key if
 	//   wb.batch is indexed)
-	valueLen, isExtended := mvccValueSize(value)
 	keyLen := mvccencoding.EncodedMVCCKeyLength(key.Key, key.Timestamp)
-	o := wb.batch.SetDeferred(keyLen, valueLen)
-	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
-	if !isExtended {
+	var o *pebble.DeferredBatchOp
+	if value.useSimpleEncoding() {
 		// Fast path; we don't need to use the extended encoding and can copy
 		// RawBytes in verbatim.
+		o = wb.batch.SetDeferred(keyLen, len(value.Value.RawBytes))
 		copy(o.Value, value.Value.RawBytes)
 	} else {
-		// Slow path; we need the MVCC value header.
-		err := encodeExtendedMVCCValueToSizedBuf(value, o.Value)
-		if err != nil {
+		// Slow path; we need the MVCC value header. Inline the relevant part of encodedSize().
+		valueLen := extendedPreludeSize + value.MVCCValueHeader.Size() + len(value.Value.RawBytes)
+		if buildutil.CrdbTestBuild && valueLen != value.encodedSize() {
+			panic("incorrect valueLen calculation")
+		}
+		o = wb.batch.SetDeferred(keyLen, valueLen)
+		if err := encodeExtendedMVCCValueToSizedBuf(value, o.Value); err != nil {
 			return err
 		}
 	}
+	mvccencoding.EncodeMVCCKeyToBufSized(o.Key, key.Key, key.Timestamp, keyLen)
 	return o.Finish()
 }
 

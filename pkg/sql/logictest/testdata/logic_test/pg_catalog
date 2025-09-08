@@ -1152,6 +1152,8 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 663840575   42        3         false        false                false         false           false         false           true        false         false       true       false           1 5 18                  0 3403232968 0             0 0 0          2 2 1          NULL      app_name NOT LIKE '$ internal%'::STRING                                                                                       3
 710236230   58        1         true         false                true          false           true          false           true        false         false       true       false           1                       0                          0              2              NULL      NULL                                                                                                                          1
 803027558   26        3         true         false                true          false           true          false           true        false         false       true       false           1 2 3                   0 0 3403232968             0 0 0          2 2 2          NULL      NULL                                                                                                                          3
+830785509   73        1         true         false                true          false           true          false           true        false         false       true       false           1                       0                          0              2              NULL      NULL                                                                                                                          1
+830785510   73        1         false        false                false         false           false         false           true        false         false       true       false           6                       0                          0              2              NULL      NULL                                                                                                                          1
 923576837   41        1         true         false                true          false           true          false           true        false         false       true       false           1                       0                          0              2              NULL      NULL                                                                                                                          1
 969972501   57        1         true         false                true          false           true          false           true        false         false       true       false           1                       0                          0              2              NULL      NULL                                                                                                                          1
 969972502   57        1         true         false                false         false           true          false           true        false         false       true       false           2                       0                          0              2              NULL      NULL                                                                                                                          1
@@ -1326,6 +1328,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 803027558   0                           1
 803027558   0                           2
 803027558   0                           3
+830785509   0                           1
+830785510   0                           1
 923576837   0                           1
 969972501   0                           1
 969972502   0                           1
@@ -1736,8 +1740,8 @@ FROM pg_catalog.pg_depend
 ORDER BY objid, refobjid, refobjsubid
 ----
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
-4294967082  111         0         4294967082  110         14           a
-4294967082  112         0         4294967082  110         15           a
+4294967082  111         0         4294967082  110         14           i
+4294967082  112         0         4294967082  110         15           i
 4294967036  842401391   0         4294967082  110         1            n
 4294967036  842401391   0         4294967082  110         2            n
 4294967036  842401391   0         4294967082  110         3            n
@@ -1771,6 +1775,19 @@ WHERE seq.oid           = dep.objid
 ----
 attname  nspname  relname
 a        public   t_with_pk_seq_a_seq
+
+# Test for issue #108439: IDENTITY columns should have deptype 'i' dependencies.
+query TTT colnames
+SELECT seq_cls.relname AS sequence_name, attr.attname AS column_name, dep.deptype
+FROM pg_depend dep
+JOIN pg_class seq_cls ON seq_cls.oid = dep.objid
+JOIN pg_attribute attr ON attr.attrelid = dep.refobjid AND attr.attnum = dep.refobjsubid
+WHERE dep.refobjid = 't_with_pk_seq'::regclass
+  AND dep.deptype = 'i'
+ORDER BY dep.deptype
+----
+sequence_name        column_name  deptype
+t_with_pk_seq_a_seq  a            i
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table. Other entries are links to pg_class when it is
@@ -1979,6 +1996,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 90007   _vector                4294967094    NULL        -1      false     b
 90008   citext                 4294967094    NULL        -1      false     b
 90009   _citext                4294967094    NULL        -1      false     b
+90010   ltree                  4294967094    NULL        -1      false     b
+90011   _ltree                 4294967094    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2102,6 +2121,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 90007   _vector                A            false           true          ,         0         90006    0
 90008   citext                 S            false           true          ,         0         0        90009
 90009   _citext                A            false           true          ,         0         90008    0
+90010   ltree                  U            false           true          ,         0         0        90011
+90011   _ltree                 A            false           true          ,         0         90010    0
 100110  t1                     C            false           true          ,         110       0        0
 100111  t1_m_seq               C            false           true          ,         111       0        0
 100112  t1_n_seq               C            false           true          ,         112       0        0
@@ -2225,6 +2246,8 @@ oid     typname                typinput        typoutput        typreceive      
 90007   _vector                array_in        array_out        array_recv        array_send        0         0          0
 90008   citext                 citextin        citextout        citextrecv        citextsend        0         0          0
 90009   _citext                array_in        array_out        array_recv        array_send        0         0          0
+90010   ltree                  ltreein         ltreeout         ltreerecv         ltreesend         0         0          0
+90011   _ltree                 array_in        array_out        array_recv        array_send        0         0          0
 100110  t1                     record_in       record_out       record_recv       record_send       0         0          0
 100111  t1_m_seq               record_in       record_out       record_recv       record_send       0         0          0
 100112  t1_n_seq               record_in       record_out       record_recv       record_send       0         0          0
@@ -2348,6 +2371,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 90007   _vector                NULL      NULL        false       0            -1
 90008   citext                 NULL      NULL        false       0            -1
 90009   _citext                NULL      NULL        false       0            -1
+90010   ltree                  NULL      NULL        false       0            -1
+90011   _ltree                 NULL      NULL        false       0            -1
 100110  t1                     NULL      NULL        false       0            -1
 100111  t1_m_seq               NULL      NULL        false       0            -1
 100112  t1_n_seq               NULL      NULL        false       0            -1
@@ -2471,6 +2496,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 90007   _vector                0         0             NULL           NULL        NULL
 90008   citext                 0         3908466058    NULL           NULL        NULL
 90009   _citext                0         0             NULL           NULL        NULL
+90010   ltree                  0         0             NULL           NULL        NULL
+90011   _ltree                 0         0             NULL           NULL        NULL
 100110  t1                     0         0             NULL           NULL        NULL
 100111  t1_m_seq               0         0             NULL           NULL        NULL
 100112  t1_n_seq               0         0             NULL           NULL        NULL
@@ -2936,6 +2963,7 @@ name                                                             setting        
 allow_create_trigger_function_with_argv_references               off                 NULL      NULL        NULL        string
 allow_ordinal_column_references                                  off                 NULL      NULL        NULL        string
 allow_role_memberships_to_change_during_transaction              off                 NULL      NULL        NULL        string
+allow_unsafe_internals                                           on                  NULL      NULL        NULL        string
 alter_primary_region_super_region_override                       off                 NULL      NULL        NULL        string
 always_distribute_full_scans                                     off                 NULL      NULL        NULL        string
 application_name                                                 ·                   NULL      NULL        NULL        string
@@ -2975,6 +3003,7 @@ default_with_oids                                                off            
 descriptor_validation                                            on                  NULL      NULL        NULL        string
 disable_changefeed_replication                                   off                 NULL      NULL        NULL        string
 disable_hoist_projection_in_join_limitation                      off                 NULL      NULL        NULL        string
+disable_optimizer_rules                                          ·                   NULL      NULL        NULL        string
 disable_partially_distributed_plans                              off                 NULL      NULL        NULL        string
 disable_plan_gists                                               off                 NULL      NULL        NULL        string
 disable_vec_union_eager_cancellation                             off                 NULL      NULL        NULL        string
@@ -2995,6 +3024,7 @@ enable_implicit_fk_locking_for_serializable                      off            
 enable_implicit_select_for_update                                on                  NULL      NULL        NULL        string
 enable_implicit_transaction_for_batch_statements                 on                  NULL      NULL        NULL        string
 enable_insert_fast_path                                          on                  NULL      NULL        NULL        string
+enable_inspect_command                                           off                 NULL      NULL        NULL        string
 enable_multiple_modifications_of_table                           off                 NULL      NULL        NULL        string
 enable_multiregion_placement_policy                              off                 NULL      NULL        NULL        string
 enable_scrub_job                                                 off                 NULL      NULL        NULL        string
@@ -3003,7 +3033,6 @@ enable_shared_locking_for_serializable                           off            
 enable_super_regions                                             off                 NULL      NULL        NULL        string
 enable_zigzag_join                                               off                 NULL      NULL        NULL        string
 enforce_home_region                                              off                 NULL      NULL        NULL        string
-enforce_home_region_follower_reads_enabled                       off                 NULL      NULL        NULL        string
 escape_string_warning                                            on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy                    off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning                 off                 NULL      NULL        NULL        string
@@ -3067,6 +3096,7 @@ optimizer_use_histograms                                         on             
 optimizer_use_improved_computed_column_filters_derivation        on                  NULL      NULL        NULL        string
 optimizer_use_improved_disjunction_stats                         on                  NULL      NULL        NULL        string
 optimizer_use_improved_distinct_on_limit_hint_costing            on                  NULL      NULL        NULL        string
+optimizer_use_improved_hoist_join_project                        on                  NULL      NULL        NULL        string
 optimizer_use_improved_join_elimination                          on                  NULL      NULL        NULL        string
 optimizer_use_improved_multi_column_selectivity_estimate         on                  NULL      NULL        NULL        string
 optimizer_use_improved_split_disjunction_for_joins               on                  NULL      NULL        NULL        string
@@ -3148,6 +3178,7 @@ use_declarative_schema_changer                                   on             
 use_improved_routine_dependency_tracking                         on                  NULL      NULL        NULL        string
 use_pre_25_2_variadic_builtins                                   off                 NULL      NULL        NULL        string
 use_proc_txn_control_extended_protocol_fix                       on                  NULL      NULL        NULL        string
+use_soft_limit_for_distribute_scan                               on                  NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                          on                  NULL      NULL        NULL        string
 vector_search_beam_size                                          32                  NULL      NULL        NULL        string
 vector_search_rerank_multiplier                                  50                  NULL      NULL        NULL        string
@@ -3177,6 +3208,7 @@ name                                                             setting        
 allow_create_trigger_function_with_argv_references               off                 NULL  user     NULL      off                 off
 allow_ordinal_column_references                                  off                 NULL  user     NULL      off                 off
 allow_role_memberships_to_change_during_transaction              off                 NULL  user     NULL      off                 off
+allow_unsafe_internals                                           on                  NULL  user     NULL      on                  on
 alter_primary_region_super_region_override                       off                 NULL  user     NULL      off                 off
 always_distribute_full_scans                                     off                 NULL  user     NULL      off                 off
 application_name                                                 ·                   NULL  user     NULL      ·                   ·
@@ -3216,6 +3248,7 @@ default_with_oids                                                off            
 descriptor_validation                                            on                  NULL  user     NULL      on                  on
 disable_changefeed_replication                                   off                 NULL  user     NULL      off                 off
 disable_hoist_projection_in_join_limitation                      off                 NULL  user     NULL      off                 off
+disable_optimizer_rules                                          ·                   NULL  user     NULL      ·                   ·
 disable_partially_distributed_plans                              off                 NULL  user     NULL      off                 off
 disable_plan_gists                                               off                 NULL  user     NULL      off                 off
 disable_vec_union_eager_cancellation                             off                 NULL  user     NULL      off                 off
@@ -3236,6 +3269,7 @@ enable_implicit_fk_locking_for_serializable                      off            
 enable_implicit_select_for_update                                on                  NULL  user     NULL      on                  on
 enable_implicit_transaction_for_batch_statements                 on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                                          on                  NULL  user     NULL      on                  on
+enable_inspect_command                                           off                 NULL  user     NULL      off                 off
 enable_multiple_modifications_of_table                           off                 NULL  user     NULL      off                 off
 enable_multiregion_placement_policy                              off                 NULL  user     NULL      off                 off
 enable_scrub_job                                                 off                 NULL  user     NULL      off                 off
@@ -3244,7 +3278,6 @@ enable_shared_locking_for_serializable                           off            
 enable_super_regions                                             off                 NULL  user     NULL      off                 off
 enable_zigzag_join                                               off                 NULL  user     NULL      off                 off
 enforce_home_region                                              off                 NULL  user     NULL      off                 off
-enforce_home_region_follower_reads_enabled                       off                 NULL  user     NULL      off                 off
 escape_string_warning                                            on                  NULL  user     NULL      on                  on
 expect_and_ignore_not_visible_columns_in_copy                    off                 NULL  user     NULL      off                 off
 experimental_enable_implicit_column_partitioning                 off                 NULL  user     NULL      off                 off
@@ -3308,6 +3341,7 @@ optimizer_use_histograms                                         on             
 optimizer_use_improved_computed_column_filters_derivation        on                  NULL  user     NULL      on                  on
 optimizer_use_improved_disjunction_stats                         on                  NULL  user     NULL      on                  on
 optimizer_use_improved_distinct_on_limit_hint_costing            on                  NULL  user     NULL      on                  on
+optimizer_use_improved_hoist_join_project                        on                  NULL  user     NULL      on                  on
 optimizer_use_improved_join_elimination                          on                  NULL  user     NULL      on                  on
 optimizer_use_improved_multi_column_selectivity_estimate         on                  NULL  user     NULL      on                  on
 optimizer_use_improved_split_disjunction_for_joins               on                  NULL  user     NULL      on                  on
@@ -3389,6 +3423,7 @@ use_declarative_schema_changer                                   on             
 use_improved_routine_dependency_tracking                         on                  NULL  user     NULL      on                  on
 use_pre_25_2_variadic_builtins                                   off                 NULL  user     NULL      off                 off
 use_proc_txn_control_extended_protocol_fix                       on                  NULL  user     NULL      on                  on
+use_soft_limit_for_distribute_scan                               on                  NULL  user     NULL      on                  on
 variable_inequality_lookup_join_enabled                          on                  NULL  user     NULL      on                  on
 vector_search_beam_size                                          32                  NULL  user     NULL      32                  32
 vector_search_rerank_multiplier                                  50                  NULL  user     NULL      50                  50
@@ -3402,6 +3437,7 @@ name                                                             source  min_val
 allow_create_trigger_function_with_argv_references               NULL    NULL     NULL     NULL        NULL
 allow_ordinal_column_references                                  NULL    NULL     NULL     NULL        NULL
 allow_role_memberships_to_change_during_transaction              NULL    NULL     NULL     NULL        NULL
+allow_unsafe_internals                                           NULL    NULL     NULL     NULL        NULL
 alter_primary_region_super_region_override                       NULL    NULL     NULL     NULL        NULL
 always_distribute_full_scans                                     NULL    NULL     NULL     NULL        NULL
 application_name                                                 NULL    NULL     NULL     NULL        NULL
@@ -3444,6 +3480,7 @@ descriptor_validation                                            NULL    NULL   
 direct_columnar_scans_enabled                                    NULL    NULL     NULL     NULL        NULL
 disable_changefeed_replication                                   NULL    NULL     NULL     NULL        NULL
 disable_hoist_projection_in_join_limitation                      NULL    NULL     NULL     NULL        NULL
+disable_optimizer_rules                                          NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                              NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                               NULL    NULL     NULL     NULL        NULL
 disable_vec_union_eager_cancellation                             NULL    NULL     NULL     NULL        NULL
@@ -3465,6 +3502,7 @@ enable_implicit_fk_locking_for_serializable                      NULL    NULL   
 enable_implicit_select_for_update                                NULL    NULL     NULL     NULL        NULL
 enable_implicit_transaction_for_batch_statements                 NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                                          NULL    NULL     NULL     NULL        NULL
+enable_inspect_command                                           NULL    NULL     NULL     NULL        NULL
 enable_multiple_modifications_of_table                           NULL    NULL     NULL     NULL        NULL
 enable_multiregion_placement_policy                              NULL    NULL     NULL     NULL        NULL
 enable_scrub_job                                                 NULL    NULL     NULL     NULL        NULL
@@ -3473,7 +3511,6 @@ enable_shared_locking_for_serializable                           NULL    NULL   
 enable_super_regions                                             NULL    NULL     NULL     NULL        NULL
 enable_zigzag_join                                               NULL    NULL     NULL     NULL        NULL
 enforce_home_region                                              NULL    NULL     NULL     NULL        NULL
-enforce_home_region_follower_reads_enabled                       NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                            NULL    NULL     NULL     NULL        NULL
 expect_and_ignore_not_visible_columns_in_copy                    NULL    NULL     NULL     NULL        NULL
 experimental_enable_implicit_column_partitioning                 NULL    NULL     NULL     NULL        NULL
@@ -3540,6 +3577,7 @@ optimizer_use_histograms                                         NULL    NULL   
 optimizer_use_improved_computed_column_filters_derivation        NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_disjunction_stats                         NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_distinct_on_limit_hint_costing            NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_hoist_join_project                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_join_elimination                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_multi_column_selectivity_estimate         NULL    NULL     NULL     NULL        NULL
 optimizer_use_improved_split_disjunction_for_joins               NULL    NULL     NULL     NULL        NULL
@@ -3622,6 +3660,7 @@ use_declarative_schema_changer                                   NULL    NULL   
 use_improved_routine_dependency_tracking                         NULL    NULL     NULL     NULL        NULL
 use_pre_25_2_variadic_builtins                                   NULL    NULL     NULL     NULL        NULL
 use_proc_txn_control_extended_protocol_fix                       NULL    NULL     NULL     NULL        NULL
+use_soft_limit_for_distribute_scan                               NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                          NULL    NULL     NULL     NULL        NULL
 vector_search_beam_size                                          NULL    NULL     NULL     NULL        NULL
 vector_search_rerank_multiplier                                  NULL    NULL     NULL     NULL        NULL
@@ -3914,6 +3953,7 @@ oid         oprname  aggsortop
 1778355034  >        1778355034
 3944320082  >        3944320082
 1385359122  >        1385359122
+4286072550  >        4286072550
 
 # Check whether correct operator's oid is set for min, bool_and and every.
 query OTO colnames,rowsort
@@ -3950,6 +3990,7 @@ oid         oprname  aggsortop
 3675947880  <        3675947880
 3575809104  <        3575809104
 1579888144  <        1579888144
+1914008044  <        1914008044
 
 subtest collated_string_type
 

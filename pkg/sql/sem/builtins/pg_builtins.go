@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -879,7 +879,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				columnName := tree.MustBeDString(args[1])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(tableName))
+				qualifiedName, err := parserutils.ParseQualifiedTableName(string(tableName))
 				if err != nil {
 					return nil, err
 				}

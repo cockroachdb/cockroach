@@ -622,7 +622,7 @@ func applyCutoverTime(
 	cutoverTimestamp hlc.Timestamp,
 	replicatedTimeAtCutover hlc.Timestamp,
 ) error {
-	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
+	log.Dev.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
 	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()

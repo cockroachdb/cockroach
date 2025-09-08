@@ -82,9 +82,9 @@ enum ResumeReason {
   // since MVCCScan converts the result into a LockConflictError.
   // NB: 21.2 and below will return RESUME_KEY_LIMIT instead.
   RESUME_INTENT_LIMIT = 3;
-  // The DistSender encountered a range boundary and returned a partial result,
-  // in response to return_on_range_boundary.
-  RESUME_RANGE_BOUNDARY = 4;
+
+  reserved 4; // Previously: RESUME_RANGE_BOUNDARY
+
   // The ElasticCPUHandle signalled that the command evaluation exceeded its
   // allotted CPU time. It is the callers responsibility to resume from the
   // returned resume key.
@@ -740,6 +740,9 @@ message ExciseResponse {
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
+//
+// NB: ReverseScans cannot be put into the same batch as forward requests like
+// Scans. IsReverse must be set on the batch header as well.
 message ReverseScanRequest {
   reserved 2, 3;
 
@@ -2127,18 +2130,18 @@ message AddSSTableRequest {
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
-  
+
   // ComputeStatsDiff causes the server to compute the effect this
   // SST will have on the range's MVCC stats, even in the presence of
   // overlapping keys. This flag cannot be passed with the MVCCStats,
-  // DisallowShadowingBelow, or DisallowShadowing fields. 
+  // DisallowShadowingBelow, or DisallowShadowing fields.
   //
   // This flag assumes that any key in the sst that is shadowed by a key in the
   // engine is also a duplicate. As an example, accurate stats will be computed
-  // here: 
+  // here:
   // - sst: a@3,a@2 and eng: a@2,a@1
   //
-  // but not for, as a@1 is not a duplicate: 
+  // but not for, as a@1 is not a duplicate:
   // - sst: a@1 and eng: a@2
   //
   // In the ladder case, we silently create inaccurate stats currently. A TODO
@@ -2797,11 +2800,16 @@ message Header {
   // - RevertRangeRequest
   // - ResolveIntentRangeRequest
   // - QueryLocksRequest
+  // - IsSpanEmptyRequest
   //
-  // The following two requests types are also allowed in the batch, although
-  // the limit has no effect on them:
+  // The following requests types are also allowed in the batch, although the
+  // limit has no effect on them:
+  // - ExportRequest
   // - QueryIntentRequest
   // - EndTxnRequest
+  // - ResolveIntentRequest
+  // - DeleteRequest
+  // - PutRequest
   //
   // [*] DeleteRangeRequests are generally not allowed to be batched together
   // with a commit (i.e. 1PC), except if Require1PC is also set. See #37457.
@@ -2848,29 +2856,6 @@ message Header {
   // If true, allow returning an empty result when the first result exceeds a
   // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
   bool allow_empty = 23;
-  // If true, DistSender returns partial non-empty results when encountering a
-  // range boundary, with an appropriate resume span and reason
-  // RESUME_RANGE_BOUNDARY. This will disable parallelism of DistSender
-  // requests, similarly to to the other limits above.
-  //
-  // This is useful in particular to prevent the DistSender from sending
-  // requests with very small remaining limits (e.g. TargetBytes) to subsequent
-  // ranges. Normally, as the DistSender iterates across ranges, each request's
-  // limits will be reduced by the results returned from the previous range,
-  // which can end up sending e.g. a request with TargetBytes=1 to the next
-  // range in the worst case. Enabling this option would instead return the
-  // partial result to the client, who then sends a new request with a new, full
-  // limit. In aggregate, as the client keeps paginating, this can significantly
-  // reduce the overall number of RPC requests sent to ranges, and thus the
-  // overall latency of the operation.
-  //
-  // However, the benefit depends greatly on the limits, key spans, overlap with
-  // range boundaries, as well as MVCC garbage. In some cases, it can be
-  // detrimental due to the cost of additional client sender stack traversals,
-  // so it is more appropriate for expensive requests (e.g. Scan) than cheap
-  // requests (e.g. Get). Benchmarks have shown that this relative overhead
-  // approaches zero as range RPC request latency increases past 1 ms.
-  bool return_on_range_boundary = 24;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTxnRequest. Currently set conservatively: a request might be
@@ -3028,9 +3013,13 @@ message Header {
   // the server.
   bool has_buffered_all_preceding_writes = 37;
 
-  reserved 7, 10, 12, 14, 20;
+  // IsReverse, if set, indicates that the requests in the batch should be
+  // evaluated in descending range order.
+  bool is_reverse = 38;
 
-  // Next ID: 38
+  reserved 7, 10, 12, 14, 20, 24;
+
+  // Next ID: 39
 }
 
 message WriteOptions {
@@ -3301,8 +3290,8 @@ message RangeFeedValue {
 }
 
 // RangeFeedBulkEvents is a variant of RangeFeedEvent that represetns a
-// collection of many RangeFeedEvent delivered as a single event rather than 
-// individually for reduced delivery overhead when many events are available, 
+// collection of many RangeFeedEvent delivered as a single event rather than
+// individually for reduced delivery overhead when many events are available,
 // such as during catch-up scans.
 message RangeFeedBulkEvents {
   repeated RangeFeedEvent events = 1;
@@ -3901,6 +3890,8 @@ message ScanStats {
   uint64 separated_point_count = 14;
   uint64 separated_point_value_bytes = 15;
   uint64 separated_point_value_bytes_fetched = 16;
+  uint64 separated_point_value_count_fetched = 23;
+  uint64 separated_point_value_reader_cache_misses = 24;
   google.protobuf.Duration block_read_duration = 20 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
 

@@ -242,7 +242,7 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	}
 
 	if log.V(4) {
-		log.Infof(p.Context(), "submitting proposal %x", p.idKey)
+		log.Dev.Infof(p.Context(), "submitting proposal %x", p.idKey)
 	}
 
 	// Insert the proposal into the buffer's array. The buffer now takes ownership
@@ -423,7 +423,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	var firstErr error
 	for i, p := range buf {
 		if p == nil {
-			log.Fatalf(ctx, "unexpected nil proposal in buffer")
+			log.Dev.Fatalf(ctx, "unexpected nil proposal in buffer")
 			return 0, nil // unreachable, for linter
 		}
 		reproposal := !p.tok.stillTracked()
@@ -446,7 +446,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			lb := b.evalTracker.LowerBound(ctx)
 			if wts.Less(lb) {
 				wts, lb := wts, lb // copies escape to heap
-				log.Fatalf(ctx, "%v", errorutil.UnexpectedWithIssueErrorf(72428,
+				log.Dev.Fatalf(ctx, "%v", errorutil.UnexpectedWithIssueErrorf(72428,
 					"request writing below tracked lower bound: wts: %s < lb: %s; ba: %s; lease: %s.",
 					wts, lb, p.Request, b.p.leaseDebugRLocked()))
 			}
@@ -649,7 +649,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
 				lead := raftGroup.BasicStatus().Lead
 				if logCampaignOnRejectLease.ShouldLog() {
-					log.Infof(ctx, format, lead)
+					log.Dev.Infof(ctx, format, lead)
 				} else {
 					log.VEventf(ctx, 2, format, lead)
 				}
@@ -897,7 +897,7 @@ func proposeBatch(
 // into the proposals map before canceling all proposals.
 func (b *propBuf) FlushLockedWithoutProposing(ctx context.Context) {
 	if _, err := b.FlushLockedWithRaftGroup(ctx, nil /* raftGroup */); err != nil {
-		log.Fatalf(ctx, "unexpected error: %+v", err)
+		log.Dev.Fatalf(ctx, "unexpected error: %+v", err)
 	}
 }
 
@@ -986,7 +986,7 @@ func (t *TrackedRequestToken) stillTracked() bool {
 // neutered; calling DoneIfNotMoved on it becomes a no-op.
 func (t *TrackedRequestToken) Move(ctx context.Context) TrackedRequestToken {
 	if t.done {
-		log.Fatalf(ctx, "attempting to Move() after Done() call")
+		log.Dev.Fatalf(ctx, "attempting to Move() after Done() call")
 	}
 	cpy := *t
 	t.done = true
@@ -1116,7 +1116,7 @@ func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {
 }
 
 func (rp *replicaProposer) destroyed() destroyStatus {
-	return rp.mu.destroyStatus
+	return rp.shMu.destroyStatus
 }
 
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
@@ -1167,7 +1167,7 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	}
 	rp.mu.lastProposalAtTicks = rp.mu.ticks // monotonically increasing
 	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
-		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
+		log.Dev.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
 	}
 	// NB: we can see finished proposals inserted here. We don't like it but
 	// it's currently possible.

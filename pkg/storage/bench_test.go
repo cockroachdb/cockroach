@@ -13,7 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -1043,7 +1043,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		return eng, nil
 	}
 
-	log.Infof(context.Background(), "creating test data: %s", dir)
+	log.Dev.Infof(context.Background(), "creating test data: %s", dir)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
@@ -1064,7 +1064,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 	for i, key := range keys {
 		if (i % batchSize) == 0 {
 			if i > 0 {
-				log.Infof(ctx, "committing (%d/~%d)", i/batchSize, numBatches)
+				log.Dev.Infof(ctx, "committing (%d/~%d)", i/batchSize, numBatches)
 				if err := batch.Commit(false /* sync */); err != nil {
 					return nil, err
 				}
@@ -1674,7 +1674,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	}
 
 	b.StopTimer()
-	log.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
+	log.Dev.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
 }
 
 // runMVCCCFindSplitKey benchmarks MVCCFindSplitKey on a 64MB range of data.
@@ -2421,14 +2421,14 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		sort.Slice(kvPairs, func(i, j int) bool {
-			cmp := EngineComparer.Compare(kvPairs[i].key, kvPairs[j].key)
-			if cmp == 0 {
+		slices.SortFunc(kvPairs, func(i, j kvPair) int {
+			v := EngineComparer.Compare(i.key, j.key)
+			if v == 0 {
 				// Should not happen since we resolve in a different batch from the
 				// one where we wrote the intent.
-				b.Fatalf("found equal user keys in same batch")
+				b.Fatal("found equal user keys in same batch")
 			}
-			return cmp < 0
+			return v
 		})
 		sstFileName := fmt.Sprintf("tmp-ingest-%d", i)
 		sstFile, err := eng.Env().Create(sstFileName, fs.UnspecifiedWriteCategory)

@@ -8,6 +8,7 @@ package rangefeed
 import (
 	"context"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,31 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type kvs = storageutils.KVs
-
-var (
-	pointKV = storageutils.PointKV
-	rangeKV = storageutils.RangeKV
-)
-
-var (
-	testKey            = roachpb.Key("/db1")
-	testTxnID          = uuid.MakeV4()
-	testIsolationLevel = isolation.Serializable
-	testSpan           = roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
-	testTs             = hlc.Timestamp{WallTime: 1}
-	testStartKey       = roachpb.Key("a")
-	testEndKey         = roachpb.Key("z")
-	testValue          = []byte("1")
-	testPrevValue      = []byte("1234")
-	testSSTKVs         = kvs{
-		pointKV("a", 1, "1"),
-		pointKV("b", 1, "2"),
-		pointKV("c", 1, "3"),
-		rangeKV("d", "e", 1, ""),
-	}
-)
-
 type testData struct {
 	numOfLogicalOps  int
 	kvs              []interface{}
@@ -68,9 +44,34 @@ type testData struct {
 	omitInRangefeeds bool
 }
 
-func generateStaticTestdata() testData {
+// testSSTKVs returns a set of key-value pairs that can be used for testing.
+// Note that the value output depends on storage.disableSimpleValueEncoding.
+func testSSTKVs() storageutils.KVs {
+	return storageutils.KVs{
+		storageutils.PointKV("a", 1, "1"),
+		storageutils.PointKV("b", 1, "2"),
+		storageutils.PointKV("c", 1, "3"),
+		storageutils.RangeKV("d", "e", 1, ""),
+	}
+}
+
+func generateStaticTestdata(t *testing.T) testData {
+	storage.DisableMetamorphicSimpleValueEncoding(t)
+
+	var (
+		testKey            = roachpb.Key("/db1")
+		testTxnID          = uuid.MakeV4()
+		testIsolationLevel = isolation.Serializable
+		testSpan           = roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
+		testTs             = hlc.Timestamp{WallTime: 1}
+		testStartKey       = roachpb.Key("a")
+		testEndKey         = roachpb.Key("z")
+		testValue          = []byte("1")
+		testPrevValue      = []byte("1234")
+	)
+
 	return testData{
-		kvs:              testSSTKVs,
+		kvs:              testSSTKVs(),
 		span:             testSpan,
 		key:              testKey,
 		timestamp:        testTs,
@@ -94,9 +95,7 @@ func generateStaticTestdata() testData {
 // be careful and account the memory usage of the additional underlying data
 // structure. Otherwise, you can simply update the expected values in this test.
 func TestEventSizeCalculation(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
-	data := generateStaticTestdata()
-	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.StoreCompressionSnappy)
+	data := generateStaticTestdata(t)
 
 	key := data.key
 	timestamp := data.timestamp
@@ -114,7 +113,16 @@ func TestEventSizeCalculation(t *testing.T) {
 	omitInRangefeeds := data.omitInRangefeeds
 
 	span := data.span
+
+	// Fix settings that can affect the size of the sstable.
+	st := cluster.MakeTestingClusterSettings()
+	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.StoreCompressionSnappy)
+	storage.IngestionValueBlocksEnabled.Override(context.Background(), &st.SV, true)
 	sst, _, _ := storageutils.MakeSST(t, st, data.kvs)
+	// The test cares about cap(sst); this can hide bugs where the sst
+	// generation is non-deterministic and results in slightly different
+	// lengths. Clip the slice to its length half the time to detect this.
+	sst = slices.Clip(sst)
 
 	for _, tc := range []struct {
 		name                   string
@@ -220,10 +228,10 @@ func TestEventSizeCalculation(t *testing.T) {
 		{
 			name:                 "sstEvent event",
 			ev:                   event{sst: &sstEvent{data: sst, span: span, ts: timestamp}},
-			expectedCurrMemUsage: int64(2218),
+			expectedCurrMemUsage: int64(1161),
 			actualCurrMemUsage: eventOverhead + sstEventOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
-			expectedFutureMemUsage: int64(2242),
+			expectedFutureMemUsage: int64(1185),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedSSTTableOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
 		},
@@ -290,7 +298,7 @@ func generateRandomTestData(rand *rand.Rand) testData {
 	startKey, endkey := generateStartAndEndKey(rand)
 	return testData{
 		numOfLogicalOps:  rand.Intn(100) + 1, // Avoid 0 (empty event)
-		kvs:              testSSTKVs,
+		kvs:              testSSTKVs(),
 		span:             generateRandomizedSpan(rand).AsRawSpanWithNoLocals(),
 		key:              generateRandomizedBytes(rand),
 		timestamp:        GenerateRandomizedTs(rand, 100 /* maxTime */),

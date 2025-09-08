@@ -23,7 +23,7 @@ import "server/serverpb/index_recommendations.proto";
 import "server/status/statuspb/status.proto";
 import "sql/appstatspb/app_stats.proto";
 import "sql/contentionpb/contention.proto";
-import "sql/sqlstats/insights/insights.proto";
+import "sql/sqlstats/insightspb/insights.proto";
 import "storage/enginepb/key_registry.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/stats.proto";
@@ -1118,6 +1118,9 @@ message Session {
   string authentication_method = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/redact.SafeString"
   ];
+
+  // The session's default transaction isolation level.
+  string default_isolation_level = 23;
 }
 
 // An error wrapper object for ListSessionsResponse.

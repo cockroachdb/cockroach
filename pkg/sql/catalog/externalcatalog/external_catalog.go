@@ -228,10 +228,10 @@ func DropIngestedExternalCatalog(
 			if err := SetGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,
 			); err != nil {
-				log.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
+				log.Dev.Warningf(ctx, "setting low GC TTL for table %q failed: %s", tableToDrop.GetName(), err.Error())
 			}
 		} else {
-			log.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())
+			log.Dev.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())
 		}
 	}
 
@@ -269,7 +269,7 @@ func DropIngestedExternalCatalog(
 func SetGCTTLForDroppingTable(
 	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, tableToDrop *tabledesc.Mutable,
 ) error {
-	log.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
+	log.Dev.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
 	// We get a mutable descriptor here because we are going to construct a
 	// synthetic descriptor collection in which they are online.
 	dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tableToDrop.GetParentID())

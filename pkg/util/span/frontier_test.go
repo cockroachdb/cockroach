@@ -6,7 +6,6 @@
 package span
 
 import (
-	"container/heap"
 	"context"
 	"fmt"
 	"math/rand"
@@ -14,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -374,7 +374,7 @@ func advanceFrontier(t *testing.T, f Frontier, s roachpb.Span, wall int64) {
 	t.Helper()
 	if log.V(1) {
 		defer func(before string) {
-			log.Infof(context.Background(), "advanceFrontier %s@%d: before=%s after=%s", s, wall, before, f)
+			log.Dev.Infof(context.Background(), "advanceFrontier %s@%d: before=%s after=%s", s, wall, before, f)
 		}(f.String())
 	}
 
@@ -506,7 +506,7 @@ func BenchmarkFrontier(b *testing.B) {
 
 	benchForward := func(b *testing.B, f Frontier, rnd *rand.Rand) {
 		if log.V(1) {
-			log.Infof(context.Background(), "N=%d NumEntries=%d (seed: %d)", b.N, f.Len(), rndSeed)
+			log.Dev.Infof(context.Background(), "N=%d NumEntries=%d (seed: %d)", b.N, f.Len(), rndSeed)
 		}
 		var wall int64 = 10
 
@@ -522,7 +522,7 @@ func BenchmarkFrontier(b *testing.B) {
 			}
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "Final frontier has %d entries", f.Len())
+			log.Dev.Infof(context.Background(), "Final frontier has %d entries", f.Len())
 		}
 	}
 

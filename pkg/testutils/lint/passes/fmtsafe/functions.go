@@ -38,7 +38,7 @@ in the form (main.yourStruct).yourFuncF
 var requireConstFmt = map[string]bool{
 	// Logging things.
 	"log.Printf":           true,
-	"log.Fatalf":           true,
+	"log.Dev.Fatalf":       true,
 	"log.Panicf":           true,
 	"(*log.Logger).Fatalf": true,
 	"(*log.Logger).Panicf": true,
@@ -177,6 +177,13 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/cloud/amazon.awsLogAdapter).Logf": true,
 
+	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).logfDepth": true,
+	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Infof":     true,
+	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Warningf":  true,
+	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Errorf":    true,
+	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Fatalf":    true,
+	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).VEventf":   true,
+
 	// Error things are populated in the init() message.
 }
 
@@ -187,13 +194,13 @@ func title(s string) string {
 func init() {
 	for _, sev := range logpb.Severity_name {
 		capsev := title(strings.ToLower(sev))
-		// log.Infof, log.Warningf etc.
+		// log.Dev.Infof, log.Dev.Warningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"f"] = true
-		// log.VInfof, log.VWarningf etc.
+		// log.Dev.VInfof, log.Dev.VWarningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log.V"+capsev+"f"] = true
-		// log.InfofDepth, log.WarningfDepth, etc.
+		// log.Dev.InfofDepth, log.Dev.WarningfDepth, etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"fDepth"] = true
-		// log.Info, log.Warning, etc.
+		// log.Dev.Info, log.Dev.Warning, etc.
 		requireConstMsg["github.com/cockroachdb/cockroach/pkg/util/log."+capsev] = true
 
 		for _, ch := range logpb.Channel_name {

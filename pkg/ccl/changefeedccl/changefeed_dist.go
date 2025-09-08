@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -81,6 +82,7 @@ func distChangefeedFlow(
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
+	targets changefeedbase.Targets,
 ) error {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
@@ -134,7 +136,7 @@ func distChangefeedFlow(
 		}
 	}
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent)
+		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
 }
 
 func fetchTableDescriptors(
@@ -234,9 +236,10 @@ func startDistChangefeed(
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
+	targets changefeedbase.Targets,
 ) error {
 	execCfg := execCtx.ExecCfg()
-	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details), schemaTS)
+	tableDescs, err := fetchTableDescriptors(ctx, execCfg, targets, schemaTS)
 	if err != nil {
 		return err
 	}
@@ -249,7 +252,7 @@ func startDistChangefeed(
 		return err
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "tracked spans: %s", trackedSpans)
+		log.Changefeed.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
 	localState.trackedSpans = trackedSpans
 
@@ -262,7 +265,7 @@ func startDistChangefeed(
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
 		spanLevelCheckpoint = progress.SpanLevelCheckpoint
 		if log.V(2) {
-			log.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
@@ -410,7 +413,7 @@ func makePlan(
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
-			log.Infof(ctx, "using bulk oracle for DistSQL planning")
+			log.Changefeed.Infof(ctx, "using bulk oracle for DistSQL planning")
 			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
@@ -420,12 +423,12 @@ func makePlan(
 			return nil, nil, err
 		}
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
+			log.Changefeed.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
 		switch {
 		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
 		case rangeDistribution == balancedSimpleDistribution:
-			log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
+			log.Changefeed.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 			ri := kvcoord.MakeRangeIterator(distSender)
@@ -435,7 +438,7 @@ func makePlan(
 				return nil, nil, err
 			}
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
+				log.Changefeed.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
 			}
 		default:
 			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %d and dist mode %d",
@@ -453,10 +456,24 @@ func makePlan(
 			maybeCfKnobs.SpanPartitionsCallback(spanPartitions)
 		}
 
+		// Create progress config based on current settings.
+		var progressConfig *execinfrapb.ChangefeedProgressConfig
+		if execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(sv)
+			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(sv)
+			progressConfig = &execinfrapb.ChangefeedProgressConfig{
+				PerTableTracking: perTableTrackingEnabled,
+				// If the per table pts flag was turned on between changefeed creation and now,
+				// the per table pts records will be rewritten in the new format when the
+				// highwater mark is updated in manageProtectedTimestamps.
+				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
+			}
+		}
+
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
+				log.Changefeed.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
 			}
 
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
@@ -475,6 +492,7 @@ func makePlan(
 				JobID:               jobID,
 				Select:              execinfrapb.Expression{Expr: details.Select},
 				Description:         description,
+				ProgressConfig:      progressConfig,
 			}
 		}
 
@@ -489,6 +507,7 @@ func makePlan(
 			JobID:               jobID,
 			UserProto:           execCtx.User().EncodeProto(),
 			Description:         description,
+			ProgressConfig:      progressConfig,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
@@ -524,11 +543,11 @@ func makePlan(
 			flowSpecs,
 			execinfrapb.DiagramFlags{},
 		); err != nil {
-			log.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
+			log.Changefeed.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
 		} else if diagURL := diagURL.String(); len(diagURL) > maxLenDiagURL {
-			log.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
+			log.Changefeed.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
 		} else {
-			log.Infof(ctx, "changefeed plan diagram: %s", diagURL)
+			log.Changefeed.Infof(ctx, "changefeed plan diagram: %s", diagURL)
 		}
 
 		return p, planCtx, nil
@@ -637,7 +656,7 @@ func rebalanceSpanPartitions(
 		nRanges, ok := p.NumRanges()
 		// We cannot rebalance if we're missing range information.
 		if !ok {
-			log.Warning(ctx, "skipping rebalance due to missing range info")
+			log.Changefeed.Warning(ctx, "skipping rebalance due to missing range info")
 			return partitions, nil
 		}
 		builders[i].numRanges = nRanges

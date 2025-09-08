@@ -257,14 +257,14 @@ func (vw *vectorWorkload) loadDataset(ctx context.Context) error {
 		DatasetName: vw.datasetName,
 		CacheFolder: vw.cacheFolder,
 		OnProgress: func(ctx context.Context, format string, args ...any) {
-			log.Infof(ctx, "%s", fmt.Sprintf(format, args...))
+			log.Dev.Infof(ctx, "%s", fmt.Sprintf(format, args...))
 		},
 		OnDownloadProgress: func(downloaded, total int64, elapsed time.Duration) {
 			// Only log after each 10% progress.
 			threshold := (total + 3) / 10
 			if downloaded > lastDownloaded+threshold {
 				lastDownloaded = downloaded
-				log.Infof(ctx, "Downloaded %s / %s (%.0f%%) in %v",
+				log.Dev.Infof(ctx, "Downloaded %s / %s (%.0f%%) in %v",
 					humanizeutil.IBytes(downloaded), humanizeutil.IBytes(total),
 					(float64(downloaded)/float64(total))*100, elapsed.Truncate(time.Second))
 			}
@@ -282,7 +282,7 @@ func (vw *vectorWorkload) loadDataset(ctx context.Context) error {
 		if trainFile == "" {
 			break
 		}
-		log.Infof(ctx, "loading training vectors from %s...", trainFile)
+		log.Dev.Infof(ctx, "loading training vectors from %s...", trainFile)
 
 		_, err := loader.Data.Next()
 		if err != nil {

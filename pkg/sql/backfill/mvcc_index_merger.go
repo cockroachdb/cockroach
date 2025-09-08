@@ -296,7 +296,7 @@ func (ibm *IndexBackfillMerger) scan(
 			return err
 		}
 		// For now just grab all of the destination KVs and merge the corresponding entries.
-		log.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
+		log.Dev.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
 		ba := &kvpb.BatchRequest{}
 		ba.TargetBytes = chunkBytes
 		if err := ibm.growBoundAccount(ctx, chunkBytes); err != nil {
@@ -392,7 +392,7 @@ func (ibm *IndexBackfillMerger) merge(
 				var keysToSkipCount int
 				txn.KV().AddCommitTrigger(func(ctx context.Context) {
 					commitTs, _ := txn.KV().CommitTimestamp()
-					log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes, %d skipped) (span: %s) (commit timestamp: %s)",
+					log.Dev.VInfof(ctx, 2, "merged batch of %d keys (%d deletes, %d skipped) (span: %s) (commit timestamp: %s)",
 						len(keys),
 						deletedCount,
 						keysToSkipCount,
@@ -641,7 +641,7 @@ func retryWithReducedBatchWhenAutoRetryLimitExceeded(
 		// If we reached the auto retry limit, we reduce the keys for the next batch.
 		if kv.IsAutoRetryLimitExhaustedError(err) {
 			batch.reduceForRetry()
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"kv auto retry limit was reached, retrying with a reduced batch size of %d keys. kv error: %v",
 				batch.batchSize, err)
 			continue

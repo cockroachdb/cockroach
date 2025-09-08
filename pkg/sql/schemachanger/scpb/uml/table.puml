@@ -384,6 +384,7 @@ SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
 SecondaryIndex :  RecreateSourceIndexID
 SecondaryIndex :  RecreateTargetIndexID
+SecondaryIndex :  HideForPrimaryKeyRecreated
 
 object Sequence
 

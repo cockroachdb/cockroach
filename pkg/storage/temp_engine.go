@@ -37,7 +37,7 @@ type tempEngine struct {
 // Close implements the diskmap.Factory interface.
 func (r *tempEngine) Close() {
 	if err := r.db.Close(); err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Dev.Fatalf(context.TODO(), "%v", err)
 	}
 	r.env.Close()
 }
@@ -73,6 +73,7 @@ func newTempEngine(
 		// Adopt the encryption options of the provided store spec so that
 		// temporary data is encrypted if the store is encrypted.
 		EncryptionOptions: storeSpec.EncryptionOptions,
+		Version:           tempStorage.Settings.Version,
 	}, diskWriteStats)
 	if err != nil {
 		return nil, nil, err

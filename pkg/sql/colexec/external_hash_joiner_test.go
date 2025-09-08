@@ -62,7 +62,7 @@ func TestExternalHashJoiner(t *testing.T) {
 		for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 			for _, tc := range tcs {
 				delegateFDAcquisitions := rng.Float64() < 0.5
-				log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s/delegateFDAcquisitions=%t",
+				log.Dev.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s/delegateFDAcquisitions=%t",
 					spillForced, numForcedRepartitions, tc.description, delegateFDAcquisitions)
 				var semsToCheck []semaphore.Semaphore
 				// Since RunTests harness internally performs multiple runs with

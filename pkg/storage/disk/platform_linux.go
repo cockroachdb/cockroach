@@ -79,10 +79,11 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	major := unix.Major(statInfo.Dev)
 	minor := unix.Minor(statInfo.Dev)
 
-	// Per /usr/include/linux/major.h and Documentation/admin-guide/devices.rst:
+	// See
+	// - /usr/include/linux/major.h
+	// - Documentation/admin-guide/devices.rst:
 	switch major {
 	case 0: // UNNAMED_MAJOR
-
 		// Perform additional lookups for unknown device types
 		var statfs sysutil.StatfsT
 		err := sysutil.Statfs(path, &statfs)
@@ -113,11 +114,21 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 			maybeWarnf(ctx, "unsupported file system type %x for path (%d:%d) %q", statfs.Type, major, minor, path)
 		}
 
-	case 259: // BLOCK_EXT_MAJOR=259
+	case 43:
+		// Network block devices (nb*)
+		maybeInfof(ctx, "mapping %q to diskstats network block device %d:%d", path, major, minor)
 
+	case 8, 65, 66, 67, 68, 69, 70, 71, 128, 129, 130, 131, 132, 133, 134, 135:
+		// SCSI disks (sdX)
+		maybeInfof(ctx, "mapping %q to diskstats SCSI device %d:%d", path, major, minor)
+
+	case 202:
+		// Xen virtual block devices (xvd*)
+		maybeInfof(ctx, "mapping %q to diskstats xvd* device %d:%d", path, major, minor)
+
+	case 259: // BLOCK_EXT_MAJOR=259
 		// NOTE: Major device 259 is the happy path for ext4 and xfs filesystems: no
 		// additional handling is required.
-
 		maybeInfof(ctx, "mapping %q to diskstats device %d:%d", path, major, minor)
 
 	default:

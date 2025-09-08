@@ -2,7 +2,7 @@
 # the tenant table for tenants. Legacy schema changer is also skipped, because
 # some of the queries relating internal state will be impacted in terms of
 # descriptor versions, etc..
-# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer
+# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer !local-prepared
 
 # Verify information_schema database handles mutation statements correctly.
 
@@ -1279,6 +1279,8 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1564,6 +1566,11 @@ system              public             29_72_2_not_null                         
 system              public             29_72_4_not_null                                                                                                prepared IS NOT NULL
 system              public             29_72_5_not_null                                                                                                owner IS NOT NULL
 system              public             29_72_6_not_null                                                                                                database IS NOT NULL
+system              public             29_73_1_not_null                                                                                                error_id IS NOT NULL
+system              public             29_73_2_not_null                                                                                                job_id IS NOT NULL
+system              public             29_73_3_not_null                                                                                                error_type IS NOT NULL
+system              public             29_73_6_not_null                                                                                                id IS NOT NULL
+system              public             29_73_8_not_null                                                                                                details IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -1598,6 +1605,8 @@ table_catalog  table_schema  table_name  column_name    constraint_catalog  cons
 system         public        locations   localityKey    system              public             primary
 system         public        locations   localityValue  system              public             primary
 
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1883,6 +1892,11 @@ system              public             29_72_2_not_null                         
 system              public             29_72_4_not_null                                                                                                prepared IS NOT NULL
 system              public             29_72_5_not_null                                                                                                owner IS NOT NULL
 system              public             29_72_6_not_null                                                                                                database IS NOT NULL
+system              public             29_73_1_not_null                                                                                                error_id IS NOT NULL
+system              public             29_73_2_not_null                                                                                                job_id IS NOT NULL
+system              public             29_73_3_not_null                                                                                                error_type IS NOT NULL
+system              public             29_73_6_not_null                                                                                                id IS NOT NULL
+system              public             29_73_8_not_null                                                                                                details IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -3243,6 +3257,7 @@ admin    test           CREATE             NULL
 admin    test           DELETE             NULL
 admin    test           DROP               NULL
 admin    test           INSERT             NULL
+admin    test           INSPECT            NULL
 admin    test           REPLICATIONDEST    NULL
 admin    test           REPLICATIONSOURCE  NULL
 admin    test           SELECT             NULL
@@ -3256,6 +3271,7 @@ root     test           CREATE             NULL
 root     test           DELETE             NULL
 root     test           DROP               NULL
 root     test           INSERT             NULL
+root     test           INSPECT            NULL
 root     test           REPLICATIONDEST    NULL
 root     test           REPLICATIONSOURCE  NULL
 root     test           SELECT             NULL
@@ -3936,6 +3952,7 @@ variable                                                         value
 allow_create_trigger_function_with_argv_references               off
 allow_ordinal_column_references                                  off
 allow_role_memberships_to_change_during_transaction              off
+allow_unsafe_internals                                           on
 alter_primary_region_super_region_override                       off
 always_distribute_full_scans                                     off
 application_name                                                 ·
@@ -3972,6 +3989,7 @@ default_with_oids                                                off
 descriptor_validation                                            on
 disable_changefeed_replication                                   off
 disable_hoist_projection_in_join_limitation                      off
+disable_optimizer_rules                                          ·
 disable_partially_distributed_plans                              off
 disable_plan_gists                                               off
 disable_vec_union_eager_cancellation                             off
@@ -3991,6 +4009,7 @@ enable_implicit_fk_locking_for_serializable                      off
 enable_implicit_select_for_update                                on
 enable_implicit_transaction_for_batch_statements                 on
 enable_insert_fast_path                                          on
+enable_inspect_command                                           off
 enable_multiple_modifications_of_table                           off
 enable_multiregion_placement_policy                              off
 enable_scrub_job                                                 off
@@ -3999,7 +4018,6 @@ enable_shared_locking_for_serializable                           off
 enable_super_regions                                             off
 enable_zigzag_join                                               off
 enforce_home_region                                              off
-enforce_home_region_follower_reads_enabled                       off
 escape_string_warning                                            on
 expect_and_ignore_not_visible_columns_in_copy                    off
 experimental_enable_implicit_column_partitioning                 off
@@ -4064,6 +4082,7 @@ optimizer_use_histograms                                         on
 optimizer_use_improved_computed_column_filters_derivation        on
 optimizer_use_improved_disjunction_stats                         on
 optimizer_use_improved_distinct_on_limit_hint_costing            on
+optimizer_use_improved_hoist_join_project                        on
 optimizer_use_improved_join_elimination                          on
 optimizer_use_improved_multi_column_selectivity_estimate         on
 optimizer_use_improved_split_disjunction_for_joins               on
@@ -4143,6 +4162,7 @@ use_cputs_on_non_unique_indexes                                  off
 use_improved_routine_dependency_tracking                         on
 use_pre_25_2_variadic_builtins                                   off
 use_proc_txn_control_extended_protocol_fix                       on
+use_soft_limit_for_distribute_scan                               on
 variable_inequality_lookup_join_enabled                          on
 vector_search_beam_size                                          32
 vector_search_rerank_multiplier                                  50

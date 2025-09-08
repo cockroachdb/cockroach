@@ -3,6 +3,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 proto_library(
     name = "serverpb_proto",
@@ -33,7 +34,7 @@ proto_library(
         "//pkg/server/status/statuspb:statuspb_proto",
         "//pkg/sql/appstatspb:appstatspb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
-        "//pkg/sql/sqlstats/insights:insights_proto",
+        "//pkg/sql/sqlstats/insightspb:insightspb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/ts/catalog:catalog_proto",
         "//pkg/util:util_proto",
@@ -88,7 +89,7 @@ go_proto_library(
         "//pkg/server/status/statuspb",
         "//pkg/sql/appstatspb",
         "//pkg/sql/contentionpb",
-        "//pkg/sql/sqlstats/insights",
+        "//pkg/sql/sqlstats/insightspb",
         "//pkg/storage/enginepb",
         "//pkg/ts/catalog",
         "//pkg/util",
@@ -125,4 +126,9 @@ go_test(
     srcs = ["admin_test.go"],
     embed = [":serverpb"],
     deps = ["@com_github_stretchr_testify//assert"],
+)
+
+disallowed_imports_test(
+    "serverpb",
+    disallowed_list = ["//pkg/sql/parser"],
 )

@@ -255,34 +255,6 @@ func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string)
 	return keys
 }
 
-const latestStr = "latest"
-
-// LatestOpts are parameters passed to MarkLatestReleaseWithSuffix
-type LatestOpts struct {
-	Platform   Platform
-	VersionStr string
-}
-
-// MarkLatestReleaseWithSuffix adds redirects to release files using "latest" instead of the version
-func MarkLatestReleaseWithSuffix(
-	svc ObjectPutGetter, o LatestOpts, archivePrefix string, suffix string,
-) {
-	keys := makeArchiveKeys(o.Platform, o.VersionStr, archivePrefix)
-	versionedKey := "/" + keys.archive + suffix
-	oLatest := o
-	oLatest.VersionStr = latestStr
-	latestKeys := makeArchiveKeys(oLatest.Platform, oLatest.VersionStr, archivePrefix)
-	latestKey := latestKeys.archive + suffix
-	log.Printf("Adding redirect to %s", svc.URL(latestKey))
-	if err := svc.PutObject(&PutObjectInput{
-		CacheControl:            &NoCache,
-		Key:                     &latestKey,
-		WebsiteRedirectLocation: &versionedKey,
-	}); err != nil {
-		log.Fatalf("failed adding a redirect to %s: %s", versionedKey, err)
-	}
-}
-
 // GetObjectInput specifies input parameters for GetOject
 type GetObjectInput struct {
 	Key *string

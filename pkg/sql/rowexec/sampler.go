@@ -275,7 +275,7 @@ func (s *samplerProcessor) mainLoop(
 							(cpuUsageMaxThrottle - cpuUsageMinThrottle)
 					}
 					if log.V(1) {
-						log.Infof(
+						log.Dev.Infof(
 							ctx, "throttling to fraction idle %.2f (based on usage %.2f)", fractionIdle, usage,
 						)
 					}
@@ -448,7 +448,7 @@ func (s *samplerProcessor) sampleRow(
 		// We hit an out of memory error. Clear the sample reservoir and
 		// disable histogram sample collection.
 		sr.Disable()
-		log.Info(ctx, "disabling histogram collection due to excessive memory utilization")
+		log.Dev.Info(ctx, "disabling histogram collection due to excessive memory utilization")
 		telemetry.Inc(sqltelemetry.StatsHistogramOOMCounter)
 
 		// Send a metadata record so the sample aggregator will also disable
@@ -460,7 +460,7 @@ func (s *samplerProcessor) sampleRow(
 			return true, nil
 		}
 	} else if sr.Cap() != prevCapacity {
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
 			prevCapacity, sr.Cap(),
 		)

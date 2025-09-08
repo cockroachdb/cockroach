@@ -198,6 +198,10 @@ layers:
       description: |
         Sum of exponentially weighted moving average of round-trip latencies, as measured through a gRPC RPC.
 
+        Since this metric is based on gRPC RPCs, it is affected by application-level
+        processing delays and CPU overload effects. See rpc.connection.tcp_rtt for a
+        metric that is obtained from the kernel's TCP stack.
+
         Dividing this Gauge by rpc.connection.healthy gives an approximation of average
         latency, but the top-level round-trip-latency histogram is more useful. Instead,
         users should consult the label families of this metric if they are available
@@ -265,6 +269,40 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: See Description.
       essential: true
+    - name: rpc.connection.tcp_rtt
+      exported_name: rpc_connection_tcp_rtt
+      description: |
+        Kernel-level TCP round-trip time as measured by the Linux TCP stack.
+
+        This metric reports the smoothed round-trip time (SRTT) as maintained by the
+        kernel's TCP implementation. Unlike application-level RPC latency measurements,
+        this reflects pure network latency and is less affected by CPU overload effects.
+
+        This metric is only available on Linux.
+      y_axis_label: Latency
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.
+      essential: true
+    - name: rpc.connection.tcp_rtt_var
+      exported_name: rpc_connection_tcp_rtt_var
+      description: |
+        Kernel-level TCP round-trip time variance as measured by the Linux TCP stack.
+
+        This metric reports the smoothed round-trip time variance (RTTVAR) as maintained
+        by the kernel's TCP implementation. This measures the stability of the
+        connection latency.
+
+        This metric is only available on Linux.
+      y_axis_label: Latency Variance
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.
+      essential: true
     - name: rpc.connection.unhealthy
       exported_name: rpc_connection_unhealthy
       description: Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)
@@ -292,6 +330,39 @@ layers:
       essential: true
   - name: SQL
     metrics:
+    - name: jobs.auto_create_partial_stats.currently_paused
+      exported_name: jobs_auto_create_partial_stats_currently_paused
+      labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
+      description: Number of auto_create_partial_stats jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric is a high-level indicator that automatically generated partial statistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
+      essential: true
+    - name: jobs.auto_create_partial_stats.currently_running
+      exported_name: jobs_auto_create_partial_stats_currently_running
+      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_running}'
+      description: Number of auto_create_partial_stats jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric tracks the number of active automatically generated partial statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
+      essential: true
+    - name: jobs.auto_create_partial_stats.resume_failed
+      exported_name: jobs_auto_create_partial_stats_resume_failed
+      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: failed}'
+      description: Number of auto_create_partial_stats jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric is a high-level indicator that automatically generated partial table statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
+      essential: true
     - name: jobs.auto_create_stats.currently_paused
       exported_name: jobs_auto_create_stats_currently_paused
       labeled_name: 'jobs{name: auto_create_stats, status: currently_paused}'
@@ -356,7 +427,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-      how_to_use: This metric tracks the number of active create statistics jobs that may be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
+      how_to_use: This metric tracks the number of active create statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
       essential: true
     - name: schedules.BACKUP.failed
       exported_name: schedules_BACKUP_failed
@@ -533,6 +604,162 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.
       essential: true
+    - name: sql.routine.delete.count
+      exported_name: sql_routine_delete_count
+      labeled_name: 'sql.count{query_type: routine-delete}'
+      description: Number of SQL DELETE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.delete.count.internal
+      exported_name: sql_routine_delete_count_internal
+      labeled_name: 'sql.count{query_type: routine-delete, query_internal: true}'
+      description: Number of SQL DELETE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.delete.started.count
+      exported_name: sql_routine_delete_started_count
+      labeled_name: 'sql.count{query_type: routine-started-delete}'
+      description: Number of SQL DELETE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.routine.delete.started.count.internal
+      exported_name: sql_routine_delete_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-delete, query_internal: true}'
+      description: Number of SQL DELETE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.insert.count
+      exported_name: sql_routine_insert_count
+      labeled_name: 'sql.count{query_type: routine-insert}'
+      description: Number of SQL INSERT statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.insert.count.internal
+      exported_name: sql_routine_insert_count_internal
+      labeled_name: 'sql.count{query_type: routine-insert, query_internal: true}'
+      description: Number of SQL INSERT statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.insert.started.count
+      exported_name: sql_routine_insert_started_count
+      labeled_name: 'sql.count{query_type: routine-started-insert}'
+      description: Number of SQL INSERT statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.routine.insert.started.count.internal
+      exported_name: sql_routine_insert_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-insert, query_internal: true}'
+      description: Number of SQL INSERT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.select.count
+      exported_name: sql_routine_select_count
+      labeled_name: 'sql.count{query_type: routine-select}'
+      description: Number of SQL SELECT statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.select.count.internal
+      exported_name: sql_routine_select_count_internal
+      labeled_name: 'sql.count{query_type: routine-select, query_internal: true}'
+      description: Number of SQL SELECT statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.select.started.count
+      exported_name: sql_routine_select_started_count
+      labeled_name: 'sql.count{query_type: routine-started-select}'
+      description: Number of SQL SELECT statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.routine.select.started.count.internal
+      exported_name: sql_routine_select_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-select, query_internal: true}'
+      description: Number of SQL SELECT statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.update.count
+      exported_name: sql_routine_update_count
+      labeled_name: 'sql.count{query_type: routine-update}'
+      description: Number of SQL UPDATE statements successfully executed within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+      essential: true
+    - name: sql.routine.update.count.internal
+      exported_name: sql_routine_update_count_internal
+      labeled_name: 'sql.count{query_type: routine-update, query_internal: true}'
+      description: Number of SQL UPDATE statements successfully executed within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.routine.update.started.count
+      exported_name: sql_routine_update_started_count
+      labeled_name: 'sql.count{query_type: routine-started-update}'
+      description: Number of SQL UPDATE statements started within routine invocation
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
+    - name: sql.routine.update.started.count.internal
+      exported_name: sql_routine_update_started_count_internal
+      labeled_name: 'sql.count{query_type: routine-started-update, query_internal: true}'
+      description: Number of SQL UPDATE statements started within routine invocation (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.select.count
       exported_name: sql_select_count
       labeled_name: 'sql.count{query_type: select}'
@@ -933,6 +1160,14 @@ layers:
     - name: auth.ldap.conn.latency
       exported_name: auth_ldap_conn_latency
       description: Latency to establish and authenticate a SQL connection using LDAP
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: auth.ldap.conn.latency.internal
+      exported_name: auth_ldap_conn_latency_internal
+      description: Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)
       y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -3561,15 +3796,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_config_env_runner.fail_or_cancel_failed
-      exported_name: jobs_auto_config_env_runner_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: failed}'
-      description: Number of auto_config_env_runner jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_env_runner_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: retry_error}'
@@ -3664,15 +3890,6 @@ layers:
       exported_name: jobs_auto_config_runner_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: completed}'
       description: Number of auto_config_runner jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_config_runner.fail_or_cancel_failed
-      exported_name: jobs_auto_config_runner_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: failed}'
-      description: Number of auto_config_runner jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -3777,15 +3994,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_config_task.fail_or_cancel_failed
-      exported_name: jobs_auto_config_task_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: failed}'
-      description: Number of auto_config_task jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_task_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: retry_error}'
@@ -3849,46 +4057,10 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.auto_create_partial_stats.currently_paused
-      exported_name: jobs_auto_create_partial_stats_currently_paused
-      labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
-      description: Number of auto_create_partial_stats jobs currently considered Paused
-      y_axis_label: jobs
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_partial_stats.currently_running
-      exported_name: jobs_auto_create_partial_stats_currently_running
-      labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_running}'
-      description: Number of auto_create_partial_stats jobs currently running in Resume or OnFailOrCancel state
-      y_axis_label: jobs
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_partial_stats.expired_pts_records
-      exported_name: jobs_auto_create_partial_stats_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: auto_create_partial_stats}'
-      description: Number of expired protected timestamp records owned by auto_create_partial_stats jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.fail_or_cancel_completed
       exported_name: jobs_auto_create_partial_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: completed}'
       description: Number of auto_create_partial_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_partial_stats.fail_or_cancel_failed
-      exported_name: jobs_auto_create_partial_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: failed}'
-      description: Number of auto_create_partial_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -3903,37 +4075,10 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_partial_stats.protected_age_sec
-      exported_name: jobs_auto_create_partial_stats_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: auto_create_partial_stats}'
-      description: The age of the oldest PTS record protected by auto_create_partial_stats jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_partial_stats.protected_record_count
-      exported_name: jobs_auto_create_partial_stats_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: auto_create_partial_stats}'
-      description: Number of protected timestamp records held by auto_create_partial_stats jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.auto_create_partial_stats.resume_completed
       exported_name: jobs_auto_create_partial_stats_resume_completed
       labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: completed}'
       description: Number of auto_create_partial_stats jobs which successfully resumed to completion
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_partial_stats.resume_failed
-      exported_name: jobs_auto_create_partial_stats_resume_failed
-      labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: failed}'
-      description: Number of auto_create_partial_stats jobs which failed with a non-retriable error
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -3957,28 +4102,10 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.auto_create_stats.expired_pts_records
-      exported_name: jobs_auto_create_stats_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: auto_create_stats}'
-      description: Number of expired protected timestamp records owned by auto_create_stats jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_stats.fail_or_cancel_completed
       exported_name: jobs_auto_create_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: completed}'
       description: Number of auto_create_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_stats.fail_or_cancel_failed
-      exported_name: jobs_auto_create_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: failed}'
-      description: Number of auto_create_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -3993,24 +4120,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_stats.protected_age_sec
-      exported_name: jobs_auto_create_stats_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: auto_create_stats}'
-      description: The age of the oldest PTS record protected by auto_create_stats jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.auto_create_stats.protected_record_count
-      exported_name: jobs_auto_create_stats_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: auto_create_stats}'
-      description: Number of protected timestamp records held by auto_create_stats jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.auto_create_stats.resume_completed
       exported_name: jobs_auto_create_stats_resume_completed
       labeled_name: 'jobs.resume{name: auto_create_stats, status: completed}'
@@ -4069,15 +4178,6 @@ layers:
       exported_name: jobs_auto_schema_telemetry_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: completed}'
       description: Number of auto_schema_telemetry jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_schema_telemetry.fail_or_cancel_failed
-      exported_name: jobs_auto_schema_telemetry_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: failed}'
-      description: Number of auto_schema_telemetry jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4182,15 +4282,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_span_config_reconciliation.fail_or_cancel_failed
-      exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: failed}'
-      description: Number of auto_span_config_reconciliation jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.fail_or_cancel_retry_error
       exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: retry_error}'
@@ -4285,15 +4376,6 @@ layers:
       exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: completed}'
       description: Number of auto_sql_stats_compaction jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_sql_stats_compaction.fail_or_cancel_failed
-      exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: failed}'
-      description: Number of auto_sql_stats_compaction jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4398,15 +4480,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_update_sql_activity.fail_or_cancel_failed
-      exported_name: jobs_auto_update_sql_activity_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: failed}'
-      description: Number of auto_update_sql_activity jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.fail_or_cancel_retry_error
       exported_name: jobs_auto_update_sql_activity_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: retry_error}'
@@ -4483,15 +4556,6 @@ layers:
       exported_name: jobs_backup_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: backup, status: completed}'
       description: Number of backup jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.backup.fail_or_cancel_failed
-      exported_name: jobs_backup_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: backup, status: failed}'
-      description: Number of backup jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4587,15 +4651,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.changefeed.fail_or_cancel_failed
-      exported_name: jobs_changefeed_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: failed}'
-      description: Number of changefeed jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.fail_or_cancel_retry_error
       exported_name: jobs_changefeed_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: retry_error}'
@@ -4667,28 +4722,10 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.create_stats.expired_pts_records
-      exported_name: jobs_create_stats_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: create_stats}'
-      description: Number of expired protected timestamp records owned by create_stats jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.fail_or_cancel_completed
       exported_name: jobs_create_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: completed}'
       description: Number of create_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.create_stats.fail_or_cancel_failed
-      exported_name: jobs_create_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: failed}'
-      description: Number of create_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4703,24 +4740,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.create_stats.protected_age_sec
-      exported_name: jobs_create_stats_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: create_stats}'
-      description: The age of the oldest PTS record protected by create_stats jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.create_stats.protected_record_count
-      exported_name: jobs_create_stats_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: create_stats}'
-      description: Number of protected timestamp records held by create_stats jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.create_stats.resume_completed
       exported_name: jobs_create_stats_resume_completed
       labeled_name: 'jobs.resume{name: create_stats, status: completed}'
@@ -4788,15 +4807,6 @@ layers:
       exported_name: jobs_history_retention_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: completed}'
       description: Number of history_retention jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.history_retention.fail_or_cancel_failed
-      exported_name: jobs_history_retention_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: failed}'
-      description: Number of history_retention jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4901,15 +4911,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.hot_ranges_logger.fail_or_cancel_failed
-      exported_name: jobs_hot_ranges_logger_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: failed}'
-      description: Number of hot_ranges_logger jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.hot_ranges_logger.fail_or_cancel_retry_error
       exported_name: jobs_hot_ranges_logger_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: retry_error}'
@@ -5009,15 +5010,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.import.fail_or_cancel_failed
-      exported_name: jobs_import_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: import, status: failed}'
-      description: Number of import jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.fail_or_cancel_retry_error
       exported_name: jobs_import_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: import, status: retry_error}'
@@ -5099,28 +5091,10 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: jobs.import_rollback.expired_pts_records
-      exported_name: jobs_import_rollback_expired_pts_records
-      labeled_name: 'jobs.expired_pts_records{type: import_rollback}'
-      description: Number of expired protected timestamp records owned by import_rollback jobs
-      y_axis_label: records
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import_rollback.fail_or_cancel_completed
       exported_name: jobs_import_rollback_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: completed}'
       description: Number of import_rollback jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.import_rollback.fail_or_cancel_failed
-      exported_name: jobs_import_rollback_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: failed}'
-      description: Number of import_rollback jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5135,24 +5109,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.import_rollback.protected_age_sec
-      exported_name: jobs_import_rollback_protected_age_sec
-      labeled_name: 'jobs.protected_age_sec{type: import_rollback}'
-      description: The age of the oldest PTS record protected by import_rollback jobs
-      y_axis_label: seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: jobs.import_rollback.protected_record_count
-      exported_name: jobs_import_rollback_protected_record_count
-      labeled_name: 'jobs.protected_record_count{type: import_rollback}'
-      description: Number of protected timestamp records held by import_rollback jobs
-      y_axis_label: records
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: jobs.import_rollback.resume_completed
       exported_name: jobs_import_rollback_resume_completed
       labeled_name: 'jobs.resume{name: import_rollback, status: completed}'
@@ -5220,15 +5176,6 @@ layers:
       exported_name: jobs_inspect_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: inspect, status: completed}'
       description: Number of inspect jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.inspect.fail_or_cancel_failed
-      exported_name: jobs_inspect_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: inspect, status: failed}'
-      description: Number of inspect jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5333,15 +5280,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.key_visualizer.fail_or_cancel_failed
-      exported_name: jobs_key_visualizer_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: failed}'
-      description: Number of key_visualizer jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.fail_or_cancel_retry_error
       exported_name: jobs_key_visualizer_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: retry_error}'
@@ -5436,15 +5374,6 @@ layers:
       exported_name: jobs_logical_replication_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: completed}'
       description: Number of logical_replication jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.logical_replication.fail_or_cancel_failed
-      exported_name: jobs_logical_replication_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: failed}'
-      description: Number of logical_replication jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5557,15 +5486,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.migration.fail_or_cancel_failed
-      exported_name: jobs_migration_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: migration, status: failed}'
-      description: Number of migration jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.fail_or_cancel_retry_error
       exported_name: jobs_migration_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: migration, status: retry_error}'
@@ -5660,15 +5580,6 @@ layers:
       exported_name: jobs_mvcc_statistics_update_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: completed}'
       description: Number of mvcc_statistics_update jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.mvcc_statistics_update.fail_or_cancel_failed
-      exported_name: jobs_mvcc_statistics_update_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: failed}'
-      description: Number of mvcc_statistics_update jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5773,15 +5684,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.new_schema_change.fail_or_cancel_failed
-      exported_name: jobs_new_schema_change_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: failed}'
-      description: Number of new_schema_change jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.fail_or_cancel_retry_error
       exported_name: jobs_new_schema_change_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: retry_error}'
@@ -5876,15 +5778,6 @@ layers:
       exported_name: jobs_poll_jobs_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: completed}'
       description: Number of poll_jobs_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.poll_jobs_stats.fail_or_cancel_failed
-      exported_name: jobs_poll_jobs_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: failed}'
-      description: Number of poll_jobs_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5989,15 +5882,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.replication_stream_ingestion.fail_or_cancel_failed
-      exported_name: jobs_replication_stream_ingestion_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: failed}'
-      description: Number of replication_stream_ingestion jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.fail_or_cancel_retry_error
       exported_name: jobs_replication_stream_ingestion_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: retry_error}'
@@ -6092,15 +5976,6 @@ layers:
       exported_name: jobs_replication_stream_producer_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: completed}'
       description: Number of replication_stream_producer jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.replication_stream_producer.fail_or_cancel_failed
-      exported_name: jobs_replication_stream_producer_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: failed}'
-      description: Number of replication_stream_producer jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6205,15 +6080,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.restore.fail_or_cancel_failed
-      exported_name: jobs_restore_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: restore, status: failed}'
-      description: Number of restore jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.fail_or_cancel_retry_error
       exported_name: jobs_restore_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: restore, status: retry_error}'
@@ -6298,15 +6164,6 @@ layers:
       exported_name: jobs_row_level_ttl_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: completed}'
       description: Number of row_level_ttl jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.row_level_ttl.fail_or_cancel_failed
-      exported_name: jobs_row_level_ttl_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: failed}'
-      description: Number of row_level_ttl jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6404,15 +6261,6 @@ layers:
       exported_name: jobs_schema_change_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: completed}'
       description: Number of schema_change jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.schema_change.fail_or_cancel_failed
-      exported_name: jobs_schema_change_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: failed}'
-      description: Number of schema_change jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6517,15 +6365,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.schema_change_gc.fail_or_cancel_failed
-      exported_name: jobs_schema_change_gc_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: failed}'
-      description: Number of schema_change_gc jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.fail_or_cancel_retry_error
       exported_name: jobs_schema_change_gc_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: retry_error}'
@@ -6620,15 +6459,6 @@ layers:
       exported_name: jobs_sql_activity_flush_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: completed}'
       description: Number of sql_activity_flush jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.sql_activity_flush.fail_or_cancel_failed
-      exported_name: jobs_sql_activity_flush_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: failed}'
-      description: Number of sql_activity_flush jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6733,15 +6563,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.standby_read_ts_poller.fail_or_cancel_failed
-      exported_name: jobs_standby_read_ts_poller_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: failed}'
-      description: Number of standby_read_ts_poller jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.fail_or_cancel_retry_error
       exported_name: jobs_standby_read_ts_poller_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: retry_error}'
@@ -6841,15 +6662,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.typedesc_schema_change.fail_or_cancel_failed
-      exported_name: jobs_typedesc_schema_change_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: failed}'
-      description: Number of typedesc_schema_change jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.fail_or_cancel_retry_error
       exported_name: jobs_typedesc_schema_change_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: retry_error}'
@@ -6944,15 +6756,6 @@ layers:
       exported_name: jobs_update_table_metadata_cache_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: completed}'
       description: Number of update_table_metadata_cache jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.update_table_metadata_cache.fail_or_cancel_failed
-      exported_name: jobs_update_table_metadata_cache_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: failed}'
-      description: Number of update_table_metadata_cache jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -7369,6 +7172,17 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: round-trip-default-class-latency
+      exported_name: round_trip_default_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for default class connections.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: round-trip-latency
       exported_name: round_trip_latency
       description: |
@@ -7381,6 +7195,39 @@ layers:
         metrics such as packet loss, retransmits, etc, to conclusively diagnose network
         issues. Heartbeats are not very frequent (~seconds), so they may not capture
         rare or short-lived degradations.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: round-trip-raft-class-latency
+      exported_name: round_trip_raft_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for raft class connections.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: round-trip-rangefeed-class-latency
+      exported_name: round_trip_rangefeed_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for rangefeed class connections.
+      y_axis_label: Round-trip time
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: round-trip-system-class-latency
+      exported_name: round_trip_system_class_latency
+      description: |
+        Distribution of round-trip latencies with other nodes.
+
+        Similar to round-trip-latency, but only for system class connections.
       y_axis_label: Round-trip time
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -9110,6 +8957,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.stats.ingester.num_processed
+      exported_name: sql_stats_ingester_num_processed
+      description: Number of items processed by the SQL stats ingester
+      y_axis_label: Items
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.stats.ingester.queue_size
+      exported_name: sql_stats_ingester_queue_size
+      description: Current number of items queued in the SQL stats ingester
+      y_axis_label: Items
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: sql.stats.mem.current
       exported_name: sql_stats_mem_current
       description: Current memory usage for fingerprint storage
@@ -10323,6 +10186,14 @@ layers:
     - name: sys.go.heap.heapreservedbytes
       exported_name: sys_go_heap_heapreservedbytes
       description: Total bytes reserved by heap, derived from bytes in idle (unused) spans subtracts bytes returned to the OS
+      y_axis_label: Memory
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: sys.go.limitbytes
+      exported_name: sys_go_limitbytes
+      description: Go soft memory limit
       y_axis_label: Memory
       type: GAUGE
       unit: BYTES
@@ -13924,6 +13795,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.add
+      exported_name: queue_replicate_enqueue_add
+      description: Number of replicas successfully added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.failedprecondition
+      exported_name: queue_replicate_enqueue_failedprecondition
+      description: Number of replicas that failed the precondition checks and were therefore not added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.noaction
+      exported_name: queue_replicate_enqueue_noaction
+      description: Number of replicas for which ShouldQueue determined no action was needed and were therefore not added to the replicate queue
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.enqueue.unexpectederror
+      exported_name: queue_replicate_enqueue_unexpectederror
+      description: Number of replicas that were expected to be enqueued (ShouldQueue returned true or the caller decided to add to the replicate queue directly), but failed to be enqueued due to unexpected errors
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.nonvoterpromotions
       exported_name: queue_replicate_nonvoterpromotions
       description: Number of non-voters promoted to voters by the replicate queue
@@ -13940,6 +13843,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: queue.replicate.priority_inversion.requeue
+      exported_name: queue_replicate_priority_inversion_requeue
+      description: Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time. When the priority has changed from a high priority repair action to rebalance, the change is requeued to avoid unfairness.
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicate.priority_inversion.total
+      exported_name: queue_replicate_priority_inversion_total
+      description: Total number of priority inversions in the replicate queue. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.process.failure
       exported_name: queue_replicate_process_failure
       description: Number of replicas which failed processing in the replicate queue
@@ -13972,6 +13891,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: queue.replicate.queue_full
+      exported_name: queue_replicate_queue_full
+      description: Number of times a replica was dropped from the queue due to queue fullness
+      y_axis_label: Replicas
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.replicate.rebalancenonvoterreplica
       exported_name: queue_replicate_rebalancenonvoterreplica
       description: Number of non-voter replica rebalancer-initiated additions attempted by the replicate queue
@@ -15346,6 +15273,60 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: ranges.decommissioning.nudger.enqueue
+      exported_name: ranges_decommissioning_nudger_enqueue
+      labeled_name: 'ranges.decommissioning.nudger.enqueue{status: enqueue}'
+      description: 'Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger. Note: This metric tracks when the nudger attempts to enqueue, but the replica might not end up being enqueued by the priority queue due to various filtering or failure conditions.'
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.enqueue.failure
+      exported_name: ranges_decommissioning_nudger_enqueue_failure
+      labeled_name: ranges.decommissioning.nudger.enqueue.failure
+      description: Number of ranges that failed to enqueue at the replicate queue
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.enqueue.success
+      exported_name: ranges_decommissioning_nudger_enqueue_success
+      labeled_name: ranges.decommissioning.nudger.enqueue.success
+      description: Number of ranges that were successfully enqueued by the decommisioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease
+      exported_name: ranges_decommissioning_nudger_not_leaseholder_or_invalid_lease
+      labeled_name: ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease
+      description: Number of ranges that were not the leaseholder or had an invalid lease at the decommissioning nudger
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.process.failure
+      exported_name: ranges_decommissioning_nudger_process_failure
+      labeled_name: ranges.decommissioning.nudger.process.failure
+      description: Number of ranges enqueued by the decommissioning nudger that failed to process by the replicate queue
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ranges.decommissioning.nudger.process.success
+      exported_name: ranges_decommissioning_nudger_process_success
+      labeled_name: ranges.decommissioning.nudger.process.success
+      description: Number of ranges enqueued by the decommissioning nudger that were successfully processed by the replicate queue
+      y_axis_label: Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: ranges.overreplicated
       exported_name: ranges_overreplicated
       description: Number of ranges with more live replicas than the replication target
@@ -15654,7 +15635,7 @@ layers:
       description: Number of disk reads per query
       y_axis_label: Disk Reads per Query
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: rocksdb.table-readers-mem-estimate
@@ -16274,6 +16255,78 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.compression.cr
+      exported_name: storage_compression_cr
+      description: Average compression ratio of sstable and blob value data.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.minlz.bytes
+      exported_name: storage_compression_minlz_bytes
+      description: Total on disk size of sstable and blob value data that is compressed with the MinLZ algorithm.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.minlz.cr
+      exported_name: storage_compression_minlz_cr
+      description: Average compression ratio of sstable and blob value data that is compressed with the MinLZ algorithm.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.none.bytes
+      exported_name: storage_compression_none_bytes
+      description: Total on disk size of sstable and blob value data that is not compressed.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.snappy.bytes
+      exported_name: storage_compression_snappy_bytes
+      description: Total on disk size of sstable and blob value data that is compressed with the Snappy algorithm.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.snappy.cr
+      exported_name: storage_compression_snappy_cr
+      description: Average compression ratio of sstable and blob value data that is compressed with the snappy algorithm.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.unknown.bytes
+      exported_name: storage_compression_unknown_bytes
+      description: Total on disk size of sstable and blob value data that is compressed but for which we have no compression statistics.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.zstd.bytes
+      exported_name: storage_compression_zstd_bytes
+      description: Total on disk size of sstable and blob value data that is compressed with the Zstd algorithm.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.compression.zstd.cr
+      exported_name: storage_compression_zstd_cr
+      description: Average compression ratio of sstable and blob value data that is compressed with the Zstd algorithm.
+      y_axis_label: Ratio
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
     - name: storage.disk-slow
       exported_name: storage_disk_slow
       description: Number of instances of disk operations taking longer than 10s
@@ -16885,7 +16938,7 @@ layers:
       description: Compaction score of level 0
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l0-level-size
@@ -16925,7 +16978,7 @@ layers:
       description: Compaction score of level 1
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l1-level-size
@@ -16949,7 +17002,7 @@ layers:
       description: Compaction score of level 2
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l2-level-size
@@ -16973,7 +17026,7 @@ layers:
       description: Compaction score of level 3
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l3-level-size
@@ -16997,7 +17050,7 @@ layers:
       description: Compaction score of level 4
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l4-level-size
@@ -17021,7 +17074,7 @@ layers:
       description: Compaction score of level 5
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l5-level-size
@@ -17045,7 +17098,7 @@ layers:
       description: Compaction score of level 6
       y_axis_label: Score
       type: GAUGE
-      unit: COUNT
+      unit: CONST
       aggregation: AVG
       derivative: NONE
     - name: storage.l6-level-size
@@ -17200,38 +17253,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: storage.sstable.compression.none.count
-      exported_name: storage_sstable_compression_none_count
-      description: Count of SSTables that are uncompressed.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: storage.sstable.compression.snappy.count
-      exported_name: storage_sstable_compression_snappy_count
-      description: Count of SSTables that have been compressed with the snappy compression algorithm.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: storage.sstable.compression.unknown.count
-      exported_name: storage_sstable_compression_unknown_count
-      description: Count of SSTables that have an unknown compression algorithm.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: storage.sstable.compression.zstd.count
-      exported_name: storage_sstable_compression_zstd_count
-      description: Count of SSTables that have been compressed with the zstd compression algorithm.
-      y_axis_label: SSTables
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
     - name: storage.sstable.remote.bytes
       exported_name: storage_sstable_remote_bytes
       description: Bytes in SSTables that are stored off-disk (remotely) in object storage.
@@ -17288,6 +17309,14 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+    - name: storage.value_separation.value_retrieval.count
+      exported_name: storage_value_separation_value_retrieval_count
+      description: The number of value retrievals of values separated into blob files.
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.wal.bytes_in
       exported_name: storage_wal_bytes_in
       description: The number of logical bytes the storage engine has written to the WAL

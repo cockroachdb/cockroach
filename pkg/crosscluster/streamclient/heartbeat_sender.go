@@ -79,7 +79,7 @@ func (h *HeartbeatSender) Start(ctx context.Context, ts timeutil.TimeSource) {
 
 				sent, streamStatus, err := h.maybeHeartbeat(ctx, ts, h.frontier, h.frequencyGetter())
 				if err != nil {
-					log.Errorf(ctx, "replication stream %d received an error from the producer job: %v", h.streamID, err)
+					log.Dev.Errorf(ctx, "replication stream %d received an error from the producer job: %v", h.streamID, err)
 					continue
 				}
 
@@ -89,7 +89,7 @@ func (h *HeartbeatSender) Start(ctx context.Context, ts timeutil.TimeSource) {
 
 				if streamStatus.StreamStatus == streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
 					if unknownStreamStatusRetryErr.ShouldLog() {
-						log.Warningf(ctx, "replication stream %d has unknown stream status error and will retry later", h.streamID)
+						log.Dev.Warningf(ctx, "replication stream %d has unknown stream status error and will retry later", h.streamID)
 					}
 					continue
 				}

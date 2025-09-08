@@ -143,7 +143,7 @@ func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) {
 			panic(err)
 		}
 		// TODO(wenyihu6): we should revisit error handling here for production.
-		log.Warningf(ctx, "failed to get cpu usage: %v", err)
+		log.Dev.Warningf(ctx, "failed to get cpu usage: %v", err)
 	}
 	// Convert milliseconds to nanoseconds.
 	totalUsageNanos := float64(userTimeMillis*1e6 + sysTimeMillis*1e6)
@@ -165,7 +165,7 @@ func (m *runtimeLoadMonitor) recordCPUCapacity(ctx context.Context) {
 			panic("programming error: cpu capacity is 0")
 		}
 		// TODO(wenyihu6): we should pass in an actual context here.
-		log.Warningf(ctx, "failed to get cpu capacity")
+		log.Dev.Warningf(ctx, "failed to get cpu capacity")
 	}
 }
 

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,8 +29,8 @@ type leaseQueue struct {
 	planner          plan.ReplicationPlanner
 	clock            *hlc.Clock
 	settings         *config.SimulationSettings
-	as               *mmaprototypehelpers.AllocatorSync
-	lastSyncChangeID mmaprototypehelpers.SyncChangeID
+	as               *mmaintegration.AllocatorSync
+	lastSyncChangeID mmaintegration.SyncChangeID
 }
 
 // NewLeaseQueue returns a new lease queue.
@@ -40,7 +40,7 @@ func NewLeaseQueue(
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
-	allocatorSync *mmaprototypehelpers.AllocatorSync,
+	allocatorSync *mmaintegration.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -79,7 +79,7 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 	desc := repl.Desc()
 	conf, err := repl.SpanConfig()
 	if err != nil {
-		log.Fatalf(ctx, "conf not found err=%v", err)
+		log.Dev.Fatalf(ctx, "conf not found err=%v", err)
 	}
 	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s", desc, conf)
 	shouldPlanChange, priority := lq.planner.ShouldPlanChange(
@@ -121,8 +121,8 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	}
 
 	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
-		lq.as.PostApply(ctx, lq.lastSyncChangeID, true /* success */)
-		lq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
+		lq.as.PostApply(lq.lastSyncChangeID, true /* success */)
+		lq.lastSyncChangeID = mmaintegration.InvalidSyncChangeID
 	}
 
 	for !tick.Before(lq.next) && lq.priorityQueue.Len() != 0 {
@@ -160,7 +160,7 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			CanTransferLease: true,
 		})
 		if err != nil {
-			log.Errorf(ctx, "error planning change %s", err.Error())
+			log.Dev.Errorf(ctx, "error planning change %s", err.Error())
 			continue
 		}
 

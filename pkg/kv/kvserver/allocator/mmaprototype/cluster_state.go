@@ -353,7 +353,7 @@ func makeRebalanceReplicaChanges(
 		}
 	}
 	if remove == (StoreIDAndReplicaState{}) {
-		log.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
+		log.Dev.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
 	}
 
 	addState := ReplicaState{
@@ -1169,7 +1169,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	// corresponding delta adjustment as the reported load already contains the
 	// effect.
 	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
-		log.VInfof(ctx, 2, "s%d not-pending %v", storeMsg.StoreID, change)
+		log.Dev.VInfof(ctx, 2, "s%d not-pending %v", storeMsg.StoreID, change)
 		delete(ss.adjusted.loadPendingChanges, change.ChangeID)
 	}
 
@@ -1179,7 +1179,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
-	log.VInfof(ctx, 2, "processStoreLoadMsg for store s%v: %v",
+	log.Dev.VInfof(ctx, 2, "processStoreLoadMsg for store s%v: %v",
 		storeMsg.StoreID, ss.adjusted.load)
 }
 
@@ -1279,7 +1279,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// rs.pendingChanges is the union of remainingChanges and enactedChanges.
 		// These changes are also in cs.pendingChanges.
 		if len(enactedChanges) > 0 {
-			log.Infof(ctx, "enactedChanges %v", enactedChanges)
+			log.Dev.Infof(ctx, "enactedChanges %v", enactedChanges)
 		}
 		for _, change := range enactedChanges {
 			// Mark the change as enacted. Enacting a change does not remove the
@@ -1301,7 +1301,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// effect is also incorporated into the storeStates, but not in the range
 		// membership (since we undid that above).
 		if len(remainingChanges) > 0 {
-			log.Infof(ctx, "remainingChanges %v", remainingChanges)
+			log.Dev.Infof(ctx, "remainingChanges %v", remainingChanges)
 			// Temporarily set the rs.pendingChanges to nil, since
 			// preCheckOnApplyReplicaChanges returns false if there are any pending
 			// changes, and these are the changes that are pending. This is hacky
@@ -1324,7 +1324,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				// changes, so we need to drop them. This should be rare, but can happen
 				// if the leaseholder executed a change that MMA was completely unaware
 				// of.
-				log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
+				log.Dev.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
 					remainingChanges, reason)
 				if metrics != nil {
 					metrics.DroppedDueToStateInconsistency.Inc(1)
@@ -1377,8 +1377,12 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
-		for _, change := range rs.pendingChanges {
-			cs.pendingChangeEnacted(change.ChangeID, now, true)
+		changeIDs := make([]ChangeID, len(rs.pendingChanges))
+		for i, change := range rs.pendingChanges {
+			changeIDs[i] = change.ChangeID
+		}
+		for _, changeID := range changeIDs {
+			cs.pendingChangeEnacted(changeID, now, true)
 		}
 		// Remove from the storeStates.
 		for _, replica := range rs.replicas {
@@ -1552,7 +1556,7 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 	}
 	if len(replicaChanges) > 0 {
 		if valid, reason := cs.preCheckOnUndoReplicaChanges(replicaChanges); !valid {
-			log.Infof(context.Background(), "did not undo change %v: due to %v", removeChangeIds, reason)
+			log.Dev.Infof(context.Background(), "did not undo change %v: due to %v", removeChangeIds, reason)
 			return
 		}
 		for _, rmChange := range removeChangeIds {
@@ -1660,7 +1664,7 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
-		log.VInfof(context.Background(), 3, "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
+		log.Dev.VInfof(context.Background(), 3, "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
 		pendingChanges = append(pendingChanges, pendingChange)
 	}
 	return pendingChanges
@@ -1687,7 +1691,7 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(
 		return false, "range does not exist in cluster state"
 	}
 	if len(curr.pendingChanges) > 0 {
-		log.VInfof(context.Background(), 2, "range %d has pending changes: %v",
+		log.Dev.VInfof(context.Background(), 2, "range %d has pending changes: %v",
 			rangeID, curr.pendingChanges)
 		return false, "range has pending changes"
 	}
@@ -1788,7 +1792,7 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	log.VInfof(context.Background(), 2, "applying replica change %v to range %d on store %d",
+	log.Dev.VInfof(context.Background(), 2, "applying replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
@@ -1819,7 +1823,7 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 }
 
 func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
-	log.Infof(context.Background(), "undoing replica change %v to range %d on store %d",
+	log.Dev.Infof(context.Background(), "undoing replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	rangeState := cs.ranges[change.rangeID]
 	storeState := cs.stores[change.target.StoreID]
@@ -1983,11 +1987,11 @@ func (cs *clusterState) canShedAndAddLoad(
 	var reason strings.Builder
 	defer func() {
 		if canAddLoad {
-			log.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			log.Dev.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else {
-			log.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
-			log.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+			log.Dev.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+			log.Dev.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 		}
 	}()
 	if targetSLS.highDiskSpaceUtilization {
@@ -2074,7 +2078,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		}
 		// The use of 33% is arbitrary.
 		if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-			log.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+			log.Dev.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 			otherDimensionsBecameWorseInTarget = true
 			break
 		}

@@ -61,6 +61,9 @@ message ChangeAggregatorSpec {
   // have been resolved to the given timestamp, so it is safe to forward these
   // spans to its corresponding timestamps upon resuming.
   optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 9;
+
+  // ProgressConfig is the configuration for the changefeed's progress tracking.
+  optional ChangefeedProgressConfig progress_config = 10;
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -92,4 +95,19 @@ message ChangeFrontierSpec {
   // SpanLevelCheckpoint is a map from timestamps to lists of spans that captures
   // the changefeed progress and is used to initialize the frontier on resume.
   optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 6;
+
+  // ProgressConfig is the configuration for the changefeed's progress tracking.
+  optional ChangefeedProgressConfig progress_config = 7;
+}
+
+// ChangefeedProgressConfig is the configuration for the changefeed's progress tracking.
+message ChangefeedProgressConfig {
+  // PerTableTracking configures whether the changefeed should track
+  // span progress on a per-table basis. If configured, any span frontiers
+  // created will track spans belonging to different tables separately.
+  optional bool per_table_tracking = 1 [(gogoproto.nullable) = false];
+  // PerTableProtectedTimestamps configures whether the changefeed should
+  // store one protected timestamp per target table. If configured, any
+  // new changefeeds created will create one record per table.
+  optional bool per_table_protected_timestamps = 2 [(gogoproto.nullable) = false];
 }

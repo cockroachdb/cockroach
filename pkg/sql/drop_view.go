@@ -386,7 +386,7 @@ func (p *planner) getDescForCascade(
 ) (catalog.MutableDescriptor, error) {
 	desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, descID)
 	if err != nil {
-		log.Warningf(ctx, "unable to retrieve descriptor for %d: %v", descID, err)
+		log.Dev.Warningf(ctx, "unable to retrieve descriptor for %d: %v", descID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent ID %d", descID)
 	}
 	if behavior != tree.DropCascade {

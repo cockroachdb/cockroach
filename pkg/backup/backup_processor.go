@@ -204,7 +204,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		for range bp.progCh {
 		}
 	}
-	log.Infof(ctx, "starting backup data")
+	log.Dev.Infof(ctx, "starting backup data")
 	if err := bp.FlowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "backupDataProcessor.runBackupProcessor",
 		SpanOpt:  stop.ChildSpan,
@@ -232,7 +232,7 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 	// Annotate the progress with the fraction completed by this backupDataProcessor.
 	progDetails := backuppb.BackupManifest_Progress{}
 	if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
-		log.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
+		log.Dev.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
 	} else {
 		totalSpans := int32(len(bp.spec.Spans) + len(bp.spec.IntroducedSpans))
 		bp.completedSpans += progDetails.CompletedSpans
@@ -354,7 +354,7 @@ func runBackupProcessor(
 		return err
 	}
 
-	log.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
+	log.Dev.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
 
 	destURI := spec.DefaultURI
 	var destLocalityKV string
@@ -372,7 +372,7 @@ func runBackupProcessor(
 			}
 		}
 		if localitySinkURI != "" {
-			log.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
+			log.Dev.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
 			destURI = localitySinkURI
 		} else {
 			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
@@ -383,7 +383,7 @@ func runBackupProcessor(
 			for i := range spec.URIsByLocalityKV {
 				backupLocalities = append(backupLocalities, i)
 			}
-			log.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
+			log.Dev.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
 		}
 	}
 	if testingDiscardBackupData {
@@ -421,7 +421,7 @@ func runBackupProcessor(
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "starting %d backup export workers", numSenders)
+	log.Dev.Infof(ctx, "starting %d backup export workers", numSenders)
 	defer release()
 
 	todo := make(chan []spanAndTime, len(requestSpans))
@@ -464,7 +464,7 @@ func runBackupProcessor(
 		sink := backupsink.MakeFileSSTSink(sinkConf, storage, pacer)
 		defer func() {
 			if err := sink.Flush(ctx); err != nil {
-				log.Warningf(ctx, "failed to flush SST sink: %s", err)
+				log.Dev.Warningf(ctx, "failed to flush SST sink: %s", err)
 			}
 			logClose(ctx, sink, "SST sink")
 		}()
@@ -503,7 +503,7 @@ func runBackupProcessor(
 							// a similar or later time anyway.
 							if delay := delayPerAttempt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
 								timer.Reset(delay)
-								log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
+								log.Dev.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
 								select {
 								case <-ctxDone:
 									return ctx.Err()
@@ -561,7 +561,7 @@ func runBackupProcessor(
 									tracer = flowCtx.Cfg.Tracer
 								}
 								if tracer == nil {
-									log.Warning(ctx, "nil tracer in backup processor")
+									log.Dev.Warning(ctx, "nil tracer in backup processor")
 								}
 								opts := make([]tracing.SpanOption, 0)
 								opts = append(opts, tracing.WithParent(sp))
@@ -602,7 +602,7 @@ func runBackupProcessor(
 							// message so use that instead.
 							if errors.HasType(exportRequestErr, (*timeutil.TimeoutError)(nil)) {
 								if recording != nil {
-									log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
+									log.Dev.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 								}
 								return errors.Wrap(exportRequestErr, "KV storage layer did not respond to BACKUP within timeout")
 							}
@@ -620,7 +620,7 @@ func runBackupProcessor(
 							}
 
 							if recording != nil {
-								log.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
+								log.Dev.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
 							}
 							return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 						}
@@ -657,7 +657,7 @@ func runBackupProcessor(
 						}
 
 						if len(resp.Files) > 1 {
-							log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
+							log.Dev.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 						}
 
 						// Even if the ExportRequest did not export any data we want to report
@@ -756,7 +756,7 @@ func reserveWorkerMemory(
 	workerCount := minimumWorkerCount
 	for i := 0; i < (maxWorkerCount - minimumWorkerCount); i++ {
 		if err := memAcc.Grow(ctx, perWorkerMemory); err != nil {
-			log.Warningf(ctx, "backup worker count restricted by memory limit")
+			log.Dev.Warningf(ctx, "backup worker count restricted by memory limit")
 			break
 		}
 		workerCount++
@@ -766,7 +766,7 @@ func reserveWorkerMemory(
 
 func logClose(ctx context.Context, c io.Closer, desc string) {
 	if err := c.Close(); err != nil {
-		log.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
+		log.Dev.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
 	}
 }
 

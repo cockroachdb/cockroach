@@ -227,6 +227,11 @@ func (ep *DummyEvalPlanner) UpsertDroppedRelationGCTTL(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// UnsafeDeleteComment is part of the Planner interface.
+func (ep *DummyEvalPlanner) UnsafeDeleteComment(ctx context.Context, objectID int64) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
@@ -575,6 +580,13 @@ func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
 // RetryCounter is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) RetryCounter() int {
 	return 0
+}
+
+// ProcessVectorIndexFixups is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ProcessVectorIndexFixups(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
+) error {
+	return nil
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

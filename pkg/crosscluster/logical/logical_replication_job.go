@@ -8,9 +8,11 @@ package logical
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -112,14 +114,14 @@ func (r *logicalReplicationResumer) handleResumeError(
 func (r *logicalReplicationResumer) updateStatusMessage(
 	ctx context.Context, status redact.RedactableString,
 ) {
-	log.Infof(ctx, "%s", status)
+	log.Dev.Infof(ctx, "%s", status)
 	err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.StatusMessage = string(status.Redact())
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})
 	if err != nil {
-		log.Warningf(ctx, "error when updating job running status: %s", err)
+		log.Dev.Warningf(ctx, "error when updating job running status: %s", err)
 	}
 }
 
@@ -182,7 +184,7 @@ func (r *logicalReplicationResumer) ingest(
 
 	status, err := client.Heartbeat(ctx, streampb.StreamID(payload.StreamID), progress.ReplicatedTime)
 	if err != nil {
-		log.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
+		log.Dev.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
 	}
 	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
 		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
@@ -279,7 +281,9 @@ func (r *logicalReplicationResumer) ingest(
 		stopReplanner()
 	}()
 
+	confPoller := make(chan struct{})
 	execPlan := func(ctx context.Context) error {
+		defer close(confPoller)
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
 			frontier:              frontier,
@@ -322,6 +326,36 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
+	refreshConn := func(ctx context.Context) error {
+		ingestionJob := r.job
+		details := ingestionJob.Details().(jobspb.LogicalReplicationDetails)
+		resolvedDest, err := resolveDest(ctx, jobExecCtx.ExecCfg(), details.SourceClusterConnUri)
+		if err != nil {
+			return err
+		}
+		pollingInterval := 2 * time.Minute
+		if knobs := jobExecCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.ExternalConnectionPollingInterval != nil {
+			pollingInterval = *knobs.ExternalConnectionPollingInterval
+		}
+		t := time.NewTicker(pollingInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-confPoller:
+				return nil
+			case <-t.C:
+				newDest, err := reloadDest(ctx, ingestionJob.ID(), jobExecCtx.ExecCfg())
+				if err != nil {
+					log.Dev.Warningf(ctx, "failed to check for updated configuration: %v", err)
+				} else if newDest != resolvedDest {
+					return errors.Mark(errors.Newf("replan due to detail change: old=%s, new=%s", resolvedDest, newDest), sql.ErrPlanChanged)
+				}
+			}
+		}
+	}
+
 	defer func() {
 		if l := payload.MetricsLabel; l != "" {
 			metrics.LabeledScanningRanges.Update(map[string]string{"label": l}, 0)
@@ -331,7 +365,7 @@ func (r *logicalReplicationResumer) ingest(
 		metrics.CatchupRanges.Update(0)
 	}()
 
-	err = ctxgroup.GoAndWait(ctx, execPlan, replanner, startHeartbeat)
+	err = ctxgroup.GoAndWait(ctx, execPlan, replanner, startHeartbeat, refreshConn)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		metrics.ReplanCount.Inc(1)
 	}
@@ -364,7 +398,7 @@ func (r *logicalReplicationResumer) maybeStartReverseStream(
 	}); err != nil {
 		return err
 	}
-	log.Infof(ctx, "started reverse stream")
+	log.Dev.Infof(ctx, "started reverse stream")
 	return nil
 }
 
@@ -386,7 +420,7 @@ func (r *logicalReplicationResumer) maybePublishCreatedTables(
 	if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
 		return errors.Wrapf(err, "unable to verify that attempted LDR job %d had stopped offline ingesting %s", r.job.ID(), maxWait)
 	}
-	log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
+	log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
 
 	return sql.DescsTxn(ctx, jobExecCtx.ExecCfg(), func(ctx context.Context, txn isql.Txn, descCol *descs.Collection) error {
 		b := txn.KV().NewBatch()
@@ -778,7 +812,7 @@ func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.Producer
 	}
 
 	if meta.BulkProcessorProgress == nil {
-		log.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
+		log.Dev.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
 		return nil
 	}
 
@@ -822,7 +856,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	}
 
 	rh.lastPartitionUpdate = timeutil.Now()
-	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
+	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
 	if err := rh.job.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
@@ -890,6 +924,7 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
 	var lastReplicatedTime hlc.Timestamp
+
 	for retrier := retry.Start(ro); retrier.Next(); {
 		err = r.ingest(ctx, execCtx)
 		if err == nil {
@@ -903,7 +938,7 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 			break
 		}
 
-		log.Infof(ctx, "hit retryable error %s", err)
+		log.Dev.Infof(ctx, "hit retryable error %s", err)
 		newReplicatedTime := loadOnlineReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			retrier.Reset()
@@ -927,11 +962,11 @@ func loadOnlineReplicatedTime(
 	// latest progress.
 	progress, err := jobs.LoadJobProgress(ctx, db, ingestionJob.ID())
 	if err != nil {
-		log.Warningf(ctx, "error loading job progress: %s", err)
+		log.Dev.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
 	}
 	if progress == nil {
-		log.Warningf(ctx, "no job progress yet: %s", err)
+		log.Dev.Warningf(ctx, "no job progress yet: %s", err)
 		return hlc.Timestamp{}
 	}
 	return progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.ReplicatedTime
@@ -956,9 +991,9 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	}
 	if details.CreateTable && !progress.PublishedNewTables {
 		if err := ingeststopped.WaitForNoIngestingNodes(ctx, jobExecCtx, r.job, maxWait); err != nil {
-			log.Errorf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", r.job.ID(), maxWait, err)
+			log.Dev.Errorf(ctx, "unable to verify that attempted LDR job %d had stopped offline ingesting %s: %v", r.job.ID(), maxWait, err)
 		} else {
-			log.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
+			log.Dev.Infof(ctx, "verified no nodes still offline ingesting on behalf of job %d", r.job.ID())
 		}
 		if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			return externalcatalog.DropIngestedExternalCatalog(ctx, execCfg, jobExecCtx.User(), details.IngestedExternalCatalog, txn, execCfg.JobRegistry, txn.Descriptors(), fmt.Sprintf("gc for ldr job %d", r.job.ID()))
@@ -1007,7 +1042,7 @@ func (r *logicalReplicationResumer) completeProducerJob(
 	)
 
 	streamID := streampb.StreamID(payload.StreamID)
-	log.Infof(ctx, "attempting to update producer job %d", streamID)
+	log.Dev.Infof(ctx, "attempting to update producer job %d", streamID)
 	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
 			uris, err := r.getClusterUris(ctx, r.job, internalDB)
@@ -1028,13 +1063,13 @@ func (r *logicalReplicationResumer) completeProducerJob(
 			return client.Complete(ctx, streamID, false /* successfulIngestion */)
 		},
 	); err != nil {
-		log.Warningf(ctx, "error completing the source cluster producer job %d: %s", streamID, err.Error())
+		log.Dev.Warningf(ctx, "error completing the source cluster producer job %d: %s", streamID, err.Error())
 	}
 }
 
 func closeAndLog(ctx context.Context, d streamclient.Client) {
 	if err := d.Close(ctx); err != nil {
-		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+		log.Dev.Warningf(ctx, "error closing stream client: %s", err.Error())
 	}
 }
 
@@ -1052,6 +1087,35 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 		MaxBackoff:     1 * time.Minute,
 		MaxRetries:     30,
 	}
+}
+
+func resolveDest(
+	ctx context.Context, execCfg *sql.ExecutorConfig, sourceURI string,
+) (string, error) {
+	u, err := url.Parse(sourceURI)
+	if err != nil {
+		return "", err
+	}
+
+	resolved := ""
+	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		conn, err := externalconn.LoadExternalConnection(ctx, u.Host, txn)
+		if err != nil {
+			return err
+		}
+		resolved = conn.UnredactedConnectionStatement()
+		return nil
+	})
+	return resolved, err
+}
+
+func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig) (string, error) {
+	reloadedJob, err := execCfg.JobRegistry.LoadJob(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	newDetails := reloadedJob.Details().(jobspb.LogicalReplicationDetails)
+	return resolveDest(ctx, execCfg, newDetails.SourceClusterConnUri)
 }
 
 func init() {

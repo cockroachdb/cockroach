@@ -50,11 +50,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "clientTimeout", func(t *testing.T, clientTimeout bool) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer time.AfterFunc(29*time.Second, func() {
-			log.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
-		}).Stop()
-		defer cancel()
+		ctx := context.Background()
 
 		// The lease won't move unless we use expiration-based leases. We also
 		// speed up the test by reducing various intervals and timeouts.
@@ -89,6 +85,12 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 		t.Logf("created %s", desc)
 
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer time.AfterFunc(29*time.Second, func() {
+			log.Dev.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
+		}).Stop()
+		defer cancel()
+
 		// Move the lease to n3, and make sure everyone has applied it by
 		// replicating a write.
 		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
@@ -101,7 +103,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		// Deadlock n3.
 		repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 		require.NoError(t, err)
-		mu := repl3.GetMutexForTesting()
+		mu := repl3.TestingGetMutex()
 		mu.Lock()
 		defer mu.Unlock()
 		t.Log("deadlocked n3")
@@ -209,7 +211,7 @@ func TestDistSenderCircuitBreakerModes(t *testing.T) {
 				// Deadlock either liveness or the scratch range.
 				repl, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 				require.NoError(t, err)
-				mu := repl.GetMutexForTesting()
+				mu := repl.TestingGetMutex()
 				mu.Lock()
 				defer mu.Unlock()
 				t.Logf("deadlocked range on n3 - %v", desc)

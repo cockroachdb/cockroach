@@ -8,7 +8,6 @@ package execbuilder
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -675,7 +674,7 @@ func (b *Builder) buildExistsSubquery(
 		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
 
 		// Create an wrapRootExprFn that wraps input in a Limit and a Project.
-		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) opt.Expr {
+		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) memo.RelExpr {
 			return f.ConstructProject(
 				f.ConstructLimit(
 					e,
@@ -693,7 +692,8 @@ func (b *Builder) buildExistsSubquery(
 			params,
 			stmts,
 			stmtProps,
-			nil,  /* stmtStr */
+			nil, /* stmtStr */
+			make([]string, len(stmts)),
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 			0, /* resultBufferID */
@@ -760,7 +760,7 @@ func (b *Builder) buildSubquery(
 				if homeRegion != gatewayRegion {
 					return nil, pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
 						`%s. Try running the query from region '%s'. %s`,
-						execinfra.QueryNotRunningInHomeRegionMessagePrefix,
+						sqlerrors.QueryNotRunningInHomeRegionMessagePrefix,
 						homeRegion,
 						sqlerrors.EnforceHomeRegionFurtherInfo,
 					)
@@ -819,7 +819,8 @@ func (b *Builder) buildSubquery(
 			params,
 			stmts,
 			stmtProps,
-			nil,  /* stmtStr */
+			nil, /* stmtStr */
+			make([]string, len(stmts)),
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
@@ -1014,6 +1015,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.Body,
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
+		udf.Def.BodyTags,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
@@ -1087,6 +1089,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.Body,
 			action.BodyProps,
 			action.BodyStmts,
+			action.BodyTags,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
@@ -1115,7 +1118,7 @@ func (b *Builder) initRoutineExceptionHandler(
 	blockState.ExceptionHandler = exceptionHandler
 }
 
-type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
+type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) memo.RelExpr
 
 // buildRoutinePlanGenerator returns a tree.RoutinePlanFn that can plan the
 // statements in a routine that has one or more arguments.
@@ -1136,6 +1139,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	stmts []memo.RelExpr,
 	stmtProps []*physical.Required,
 	stmtStr []string,
+	stmtTags []string,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
@@ -1199,9 +1203,18 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 		}()
 
+		dbName := b.evalCtx.SessionData().Database
+		appName := b.evalCtx.SessionData().ApplicationName
+
 		for i := range stmts {
 			stmt := stmts[i]
 			props := stmtProps[i]
+			var tag string
+			// Theoretically, stmts and stmtTags should have the same length,
+			// but just to avoid an out-of-bounds panic, we have this check.
+			if i < len(stmtTags) {
+				tag = stmtTags[i]
+			}
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1249,7 +1262,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 			f.CopyAndReplace(originalMemo, stmt, props, replaceFn)
 
 			if wrapRootExpr != nil {
-				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)
+				wrapped := wrapRootExpr(f, f.Memo().RootExpr())
 				f.Memo().SetRoot(wrapped, props)
 			}
 
@@ -1309,14 +1322,39 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
+			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
 			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
+			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
 		}
 		return nil
 	}
 	return planGen
+}
+
+func incrementRoutineStmtCounter(
+	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
+) {
+	switch stmtTag {
+	case "INSERT":
+		if counters.InsertCount != nil {
+			counters.InsertCount.Inc(dbName, appName)
+		}
+	case "UPDATE":
+		if counters.UpdateCount != nil {
+			counters.UpdateCount.Inc(dbName, appName)
+		}
+	case "SELECT":
+		if counters.SelectCount != nil {
+			counters.SelectCount.Inc(dbName, appName)
+		}
+	case "DELETE":
+		if counters.DeleteCount != nil {
+			counters.DeleteCount.Inc(dbName, appName)
+		}
+	}
 }
 
 func (b *Builder) addRoutineResultBuffer(

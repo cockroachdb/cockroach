@@ -3763,7 +3763,7 @@ func (h *flowControlTestHelper) comment(comment string) {
 
 func (h *flowControlTestHelper) log(msg string) {
 	if log.ShowLogs() {
-		log.Infof(context.Background(), "%s", msg)
+		log.Dev.Infof(context.Background(), "%s", msg)
 	}
 }
 

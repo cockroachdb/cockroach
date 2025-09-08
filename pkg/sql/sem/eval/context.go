@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -99,11 +100,6 @@ type Context struct {
 	//   [region=us,dc=east]
 	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
-
-	// OriginalLocality is the initial Locality at the time the connection was
-	// established. Since Locality may be overridden in some paths, this provides
-	// a means of restoring the original Locality.
-	OriginalLocality roachpb.Locality
 
 	Tracer *tracing.Tracer
 
@@ -311,6 +307,29 @@ type Context struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
+
+	// StartedRoutineStatementCounters contains metrics for statements initiated by
+	// users when calling a UDF/SP. These metrics count user-initiated
+	// operations, regardless of success
+	StartedRoutineStatementCounters RoutineStatementCounters
+	// ExecutedStatementCounters contains metrics for successfully executed
+	// statements defined within the body of a UDF/SP.
+	ExecutedRoutineStatementCounters RoutineStatementCounters
+}
+
+// RoutineStatementCounters encapsulates metrics for tracking the execution
+// of different statement types defined within the body of a UDF or stored
+// procedure (SP).
+type RoutineStatementCounters struct {
+	// QueryCount includes all statements, and it is therefore the sum of
+	// all the below metrics.
+	QueryCount *telemetry.CounterWithMetric
+
+	// Basic CRUD statements.
+	SelectCount *telemetry.CounterWithAggMetric
+	UpdateCount *telemetry.CounterWithAggMetric
+	InsertCount *telemetry.CounterWithAggMetric
+	DeleteCount *telemetry.CounterWithAggMetric
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
@@ -441,10 +460,14 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
+	sessionData := &sessiondata.SessionData{}
+	// Set defaults that match what the session variables system expects.
+	// allow_unsafe_internals defaults to true.
+	sessionData.AllowUnsafeInternals = true
 	ctx := Context{
 		Codec:            keys.SystemSQLCodec,
 		Txn:              &kv.Txn{},
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+		SessionDataStack: sessiondata.NewStack(sessionData),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
 	}
@@ -834,13 +857,17 @@ func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	return nil
 }
 
-// arrayOfType returns a fresh DArray of the input type.
-func arrayOfType(typ *types.T) (*tree.DArray, error) {
+// arrayOfType returns a fresh tree.DArray of the input type. 'elements'
+// argument is optional.
+func arrayOfType(typ *types.T, elements tree.Datums) (*tree.DArray, error) {
 	if typ.Family() != types.ArrayFamily {
 		return nil, errors.AssertionFailedf("array node type (%v) is not types.TArray", typ)
 	}
 	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
 		return nil, err
+	}
+	if elements != nil {
+		return tree.NewDArrayFromDatums(typ.ArrayContents(), elements), nil
 	}
 	return tree.NewDArray(typ.ArrayContents()), nil
 }

@@ -60,7 +60,7 @@ var _ jobs.Resumer = (*mvccStatisticsUpdateJob)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (j *mvccStatisticsUpdateJob) Resume(ctx context.Context, execCtxI interface{}) error {
-	log.Infof(ctx, "starting mvcc statistics update job")
+	log.Dev.Infof(ctx, "starting mvcc statistics update job")
 
 	// This job is a forever running background job, and it is always safe to
 	// terminate the SQL pod whenever the job is running, so mark it as idle.
@@ -138,7 +138,7 @@ func (j *mvccStatisticsUpdateJob) runTenantGlobalMetricsExporter(
 			return ctx.Err()
 		case <-timer.C:
 			if err := runTask(); err != nil {
-				log.Errorf(ctx, "mvcc statistics update job error: %v", err)
+				log.Dev.Errorf(ctx, "mvcc statistics update job error: %v", err)
 			}
 			timer.Reset(TenantGlobalMetricsExporterInterval.Get(&execCtx.ExecCfg().Settings.SV))
 		}
@@ -153,7 +153,7 @@ func (j *mvccStatisticsUpdateJob) OnFailOrCancel(
 		err := errors.NewAssertionErrorWithWrappedErrf(
 			jobErr, "mvcc statistics update job is not cancelable",
 		)
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return nil
 }

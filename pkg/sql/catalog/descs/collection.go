@@ -267,6 +267,11 @@ func (tc *Collection) IsNewUncommittedDescriptor(id descpb.ID) bool {
 	return false
 }
 
+// IsVersionBumpOfUncommittedDescriptor returns true if the descriptor is only having its version bumped (without mutations) in this transaction.
+func (tc *Collection) IsVersionBumpOfUncommittedDescriptor(id descpb.ID) bool {
+	return tc.uncommitted.versionBumpOnly[id]
+}
+
 // HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
 // any uncommitted descriptors that are newly created or dropped.
 func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {
@@ -311,8 +316,14 @@ func (tc *Collection) HasUncommittedTypes() (has bool) {
 // An uncommitted descriptor cannot coexist with a synthetic descriptor with the
 // same ID or the same name.
 func (tc *Collection) AddUncommittedDescriptor(
-	ctx context.Context, desc catalog.MutableDescriptor,
+	ctx context.Context, desc catalog.MutableDescriptor, opts ...WriteDescOption,
 ) (err error) {
+	options := writeDescOptions{}
+
+	for _, o := range opts {
+		o.apply(&options)
+	}
+
 	if !desc.IsUncommittedVersion() {
 		return nil
 	}
@@ -330,13 +341,55 @@ func (tc *Collection) AddUncommittedDescriptor(
 			desc.DescriptorType(), desc.GetName(), desc.GetID())
 	}
 	tc.markAsShadowedName(desc.GetID())
+
+	tc.maybeMarkVersionBumpOnly(desc, options.isVersionBump)
+
 	return tc.uncommitted.upsert(ctx, desc)
+}
+
+type writeDescOptions struct {
+	isVersionBump bool
+}
+
+// WriteDescOption defines functional options for WriteDescToBatch.
+type WriteDescOption interface {
+	apply(*writeDescOptions)
+}
+
+type onlyVersionBumpOption bool
+
+func (c onlyVersionBumpOption) apply(opts *writeDescOptions) {
+	opts.isVersionBump = bool(c)
+}
+
+// Noop writes to a descriptor (version bumps) are used to trigger cache
+// invalidations. In that case, transactions block on visibility instead of
+// convergence to a single version.
+func WithOnlyVersionBump() WriteDescOption {
+	return onlyVersionBumpOption(true)
+}
+
+// maybeMarkVersionBumpOnly updates the version bump only flag for the
+// descriptor so it reflects previous mutations to the descriptor along with the
+// current mutation.
+func (tc *Collection) maybeMarkVersionBumpOnly(
+	desc catalog.MutableDescriptor, isVersionBumpOnly bool,
+) {
+	prev, ok := tc.uncommitted.versionBumpOnly[desc.GetID()]
+
+	tc.uncommitted.versionBumpOnly[desc.GetID()] =
+		(!ok || prev) && // if the flag isn't set or it was previously set up
+			isVersionBumpOnly
 }
 
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
 // collection as an uncommitted descriptor, and writes it into b.
 func (tc *Collection) WriteDescToBatch(
-	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
+	ctx context.Context,
+	kvTrace bool,
+	desc catalog.MutableDescriptor,
+	b *kv.Batch,
+	opts ...WriteDescOption,
 ) error {
 	if desc.GetID() == descpb.InvalidID {
 		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
@@ -371,7 +424,7 @@ func (tc *Collection) WriteDescToBatch(
 		expected = desc.GetRawBytesInStorage()
 	}
 
-	if err := tc.AddUncommittedDescriptor(ctx, desc); err != nil {
+	if err := tc.AddUncommittedDescriptor(ctx, desc, opts...); err != nil {
 		return err
 	}
 	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), desc.GetID())

@@ -363,7 +363,7 @@ func weakEqualf(t *testing.T, successes int64, count int64, s string, id int) {
 		require.Equalf(t, successes, count, s, id)
 	} else {
 		if successes != count {
-			log.Warningf(context.Background(), "Not equal, expected %d, got %d for %s %d", successes, count, s, id)
+			log.Dev.Warningf(context.Background(), "Not equal, expected %d, got %d for %s %d", successes, count, s, id)
 		}
 	}
 }
@@ -880,7 +880,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 		case roachpb.NON_VOTER:
 			_, err = tc.AddNonVoters(scratchStartKey, tc.Target(1))
 		default:
-			log.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
+			log.Dev.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
 		}
 
 		if !testutils.IsError(err, `remote couldn't accept snapshot`) {
@@ -1741,7 +1741,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		require.NoError(t, err)
-		if repl.HasOutstandingLearnerSnapshotInFlightForTesting() {
+		if repl.TestingHasOutstandingLearnerSnapshotInFlight() {
 			return errors.Errorf("outstanding learner snapshot in flight %s", desc)
 		}
 		return nil

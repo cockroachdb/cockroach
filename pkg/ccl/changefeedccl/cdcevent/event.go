@@ -8,6 +8,7 @@ package cdcevent
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -302,7 +304,7 @@ func NewEventDescriptor(
 	}
 
 	// addColumn is a helper to add a column to this descriptor.
-	addColumn := func(col catalog.Column, ord int) int {
+	addColumn := func(col catalog.Column, nameOverride string, ord int) int {
 		resultColumn := ResultColumn{
 			ResultColumn: colinfo.ResultColumn{
 				Name:           col.GetName(),
@@ -315,10 +317,12 @@ func NewEventDescriptor(
 			ord:       ord,
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		}
-
+		if nameOverride != "" {
+			resultColumn.Name = nameOverride
+		}
 		colIdx := len(sd.cols)
 		sd.cols = append(sd.cols, resultColumn)
-		sd.colsByName[col.GetName()] = colIdx
+		sd.colsByName[resultColumn.Name] = colIdx
 
 		if col.GetType().UserDefined() {
 			sd.udtCols = append(sd.udtCols, colIdx)
@@ -329,7 +333,46 @@ func NewEventDescriptor(
 	// Primary key columns must be added in the same order they
 	// appear in the primary key index.
 	primaryIdx := desc.GetPrimaryIndex()
-	colOrd := catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
+	// The declarative schema changer requires special handling for dropped columns
+	// to ensure their previous values are available to the changefeed.
+	// We select a prior descriptor where the column is in the WRITE_ONLY state
+	// (instead of PUBLIC) and treat it as visible.
+	// This is necessary because the schema change stages for dropped columns were
+	// intentionally shifted to support automatic `schema_locked` management. The
+	// declarative schema changer cannot make a column WRITE_ONLY and flip
+	// `schema_locked` in two separate stages, so we instead treat the WRITE_ONLY
+	//  stage as a non-backfilling change for CDC.
+	columnsToTrack := desc.PublicColumns()
+	colNameOverrides := make(map[catid.ColumnID]string)
+	if desc.GetDeclarativeSchemaChangerState() != nil {
+		hasMergedIndex := catalog.HasDeclarativeMergedPrimaryIndex(desc)
+		allColumns := desc.AllColumns()
+		columnsToTrack = make([]catalog.Column, 0, len(allColumns))
+		for _, column := range allColumns {
+			// Skip all adding columns and non-public column.
+			if column.Adding() {
+				continue
+			}
+			// Pick up any write-only columns.
+			if column.Dropped() {
+				if !column.WriteAndDeleteOnly() || hasMergedIndex || column.IsHidden() {
+					continue
+				}
+				if found, previousName := catalog.FindPreviousColumnNameForDeclarativeSchemaChange(desc, column.GetID()); found {
+					colNameOverrides[column.GetID()] = previousName
+				}
+			}
+			columnsToTrack = append(columnsToTrack, column)
+		}
+		// Recover the order of the original columns.
+		slices.SortStableFunc(columnsToTrack, func(a, b catalog.Column) int {
+			return int(a.GetPGAttributeNum()) - int(b.GetPGAttributeNum())
+		})
+	}
+	var colOrd catalog.TableColMap
+	for ord, col := range columnsToTrack {
+		colOrd.Set(col.GetID(), ord)
+	}
 	writeOnlyAndPublic := catalog.ColumnIDToOrdinalMap(desc.WritableColumns())
 	var primaryKeyOrdinal catalog.TableColMap
 
@@ -345,7 +388,7 @@ func NewEventDescriptor(
 			}
 			return nil, errors.AssertionFailedf("expected to find column %d", ord)
 		}
-		primaryKeyOrdinal.Set(desc.PublicColumns()[ord].GetID(), ordIdx)
+		primaryKeyOrdinal.Set(columnsToTrack[ord].GetID(), ordIdx)
 		ordIdx += 1
 	}
 	sd.keyCols = make([]int, ordIdx)
@@ -353,12 +396,12 @@ func NewEventDescriptor(
 	switch {
 	case keyOnly:
 		ord := 0
-		for _, col := range desc.PublicColumns() {
+		for _, col := range columnsToTrack {
 			pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
 			if !isPKey {
 				continue
 			}
-			colIdx := addColumn(col, ord)
+			colIdx := addColumn(col, colNameOverrides[col.GetID()], ord)
 			ord++
 			sd.keyCols[pKeyOrd] = colIdx
 			sd.valueCols = append(sd.valueCols, colIdx)
@@ -369,9 +412,9 @@ func NewEventDescriptor(
 		// a sentinel ordinal position of virtualColOrd.
 		inFamily := catalog.MakeTableColSet(family.ColumnIDs...)
 		ord := 0
-		for _, col := range desc.PublicColumns() {
+		for _, col := range columnsToTrack {
 			if isVirtual := col.IsVirtual(); isVirtual && includeVirtualColumns {
-				colIdx := addColumn(col, virtualColOrd)
+				colIdx := addColumn(col, colNameOverrides[col.GetID()], virtualColOrd)
 				sd.valueCols = append(sd.valueCols, colIdx)
 				continue
 			}
@@ -380,7 +423,7 @@ func NewEventDescriptor(
 			if !isPKey && !isInFamily {
 				continue
 			}
-			colIdx := addColumn(col, ord)
+			colIdx := addColumn(col, colNameOverrides[col.GetID()], ord)
 			ord++
 			if isPKey {
 				sd.keyCols[pKeyOrd] = colIdx
@@ -569,7 +612,7 @@ func (d *eventDecoder) DecodeKV(
 	err = changefeedbase.WithTerminalError(errors.Wrapf(err,
 		"error decoding key %s@%s (hex_kv: %x)",
 		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
-	log.Errorf(ctx, "terminal error decoding KV: %v", err)
+	log.Changefeed.Errorf(ctx, "terminal error decoding KV: %v", err)
 	return Row{}, err
 }
 
@@ -801,7 +844,7 @@ func MakeRowFromTuple(ctx context.Context, evalCtx *eval.Context, t *tree.DTuple
 		r.AddValueColumn(name, d.ResolvedType())
 		if err := r.SetValueDatumAt(i, d); err != nil {
 			if build.IsRelease() {
-				log.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
+				log.Changefeed.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
 				_ = r.SetValueDatumAt(i, tree.DNull)
 			} else {
 				panic(err)
@@ -881,7 +924,29 @@ func getRelevantColumnsForFamily(
 	// matches the order of columns in the SQL table.
 	idx := 0
 	result := make([]descpb.ColumnID, cols.Len())
-	for _, colID := range tableDesc.PublicColumnIDs() {
+	visibleColumns := tableDesc.PublicColumns()
+	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
+		hasMergedIndex := catalog.HasDeclarativeMergedPrimaryIndex(tableDesc)
+		visibleColumns = make([]catalog.Column, 0, cols.Len())
+		for _, col := range tableDesc.AllColumns() {
+			if col.Adding() {
+				continue
+			}
+			if tableDesc.GetDeclarativeSchemaChangerState() == nil && !col.Public() {
+				continue
+			}
+			if col.Dropped() && (!col.WriteAndDeleteOnly() || hasMergedIndex) {
+				continue
+			}
+			visibleColumns = append(visibleColumns, col)
+		}
+		// Recover the order of the original columns.
+		slices.SortStableFunc(visibleColumns, func(a, b catalog.Column) int {
+			return int(a.GetPGAttributeNum()) - int(b.GetPGAttributeNum())
+		})
+	}
+	for _, col := range visibleColumns {
+		colID := col.GetID()
 		if cols.Contains(colID) {
 			result[idx] = colID
 			idx++

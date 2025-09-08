@@ -80,7 +80,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	// Sanity check: backup should be detached.
 	if backupStmt.Options.Detached != tree.DBoolTrue {
 		backupStmt.Options.Detached = tree.DBoolTrue
-		log.Warningf(ctx, "force setting detached option for backup schedule %d",
+		log.Dev.Warningf(ctx, "force setting detached option for backup schedule %d",
 			sj.ScheduleID())
 	}
 
@@ -110,7 +110,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	// pause the schedule. To maintain backward compatability with schedules
 	// without a clusterID, don't pause schedules without a clusterID.
 	if !currentDetails.ClusterID.Equal(uuid.Nil) && currentClusterID != currentDetails.ClusterID {
-		log.Infof(ctx, "schedule %d last run by different cluster %s, pausing until manually resumed",
+		log.Dev.Infof(ctx, "schedule %d last run by different cluster %s, pausing until manually resumed",
 			sj.ScheduleID(),
 			currentDetails.ClusterID)
 		currentDetails.ClusterID = currentClusterID
@@ -119,7 +119,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 		return nil
 	}
 
-	log.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
+	log.Dev.Infof(ctx, "Starting scheduled backup %d", sj.ScheduleID())
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.OverrideAsOfClause != nil {
@@ -188,7 +188,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 ) error {
 	if jobState == jobs.StateSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
-		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
+		log.Dev.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
 		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
 	}
 
@@ -196,7 +196,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 	err := errors.Errorf(
 		"backup job %d scheduled by %d failed with state %s",
 		jobID, schedule.ScheduleID(), jobState)
-	log.Errorf(ctx, "backup error: %v	", err)
+	log.Dev.Errorf(ctx, "backup error: %v	", err)
 	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
 	return nil
 }
@@ -376,7 +376,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	s, err := txn.Load(ctx, env, args.UnpauseOnSuccess)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
+			log.Dev.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
 				args.UnpauseOnSuccess)
 			return nil
 		}
@@ -461,7 +461,7 @@ func unlinkOrDropDependentSchedule(
 	)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+			log.Dev.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
 			return 0, nil
 		}
 		return 0, errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
@@ -563,7 +563,7 @@ func getBackupFnTelemetry(
 
 	initialDetails, err := getInitialDetails()
 	if err != nil {
-		log.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
+		log.Dev.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
 		return eventpb.RecoveryEvent{}
 	}
 	return createBackupRecoveryEvent(ctx, initialDetails, 0)

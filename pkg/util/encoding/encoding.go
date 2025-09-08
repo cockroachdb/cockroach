@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -135,9 +136,19 @@ const (
 	jsonArrayKeyDescendingMarker      = jsonTrueKeyDescendingMarker - 1
 	jsonObjectKeyDescendingMarker     = jsonArrayKeyDescendingMarker - 1
 
+	// LTREE key encoding markers
+	ltreeKeyMarker           = jsonEmptyArrayKeyDescendingMarker + 1
+	ltreeKeyDescendingMarker = ltreeKeyMarker + 1
+
 	// Terminators for JSON Key encoding.
 	jsonKeyTerminator           byte = 0x00
 	jsonKeyDescendingTerminator byte = 0xFF
+
+	// Terminators for LTREE Key encoding.
+	ltreeKeyTerminator                byte = 0x00
+	ltreeKeyDescendingTerminator      byte = 0xFF
+	ltreeLabelKeyTerminator           byte = 0x01
+	ltreeLabelKeyDescendingTerminator byte = 0xFE
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
@@ -860,6 +871,20 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 			return skipped, nil
 		}
 	}
+}
+
+// getLTreeLength finds the length of a ltree encoding.
+func getLTreeLength(b []byte, dir Direction) (int, error) {
+	var i int
+	if dir == Ascending {
+		i = bytes.IndexByte(b, ltreeKeyTerminator)
+	} else {
+		i = bytes.IndexByte(b, ltreeKeyDescendingTerminator)
+	}
+	if i == -1 {
+		return 0, errors.Errorf("did not find terminator")
+	}
+	return i + 1, nil
 }
 
 // prettyPrintInvertedIndexKey returns a string representation of the path part of a JSON inverted
@@ -1725,6 +1750,101 @@ func DecodeBitArrayDescending(b []byte) ([]byte, bitarray.BitArray, error) {
 	return b, ba, err
 }
 
+// EncodeLTreeAscending encodes a ltree.T value, appends it to the
+// supplied buffer, and returns the final buffer. The encoding is guaranteed to
+// be ordered such that if t1 < t2 then bytes.Compare will order them the same
+// way after encoding.
+//
+// The encoding is in the below format:
+// [ ltreeMarker ]
+// for each label:
+//
+//	[ label raw bytes ] [ ltreeLabelKeyTerminator ]
+//
+// [ ltreeKeyTerminator ]
+func EncodeLTreeAscending(b []byte, d ltree.T) []byte {
+	b = append(b, ltreeKeyMarker)
+	d.ForEachLabel(func(i int, label string) {
+		b = append(b, []byte(label)...)
+		b = append(b, ltreeLabelKeyTerminator)
+	})
+	b = append(b, ltreeKeyTerminator)
+	return b
+}
+
+// EncodeLTreeDescending is the descending version of EncodeLTreeAscending.
+func EncodeLTreeDescending(b []byte, d ltree.T) []byte {
+	b = append(b, ltreeKeyDescendingMarker)
+	d.ForEachLabel(func(i int, label string) {
+		n := len(b)
+		b = append(b, []byte(label)...)
+		onesComplement(b[n:])
+		b = append(b, ltreeLabelKeyDescendingTerminator)
+	})
+	b = append(b, ltreeKeyDescendingTerminator)
+	return b
+}
+
+// DecodeLTreeAscending decodes a ltree.T value which was encoded using
+// EncodeLTreeAscending. The remainder of the input buffer and the
+// decoded ltree.T are returned.
+func DecodeLTreeAscending(b []byte) ([]byte, ltree.T, error) {
+	if PeekType(b) != LTree {
+		return nil, ltree.Empty, errors.Errorf("did not find marker %#x", b)
+	}
+	b = b[1:]
+
+	var labels []string
+	for {
+		if len(b) != 0 && b[0] == ltreeKeyTerminator {
+			b = b[1:]
+			break
+		}
+		i := bytes.IndexByte(b, ltreeLabelKeyTerminator)
+		if i == -1 {
+			return nil, ltree.Empty, errors.Errorf("malformed ltree encoding")
+		}
+		labels = append(labels, string(b[:i]))
+		b = b[i+1:]
+	}
+	l, err := ltree.ParseLTreeFromLabels(labels)
+	if err != nil {
+		return nil, ltree.Empty, err
+	}
+	return b, l, nil
+}
+
+// DecodeLTreeDescending is the descending version of DecodeLTreeAscending.
+func DecodeLTreeDescending(b []byte) ([]byte, ltree.T, error) {
+	if PeekType(b) != LTreeDesc {
+		return nil, ltree.Empty, errors.Errorf("did not find marker %#x", b)
+	}
+	b = b[1:]
+
+	var labels []string
+	for {
+		if len(b) != 0 && b[0] == ltreeKeyDescendingTerminator {
+			b = b[1:]
+			break
+		}
+		i := bytes.IndexByte(b, ltreeLabelKeyDescendingTerminator)
+		if i == -1 {
+			return nil, ltree.Empty, errors.Errorf("malformed ltree encoding")
+		}
+		// Deep copying here is necessary to avoid modifying the input buffer slice.
+		var label []byte
+		label = append(label, b[:i]...)
+		onesComplement(label)
+		labels = append(labels, string(label))
+		b = b[i+1:]
+	}
+	l, err := ltree.ParseLTreeFromLabels(labels)
+	if err != nil {
+		return nil, ltree.Empty, err
+	}
+	return b, l, nil
+}
+
 // Type represents the type of a value encoded by
 // Encode{Null,NotNull,Varint,Uvarint,Float,Bytes}.
 //
@@ -1786,6 +1906,8 @@ const (
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
+	LTree              Type = 45
+	LTreeDesc          Type = 46
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -1888,6 +2010,10 @@ func slowPeekType(b []byte) Type {
 			return Decimal
 		case m == voidMarker:
 			return Void
+		case m == ltreeKeyMarker:
+			return LTree
+		case m == ltreeKeyDescendingMarker:
+			return LTreeDesc
 		}
 	}
 	return Unknown
@@ -2084,6 +2210,10 @@ func PeekLength(b []byte) (int, error) {
 			return 0, errors.Errorf("slice too short for float (%d)", len(b))
 		}
 		return 9, nil
+	case ltreeKeyMarker:
+		return getLTreeLength(b, Ascending)
+	case ltreeKeyDescendingMarker:
+		return getLTreeLength(b, Descending)
 	}
 	if m >= IntMin && m <= IntMax {
 		return getVarintLen(b)
@@ -2382,6 +2512,26 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, d.StringNanos(), nil
+	case LTree:
+		if dir == Descending {
+			return b, "", errors.Errorf("ascending ltree column dir but descending ltree encoding")
+		}
+		var l ltree.T
+		b, l, err = DecodeLTreeAscending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, l.String(), nil
+	case LTreeDesc:
+		if dir == Ascending {
+			return b, "", errors.Errorf("descending ltree column dir but ascending ltree encoding")
+		}
+		var l ltree.T
+		b, l, err = DecodeLTreeDescending(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, l.String(), nil
 	default:
 		if len(b) >= 1 {
 			switch b[0] {
@@ -2840,6 +2990,22 @@ func EncodePGVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
+// EncodeLTreeValue encodes a ltree.T value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeLTreeValue(appendTo []byte, colIDDelta uint32, l ltree.T) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, LTree)
+	return EncodeUntaggedLTreeValue(appendTo, l)
+}
+
+// EncodeUntaggedLTreeValue encodes a ltree.T value, appends it to the supplied
+// buffer, and returns the final buffer.
+func EncodeUntaggedLTreeValue(appendTo []byte, l ltree.T) []byte {
+	var buf bytes.Buffer
+	l.FormatToBuffer(&buf)
+	appendTo = EncodeUntaggedBytesValue(appendTo, buf.Bytes())
+	return appendTo
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -3189,6 +3355,28 @@ func DecodeUntaggedIPAddrValue(b []byte) (remaining []byte, u ipaddr.IPAddr, err
 	return remaining, u, err
 }
 
+// DecodeLTreeValue decodes a value encoded by EncodeLTreeValue.
+func DecodeLTreeValue(b []byte) (remaining []byte, l ltree.T, err error) {
+	b, err = decodeValueTypeAssert(b, LTree)
+	if err != nil {
+		return b, l, err
+	}
+	return DecodeUntaggedLTreeValue(b)
+}
+
+// DecodeUntaggedLTreeValue decodes a value encoded by EncodeUntaggedLTreeValue.
+func DecodeUntaggedLTreeValue(b []byte) (remaining []byte, l ltree.T, err error) {
+	remaining, data, err := DecodeUntaggedBytesValue(b)
+	if err != nil {
+		return b, l, err
+	}
+	l, err = ltree.ParseLTree(string(data))
+	if err != nil {
+		return b, l, err
+	}
+	return remaining, l, nil
+}
+
 func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	_, dataOffset, _, typ, err := DecodeValueTag(b)
 	if err != nil {
@@ -3243,7 +3431,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON, Geo, TSVector, TSQuery, PGVector:
+	case Bytes, Array, JSON, Geo, TSVector, TSQuery, PGVector, LTree:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Box2D:
@@ -3456,6 +3644,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 		var s string
 		b, s, err = PrettyPrintTupleValueEncoded(b)
 		return b, s, err
+	case LTree:
+		var l ltree.T
+		b, l, err = DecodeLTreeValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, l.String(), nil
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}

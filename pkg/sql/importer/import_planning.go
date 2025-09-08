@@ -746,7 +746,7 @@ func importPlanHook(
 			// This should never be true as we have parsed these file names in an
 			// earlier step of import.
 			if err != nil {
-				log.Warningf(ctx, "failed to collect file specific import telemetry for %s", uri)
+				log.Dev.Warningf(ctx, "failed to collect file specific import telemetry for %s", uri)
 				continue
 			}
 
@@ -807,7 +807,7 @@ func importPlanHook(
 					return
 				}
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+					log.Dev.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
 				}
 			}()
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()

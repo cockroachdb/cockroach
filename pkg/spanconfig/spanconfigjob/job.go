@@ -56,7 +56,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		// TODO(irfansharif): We could instead give the reconciliation job a fixed
 		// ID; comparing cluster IDs during restore doesn't help when we're
 		// restoring into the same cluster the backup was run from.
-		log.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
+		log.Dev.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
 			r.job.Payload().CreationClusterID, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
 		return nil
 	}
@@ -181,12 +181,12 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				// the reconciliation job during restore, or observing a checkpoint in
 				// the restore job, or re-keying restored descriptors to not re-use the
 				// same IDs as previously existing ones) is a lot more invasive.
-				log.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
+				log.Dev.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
 				lastCheckpoint = hlc.Timestamp{}
 				continue
 			}
 
-			log.Errorf(ctx, "reconciler failed with %v, retrying...", err)
+			log.Dev.Errorf(ctx, "reconciler failed with %v, retrying...", err)
 			continue
 		}
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)

@@ -447,7 +447,7 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 				if _, err := conn.ExecContext(ctx, "USE $1", dbName.Catalog()); err != nil {
 					return err
 				}
-				if _, err := db.ExecContext(ctx, fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
+				if _, err := conn.ExecContext(ctx, fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
 					return err
 				}
 				return t.tpcc.postLoadImpl(ctx, conn)

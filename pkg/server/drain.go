@@ -250,7 +250,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// The signal-based shutdown path uses a similar time-based escape hatch.
 		// Until we spend (potentially lots of time to) understand and fix this
 		// issue, this will serve us well.
-		log.Fatal(ctx, "timeout after drain")
+		log.Dev.Fatal(ctx, "timeout after drain")
 		return errors.New("unreachable")
 	}
 }
@@ -375,7 +375,7 @@ func (s *drainServer) drainInner(
 		if stillRunning > 0 {
 			return nil
 		}
-		log.Infof(ctx, "all tenant servers stopped")
+		log.Dev.Infof(ctx, "all tenant servers stopped")
 	}
 
 	// Drain the SQL layer.
@@ -383,7 +383,7 @@ func (s *drainServer) drainInner(
 	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
-	log.Infof(ctx, "done draining clients")
+	log.Dev.Infof(ctx, "done draining clients")
 
 	// Mark the node as draining in liveness and drain all range leases.
 	return s.drainNode(ctx, reporter, verbose)
@@ -398,6 +398,12 @@ func (s *drainServer) isDraining() bool {
 // drainClients starts draining the SQL layer.
 func (s *drainServer) drainClients(
 	ctx context.Context, reporter func(int, redact.SafeString),
+) error {
+	return s.drainClientsInternal(ctx, reporter, true /* assertOnLeakedDescriptor */)
+}
+
+func (s *drainServer) drainClientsInternal(
+	ctx context.Context, reporter func(int, redact.SafeString), assertOnLeakedDescriptor bool,
 ) error {
 	// Setup a cancelable context so that the logOpenConns goroutine exits when
 	// this function returns.
@@ -486,7 +492,7 @@ func (s *drainServer) drainClients(
 	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work and after the background
 	// tasks that may issue SQL statements have shut down.
-	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter, true /*assertOnLeakedDescriptor*/)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true, reporter)
 
 	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
 	if err != nil {
@@ -505,7 +511,7 @@ func (s *drainServer) drainClients(
 	s.sqlServer.gracefulDrainComplete.Store(true)
 	// Mark this phase in the logs to clarify the context of any subsequent
 	// errors/warnings, if any.
-	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
+	log.Dev.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
 	return nil
 }
 

@@ -92,7 +92,7 @@ func (p *compactBackupsProcessor) Start(ctx context.Context) {
 		for range p.progCh {
 		}
 	}
-	log.Infof(ctx, "starting backup compaction")
+	log.Dev.Infof(ctx, "starting backup compaction")
 	if err := p.FlowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: compactBackupsProcessorName + ".runCompactBackups",
 		SpanOpt:  stop.ChildSpan,
@@ -130,7 +130,7 @@ func (p *compactBackupsProcessor) constructProgressProducerMeta(
 
 	progDetails := backuppb.BackupManifest_Progress{}
 	if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
-		log.Warningf(p.Ctx(), "failed to unmarshal progress details: %v", err)
+		log.Dev.Warningf(p.Ctx(), "failed to unmarshal progress details: %v", err)
 	} else {
 		p.completedSpans += progDetails.CompletedSpans
 	}
@@ -240,7 +240,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	entryCh chan execinfrapb.RestoreSpanEntry,
 	encryption *jobspb.BackupEncryptionOptions,
 	store cloud.ExternalStorage,
-) error {
+) (err error) {
 	var fileEncryption *kvpb.FileEncryptionOptions
 	if encryption != nil {
 		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
@@ -256,12 +256,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := sink.Flush(ctx); err != nil {
-			log.Warningf(ctx, "failed to flush sink: %v", err)
-			logClose(ctx, sink, "SST sink")
-		}
-	}()
+	defer logClose(ctx, sink, "failed to close sst sink")
 	pacer := newBackupPacer(
 		ctx, p.FlowCtx.Cfg.AdmissionPacerFactory, p.FlowCtx.Cfg.Settings,
 	)
@@ -274,7 +269,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 			return ctx.Err()
 		case entry, ok := <-entryCh:
 			if !ok {
-				return nil
+				return sink.Flush(ctx)
 			}
 			if assigned, err := p.isAssignedEntry(entry); err != nil {
 				return err
@@ -352,7 +347,7 @@ func openSSTs(
 	cleanupDirs := func() {
 		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
-				log.Warningf(ctx, "close export storage failed: %v", err)
+				log.Dev.Warningf(ctx, "close export storage failed: %v", err)
 			}
 		}
 	}
@@ -396,7 +391,7 @@ func openSSTs(
 		entry: entry,
 		iter:  compactionIter,
 		cleanup: func() {
-			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
+			log.Dev.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
 			compactionIter.Close()
 			cleanupDirs()
 		},

@@ -205,7 +205,7 @@ func opsCurrMemUsage(ops opsEvent) int64 {
 		case *enginepb.MVCCAbortTxnOp:
 			currMemUsage += abortTxnOpMemUsage(t.TxnID)
 		default:
-			log.Fatalf(context.Background(), "unknown logical op %T", t)
+			log.Dev.Fatalf(context.Background(), "unknown logical op %T", t)
 		}
 	}
 	// For each op, a checkpoint may or may not be published depending on whether
@@ -276,7 +276,7 @@ func MemUsage(e event) int64 {
 		// For sync event, no rangefeed events will be published.
 		return eventOverhead + syncEventOverhead
 	default:
-		log.Fatalf(context.Background(), "missing event variant: %+v", e)
+		log.Dev.Fatalf(context.Background(), "missing event variant: %+v", e)
 	}
 	// For empty event, only eventOverhead is accounted.
 	return eventOverhead

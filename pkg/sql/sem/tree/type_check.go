@@ -2199,6 +2199,12 @@ func (d *DTSVector) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (Ty
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DLTree) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
+	return d, nil
+}
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DTuple) TypeCheck(_ context.Context, _ *SemaContext, _ *types.T) (TypedExpr, error) {
 	return d, nil
 }
@@ -2220,7 +2226,7 @@ func (d *DArray) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) 
 	// ARRAY[]
 	// ARRAY[NULL, NULL]
 	if (d.ParamTyp.Family() == types.UnknownFamily || d.ParamTyp.Family() == types.AnyFamily) &&
-		(!d.HasNonNulls) {
+		(!d.HasNonNulls()) {
 		if desired.Family() != types.ArrayFamily {
 			// We can't desire a non-array type here.
 			return d, nil

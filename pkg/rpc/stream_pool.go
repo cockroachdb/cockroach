@@ -120,7 +120,7 @@ func (s *pooledStream[Req, Resp, Conn]) runOnce(ctx context.Context) (loop bool)
 			// > other error, the stream is aborted and the error contains the RPC
 			// > status.
 			if errors.Is(err, io.EOF) {
-				log.Errorf(ctx, "stream unexpectedly closed by server: %+v", err)
+				log.Dev.Errorf(ctx, "stream unexpectedly closed by server: %+v", err)
 			}
 			s.respC <- result[Resp]{err: err}
 			return false

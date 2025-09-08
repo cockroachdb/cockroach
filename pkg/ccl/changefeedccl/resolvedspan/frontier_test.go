@@ -11,10 +11,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +34,8 @@ func TestAggregatorFrontier(t *testing.T) {
 	f, err := resolvedspan.NewAggregatorFrontier(
 		statementTime,
 		initialHighwater,
+		mockCodec{},
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -73,6 +80,8 @@ func TestAggregatorFrontier(t *testing.T) {
 	f, err = resolvedspan.NewAggregatorFrontier(
 		statementTime,
 		initialHighwater,
+		mockCodec{},
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -97,6 +106,8 @@ func TestCoordinatorFrontier(t *testing.T) {
 	f, err := resolvedspan.NewCoordinatorFrontier(
 		statementTime,
 		initialHighwater,
+		mockCodec{},
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -144,6 +155,8 @@ func TestCoordinatorFrontier(t *testing.T) {
 	f, err = resolvedspan.NewCoordinatorFrontier(
 		statementTime,
 		initialHighwater,
+		mockCodec{},
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -164,6 +177,7 @@ type frontier interface {
 	InBackfill(jobspb.ResolvedSpan) bool
 	AtBoundary() (bool, jobspb.ResolvedSpan_BoundaryType, hlc.Timestamp)
 	All() iter.Seq[jobspb.ResolvedSpan]
+	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
 }
 
 func testBackfillSpan(
@@ -251,6 +265,8 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 	f, err := resolvedspan.NewAggregatorFrontier(
 		hlc.Timestamp{},
 		hlc.Timestamp{},
+		mockCodec{},
+		false, /* perTableTracking */
 		makeSpan("a", "f"),
 	)
 	require.NoError(t, err)
@@ -291,4 +307,226 @@ func TestAggregatorFrontier_ForwardResolvedSpan(t *testing.T) {
 		require.False(t, forwarded)
 		require.Equal(t, makeTS(10), f.Frontier())
 	})
+}
+
+// mockCodec is a simple TableCodec for testing
+// that treats all keys as table ID 1.
+type mockCodec struct{}
+
+var _ resolvedspan.TableCodec = mockCodec{}
+
+// DecodeTablePrefix implements TableCodec.
+func (mockCodec) DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error) {
+	return key, 1, nil
+}
+
+// TableSpan implements TableCodec.
+func (mockCodec) TableSpan(tableID uint32) roachpb.Span {
+	if tableID == 1 {
+		// Since the mock codec treats all keys as belonging to table ID 1,
+		// we return the everything span so that all keys will be considered
+		// a part of the table.
+		return keys.EverythingSpan
+	}
+	panic("mock codec only handles table ID 1")
+}
+
+func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, frontierType := range []string{"aggregator", "coordinator"} {
+		t.Run(frontierType, func(t *testing.T) {
+			rnd, _ := randutil.NewPseudoRand()
+
+			// Randomly use either the system codec or a tenant codec.
+			codec := func() keys.SQLCodec {
+				if rnd.Float64() < 0.5 {
+					tenantID := roachpb.MustMakeTenantID(uint64(1 + rnd.Intn(10)))
+					return keys.MakeSQLCodec(tenantID)
+				}
+				return keys.SystemSQLCodec
+			}()
+
+			// Helper to create spans for tables.
+			tableSpan := func(tableID uint32) roachpb.Span {
+				// Randomly choose either the full table span or an index span.
+				if rnd.Float64() < 0.5 {
+					return codec.TableSpan(tableID)
+				}
+				prefix := codec.IndexPrefix(tableID, 1 /* indexID */)
+				return roachpb.Span{
+					Key:    prefix,
+					EndKey: prefix.PrefixEnd(),
+				}
+			}
+
+			// Create spans for multiple tables (table IDs 10, 20, 30).
+			table10Span := tableSpan(10)
+			table20Span := tableSpan(20)
+			table30Span := tableSpan(30)
+			tableSpans := []roachpb.Span{table10Span, table20Span, table30Span}
+
+			statementTime := makeTS(5)
+			initialHighWater := hlc.Timestamp{}
+
+			// Create frontier with multiple table spans.
+			f, err := func() (frontier, error) {
+				switch frontierType {
+				case "aggregator":
+					return resolvedspan.NewAggregatorFrontier(
+						statementTime,
+						initialHighWater,
+						codec,
+						true, /* perTableTracking */
+						tableSpans...,
+					)
+				case "coordinator":
+					return resolvedspan.NewCoordinatorFrontier(
+						statementTime,
+						initialHighWater,
+						codec,
+						true, /* perTableTracking */
+						tableSpans...,
+					)
+				default:
+					t.Fatalf("unknown frontier type: %s", frontierType)
+				}
+				panic("unreachable")
+			}()
+			require.NoError(t, err)
+			require.Equal(t, initialHighWater, f.Frontier())
+
+			// Forward table 10 to timestamp 10.
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:      table10Span,
+				Timestamp: makeTS(10),
+			})
+			require.NoError(t, err)
+
+			// Forward table 20 to timestamp 15.
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:      table20Span,
+				Timestamp: makeTS(15),
+			})
+			require.NoError(t, err)
+
+			// Forward table 30 to timestamp 8.
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:      table30Span,
+				Timestamp: makeTS(8),
+			})
+			require.NoError(t, err)
+
+			// Overall frontier should be the minimum (table 30 at timestamp 8).
+			require.Equal(t, makeTS(8), f.Frontier())
+
+			// Verify per-table resolved timestamps.
+			perTableResolved := make(map[uint32]hlc.Timestamp)
+			for tableID, frontier := range f.Frontiers() {
+				perTableResolved[uint32(tableID)] = frontier.Frontier()
+			}
+			require.Equal(t, makeTS(10), perTableResolved[10])
+			require.Equal(t, makeTS(15), perTableResolved[20])
+			require.Equal(t, makeTS(8), perTableResolved[30])
+
+			// Forward table 30 to catch up.
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:      table30Span,
+				Timestamp: makeTS(12),
+			})
+			require.NoError(t, err)
+
+			// Overall frontier should now advance to table 10's timestamp (10).
+			require.Equal(t, makeTS(10), f.Frontier())
+
+			// Verify per-table resolved timestamps again.
+			perTableResolved = make(map[uint32]hlc.Timestamp)
+			for tableID, frontier := range f.Frontiers() {
+				perTableResolved[uint32(tableID)] = frontier.Frontier()
+			}
+			require.Equal(t, makeTS(10), perTableResolved[10])
+			require.Equal(t, makeTS(15), perTableResolved[20])
+			require.Equal(t, makeTS(12), perTableResolved[30])
+		})
+	}
+}
+
+func TestFrontierForwardFullTableSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "frontier type", []string{"aggregator", "coordinator"},
+		func(t *testing.T, frontierType string) {
+			rnd, _ := randutil.NewPseudoRand()
+
+			// Randomly use either the system codec or a tenant codec.
+			codec := func() keys.SQLCodec {
+				if rnd.Float64() < 0.5 {
+					tenantID := roachpb.MustMakeTenantID(uint64(1 + rnd.Intn(10)))
+					return keys.MakeSQLCodec(tenantID)
+				}
+				return keys.SystemSQLCodec
+			}()
+
+			key := func(base roachpb.Key, suffix string) roachpb.Key {
+				result := make([]byte, len(base)+len(suffix))
+				copy(result, base)
+				copy(result[len(base):], suffix)
+				return result
+			}
+
+			// Create spans for tables 109 and 110.
+			// These table IDs were specifically chosen because 109->110
+			// is the boundary for when table IDs go from single-byte to
+			// multi-byte encodings.
+			table109Span := codec.TableSpan(109)
+			table110Span := codec.TableSpan(110)
+			require.True(t, len(table110Span.Key) == len(table109Span.Key)+1)
+
+			// Create several subspans within each table.
+			tableSpans := []roachpb.Span{
+				{Key: key(table109Span.Key, "a"), EndKey: key(table109Span.Key, "c")},
+				{Key: key(table109Span.Key, "e"), EndKey: key(table109Span.Key, "g")},
+				{Key: key(table110Span.Key, "b"), EndKey: key(table110Span.Key, "d")},
+				{Key: key(table110Span.Key, "f"), EndKey: key(table110Span.Key, "k")},
+			}
+
+			statementTime := makeTS(5)
+			var initialHighWater hlc.Timestamp
+
+			f, err := func() (span.Frontier, error) {
+				switch frontierType {
+				case "aggregator":
+					return resolvedspan.NewAggregatorFrontier(
+						statementTime,
+						initialHighWater,
+						codec,
+						true, /* perTableTracking */
+						tableSpans...,
+					)
+				case "coordinator":
+					return resolvedspan.NewCoordinatorFrontier(
+						statementTime,
+						initialHighWater,
+						codec,
+						true, /* perTableTracking */
+						tableSpans...,
+					)
+				default:
+					t.Fatalf("unknown frontier type: %s", frontierType)
+				}
+				panic("unreachable")
+			}()
+			require.NoError(t, err)
+			require.Equal(t, initialHighWater, f.Frontier())
+
+			// Forward both tables to timestamp 20.
+			targetTimestamp := makeTS(20)
+			for _, tableSpan := range []roachpb.Span{table109Span, table110Span} {
+				_, err := f.Forward(tableSpan, targetTimestamp)
+				require.NoError(t, err)
+			}
+			require.Equal(t, targetTimestamp, f.Frontier())
+		})
 }

@@ -448,7 +448,7 @@ func TestGossipMostDistant(t *testing.T) {
 
 			// Connect the network in a loop. This will cut the distance to the most
 			// distant node in half.
-			log.Infof(context.Background(), "connecting from n%d to n%d", c.from, c.to)
+			log.Dev.Infof(context.Background(), "connecting from n%d to n%d", c.from, c.to)
 			connect(nodes[c.from], nodes[c.to], nodesCtx[c.from])
 
 			// Wait for n1 to determine that n6 is now the most distant hops from 9

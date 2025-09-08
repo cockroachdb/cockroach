@@ -66,6 +66,7 @@ Connection
                     connect to a server or print the current connection URL.
                     Omitted values reuse previous parameters. Use '-' to skip a field.
                     The option "autocerts" attempts to auto-discover TLS client certs.
+                    The option "tenant=NAME" switches to the specified tenant.
   \password [USERNAME]
                     securely change the password for a user
 
@@ -1708,6 +1709,11 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 		if cmd[4] != "-" {
 			if cmd[4] == "autocerts" {
 				autoCerts = true
+			} else if strings.HasPrefix(cmd[4], "tenant=") {
+				tenantName := strings.TrimPrefix(cmd[4], "tenant=")
+				if err := newURL.SetOption("options", "-ccluster="+tenantName); err != nil {
+					return err
+				}
 			} else {
 				return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
 			}

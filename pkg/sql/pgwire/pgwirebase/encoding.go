@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -499,6 +500,12 @@ func DecodeDatum(
 				return nil, err
 			}
 			return &tree.DPGVector{T: ret}, nil
+		case oidext.T_ltree:
+			ret, err := ltree.ParseLTree(bs)
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DLTree{LTree: ret}, nil
 		}
 		switch typ.Family() {
 		case types.ArrayFamily, types.TupleFamily:
@@ -867,6 +874,18 @@ func DecodeDatum(
 				return nil, err
 			}
 			return da.NewDGeography(tree.DGeography{Geography: v}), nil
+		case oidext.T_ltree:
+			version := b[0]
+			if version != 1 {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"unsupported ltree version %d", version)
+			}
+			// Skip over the version byte when parsing binary LTREE.
+			ret, err := ltree.ParseLTree(bs[1:])
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DLTree{LTree: ret}, nil
 		default:
 			if typ.Family() == types.ArrayFamily {
 				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code, da)

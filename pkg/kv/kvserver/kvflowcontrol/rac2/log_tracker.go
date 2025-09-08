@@ -349,7 +349,7 @@ func (l *LogTracker) errorf(ctx context.Context, format string, args ...any) {
 	if buildutil.CrdbTestBuild {
 		panic(errors.AssertionFailedf(format, args...))
 	} else {
-		log.Errorf(ctx, format, args...)
+		log.Dev.Errorf(ctx, format, args...)
 	}
 }
 

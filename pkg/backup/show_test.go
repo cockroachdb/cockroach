@@ -455,9 +455,11 @@ func TestShowBackups(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
 
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
+	rowsUsingIndex := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1 WITH INDEX`, full)
 
 	// assert that we see the three, and only the three, full backups.
 	require.Equal(t, 3, len(rows))
+	require.Equal(t, rows, rowsUsingIndex)
 
 	// check that we can show the inc layers in the individual full backups.
 	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
@@ -541,23 +543,23 @@ func TestShowBackupTenantView(t *testing.T) {
 
 	_ = securitytest.EmbeddedTenantIDs()
 
-	_, conn2 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(2)})
-	defer conn2.Close()
+	_, conn3 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(3)})
+	defer conn3.Close()
 
-	tenant2 := sqlutils.MakeSQLRunner(conn2)
+	tenant3 := sqlutils.MakeSQLRunner(conn3)
 	dataQuery := `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`
 	backupQuery := `BACKUP TABLE foo.bar INTO $1`
 	showBackupQuery := "SELECT object_name, object_type, rows FROM [SHOW BACKUP FROM LATEST IN $1]"
-	tenant2.Exec(t, dataQuery)
+	tenant3.Exec(t, dataQuery)
 
 	// First, assert that SHOW BACKUPS on a tenant backup returns the same results if
-	// either the system tenant or tenant2 calls it.
+	// either the system tenant or tenant3 calls it.
 	tenantAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
 
-	tenant2.Exec(t, backupQuery, tenantAddr)
+	tenant3.Exec(t, backupQuery, tenantAddr)
 	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, tenantAddr)
-	require.Equal(t, systemTenantShowRes, tenant2.QueryStr(t, showBackupQuery, tenantAddr))
+	require.Equal(t, systemTenantShowRes, tenant3.QueryStr(t, showBackupQuery, tenantAddr))
 
 	// If the system tenant created the same data, and conducted the same backup,
 	// the row counts should look the same.
@@ -703,6 +705,7 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 152935)
 
 	const numAccounts = 11
 
@@ -710,12 +713,15 @@ func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
+	// Error output changes depending on whether or not the index is used. This
+	// deterministically enables the index to make the error output consistent.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.index.read.enabled = true")
+
 	// Make an initial backup.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, localFoo)
 
 	// Ensure proper error gets returned from back SHOW BACKUP Path
-	sqlDB.ExpectErr(t, "The specified path is the root of a backup collection.",
-		"SHOW BACKUP '' IN $1", localFoo)
+	sqlDB.ExpectErr(t, "subdir does not match format", "SHOW BACKUP '' IN $1", localFoo)
 }
 
 // TestShowBackupCheckFiles verifies the check_files option catches a corrupt

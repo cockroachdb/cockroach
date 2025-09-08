@@ -251,15 +251,27 @@ func (p *planner) maybeLogStatementInternal(
 	(slowLogFullTableScans && (execDetails.FullTableScan || execDetails.FullIndexScan)) ||
 		// Is the query actually slow?
 		queryDuration > slowLogThreshold) {
+		commonSQLEventDetails := p.getCommonSQLEventDetails()
+		migrator := log.NewStructuredEventMigrator(func() bool {
+			return !log.ChannelCompatibilityModeEnabled.Get(p.ExecCfg().SV())
+		}, logpb.Channel_SQL_EXEC)
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventsOnlyExternally(ctx, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
-
+			event := &eventpb.SlowQuery{
+				CommonSQLEventDetails: commonSQLEventDetails,
+				CommonSQLExecDetails:  execDetails,
+			}
+			migrator.StructuredEvent(ctx, severity.INFO, event)
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventsOnlyExternally(ctx, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
+			event := &eventpb.SlowQueryInternal{
+				CommonSQLEventDetails: commonSQLEventDetails,
+				CommonSQLExecDetails:  execDetails,
+			}
+			migrator.StructuredEvent(ctx, severity.INFO,
+				event)
 		}
 	}
 
@@ -358,6 +370,7 @@ func (p *planner) maybeLogStatementInternal(
 
 		*sampledQuery = eventpb.SampledQuery{
 			CommonSQLExecDetails:     execDetails,
+			CommonSQLEventDetails:    p.getCommonSQLEventDetails(),
 			SkippedQueries:           skippedQueries,
 			CostEstimate:             p.curPlan.instrumentation.costEstimate,
 			Distribution:             p.curPlan.instrumentation.distribution.String(),
@@ -436,7 +449,11 @@ func (p *planner) maybeLogStatementInternal(
 			SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
 		}
 
-		p.logEventsOnlyExternally(ctx, sampledQuery)
+		migrator := log.NewStructuredEventMigrator(func() bool {
+			return log.ShouldMigrateEvent(p.ExecCfg().SV())
+		}, logpb.Channel_SQL_EXEC)
+
+		migrator.StructuredEvent(ctx, severity.INFO, sampledQuery)
 	}
 }
 
@@ -521,7 +538,11 @@ func (p *planner) logTransaction(
 		}
 	}
 
-	log.StructuredEvent(ctx, severity.INFO, sampledTxn)
+	migrator := log.NewStructuredEventMigrator(func() bool {
+		return log.ShouldMigrateEvent(p.ExecCfg().SV())
+	}, logpb.Channel_SQL_EXEC)
+
+	migrator.StructuredEvent(ctx, severity.INFO, sampledTxn)
 }
 
 func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {

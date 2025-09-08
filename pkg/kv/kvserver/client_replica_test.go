@@ -328,7 +328,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			updatedVal := []byte("updatedVal")
 			if err := txn.CPut(ctx, key, updatedVal, kvclientutils.StrToCPutExistingValue("initVal")); err != nil {
-				log.Errorf(context.Background(), "failed put value: %+v", err)
+				log.Dev.Errorf(context.Background(), "failed put value: %+v", err)
 				return err
 			}
 
@@ -777,6 +777,8 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Increase the verbosity of the test to help investigate failures.
+	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3"))
 	const numNodes = 2
 	var manuals []*hlc.HybridManualClock
 	var clocks []*hlc.Clock
@@ -804,42 +806,69 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	tc.SplitRangeOrFatal(t, keyA)
 	keyADesc, keyBDesc := tc.SplitRangeOrFatal(t, keyB)
+	t.Logf("split range at keyB=%s, got descriptors: keyADesc=%+v, keyBDesc=%+v",
+		keyB, keyADesc, keyBDesc)
+
 	// Place key A's sole replica on node 1 and key B's sole replica on node 2.
 	tc.AddVotersOrFatal(t, keyB, tc.Target(1))
+	t.Logf("added voter for keyB=%s to node 2", keyB)
 	tc.TransferRangeLeaseOrFatal(t, keyBDesc, tc.Target(1))
+	t.Logf("transferred lease for keyB range to node 2")
 	tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+	t.Logf("removed voter for keyB=%s from node 1", keyB)
 
 	// Pause the servers' clocks going forward.
-	var maxNanos int64
 	for i, m := range manuals {
 		m.Pause()
-		if cur := m.UnixNano(); cur > maxNanos {
-			maxNanos = cur
-		}
 		clocks = append(clocks, tc.Servers[i].Clock())
 	}
-	// After doing so, perfectly synchronize them.
-	for _, m := range manuals {
-		m.Increment(maxNanos - m.UnixNano())
-	}
+
+	// Synchronize the clocks. We wrap this in a SucceedsSoon to avoid messages
+	// between the nodes to cause them to remain out of sync.
+	var nowN1, nowN2 hlc.Timestamp
+	testutils.SucceedsSoon(t, func() error {
+		// Find the maximum clock value.
+		maxNanos := manuals[0].UnixNano()
+		for _, m := range manuals[1:] {
+			maxNanos = max(maxNanos, m.UnixNano())
+		}
+		// After doing so, perfectly synchronize them.
+		for _, m := range manuals {
+			m.Increment(maxNanos - m.UnixNano())
+		}
+
+		nowN1, nowN2 = clocks[0].Now(), clocks[1].Now()
+		if nowN1.WallTime != nowN2.WallTime {
+			return errors.Errorf("clocks are not synchronized: n1's clock: %+v, n2's clock: %+v",
+				nowN1, nowN2)
+		}
+		return nil
+	})
+
+	t.Logf("all clocks synchronized: n1's clock: %+v, n2's clock: %+v", nowN1, nowN2)
 
 	// Create a new transaction using the second node as the gateway.
-	now := clocks[1].Now()
 	maxOffset := clocks[1].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", keyB, isolation.Serializable, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()), 0, false /* omitInRangefeeds */)
+	txn := roachpb.MakeTransaction("test", keyB, isolation.Serializable, 1, nowN2, maxOffset, int32(tc.Servers[1].SQLInstanceID()), 0, false /* omitInRangefeeds */)
+	t.Logf("created transaction: %+v", txn)
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
 	// Collect an observed timestamp in that transaction from node 2.
+	t.Logf("collecting observed timestamp from node 2 for keyB=%s", keyB)
 	getB := getArgs(keyB)
 	resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getB)
 	require.Nil(t, pErr)
+	t.Logf("successfully read keyB=%s, response: %+v", keyB, resp)
 	txn.Update(resp.Header().Txn)
 	require.Len(t, txn.ObservedTimestamps, 1)
+	t.Logf("updated transaction with observed timestamp, now has %+v observed timestamps", txn.ObservedTimestamps)
 
 	// Advance the clock on the first node.
 	manuals[0].Increment(100)
+	nowN1, nowN2 = clocks[0].Now(), clocks[1].Now()
+	t.Logf("advanced n1's clock by 100ns: n1's clock: %+v, n2's clock: %+v", nowN1, nowN2)
 
 	// Perform a non-txn write on node 1. This will grab a timestamp from node 1's
 	// clock, which leads the clock on node 2.
@@ -856,15 +885,20 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// flakiness. For now, we just re-order the operations and assert that we
 	// receive an uncertainty error even though its absence would not be a true
 	// stale read.
+	t.Logf("Performing non-txn write on node 0 for keyA=%s", keyA)
 	ba := &kvpb.BatchRequest{}
 	ba.Add(putArgs(keyA, []byte("val")))
 	br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
+	t.Logf("Successfully wrote keyA=%s, write timestamp: %s", keyA, writeTs)
 
 	// The transaction has a read timestamp beneath the write's commit timestamp
 	// but a global uncertainty limit above the write's commit timestamp. The
 	// observed timestamp collected is also beneath the write's commit timestamp.
+	nowN1, nowN2 = clocks[0].Now(), clocks[1].Now()
+	t.Logf("validating the clocks before test assertions: n1's clock: %+v, n2's clock: %+v",
+		nowN1, nowN2)
 	assert.True(t, txn.ReadTimestamp.Less(writeTs))
 	assert.True(t, writeTs.Less(txn.GlobalUncertaintyLimit))
 	assert.True(t, txn.ObservedTimestamps[0].Timestamp.ToTimestamp().Less(writeTs))
@@ -1561,7 +1595,7 @@ func (l *leaseTransferTest) sendRead(t *testing.T, storeIdx int) *kvpb.Error {
 		getArgs(l.leftKey),
 	)
 	if pErr != nil {
-		log.Warningf(context.Background(), "%v", pErr)
+		log.Dev.Warningf(context.Background(), "%v", pErr)
 	}
 	return pErr
 }
@@ -1603,9 +1637,9 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 			l.evalFilter = nil
 			l.filterMu.Unlock()
 			extensionSem <- struct{}{}
-			log.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
+			log.Dev.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
 			<-extensionSem
-			log.Infof(filterArgs.Ctx, "filter unblocking lease request")
+			log.Dev.Infof(filterArgs.Ctx, "filter unblocking lease request")
 		}
 		return nil
 	}
@@ -2310,7 +2344,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 		})
 	})
 
-	log.Info(ctx, "restarting")
+	log.Dev.Info(ctx, "restarting")
 	require.NoError(t, tc.Restart())
 
 	// Send another read and check that the pre-existing lease has not been used.
@@ -2427,13 +2461,13 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 
 			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); ok {
-				log.Infof(ctx, "retrying lease after %s", pErr)
+				log.Dev.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if _, ok := pErr.GetDetail().(*kvpb.LeaseRejectedError); ok {
 				// Lease rejected? Try again. The extension should work because
 				// extending is idempotent (assuming the PrevLease matches).
-				log.Infof(ctx, "retrying lease after %s", pErr)
+				log.Dev.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if pErr != nil {
@@ -2987,7 +3021,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
 	aliveNodeIdx := 1 - stoppedNodeInx
-	log.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
+	log.Dev.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
 	tc.StopServer(stoppedNodeInx)
 	repl := tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 
@@ -3099,7 +3133,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	// The leaderlessWatcher starts off as available.
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
 	// Let it know it's leaderless.
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// Even though the replica is leaderless, enough time hasn't passed for it to
 	// be considered unavailable.
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
@@ -3107,7 +3141,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	require.NoError(t, repl.LeaderlessWatcher.Err())
 	// Let enough time pass.
 	manual.Increment(10 * time.Second.Nanoseconds())
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// Now the replica is considered unavailable.
 	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
 	require.Error(t, repl.LeaderlessWatcher.Err())
@@ -3117,14 +3151,14 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 
 	// Next up, let the replica know there's a leader. This should make it
 	// available again.
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, 1, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, 1, manual.Now(), st)
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
 	// Change the range descriptor. Mark it leaderless and let enough time pass
 	// for it to be considered unavailable again.
 	tc.AddVotersOrFatal(t, key, tc.Targets(2)...)
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	manual.Increment(10 * time.Second.Nanoseconds())
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// The replica should now be considered unavailable again.
 	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
 	require.Error(t, repl.LeaderlessWatcher.Err())
@@ -4673,7 +4707,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, l.Start.ToTimestamp().Next()),
 				)
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		refreshTo = func(t *testing.T, asOf hlc.Timestamp) {
@@ -4684,7 +4718,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 				)
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		// waitForProtectionAndReadProtectedTimestamps waits until the
@@ -4701,7 +4735,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptutil.TestingWaitForProtectedTimestampToExistOnSpans(ctx, t, tc.Server(i),
 					ptsReader, protectionTimestamp,
 					[]roachpb.Span{span})
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		insqlDB = tc.Server(0).InternalDB().(isql.DB)
@@ -5117,8 +5151,8 @@ func TestTenantID(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	tenant2 := roachpb.MustMakeTenantID(2)
-	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
+	tenant3 := roachpb.MustMakeTenantID(3)
+	tenant3Prefix := keys.MakeTenantPrefix(tenant3)
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
@@ -5128,16 +5162,16 @@ func TestTenantID(t *testing.T) {
 			require.Equal(t, roachpb.SystemTenantID, tenantId, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
-		tc.SplitRangeOrFatal(t, tenant2Prefix)
+		tc.SplitRangeOrFatal(t, tenant3Prefix)
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant3Prefix)
 			tenantId, valid := repl.TenantID()
 			require.True(t, valid)
-			require.Equal(t, tenant2, tenantId, "%v", repl)
+			require.Equal(t, tenant3, tenantId, "%v", repl)
 		}
 	})
 	t.Run("(2) not set before snapshot", func(t *testing.T) {
-		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
+		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant3Prefix)
 		sawSnapshot := make(chan struct{}, 1)
 		blockSnapshot := make(chan struct{})
 		tc.AddAndStartServer(t, base.TestServerArgs{
@@ -5166,7 +5200,7 @@ func TestTenantID(t *testing.T) {
 		// networking handshake timeouts.
 		addReplicaErr := make(chan error)
 		addReplica := func() {
-			_, err := tc.AddVoters(tenant2Prefix, tc.Target(1))
+			_, err := tc.AddVoters(tenant3Prefix, tc.Target(1))
 			addReplicaErr <- err
 		}
 		go addReplica()
@@ -5190,14 +5224,14 @@ func TestTenantID(t *testing.T) {
 		require.NoError(t, <-addReplicaErr)
 		tenantID, valid := uninitializedRepl.TenantID() // now initialized
 		require.True(t, valid)
-		require.Equal(t, tenant2, tenantID)
+		require.Equal(t, tenant3, tenantID)
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
 		tc.AddAndStartServer(t, stickySpecTestServerArgs)
-		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
+		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant3Prefix)
 		tenantID, _ := repl.TenantID() // now initialized
-		require.Equal(t, tenant2, tenantID, "%v", repl)
+		require.Equal(t, tenant3, tenantID, "%v", repl)
 	})
 
 }

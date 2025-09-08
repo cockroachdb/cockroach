@@ -725,7 +725,7 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
 func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
 		if debugState {
-			log.Infof(ctx, "State %s", cf.machine.state[0])
+			log.Dev.Infof(ctx, "State %s", cf.machine.state[0])
 		}
 		switch cf.machine.state[0] {
 		case stateInvalid:
@@ -787,7 +787,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			var foundNull bool
 			if cf.mustDecodeIndexKey {
 				if debugState {
-					log.Infof(ctx, "decoding first key %s", cf.machine.nextKV.Key)
+					log.Dev.Infof(ctx, "decoding first key %s", cf.machine.nextKV.Key)
 				}
 				var (
 					key []byte
@@ -925,7 +925,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				continue
 			}
 			if debugState {
-				log.Infof(ctx, "decoding next key %s", kv.Key)
+				log.Dev.Infof(ctx, "decoding next key %s", kv.Key)
 			}
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical

@@ -327,7 +327,7 @@ func (p *planner) dependentRelationError(
 	if desc.GetParentID() != parentID {
 		viewFQName, err := p.getQualifiedTableName(ctx, desc)
 		if err != nil {
-			log.Warningf(ctx, "unable to retrieve name of relation %d: %v", desc.GetID(), err)
+			log.Dev.Warningf(ctx, "unable to retrieve name of relation %d: %v", desc.GetID(), err)
 			return sqlerrors.NewDependentObjectErrorf(
 				"cannot %s %s %q because a %s depends on it",
 				op, typeName, objName, redact.SafeString(desc.GetObjectTypeString()))

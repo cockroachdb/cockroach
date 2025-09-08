@@ -150,7 +150,7 @@ type Context struct {
 	level Level
 	// query manages the query vector that was passed to the top-level Index
 	// method.
-	query queryComparer
+	query queryVector
 	// forInsert indicates that this is an insert operation (or a search for
 	// insert operation).
 	forInsert bool
@@ -175,9 +175,10 @@ func (ic *Context) Init(txn Txn) {
 	ic.txn = txn
 }
 
-// RandomizedVector is the randomized form of OriginalVector.
-func (ic *Context) RandomizedVector() vector.T {
-	return ic.query.Randomized()
+// TransformedVector is the randomized, normalized form of the original query
+// vector.
+func (ic *Context) TransformedVector() vector.T {
+	return ic.query.Transformed()
 }
 
 // Index implements the C-SPANN algorithm, which adapts Microsoft's SPANN and
@@ -401,17 +402,23 @@ func (vi *Index) Insert(
 		return err
 	}
 
-	vi.setupInsertContext(idxCtx, treeKey, vec)
+	vi.setupInsertContext(idxCtx, treeKey, LeafLevel)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
-	// Insert the vector into the secondary index.
-	childKey := ChildKey{KeyBytes: key}
-	valueBytes := ValueBytes{}
+	return vi.insertHelper(ctx, idxCtx, treeKey, ChildKey{KeyBytes: key})
+}
 
+// insertHelper inserts a new vector into a partition at the given level of the
+// tree. The vector might already have been randomized or transformed (both
+// randomized and normalized).
+func (vi *Index) insertHelper(
+	ctx context.Context, idxCtx *Context, treeKey TreeKey, childKey ChildKey,
+) error {
 	// When a candidate insert partition is found, add the vector to it.
 	addFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
 		partitionKey := result.ChildKey.PartitionKey
 		err := vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
-			partitionKey, idxCtx.level-1, idxCtx.query.Randomized(), childKey, valueBytes)
+			partitionKey, idxCtx.level-1, idxCtx.query.Transformed(), childKey, ValueBytes{})
 		if err != nil {
 			return errors.Wrapf(err, "inserting vector into partition %d", partitionKey)
 		}
@@ -448,7 +455,8 @@ func (vi *Index) Delete(
 		return false, err
 	}
 
-	vi.setupDeleteContext(idxCtx, treeKey, vec)
+	vi.setupDeleteContext(idxCtx, treeKey)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
 	// When a candidate delete partition is found, remove the vector from it.
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
@@ -482,7 +490,8 @@ func (vi *Index) Search(
 	searchSet *SearchSet,
 	options SearchOptions,
 ) error {
-	vi.setupContext(idxCtx, treeKey, options, LeafLevel, vec, false /* transformed */)
+	vi.setupContext(idxCtx, treeKey, LeafLevel, options)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 	return vi.searchHelper(ctx, idxCtx, searchSet)
 }
 
@@ -503,7 +512,8 @@ func (vi *Index) SearchForInsert(
 		return nil, err
 	}
 
-	vi.setupInsertContext(idxCtx, treeKey, vec)
+	vi.setupInsertContext(idxCtx, treeKey, LeafLevel)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
 	// When a candidate insert partition is found, lock its metadata for update
 	// and get its centroid.
@@ -542,7 +552,8 @@ func (vi *Index) SearchForDelete(
 		return nil, err
 	}
 
-	vi.setupDeleteContext(idxCtx, treeKey, vec)
+	vi.setupDeleteContext(idxCtx, treeKey)
+	idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 
 	// When a candidate delete partition is found, lock its metadata for update.
 	removeFunc := func(ctx context.Context, idxCtx *Context, result *SearchResult) error {
@@ -564,14 +575,14 @@ func (vi *Index) SearchForDelete(
 }
 
 // DiscardFixups drops all pending fixups. It is used for testing.
-func (vi *Index) DiscardFixups() {
-	vi.fixups.Process(true /* discard */)
+func (vi *Index) DiscardFixups(ctx context.Context) {
+	vi.fixups.Discard(ctx)
 }
 
 // ProcessFixups waits until all pending fixups have been processed by
 // background workers. It is used for testing.
-func (vi *Index) ProcessFixups() {
-	vi.fixups.Process(false /* discard */)
+func (vi *Index) ProcessFixups(ctx context.Context) error {
+	return vi.fixups.Process(ctx)
 }
 
 // ForceSplit enqueues a split fixup. It is used for testing.
@@ -599,42 +610,34 @@ func (vi *Index) ForceMerge(
 // setupInsertContext sets up the given context for an insert operation. Before
 // performing an insert, we need to search for the best partition with the
 // closest centroid to the query vector. The partition in which to insert the
-// vector is at the parent of the leaf level.
-func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, vec vector.T) {
+// vector is at the parent of the given level.
+func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, level Level) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
-	// skip reranking).
-	vi.setupContext(idxCtx, treeKey, SearchOptions{
+	// skip reranking). Use level+1 to search for a parent partition.
+	vi.setupContext(idxCtx, treeKey, level+1, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize,
 		SkipRerank:   true,
 		UpdateStats:  !vi.options.DisableAdaptiveSearch,
-	}, SecondLevel, vec, false /* transformed */)
+	})
 	idxCtx.forInsert = true
 }
 
 // setupDeleteContext sets up the given context for a delete operation.
-func (vi *Index) setupDeleteContext(idxCtx *Context, treeKey TreeKey, vec vector.T) {
+func (vi *Index) setupDeleteContext(idxCtx *Context, treeKey TreeKey) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking). Use a larger beam size to make it more likely that we'll
 	// find the vector to delete.
-	vi.setupContext(idxCtx, treeKey, SearchOptions{
+	vi.setupContext(idxCtx, treeKey, LeafLevel, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize * 2,
 		SkipRerank:   true,
 		UpdateStats:  !vi.options.DisableAdaptiveSearch,
-	}, LeafLevel, vec, false /* transformed */)
+	})
 	idxCtx.forDelete = true
 }
 
-// setupContext sets up the given context as an operation is beginning. If
-// "randomized" is false, then the given vector is expected to be an original,
-// unrandomized vector that was provided by the user. If "transformed" is true,
-// then the vector is expected to already be randomized and normalized.
+// setupContext sets up the given context as an operation is beginning.
 func (vi *Index) setupContext(
-	idxCtx *Context,
-	treeKey TreeKey,
-	options SearchOptions,
-	level Level,
-	vec vector.T,
-	transformed bool,
+	idxCtx *Context, treeKey TreeKey, level Level, options SearchOptions,
 ) {
 	idxCtx.treeKey = treeKey
 	idxCtx.level = level
@@ -644,11 +647,7 @@ func (vi *Index) setupContext(
 	if idxCtx.options.BaseBeamSize == 0 {
 		idxCtx.options.BaseBeamSize = vi.options.BaseBeamSize
 	}
-	if transformed {
-		idxCtx.query.InitTransformed(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
-	} else {
-		idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
-	}
+	idxCtx.query.Clear()
 }
 
 // updateFunc is called by searchForUpdateHelper when it has a candidate
@@ -712,7 +711,7 @@ func (vi *Index) searchForUpdateHelper(
 			remainingAttempts--
 			ok, err := idxCtx.search.Next(ctx)
 			if err != nil {
-				log.Infof(ctx, "error during update: %v", err)
+				log.Dev.Infof(ctx, "error during update: %v", err)
 				return nil, errors.Wrapf(err, "searching for partition to update")
 			}
 			if !ok {
@@ -796,13 +795,12 @@ func (vi *Index) searchForUpdateHelper(
 	}
 
 	// Do an inconsistent scan of the partition to see if it might be ready to
-	// split or merge. This is necessary because the search does not scan leaf
-	// partitions. Unless we do this, we may never realize the partition is
-	// oversized or undersized.
+	// split. This is necessary because the search does not scan leaf partitions.
+	// Unless we do this, we may never realize the partition is oversized.
 	// NOTE: The scan is not performed in the scope of the current transaction,
 	// so it will not reflect the effects of this operation. That's OK, since it's
-	// not necessary to split or merge at exactly the point where the partition
-	// becomes oversized or undersized.
+	// not necessary to split at exactly the point where the partition becomes
+	// oversized.
 	partitionKey := result.ChildKey.PartitionKey
 	count, err := vi.store.EstimatePartitionCount(ctx, idxCtx.treeKey, partitionKey)
 	if err != nil {
@@ -863,9 +861,12 @@ func (vi *Index) fallbackOnTargets(
 		// The partition is ready for deletion; its target partitions have already
 		// been built and may themselves been split or deleted, so don't use them.
 		return nil
+
+	case MergingState:
+		// Merging state does not have targets, so nothing to do.
+		return nil
 	}
 
-	// TODO(andyk): Add support for DrainingForMergeState.
 	return errors.AssertionFailedf(
 		"expected state that disallows updates, not %s", state.String())
 }
@@ -947,7 +948,7 @@ func (vi *Index) findExactDistances(
 	}
 
 	// Compute exact distance between query vector and the data vectors.
-	idxCtx.query.ComputeExactDistances(idxCtx.level, candidates)
+	idxCtx.query.ComputeExactDistances(vi.quantizer.GetDistanceMetric(), idxCtx.level, candidates)
 
 	return candidates, nil
 }
@@ -1045,13 +1046,13 @@ type FormatOptions struct {
 // Format formats the vector index as a tree-formatted string similar to this,
 // for testing and debugging purposes:
 //
-// • 1 (4, 3)
+// • 1 [4, 3]
 // │
-// ├───• vec1 (1, 2)
-// ├───• vec2 (7, 4)
-// └───• vec3 (4, 3)
+// ├───• vec1 [1, 2]
+// ├───• vec2 [7, 4]
+// └───• vec3 [4, 3]
 //
-// Vectors with many dimensions are abbreviated like (5, -1, ..., 2, 8), and
+// Vectors with many dimensions are abbreviated like [5, -1, ..., 2, 8], and
 // values are rounded to 4 decimal places. Centroids are printed next to
 // partition keys.
 func (vi *Index) Format(
@@ -1091,7 +1092,7 @@ func (vi *Index) Format(
 					buf.WriteByte(' ')
 					utils.WriteVector(&buf, centroid, 4)
 				} else {
-					buf.WriteString(" (MISSING)\n")
+					buf.WriteString(" [MISSING]\n")
 				}
 				return nil
 			}
@@ -1109,9 +1110,9 @@ func (vi *Index) Format(
 		utils.WriteVector(&buf, original, 4)
 		details := partition.Metadata().StateDetails
 		if details.State != ReadyState {
-			buf.WriteString(" [")
+			buf.WriteString(" (")
 			buf.WriteString(details.String())
-			buf.WriteByte(']')
+			buf.WriteByte(')')
 		}
 		buf.WriteByte('\n')
 
@@ -1145,7 +1146,7 @@ func (vi *Index) Format(
 					buf.WriteByte(' ')
 					utils.WriteVector(&buf, refs[0].Vector, 4)
 				} else {
-					buf.WriteString(" (MISSING)")
+					buf.WriteString(" [MISSING]")
 				}
 				buf.WriteByte('\n')
 

@@ -139,7 +139,7 @@ func (b *writeBuffer) writeTextDatum(
 	t *types.T,
 ) {
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
+		log.Dev.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -286,6 +286,10 @@ func writeTextDatumNotNull(
 		// Enums are serialized with their logical representation.
 		b.writeLengthPrefixedString(v.LogicalRep)
 
+	case *tree.DLTree:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
 	}
@@ -323,7 +327,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 	}()
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
+		log.Dev.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
 	}
 	if vecs.Nulls[vecIdx].MaybeHasNulls() && vecs.Nulls[vecIdx].NullAt(rowIdx) {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -611,7 +615,7 @@ func (b *writeBuffer) writeBinaryDatum(
 	ctx context.Context, d tree.Datum, sessionLoc *time.Location, t *types.T,
 ) {
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
+		log.Dev.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -839,7 +843,7 @@ func writeBinaryDatumNotNull(
 		}
 		b.putInt32(ndims)
 		hasNulls := 0
-		if v.HasNulls {
+		if v.HasNulls() {
 			hasNulls = 1
 		}
 		oid := v.ParamTyp.Oid()
@@ -870,6 +874,19 @@ func writeBinaryDatumNotNull(
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+
+	case *tree.DLTree:
+		// Postgres version number, as of writing, `1` is the only valid value.
+		// The first byte is always used for the version number
+		size := int32(1)
+		size += int32(v.LTree.ByteSize())
+
+		b.putInt32(size)
+		b.writeByte(1)
+
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtxWithoutLength(b.textFormatter)
+
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}
@@ -883,7 +900,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 ) {
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", typ)
+		log.Dev.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", typ)
 	}
 	if vecs.Nulls[vecIdx].MaybeHasNulls() && vecs.Nulls[vecIdx].NullAt(rowIdx) {
 		// NULL is encoded as -1; all other values have a length prefix.

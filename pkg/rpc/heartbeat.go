@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -155,7 +156,9 @@ func (hs *HeartbeatService) Ping(ctx context.Context, request *PingRequest) (*Pi
 	serverOffset := request.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	hs.remoteClockMonitor.UpdateOffset(ctx, request.OriginNodeID, serverOffset, 0 /* roundTripLatency */)
+	// In this case, we won't be recording the RTT (note the 0 RTT). Therefore, the RPC class is gonna be ignored.
+	hs.remoteClockMonitor.UpdateOffset(ctx, request.OriginNodeID, serverOffset, 0, /* roundTripLatency */
+		rpcbase.DefaultClass)
 	response := PingResponse{
 		Pong:                           request.Ping,
 		ServerTime:                     hs.clock.Now().UnixNano(),
@@ -166,7 +169,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, request *PingRequest) (*Pi
 
 	if fn := hs.onHandlePing; fn != nil {
 		if err := fn(ctx, request, &response); err != nil {
-			log.Infof(ctx, "failing ping request from node n%d", request.OriginNodeID)
+			log.Dev.Infof(ctx, "failing ping request from node n%d", request.OriginNodeID)
 			return nil, err
 		}
 	}

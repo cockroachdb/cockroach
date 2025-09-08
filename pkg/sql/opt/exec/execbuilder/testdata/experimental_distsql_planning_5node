@@ -13,8 +13,14 @@ INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
 # Split into 5 parts, each row from each table goes to one node.
 statement ok
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
-ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
-ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
+ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i)
+
+retry
+statement ok
+ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
+
+retry
+statement ok
 ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
 # Verify data placement.
@@ -23,7 +29,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE k
 ORDER BY 1
 ----
 start_key           end_key                 replicas  lease_holder
-<before:/Table/72>  …/1/1                   {1}       1
+<before:/Table/73>  …/1/1                   {1}       1
 …/1/1               …/1/2                   {1}       1
 …/1/2               …/1/3                   {2}       2
 …/1/3               …/1/4                   {3}       3

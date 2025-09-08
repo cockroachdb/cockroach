@@ -47,10 +47,10 @@ func bootstrapSystem(
 		{"configure key visualizer", keyVisualizerTablesMigration, true},
 	} {
 		if skipSomeSteps && u.skippableInTest {
-			log.Infof(ctx, "skipping system bootstrap step %q", u.name)
+			log.Dev.Infof(ctx, "skipping system bootstrap step %q", u.name)
 			continue
 		}
-		log.Infof(ctx, "executing system bootstrap step %q", u.name)
+		log.Dev.Infof(ctx, "executing system bootstrap step %q", u.name)
 		if err := u.fn(ctx, cv, deps); err != nil {
 			return errors.Wrapf(err, "system bootstrap step %q failed", u.name)
 		}
@@ -92,10 +92,10 @@ func bootstrapCluster(
 	} {
 
 		if skipSomeSteps && u.skippableInTest {
-			log.Infof(ctx, "skipping bootstrap step %q", u.name)
+			log.Dev.Infof(ctx, "skipping bootstrap step %q", u.name)
 			continue
 		}
-		log.Infof(ctx, "executing bootstrap step %q", u.name)
+		log.Dev.Infof(ctx, "executing bootstrap step %q", u.name)
 		if err := u.fn(ctx, cv, deps); err != nil {
 			return errors.Wrapf(err, "bootstrap step %q failed", u.name)
 		}
@@ -273,7 +273,7 @@ func createDefaultDbs(
 		stmt := fmt.Sprintf(createDbStmt, dbName)
 		_, err = deps.InternalExecutor.Exec(ctx, "create-default-DB", nil /* txn */, stmt)
 		if err != nil {
-			log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
+			log.Dev.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
 			return err
 		}
 	}

@@ -115,7 +115,7 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 		if errors.Is(err, http.ErrNoCookie) {
 			w.Header().Add("Content-Type", "application/json")
 			if _, err := w.Write([]byte(`{"virtual_clusters":[]}`)); err != nil {
-				log.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
+				log.Dev.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
 			}
 			return
 		}
@@ -139,7 +139,7 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 	}
 	w.Header().Add("Content-Type", "application/json")
 	if _, err := w.Write(respBytes); err != nil {
-		log.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
+		log.Dev.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
 	}
 })
 

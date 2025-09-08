@@ -572,7 +572,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 		if validateLocalities {
 			return zonepb.ZoneConfig{}, err
 		}
-		log.Warningf(ctx, "ignoring locality validation error for DB zone config %v", err)
+		log.Dev.Warningf(ctx, "ignoring locality validation error for DB zone config %v", err)
 		err = nil
 	}
 

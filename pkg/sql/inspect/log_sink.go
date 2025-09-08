@@ -12,12 +12,20 @@ import (
 )
 
 // logSink will report any inspect errors directly to cockroach.log.
-type logSink struct{}
+type logSink struct {
+	foundIssue bool
+}
 
 var _ inspectLogger = &logSink{}
 
 // logIssue implements the inspectLogger interface.
 func (c *logSink) logIssue(ctx context.Context, issue *inspectIssue) error {
-	log.Errorf(ctx, "inspect issue: %+v", issue)
+	c.foundIssue = true
+	log.Dev.Errorf(ctx, "inspect issue: %+v", issue)
 	return nil
+}
+
+// hasIssues implements the inspectLogger interface.
+func (c *logSink) hasIssues() bool {
+	return c.foundIssue
 }

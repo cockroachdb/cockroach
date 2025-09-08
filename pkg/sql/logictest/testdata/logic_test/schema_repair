@@ -1,6 +1,4 @@
-# TODO(#144279): remove this.
-statement ok
-SET kv_transaction_buffered_writes_enabled = false;
+# LogicTest: !local-prepared
 
 subtest lost_table_data
 

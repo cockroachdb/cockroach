@@ -25,7 +25,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/inverted",
-        "//pkg/sql/parser",
+        "//pkg/sql/parserutils",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/rowencpb",
         "//pkg/sql/rowenc/valueside",

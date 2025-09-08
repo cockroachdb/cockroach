@@ -340,7 +340,7 @@ const (
 	// still may include an exception and stack trace.
 	ReportTypeError
 	// ReportTypeLogFatal signifies that this is an error report that
-	// was generated via a log.Fatal call.
+	// was generated via a log.Dev.Fatal call.
 	ReportTypeLogFatal
 )
 
@@ -412,10 +412,10 @@ func SendReport(
 
 	res := sentry.CaptureEvent(event)
 	if res != nil {
-		log.Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
+		log.Dev.Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
 	}
 	if !sentry.Flush(10 * time.Second) {
-		log.Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
+		log.Dev.Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
 	}
 }
 
@@ -433,7 +433,7 @@ func ReportOrPanic(
 	if !build.IsRelease() || (sv != nil && PanicOnAssertions.Get(sv)) {
 		panic(err)
 	}
-	log.Errorf(ctx, "%v", err)
+	log.Dev.Errorf(ctx, "%v", err)
 	sendCrashReport(ctx, sv, err, ReportTypeError)
 }
 

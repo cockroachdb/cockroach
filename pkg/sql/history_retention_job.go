@@ -117,12 +117,12 @@ func (h *historyRetentionResumer) Resume(ctx context.Context, execCtx interface{
 				if jobs.HasJobNotFoundError(err) {
 					return errors.Wrapf(err, "job progress not found")
 				}
-				log.Errorf(ctx,
+				log.Dev.Errorf(ctx,
 					"failed loading job progress (retrying): %v", err)
 				continue
 			}
 			if p == nil {
-				log.Errorf(ctx, "job progress not found (retrying)")
+				log.Dev.Errorf(ctx, "job progress not found (retrying)")
 				continue
 			}
 			historyProgress := p.GetDetails().(*jobspb.Progress_HistoryRetentionProgress).HistoryRetentionProgress

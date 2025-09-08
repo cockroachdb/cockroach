@@ -171,6 +171,51 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Decommisioning nudger metrics.
+	metaDecommissioningNudgerEnqueue = metric.Metadata{
+		Name:         "ranges.decommissioning.nudger.enqueue",
+		Help:         "Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger. Note: This metric tracks when the nudger attempts to enqueue, but the replica might not end up being enqueued by the priority queue due to various filtering or failure conditions.",
+		Measurement:  "Ranges",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "ranges.decommissioning.nudger.enqueue",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelStatus, "enqueue"),
+	}
+	metaDecommissioningNudgerEnqueueSuccess = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.success",
+		Help:        "Number of ranges that were successfully enqueued by the decommisioning nudger",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.enqueue.success",
+	}
+	metaDecommissioningNudgerEnqueueFailure = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.failure",
+		Help:        "Number of ranges that failed to enqueue at the replicate queue",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.enqueue.failure",
+	}
+	metaDecommissioningNudgerProcessSuccess = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.process.success",
+		Help:        "Number of ranges enqueued by the decommissioning nudger that were successfully processed by the replicate queue",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.process.success",
+	}
+	metaDecommissioningNudgerProcessFailure = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.process.failure",
+		Help:        "Number of ranges enqueued by the decommissioning nudger that failed to process by the replicate queue",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.process.failure",
+	}
+	metaDecommissioningNudgerNotLeaseholderOrInvalidLease = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
+		Help:        "Number of ranges that were not the leaseholder or had an invalid lease at the decommissioning nudger",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
+	}
+
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
 		Name:        "leases.success",
@@ -680,7 +725,7 @@ var (
 		Name:        "rocksdb.read-amplification",
 		Help:        "Number of disk reads per query",
 		Measurement: "Disk Reads per Query",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_CONST,
 	}
 	metaRdbNumSSTables = metric.Metadata{
 		Name:        "rocksdb.num-sstables",
@@ -756,7 +801,7 @@ var (
 		"level-score",
 		"Compaction score of level %d",
 		"Score",
-		metric.Unit_COUNT,
+		metric.Unit_CONST,
 	)
 
 	metaRdbWriteStalls = metric.Metadata{
@@ -1128,31 +1173,60 @@ storage.initial_stats_complete becomes true.
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaSSTableCompressionSnappy = metric.Metadata{
-		Name: "storage.sstable.compression.snappy.count",
-		Help: "Count of SSTables that have been compressed with the snappy " +
-			"compression algorithm.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+
+	metaCompressionSnappyBytes = metric.Metadata{
+		Name:        "storage.compression.snappy.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed with the Snappy algorithm.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
 	}
-	metaSSTableCompressionZstd = metric.Metadata{
-		Name: "storage.sstable.compression.zstd.count",
-		Help: "Count of SSTables that have been compressed with the zstd " +
-			"compression algorithm.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+	metaCompressionSnappyCR = metric.Metadata{
+		Name:        "storage.compression.snappy.cr",
+		Help:        "Average compression ratio of sstable and blob value data that is compressed with the snappy algorithm.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
 	}
-	metaSSTableCompressionUnknown = metric.Metadata{
-		Name:        "storage.sstable.compression.unknown.count",
-		Help:        "Count of SSTables that have an unknown compression algorithm.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+	metaCompressionMinLZBytes = metric.Metadata{
+		Name:        "storage.compression.minlz.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed with the MinLZ algorithm.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_CONST,
 	}
-	metaSSTableCompressionNone = metric.Metadata{
-		Name:        "storage.sstable.compression.none.count",
-		Help:        "Count of SSTables that are uncompressed.",
-		Measurement: "SSTables",
-		Unit:        metric.Unit_COUNT,
+	metaCompressionMinLZCR = metric.Metadata{
+		Name:        "storage.compression.minlz.cr",
+		Help:        "Average compression ratio of sstable and blob value data that is compressed with the MinLZ algorithm.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
+	}
+	metaCompressionZstdBytes = metric.Metadata{
+		Name:        "storage.compression.zstd.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed with the Zstd algorithm.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCompressionZstdCR = metric.Metadata{
+		Name:        "storage.compression.zstd.cr",
+		Help:        "Average compression ratio of sstable and blob value data that is compressed with the Zstd algorithm.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
+	}
+	metaCompressionNoneBytes = metric.Metadata{
+		Name:        "storage.compression.none.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is not compressed.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCompressionUnknownBytes = metric.Metadata{
+		Name:        "storage.compression.unknown.bytes",
+		Help:        "Total on disk size of sstable and blob value data that is compressed but for which we have no compression statistics.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCompressionOverallCR = metric.Metadata{
+		Name:        "storage.compression.cr",
+		Help:        "Average compression ratio of sstable and blob value data.",
+		Measurement: "Ratio",
+		Unit:        metric.Unit_CONST,
 	}
 )
 
@@ -2098,6 +2172,33 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaReplicateQueueEnqueueAdd = metric.Metadata{
+		Name:        "queue.replicate.enqueue.add",
+		Help:        "Number of replicas successfully added to the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueFailedPrecondition = metric.Metadata{
+		Name: "queue.replicate.enqueue.failedprecondition",
+		Help: "Number of replicas that failed the precondition checks and were therefore not added to the replicate " +
+			"queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueNoAction = metric.Metadata{
+		Name: "queue.replicate.enqueue.noaction",
+		Help: "Number of replicas for which ShouldQueue determined no action was needed and were therefore not " +
+			"added to the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueUnexpectedError = metric.Metadata{
+		Name: "queue.replicate.enqueue.unexpectederror",
+		Help: "Number of replicas that were expected to be enqueued (ShouldQueue returned true or the caller decided to " +
+			"add to the replicate queue directly), but failed to be enqueued due to unexpected errors",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaLeaseQueueSuccesses = metric.Metadata{
 		Name:        "queue.lease.process.success",
 		Help:        "Number of replicas successfully processed by the replica lease queue",
@@ -2143,6 +2244,12 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 	metaReplicateQueuePending = metric.Metadata{
 		Name:        "queue.replicate.pending",
 		Help:        "Number of pending replicas in the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueFull = metric.Metadata{
+		Name:        "queue.replicate.queue_full",
+		Help:        "Number of times a replica was dropped from the queue due to queue fullness",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -2646,6 +2753,12 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaValueSeparationValueRetrievalCount = metric.Metadata{
+		Name:        "storage.value_separation.value_retrieval.count",
+		Help:        "The number of value retrievals of values separated into blob files.",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaWALBytesWritten = metric.Metadata{
 		Name:        "storage.wal.bytes_written",
 		Help:        "The number of bytes the storage engine has written to the WAL",
@@ -2832,6 +2945,14 @@ type StoreMetrics struct {
 	DecommissioningRangeCount       *metric.Gauge
 	RangeClosedTimestampPolicyCount [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gauge
 
+	// Decommissioning nudger metrics.
+	DecommissioningNudgerEnqueue                      *metric.Counter
+	DecommissioningNudgerEnqueueSuccess               *metric.Counter
+	DecommissioningNudgerEnqueueFailure               *metric.Counter
+	DecommissioningNudgerProcessSuccess               *metric.Counter
+	DecommissioningNudgerProcessFailure               *metric.Counter
+	DecommissioningNudgerNotLeaseholderOrInvalidLease *metric.Counter
+
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
@@ -2962,22 +3083,30 @@ type StoreMetrics struct {
 	SSTableZombieBytes                *metric.Gauge
 	SSTableRemoteBytes                *metric.Gauge
 	SSTableRemoteCount                *metric.Gauge
-	SSTableCompressionSnappy          *metric.Gauge
-	SSTableCompressionZstd            *metric.Gauge
-	SSTableCompressionUnknown         *metric.Gauge
-	SSTableCompressionNone            *metric.Gauge
-	categoryIterMetrics               pebbleCategoryIterMetricsContainer
-	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
-	ValueSeparationBytesReferenced    *metric.Gauge
-	ValueSeparationBytesUnreferenced  *metric.Gauge
-	ValueSeparationBlobFileCount      *metric.Gauge
-	ValueSeparationBlobFileSize       *metric.Gauge
-	WALBytesWritten                   *metric.Counter
-	WALBytesIn                        *metric.Counter
-	WALFailoverSwitchCount            *metric.Counter
-	WALFailoverPrimaryDuration        *metric.Counter
-	WALFailoverSecondaryDuration      *metric.Counter
-	WALFailoverWriteAndSyncLatency    *metric.ManualWindowHistogram
+
+	CompressionSnappyBytes  *metric.Gauge
+	CompressionSnappyCR     *metric.GaugeFloat64
+	CompressionMinLZBytes   *metric.Gauge
+	CompressionMinLZCR      *metric.GaugeFloat64
+	CompressionZstdBytes    *metric.Gauge
+	CompressionZstdCR       *metric.GaugeFloat64
+	CompressionNoneBytes    *metric.Gauge
+	CompressionUnknownBytes *metric.Gauge
+	CompressionOverallCR    *metric.GaugeFloat64
+
+	categoryIterMetrics                pebbleCategoryIterMetricsContainer
+	categoryDiskWriteMetrics           pebbleCategoryDiskWriteMetricsContainer
+	ValueSeparationBytesReferenced     *metric.Gauge
+	ValueSeparationBytesUnreferenced   *metric.Gauge
+	ValueSeparationBlobFileCount       *metric.Gauge
+	ValueSeparationBlobFileSize        *metric.Gauge
+	ValueSeparationValueRetrievalCount *metric.Counter
+	WALBytesWritten                    *metric.Counter
+	WALBytesIn                         *metric.Counter
+	WALFailoverSwitchCount             *metric.Counter
+	WALFailoverPrimaryDuration         *metric.Counter
+	WALFailoverSecondaryDuration       *metric.Counter
+	WALFailoverWriteAndSyncLatency     *metric.ManualWindowHistogram
 
 	RdbCheckpoints *metric.Gauge
 
@@ -3118,9 +3247,14 @@ type StoreMetrics struct {
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
+	ReplicateQueueEnqueueAdd                  *metric.Counter
+	ReplicateQueueEnqueueFailedPrecondition   *metric.Counter
+	ReplicateQueueEnqueueNoAction             *metric.Counter
+	ReplicateQueueEnqueueUnexpectedError      *metric.Counter
 	ReplicateQueueSuccesses                   *metric.Counter
 	ReplicateQueueFailures                    *metric.Counter
 	ReplicateQueuePending                     *metric.Gauge
+	ReplicateQueueFull                        *metric.Counter
 	ReplicateQueueProcessingNanos             *metric.Counter
 	ReplicateQueuePurgatory                   *metric.Gauge
 	SplitQueueSuccesses                       *metric.Counter
@@ -3381,11 +3515,11 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, m *tenantSto
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.mu.released.Load() {
-		log.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
+		log.Dev.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
 	}
 	m.mu.refCount--
 	if n := m.mu.refCount; n < 0 {
-		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
+		log.Dev.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
 	} else if n > 0 {
 		return
 	}
@@ -3475,7 +3609,7 @@ func (tm *tenantStorageMetrics) assert(ctx context.Context) {
 	if tm.mu.released.Load() {
 		tm.mu.Lock()
 		defer tm.mu.Unlock()
-		log.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
+		log.Dev.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
 	}
 }
 
@@ -3542,6 +3676,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:        metric.NewGauge(metaOverReplicatedRangeCount),
 		DecommissioningRangeCount:       metric.NewGauge(metaDecommissioningRangeCount),
 		RangeClosedTimestampPolicyCount: makePolicyRefresherMetrics(),
+
+		// Decommissioning nuder metrics.
+		DecommissioningNudgerEnqueue:                      metric.NewCounter(metaDecommissioningNudgerEnqueue),
+		DecommissioningNudgerEnqueueSuccess:               metric.NewCounter(metaDecommissioningNudgerEnqueueSuccess),
+		DecommissioningNudgerEnqueueFailure:               metric.NewCounter(metaDecommissioningNudgerEnqueueFailure),
+		DecommissioningNudgerProcessSuccess:               metric.NewCounter(metaDecommissioningNudgerProcessSuccess),
+		DecommissioningNudgerProcessFailure:               metric.NewCounter(metaDecommissioningNudgerProcessFailure),
+		DecommissioningNudgerNotLeaseholderOrInvalidLease: metric.NewCounter(metaDecommissioningNudgerNotLeaseholderOrInvalidLease),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
@@ -3690,22 +3832,30 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
 		SSTableRemoteBytes:                metric.NewGauge(metaSSTableRemoteBytes),
 		SSTableRemoteCount:                metric.NewGauge(metaSSTableRemoteCount),
-		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
-		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
-		SSTableCompressionUnknown:         metric.NewGauge(metaSSTableCompressionUnknown),
-		SSTableCompressionNone:            metric.NewGauge(metaSSTableCompressionNone),
+
+		CompressionSnappyBytes:  metric.NewGauge(metaCompressionSnappyBytes),
+		CompressionSnappyCR:     metric.NewGaugeFloat64(metaCompressionSnappyCR),
+		CompressionMinLZBytes:   metric.NewGauge(metaCompressionMinLZBytes),
+		CompressionMinLZCR:      metric.NewGaugeFloat64(metaCompressionMinLZCR),
+		CompressionZstdBytes:    metric.NewGauge(metaCompressionZstdBytes),
+		CompressionZstdCR:       metric.NewGaugeFloat64(metaCompressionZstdCR),
+		CompressionNoneBytes:    metric.NewGauge(metaCompressionNoneBytes),
+		CompressionUnknownBytes: metric.NewGauge(metaCompressionUnknownBytes),
+		CompressionOverallCR:    metric.NewGaugeFloat64(metaCompressionOverallCR),
+
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
-		ValueSeparationBytesReferenced:   metric.NewGauge(metaValueSeparationBytesReferenced),
-		ValueSeparationBytesUnreferenced: metric.NewGauge(metaValueSeparationBytesUnreferenced),
-		ValueSeparationBlobFileCount:     metric.NewGauge(metaValueSeparationBlobFileCount),
-		ValueSeparationBlobFileSize:      metric.NewGauge(metaValueSeparationBlobFileSize),
-		WALBytesWritten:                  metric.NewCounter(metaWALBytesWritten),
-		WALBytesIn:                       metric.NewCounter(metaWALBytesIn),
-		WALFailoverSwitchCount:           metric.NewCounter(metaStorageWALFailoverSwitchCount),
-		WALFailoverPrimaryDuration:       metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
-		WALFailoverSecondaryDuration:     metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
+		ValueSeparationBytesReferenced:     metric.NewGauge(metaValueSeparationBytesReferenced),
+		ValueSeparationBytesUnreferenced:   metric.NewGauge(metaValueSeparationBytesUnreferenced),
+		ValueSeparationBlobFileCount:       metric.NewGauge(metaValueSeparationBlobFileCount),
+		ValueSeparationBlobFileSize:        metric.NewGauge(metaValueSeparationBlobFileSize),
+		ValueSeparationValueRetrievalCount: metric.NewCounter(metaValueSeparationValueRetrievalCount),
+		WALBytesWritten:                    metric.NewCounter(metaWALBytesWritten),
+		WALBytesIn:                         metric.NewCounter(metaWALBytesIn),
+		WALFailoverSwitchCount:             metric.NewCounter(metaStorageWALFailoverSwitchCount),
+		WALFailoverPrimaryDuration:         metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
+		WALFailoverSecondaryDuration:       metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
 		WALFailoverWriteAndSyncLatency: metric.NewManualWindowHistogram(
 			metaStorageWALFailoverWriteAndSyncLatency,
 			pebble.FsyncLatencyBuckets,
@@ -3895,9 +4045,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
 		ReplicaGCQueueProcessingNanos:             metric.NewCounter(metaReplicaGCQueueProcessingNanos),
+		ReplicateQueueEnqueueAdd:                  metric.NewCounter(metaReplicateQueueEnqueueAdd),
+		ReplicateQueueEnqueueFailedPrecondition:   metric.NewCounter(metaReplicateQueueEnqueueFailedPrecondition),
+		ReplicateQueueEnqueueNoAction:             metric.NewCounter(metaReplicateQueueEnqueueNoAction),
+		ReplicateQueueEnqueueUnexpectedError:      metric.NewCounter(metaReplicateQueueEnqueueUnexpectedError),
 		ReplicateQueueSuccesses:                   metric.NewCounter(metaReplicateQueueSuccesses),
 		ReplicateQueueFailures:                    metric.NewCounter(metaReplicateQueueFailures),
 		ReplicateQueuePending:                     metric.NewGauge(metaReplicateQueuePending),
+		ReplicateQueueFull:                        metric.NewCounter(metaReplicateQueueFull),
 		ReplicateQueueProcessingNanos:             metric.NewCounter(metaReplicateQueueProcessingNanos),
 		ReplicateQueuePurgatory:                   metric.NewGauge(metaReplicateQueuePurgatory),
 		SplitQueueSuccesses:                       metric.NewCounter(metaSplitQueueSuccesses),
@@ -4144,6 +4299,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.ValueSeparationBytesUnreferenced.Update(int64(m.BlobFiles.ValueSize - m.BlobFiles.ReferencedValueSize))
 	sm.ValueSeparationBlobFileCount.Update(int64(m.BlobFiles.LiveCount))
 	sm.ValueSeparationBlobFileSize.Update(int64(m.BlobFiles.LiveSize))
+	sm.ValueSeparationValueRetrievalCount.Update(int64(m.Iterator.ValueRetrievalCount))
 	// NB: `UpdateIfHigher` is used here since there is a race in pebble where
 	// sometimes the WAL is rotated but metrics are retrieved prior to the update
 	// to BytesIn to account for the previous WAL.
@@ -4164,10 +4320,29 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	count, size := m.RemoteTablesTotal()
 	sm.SSTableRemoteBytes.Update(int64(size))
 	sm.SSTableRemoteCount.Update(int64(count))
-	sm.SSTableCompressionSnappy.Update(m.Table.CompressedCountSnappy)
-	sm.SSTableCompressionZstd.Update(m.Table.CompressedCountZstd)
-	sm.SSTableCompressionUnknown.Update(m.Table.CompressedCountUnknown)
-	sm.SSTableCompressionNone.Update(m.Table.CompressedCountNone)
+
+	c := m.Table.Compression
+	c.MergeWith(&m.BlobFiles.Compression)
+	sm.CompressionSnappyBytes.Update(int64(c.Snappy.CompressedBytes))
+	sm.CompressionSnappyCR.Update(c.Snappy.CompressionRatio())
+	sm.CompressionMinLZBytes.Update(int64(c.MinLZ.CompressedBytes))
+	sm.CompressionMinLZCR.Update(c.MinLZ.CompressionRatio())
+	sm.CompressionZstdBytes.Update(int64(c.Zstd.CompressedBytes))
+	sm.CompressionZstdCR.Update(c.Zstd.CompressionRatio())
+	sm.CompressionNoneBytes.Update(int64(c.NoCompressionBytes))
+	sm.CompressionUnknownBytes.Update(int64(c.CompressedBytesWithoutStats))
+
+	overall := pebble.CompressionStatsForSetting{
+		CompressedBytes:   m.Table.Compression.NoCompressionBytes,
+		UncompressedBytes: m.Table.Compression.NoCompressionBytes,
+	}
+	overall.Add(m.Table.Compression.Snappy)
+	overall.Add(m.Table.Compression.MinLZ)
+	overall.Add(m.Table.Compression.Zstd)
+	// We cannot use CompressedBytesWithoutStats for the overall compression
+	// ratio; we estimate it from the data we do have.
+	sm.CompressionOverallCR.Update(overall.CompressionRatio())
+
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
@@ -4286,7 +4461,7 @@ func (sm *StoreMetrics) updateDiskStats(
 		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
 	} else {
 		// Don't update cumulative stats to the useless zero value.
-		log.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
+		log.Dev.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
 	}
 	maxRollingStats := rollingStats.Max()
 	// maxRollingStats is computed as the change in stats every 100ms
@@ -4328,7 +4503,7 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.SplitEstimatedTotalBytesDiff = 0
 
 	if metric != (result.Metrics{}) {
-		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
+		log.Dev.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
 	}
 }
 

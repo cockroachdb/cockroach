@@ -628,7 +628,7 @@ func (r *ReplicaCircuitBreaker) Track(
 	if inflightReqs := r.inflightReqs.Add(1); inflightReqs == 1 {
 		r.stallSince.Store(now)
 	} else if inflightReqs < 0 {
-		log.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs) // overflow
+		log.Dev.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs) // overflow
 	}
 
 	// If enabled, create a send context that can be used to cancel in-flight
@@ -680,7 +680,7 @@ func (r *ReplicaCircuitBreaker) done(
 
 	// Untrack the request.
 	if inflightReqs := r.inflightReqs.Add(-1); inflightReqs < 0 {
-		log.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs)
+		log.Dev.Fatalf(ctx, "inflightReqs %d < 0", inflightReqs)
 	}
 
 	// Detect if the circuit breaker cancelled the request, and prepare a
@@ -1044,7 +1044,7 @@ func (r *ReplicaCircuitBreaker) OnTrip(b *circuit.Breaker, prev, cur error) {
 		now := crtime.NowMono()
 		stallSince := r.stallDuration(now).Truncate(time.Millisecond)
 		errorSince := r.errorDuration(now).Truncate(time.Millisecond)
-		log.Errorf(ctx, "%s circuit breaker tripped: %s (stalled for %s, erroring for %s)",
+		log.Dev.Errorf(ctx, "%s circuit breaker tripped: %s (stalled for %s, erroring for %s)",
 			r.id(), cur, stallSince, errorSince)
 
 		r.d.metrics.CircuitBreaker.ReplicasTripped.Inc(1)
@@ -1073,7 +1073,7 @@ func (r *ReplicaCircuitBreaker) OnReset(b *circuit.Breaker, prev error) {
 		// TODO(erikgrinaker): consider rate limiting these with log.Every, but for
 		// now we want to know which ones reset for debugging.
 		ctx := r.d.ambientCtx.AnnotateCtx(context.Background())
-		log.Infof(ctx, "%s circuit breaker reset", r.id())
+		log.Dev.Infof(ctx, "%s circuit breaker reset", r.id())
 
 		r.d.metrics.CircuitBreaker.ReplicasTripped.Dec(1)
 	}

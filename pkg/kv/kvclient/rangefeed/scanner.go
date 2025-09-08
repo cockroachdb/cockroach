@@ -109,7 +109,7 @@ func (f *RangeFeed) runInitialScan(
 					}
 				}
 				if n.ShouldLog() {
-					log.Warningf(ctx, "failed to perform initial scan: %v", err)
+					log.Dev.Warningf(ctx, "failed to perform initial scan: %v", err)
 				}
 				continue
 			}

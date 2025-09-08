@@ -262,7 +262,7 @@ func (ex *connExecutor) prepare(
 			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction | tree.FmtSimple)
 			f.FormatNode(stmt.AST)
 			redactableStmt := redact.RedactableString(f.CloseAndGetString())
-			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
+			log.Dev.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
 
@@ -497,7 +497,7 @@ func (ex *connExecutor) execBind(
 			numCols, len(bindCmd.OutFormats))
 		// A user is hitting this error unexpectedly and rarely, dump extra info,
 		// should be okay since this should be a very rare error.
-		log.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
+		log.Dev.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
 			bindCmd.OutFormats, ps.AST, ex.extraTxnState.prepStmtsNamespace.String())
 		return retErr(err)
 	}
@@ -517,7 +517,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "portal: %q for %q, args %q, formats %q",
+		log.Dev.Infof(ctx, "portal: %q for %q, args %q, formats %q",
 			portalName, ps.Statement, qargs, columnFormatCodes)
 	}
 

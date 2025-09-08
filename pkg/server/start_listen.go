@@ -110,7 +110,7 @@ func startListenRPCAndSQL(
 	m.HandleError(func(err error) bool {
 		select {
 		case <-stopper.ShouldQuiesce():
-			log.Infof(workersCtx, "server shutting down: instructing cmux to stop accepting")
+			log.Dev.Infof(workersCtx, "server shutting down: instructing cmux to stop accepting")
 			return false
 		default:
 			return true

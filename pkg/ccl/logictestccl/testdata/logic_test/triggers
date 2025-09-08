@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer
+# LogicTest: !local-legacy-schema-changer !local-prepared
 
 # Include some hidden columns that won't be visible to triggers.
 statement ok
@@ -5079,5 +5079,42 @@ DROP TABLE audit_log CASCADE;
 
 statement ok
 DROP FUNCTION trigger_func1, trigger_func2, trigger_func3;
+
+subtest end
+
+
+# Previously, we had a bug where we did not properly look at references
+# in a trigger when cleaning up back references on sequences. See
+# issue #148103
+subtest trigger_shared_backrefs
+
+statement ok
+CREATE SEQUENCE sc_tr_backref;
+
+statement ok
+CREATE TABLE sc_tr_tbl ();
+
+statement ok
+CREATE FUNCTION sc_tr_backref_f1() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT nextval('sc_tr_backref');
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER tr1
+BEFORE INSERT OR UPDATE ON sc_tr_tbl
+FOR EACH ROW EXECUTE FUNCTION sc_tr_backref_f1();
+
+statement ok
+ALTER TABLE sc_tr_tbl
+  ADD CONSTRAINT ck1 CHECK (nextval('sc_tr_backref') < 1000);
+
+statement ok
+ALTER TABLE sc_tr_tbl DROP CONSTRAINT ck1;
+
+statement ok
+DROP TRIGGER tr1 ON sc_tr_tbl;
 
 subtest end

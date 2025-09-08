@@ -293,7 +293,7 @@ func (aq *applierQuerier) execParsed(
 	datums ...interface{},
 ) error {
 	if _, err := ie.ExecParsed(ctx, opName, txn, o, stmt, datums...); err != nil {
-		log.Warningf(ctx, "%s failed (query: %s): %s", opName, stmt.SQL, err.Error())
+		log.Dev.Warningf(ctx, "%s failed (query: %s): %s", opName, stmt.SQL, err.Error())
 		return err
 	}
 	return nil
@@ -309,7 +309,7 @@ func (aq *applierQuerier) queryRowExParsed(
 	datums ...interface{},
 ) (tree.Datums, error) {
 	if row, err := ie.QueryRowExParsed(ctx, opName, txn, o, stmt, datums...); err != nil {
-		log.Warningf(ctx, "%s failed (query: %s): %s", opName, stmt.SQL, err.Error())
+		log.Dev.Warningf(ctx, "%s failed (query: %s): %s", opName, stmt.SQL, err.Error())
 		return nil, err
 	} else {
 		return row, nil

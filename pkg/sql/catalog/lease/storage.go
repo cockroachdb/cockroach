@@ -235,10 +235,10 @@ func (s storage) acquire(
 				s.livenessProvider.PauseLivenessHeartbeat(ctx)
 				extensionsBlocked = true
 			}
-			log.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
+			log.Dev.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
 			continue
 		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
-			log.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
+			log.Dev.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
 				" removal for %v, retrying: %v", id, err)
 			continue
 		case err != nil:
@@ -307,7 +307,7 @@ func (s storage) release(
 		}
 		err := s.writer.deleteLease(ctx, nil /* txn */, lf)
 		if err != nil {
-			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
+			log.Dev.Warningf(ctx, "error releasing lease %q: %s", lease, err)
 			if grpcutil.IsConnectionRejected(err) {
 				return
 			}

@@ -301,7 +301,7 @@ func newEvaluator(
 				"error upgrading changefeed expression.  Please recreate changefeed manually"))
 		}
 		if newExpr != sc {
-			log.Warningf(ctx,
+			log.Changefeed.Warningf(ctx,
 				"changefeed expression %s (job %d) created prior to 22.2-30 rewritten as %s",
 				tree.AsString(sc), spec.JobID,
 				tree.AsString(newExpr))
@@ -479,13 +479,13 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	})
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			log.Warningf(ctx, `sink failed to emit row: %v`, err)
+			log.Changefeed.Warningf(ctx, `sink failed to emit row: %v`, err)
 			c.metrics.SinkErrors.Inc(1)
 		}
 		return err
 	}
 	if log.V(3) {
-		log.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
+		log.Changefeed.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
 	}
 	return nil
 }
@@ -518,7 +518,7 @@ func (c *kvEventToRowConsumer) makeRowHeaders(
 	}
 	if objIt == nil {
 		if jsonHeaderWrongTypeLogLim.ShouldLog() || log.V(2) {
-			log.Warningf(ctx, "headers column %s must be a JSON object, was %s, in: %s", c.encodingOpts.HeadersJSONColName, redact.SafeString(headersJSON.Type().String()), updatedRow.DebugString())
+			log.Changefeed.Warningf(ctx, "headers column %s must be a JSON object, was %s, in: %s", c.encodingOpts.HeadersJSONColName, redact.SafeString(headersJSON.Type().String()), updatedRow.DebugString())
 		}
 		return nil, nil
 	}
@@ -536,7 +536,7 @@ func (c *kvEventToRowConsumer) makeRowHeaders(
 			headers[objIt.Key()] = []byte(objIt.Value().String())
 		default:
 			if jsonHeaderWrongValTypeLogLim.ShouldLog() || log.V(2) {
-				log.Warningf(ctx, "headers column %s must be a JSON object with primitive values, got %s - %s, in: %s",
+				log.Changefeed.Warningf(ctx, "headers column %s must be a JSON object with primitive values, got %s - %s, in: %s",
 					c.encodingOpts.HeadersJSONColName, redact.SafeString(objIt.Value().Type().String()), objIt.Value(), updatedRow.DebugString())
 			}
 		}
@@ -702,7 +702,7 @@ func (c *parallelEventConsumer) workerLoop(
 	defer func() {
 		err := consumer.Close()
 		if err != nil {
-			log.Errorf(ctx, "closing consumer: %v", err)
+			log.Changefeed.Errorf(ctx, "closing consumer: %v", err)
 		}
 	}()
 

@@ -280,7 +280,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	if raftStatus == nil {
 		if log.V(6) {
-			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
+			log.Dev.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
 		}
 		return truncateDecision{}, nil
 	}
@@ -620,7 +620,7 @@ func (rlq *raftLogQueue) shouldQueue(
 ) (shouldQueue bool, priority float64) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return false, 0
 	}
 
@@ -659,7 +659,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
@@ -688,7 +688,7 @@ func (rlq *raftLogQueue) process(
 	}
 
 	if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
-		log.Infof(ctx, "%v", redact.Safe(decision.String()))
+		log.Dev.Infof(ctx, "%v", redact.Safe(decision.String()))
 	} else {
 		log.VEventf(ctx, 1, "%v", redact.Safe(decision.String()))
 	}

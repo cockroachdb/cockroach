@@ -24,10 +24,10 @@ func alterTableSetOnUpdate(
 	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, colID)
 
 	// Block alters on system columns.
-	panicIfSystemColumn(col, t.Column.String())
+	panicIfSystemColumn(col, t.Column)
 
 	// Block disallowed operations on computed columns.
-	panicIfComputedColumn(b, tn.ObjectName, colType, t.Column.String(), t.Expr)
+	panicIfComputedColumn(b, tn.ObjectName, colType, t.Column, t.Expr)
 
 	// For DROP ON UPDATE.
 	if t.Expr == nil {

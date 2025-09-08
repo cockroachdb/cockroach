@@ -32,6 +32,7 @@ import (
 	"cloud.google.com/go/pubsub/pstest"
 	"github.com/IBM/sarama"
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -185,10 +186,26 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 		if marshalledValue, err := gojson.Marshal(valueMap); err == nil {
 			normalizedValue = marshalledValue
 		} else {
-			log.Infof(context.Background(), "could not marshal test feed message %v", err)
+			log.Changefeed.Infof(context.Background(), "could not marshal test feed message %v", err)
 		}
 	} else {
-		log.Infof(context.Background(), "could not unmarshal test feed message %v", err)
+		// JSON unmarshal failed, try Protobuf
+		var msg changefeedpb.Message
+		if err := protoutil.Unmarshal(m.Value, &msg); err == nil {
+			switch data := msg.Data.(type) {
+			case *changefeedpb.Message_Enriched:
+				data.Enriched.TsNs = 0
+				data.Enriched.Op = changefeedpb.Op_OP_UNSPECIFIED
+			}
+			marshalledValue, err := protoutil.Marshal(&msg)
+			if err != nil {
+				log.Changefeed.Infof(context.Background(), "could not re-marshal normalized Protobuf: %v", err)
+			} else {
+				normalizedValue = marshalledValue
+			}
+		} else {
+			log.Changefeed.Infof(context.Background(), "could not decode test feed message as JSON or Protobuf: %v, %v", err, m.Value)
+		}
 	}
 
 	// TODO(dan): This skips duplicates, since they're allowed by the
@@ -199,7 +216,7 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 	seenKey := m.Topic + m.Partition + string(m.Key) + string(normalizedValue)
 	if _, ok := t[seenKey]; ok {
 		if log.V(1) {
-			log.Infof(context.Background(), "skip dup %s", seenKey)
+			log.Changefeed.Infof(context.Background(), "skip dup %s", seenKey)
 		}
 		return false
 	}
@@ -634,7 +651,7 @@ func (f *jobFeed) Close() error {
 			return nil
 		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
-			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
+			log.Changefeed.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
 		} else {
 			return f.WaitForState(func(s jobs.State) bool { return s == jobs.StateCanceled })
 		}
@@ -861,7 +878,7 @@ func (e *enterpriseFeedFactory) AsUser(user string, fn func(*sqlutils.SQLRunner)
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
-	log.Infof(context.Background(), "Starting feed job: %q", create)
+	log.Changefeed.Infof(context.Background(), "Starting feed job: %q", create)
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
 		e.di.pendingJob = nil
@@ -1587,7 +1604,7 @@ func (c *cloudFeed) walkDir(path string, d fs.DirEntry, err error) error {
 		c.seenFiles = make(map[string]struct{})
 	}
 	if _, seen := c.seenFiles[path]; seen {
-		log.Infof(context.Background(), "Skip file %s", path)
+		log.Changefeed.Infof(context.Background(), "Skip file %s", path)
 		return nil
 	}
 	c.seenFiles[path] = struct{}{}

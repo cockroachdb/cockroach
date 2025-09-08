@@ -91,22 +91,32 @@ func DialDRPC(
 			return conn, nil
 		})
 
+		unaryInterceptors := rpcCtx.clientUnaryInterceptorsDRPC
 		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
-			if interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
-				rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC, interceptor)
+			interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass)
+			if interceptor != nil {
+				unaryInterceptors = append(unaryInterceptors, interceptor)
 			}
 		}
+		streamInterceptors := rpcCtx.clientStreamInterceptorsDRPC
 		if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
-			if interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
-				rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC, interceptor)
+			interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass)
+			if interceptor != nil {
+				streamInterceptors = append(streamInterceptors, interceptor)
 			}
 		}
-		clientConn, _ := drpcclient.NewClientConnWithOptions(
-			ctx,
-			pooledConn,
-			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDRPC...),
-			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDRPC...),
-		)
+
+		opts := []drpcclient.DialOption{
+			drpcclient.WithChainUnaryInterceptor(unaryInterceptors...),
+			drpcclient.WithChainStreamInterceptor(streamInterceptors...),
+		}
+
+		if !rpcCtx.TenantID.IsSystem() {
+			key, value := newPerRPCTIDMetdata(rpcCtx.TenantID)
+			opts = append(opts, drpcclient.WithPerRPCMetadata(map[string]string{key: value}))
+		}
+
+		clientConn, _ := drpcclient.NewClientConnWithOptions(ctx, pooledConn, opts...)
 
 		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
 		return &closeEntirePoolConn{
@@ -147,12 +157,36 @@ type drpcServer struct {
 }
 
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
-func NewDRPCServer(_ context.Context, _ *Context) (DRPCServer, error) {
+func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DRPCServer, error) {
 	d := &drpcServer{}
-	mux := drpcmux.New()
+
+	var o serverOpts
+	for _, f := range opts {
+		f(&o)
+	}
+
+	var unaryInterceptors []drpcmux.UnaryServerInterceptor
+	var streamInterceptors []drpcmux.StreamServerInterceptor
+
+	if !rpcCtx.ContextOptions.Insecure {
+		a := kvAuth{
+			sv: &rpcCtx.Settings.SV,
+			tenant: tenantAuthorizer{
+				tenantID:               rpcCtx.tenID,
+				capabilitiesAuthorizer: rpcCtx.capabilitiesAuthorizer,
+			},
+			isDRPC: true,
+		}
+
+		unaryInterceptors = append(unaryInterceptors, a.AuthDRPCUnary())
+		streamInterceptors = append(streamInterceptors, a.AuthDRPCStream())
+	}
+
+	mux := drpcmux.NewWithInterceptors(unaryInterceptors, streamInterceptors)
+
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
 		Log: func(err error) {
-			log.Warningf(context.Background(), "drpc server error %v", err)
+			log.Dev.Warningf(context.Background(), "drpc server error %v", err)
 		},
 		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 		// as happens with AddSSTable) the RPCs fail.

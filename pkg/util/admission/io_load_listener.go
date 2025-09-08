@@ -775,7 +775,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	// want to know what happened in that interval.
 	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 ||
 		log.V(1) {
-		log.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
+		log.Dev.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
 }
 
@@ -862,7 +862,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	if intL0AddedBytes < 0 {
 		// intL0AddedBytes is a simple delta computation over individually cumulative
 		// stats, so should not be negative.
-		log.Warningf(ctx, "intL0AddedBytes %d is negative", intL0AddedBytes)
+		log.Dev.Warningf(ctx, "intL0AddedBytes %d is negative", intL0AddedBytes)
 		intL0AddedBytes = 0
 	}
 	// intL0CompactedBytes are due to finished compactions.

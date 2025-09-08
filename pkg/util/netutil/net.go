@@ -86,14 +86,15 @@ func MakeHTTPServer(
 					delete(activeConns, conn)
 				}
 			},
-			ErrorLog: httpLogger,
+			ErrorLog:          httpLogger,
+			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
 
 	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
 	if err := http2.ConfigureServer(server.Server, nil); err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 
 	waitQuiesce := func(context.Context) {
@@ -210,12 +211,12 @@ func IsClosedConnection(err error) bool {
 		strings.Contains(err.Error(), "use of closed network connection")
 }
 
-// FatalIfUnexpected calls Log.Fatal(err) unless err is nil, or an error that
+// FatalIfUnexpected calls log.Fatal(err) unless err is nil, or an error that
 // comes from the net package indicating that the listener was closed or from
 // the Stopper indicating quiescence.
 func FatalIfUnexpected(err error) {
 	if err != nil && !IsClosedConnection(err) && !errors.Is(err, stop.ErrUnavailable) {
-		log.Fatalf(context.TODO(), "%+v", err)
+		log.Dev.Fatalf(context.TODO(), "%+v", err)
 	}
 }
 

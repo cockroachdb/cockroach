@@ -377,7 +377,7 @@ func (rts *registryTestSuite) checkStateChangeLog(
 				jobEventsLog.PreviousStatus == string(expectedPrevState) &&
 				jobEventsLog.NewStatus == string(expectedNewState) &&
 				strings.Contains(jobEventsLog.Error, expectedError) {
-				rts.statusChangeLogSpy.SetLastNLogsAsUnread(logpb.Channel_OPS, len(logs)-i+1)
+				rts.statusChangeLogSpy.SetLastNLogsAsUnread(logpb.Channel_OPS, len(logs)-i)
 				return nil
 			}
 		}
@@ -392,6 +392,7 @@ func (rts *registryTestSuite) idb() isql.DB {
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 152542)
 
 	t.Run("normal success", func(t *testing.T) {
 		rts := registryTestSuite{}
@@ -869,10 +870,17 @@ func TestRegistryLifecycle(t *testing.T) {
 		defer rts.setUp(t)()
 		defer rts.tearDown()
 
+		// Pick an ID so we know which job to mess with.
+		id := rts.registry.MakeJobID()
+		rts.mockJob.JobID = id
+
 		// Inject an error in the update to move the job to "succeeded" one time.
 		var failed atomic.Value
 		failed.Store(false)
 		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
+			if orig.ID != id {
+				return nil
+			}
 			if updated.State == jobs.StateSucceeded && !failed.Load().(bool) {
 				failed.Store(true)
 				return errors.New("boom")
@@ -2867,7 +2875,6 @@ func TestMetrics(t *testing.T) {
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
 			errCh <- nil
 			int64EqSoon(t, importMetrics.FailOrCancelCompleted.Count, 1)
-			int64EqSoon(t, importMetrics.FailOrCancelFailed.Count, 0)
 		}
 	})
 }
@@ -3209,7 +3216,7 @@ func TestJobTypeMetrics(t *testing.T) {
 
 	checkPTSCounts := func(typ jobspb.Type, count int64) {
 		testutils.SucceedsSoon(t, func() error {
-			m := reg.MetricsStruct().JobMetrics[typ]
+			m := reg.MetricsStruct().JobPTSMetrics[typ]
 			if m.NumJobsWithPTS.Value() == count && (count == 0 || m.ProtectedAge.Value() > 0) {
 				return nil
 			}

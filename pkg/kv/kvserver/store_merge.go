@@ -75,10 +75,10 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 						return nil
 					})
 				if err != nil {
-					log.Fatalf(ctx, "%v", err)
+					log.Dev.Fatalf(ctx, "%v", err)
 				}
 				if last.isEmpty() {
-					log.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
+					log.Dev.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
 				}
 				runtime.Gosched()
 			}()

@@ -353,7 +353,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// commits by handleMergeResult() to finish the removal.
 		rhsRepl.readOnlyCmdMu.Lock()
 		rhsRepl.mu.Lock()
-		rhsRepl.mu.destroyStatus.Set(
+		rhsRepl.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
 			destroyReasonRemoved)
 		rhsRepl.mu.Unlock()
@@ -364,7 +364,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// required for correctness, since the merge protocol should guarantee that
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
 		// be careful.
-		if err := kvstorage.DestroyReplica(ctx, rhsRepl.RangeID, b.batch, b.batch, mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
+		if err := kvstorage.DestroyReplica(ctx, rhsRepl.ID(), b.batch, b.batch, mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
 			ClearReplicatedByRangeID:   true,
 			ClearUnreplicatedByRangeID: true,
 		}); err != nil {
@@ -443,7 +443,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// application.
 		b.r.readOnlyCmdMu.Lock()
 		b.r.mu.Lock()
-		b.r.mu.destroyStatus.Set(
+		b.r.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
 		span := b.r.descRLocked().RSpan()
@@ -455,7 +455,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// We've set the replica's in-mem status to reflect the pending destruction
 		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
-		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
+		if err := kvstorage.DestroyReplica(ctx, b.r.ID(), b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
 			ClearReplicatedBySpan:      span,
 			ClearReplicatedByRangeID:   true,
 			ClearUnreplicatedByRangeID: true,
@@ -474,7 +474,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	} else if ops != nil {
-		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
+		log.Dev.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
 
 	return nil
@@ -598,7 +598,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 // application.
 func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
-		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.numEntriesProcessed)
+		log.Dev.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.numEntriesProcessed)
 	}
 
 	// Add the replica applied state key to the write batch if this change

@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 # Disable declarative schema changer for this test and schema locked by
 # default for this test.
 statement ok
@@ -33,9 +35,6 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     updating privileges for database 104               root
-SCHEMA CHANGE     updating version for role membership table         root
-SCHEMA CHANGE     updating version for role options table            root
-SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 
 query TTT
@@ -44,9 +43,6 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     updating privileges for database 104               root
-SCHEMA CHANGE     updating version for role membership table         root
-SCHEMA CHANGE     updating version for role options table            root
-SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 
 query TTT
@@ -99,9 +95,6 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
 SCHEMA CHANGE     updating privileges for database 104               root
-SCHEMA CHANGE     updating version for role membership table         root
-SCHEMA CHANGE     updating version for role options table            root
-SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
@@ -113,9 +106,6 @@ AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                
 SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)                  testuser
 SCHEMA CHANGE                    updating privileges for database 104               root
-SCHEMA CHANGE                    updating version for role membership table         root
-SCHEMA CHANGE                    updating version for role options table            root
-SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE GC                 GC for temporary index used during index backfill  root
 SCHEMA CHANGE GC                 GC for temporary index used during index backfill  testuser
 

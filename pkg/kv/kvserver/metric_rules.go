@@ -291,10 +291,10 @@ func MaybeAddRuleToRegistry(
 	ctx context.Context, err error, name string, rule metric.Rule, ruleRegistry *metric.RuleRegistry,
 ) {
 	if err != nil {
-		log.Warningf(ctx, "unable to create kv rule %s: %s", name, err.Error())
+		log.Dev.Warningf(ctx, "unable to create kv rule %s: %s", name, err.Error())
 	}
 	if ruleRegistry == nil {
-		log.Warningf(ctx, "unable to add kv rule %s: rule registry uninitialized", name)
+		log.Dev.Warningf(ctx, "unable to add kv rule %s: rule registry uninitialized", name)
 	}
 	ruleRegistry.AddRule(rule)
 }

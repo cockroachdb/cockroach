@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 sh_binary(
     name = "jsonpath-gen",
@@ -34,8 +35,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
+        "//pkg/sql/parserutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/scanner",
@@ -64,4 +65,9 @@ go_test(
         "//pkg/testutils/sqlutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
+)
+
+disallowed_imports_test(
+    src = "parser",
+    disallowed_list = ["//pkg/sql/parser"],
 )

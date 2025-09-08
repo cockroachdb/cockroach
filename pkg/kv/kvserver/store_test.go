@@ -98,7 +98,7 @@ func (s *Store) TestSender() kv.Sender {
 		// that.
 		key, err := keys.Addr(ba.Requests[0].GetInner().Header().Key)
 		if err != nil {
-			log.Fatalf(context.Background(), "%v", err)
+			log.Dev.Fatalf(context.Background(), "%v", err)
 		}
 
 		ba.RangeID = roachpb.RangeID(1)
@@ -776,7 +776,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	require.Equal(t, errRemoved, err)
 
 	repl1.mu.RLock()
-	expErr := repl1.mu.destroyStatus.err
+	expErr := repl1.shMu.destroyStatus.err
 	repl1.mu.RUnlock()
 
 	if expErr == nil {
@@ -2659,7 +2659,7 @@ func TestStore_HottestReplicasByTenant(t *testing.T) {
 	}
 
 	td := []testData{{1, 2}, {1, 3}, {1, 4}, {1, 5},
-		{2, 1}, {2, 2}, {2, 3}, {2, 4}}
+		{3, 1}, {3, 2}, {3, 3}, {3, 4}}
 
 	acc := NewTenantReplicaAccumulator(aload.Queries)
 
@@ -2685,7 +2685,7 @@ func TestStore_HottestReplicasByTenant(t *testing.T) {
 	for i := 0; i < iterationsNum; i++ {
 		go func() {
 			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(1)))
-			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(2)))
+			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(3)))
 			wg.Done()
 		}()
 	}

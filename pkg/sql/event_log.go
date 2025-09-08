@@ -165,6 +165,11 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 		User:            p.SessionData().SessionUser().Normalized(),
 		ApplicationName: p.SessionData().ApplicationName,
 	}
+	txn := p.InternalSQLTxn()
+	if txn != nil {
+		commonSQLEventDetails.TxnReadTimestamp = txn.KV().ReadTimestamp().WallTime
+	}
+
 	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
@@ -273,10 +278,6 @@ func logEventInternalForSQLStatements(
 
 		// Overwrite with the common details.
 		*m = commonSQLEventDetails
-
-		if txn != nil {
-			m.TxnReadTimestamp = txn.KV().ReadTimestamp().WallTime
-		}
 
 		// If the common details didn't have a descriptor ID, keep the
 		// one that was in the event already.
@@ -506,7 +507,7 @@ func insertEventRecords(
 			// The VDepth() call ensures that we are matching the vmodule
 			// setting to where the depth is equal to 1 in the caller stack.
 			for i := range entries {
-				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
+				log.Dev.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
 			}
 		}
 	}
@@ -614,7 +615,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 			// background context here.
 			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
 		}
-		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
+		log.Dev.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
 	}
 }
 

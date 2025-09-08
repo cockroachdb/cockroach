@@ -466,7 +466,7 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 	}
 	defer func() {
 		if err != nil {
-			log.Warningf(ctx, "error when closing subscription connection: %v", err)
+			log.Dev.Warningf(ctx, "error when closing subscription connection: %v", err)
 		}
 	}()
 

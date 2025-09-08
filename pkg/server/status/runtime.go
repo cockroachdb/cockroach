@@ -67,6 +67,12 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaGoLimitBytes = metric.Metadata{
+		Name:        "sys.go.limitbytes",
+		Help:        "Go soft memory limit",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaGoMemStackSysBytes = metric.Metadata{
 		Name:        "sys.go.stack.systembytes",
 		Help:        "Stack memory obtained from the OS.",
@@ -591,6 +597,9 @@ const runtimeMetricMemStackOSBytes = "/memory/classes/os-stacks:bytes"
 // metrics in /memory/classes.
 const runtimeMetricGoTotal = "/memory/classes/total:bytes"
 
+// Current soft memory limit (see debug.SetMemoryLimit).
+const runtimeMetricGoLimit = "/gc/gomemlimit:bytes"
+
 // Count of all completed GC cycles.
 const runtimeMetricGCCount = "/gc/cycles/total:gc-cycles"
 
@@ -598,6 +607,7 @@ var runtimeMetrics = []string{
 	runtimeMetricGCAssist,
 	runtimeMetricGoTotal,
 	runtimeMetricHeapAlloc,
+	runtimeMetricGoLimit,
 	runtimeMetricHeapFragmentBytes,
 	runtimeMetricHeapReservedBytes,
 	runtimeMetricHeapReleasedBytes,
@@ -774,6 +784,7 @@ type RuntimeStatSampler struct {
 	RunnableGoroutinesPerCPU *metric.GaugeFloat64
 	GoAllocBytes             *metric.Gauge
 	GoTotalBytes             *metric.Gauge
+	GoLimitBytes             *metric.Gauge
 	GoMemStackSysBytes       *metric.Gauge
 	GoHeapFragmentBytes      *metric.Gauge
 	GoHeapReservedBytes      *metric.Gauge
@@ -839,7 +850,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	timestamp, err := info.Timestamp()
 	if err != nil {
 		// We can't panic here, tests don't have a build timestamp.
-		log.Warningf(ctx, "could not parse build timestamp: %v", err)
+		log.Dev.Warningf(ctx, "could not parse build timestamp: %v", err)
 	}
 
 	// Build information.
@@ -875,6 +886,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		RunnableGoroutinesPerCPU: metric.NewGaugeFloat64(metaRunnableGoroutinesPerCPU),
 		GoAllocBytes:             metric.NewGauge(metaGoAllocBytes),
 		GoTotalBytes:             metric.NewGauge(metaGoTotalBytes),
+		GoLimitBytes:             metric.NewGauge(metaGoLimitBytes),
 		GoMemStackSysBytes:       metric.NewGauge(metaGoMemStackSysBytes),
 		GoHeapFragmentBytes:      metric.NewGauge(metaGoHeapFragmentBytes),
 		GoHeapReservedBytes:      metric.NewGauge(metaGoHeapReservedBytes),
@@ -949,7 +961,7 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 		var err error
 		cgoAllocated, cgoTotal, err = getCgoMemStats(ctx)
 		if err != nil {
-			log.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
+			log.Dev.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
 		}
 	}
 	return &CGoMemStats{
@@ -1136,6 +1148,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	goAlloc := rsr.goRuntimeSampler.uint64(runtimeMetricHeapAlloc)
 	goTotal := rsr.goRuntimeSampler.uint64(runtimeMetricGoTotal) -
 		rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes)
+	goLimit := rsr.goRuntimeSampler.uint64(runtimeMetricGoLimit)
+	if goLimit == math.MaxInt64 {
+		goLimit = 0
+	}
 	stackTotal := rsr.goRuntimeSampler.uint64(runtimeMetricMemStackHeapBytes) +
 		osStackBytes
 	heapFragmentBytes := rsr.goRuntimeSampler.uint64(runtimeMetricHeapFragmentBytes)
@@ -1147,6 +1163,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		MemStackSysBytes:  stackTotal,
 		GoAllocBytes:      goAlloc,
 		GoTotalBytes:      goTotal,
+		GoLimitBytes:      goLimit,
 		HeapFragmentBytes: heapFragmentBytes,
 		HeapReservedBytes: heapReservedBytes,
 		HeapReleasedBytes: heapReleasedBytes,
@@ -1168,6 +1185,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 
 	rsr.GoAllocBytes.Update(int64(goAlloc))
 	rsr.GoTotalBytes.Update(int64(goTotal))
+	rsr.GoLimitBytes.Update(int64(goLimit))
 	rsr.GoMemStackSysBytes.Update(int64(osStackBytes))
 	rsr.GoHeapFragmentBytes.Update(int64(heapFragmentBytes))
 	rsr.GoHeapReservedBytes.Update(int64(heapReservedBytes))
@@ -1267,7 +1285,7 @@ var mockableMaybeReadProcStatFile = maybeReadProcStatFile
 func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	c, err := net.IOCountersWithContext(ctx, true /* per NIC */)
 	if err != nil {
-		log.VWarningf(ctx, 1, "error reading network IO counters: %v", err)
+		log.Dev.VWarningf(ctx, 1, "error reading network IO counters: %v", err)
 		c = nil
 		// Continue. Empty slice c results in zero counters.
 	}
@@ -1276,7 +1294,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	mTCP := func() map[string]int64 {
 		pc, err := net.ProtoCountersWithContext(ctx, []string{"tcp"})
 		if err != nil {
-			log.VWarningf(ctx, 1, "error reading tcp counters: %v", err)
+			log.Dev.VWarningf(ctx, 1, "error reading tcp counters: %v", err)
 			return nil
 		}
 		return pc[0].Stats
@@ -1293,7 +1311,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	const netstatFile = "/proc/net/netstat"
 	mTCPExt, err := mockableMaybeReadProcStatFile(ctx, "TcpExt", netstatFile)
 	if err != nil {
-		log.VWarningf(ctx, 1, "error reading %s: %v", netstatFile, err)
+		log.Dev.VWarningf(ctx, 1, "error reading %s: %v", netstatFile, err)
 		mTCPExt = nil
 		// Continue.
 	}
@@ -1311,7 +1329,7 @@ func getSummedNetStats(ctx context.Context) (netCounters, error) {
 	}
 
 	if log.V(3) {
-		log.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
+		log.Dev.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
 	}
 
 	return netCounters{

@@ -6,6 +6,7 @@
 package state
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -19,8 +20,16 @@ func TestReplicaPlacement(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			require.Equal(t, "parse", d.Cmd)
 			rp := ParseReplicaPlacement(d.Input)
-			rp.findReplicaPlacementForEveryStoreSet(1000)
-			return rp.String()
+			// Make sure rp is immutable by calling
+			// findReplicaPlacementForEveryStoreSet twice and comparing the results.
+			result1 := rp.findReplicaPlacementForEveryStoreSet(1000)
+			result2 := rp.findReplicaPlacementForEveryStoreSet(1000)
+			require.Equal(t, result1, result2)
+			var result []string
+			for _, r := range result1 {
+				result = append(result, r.String())
+			}
+			return strings.Join(result, "\n")
 		})
 	})
 }

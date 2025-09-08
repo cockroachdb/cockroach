@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -689,11 +689,36 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	collatedStringType := types.MakeCollatedString(types.String, "en" /* locale */)
 	var indexableTyps []*types.T
 	for _, typ := range append(types.Scalar, collatedStringType) {
-		// TODO(#76419): DateFamily has a broken `-infinity` case.
-		// TODO(#99432): JsonFamily has broken cases. This is because the test is wrapping JSON
-		//   objects in multiple single quotes which causes parsing errors.
-		if colinfo.ColumnTypeIsIndexable(typ) && typ.Family() != types.DateFamily &&
-			typ.Family() != types.JsonFamily {
+		if !colinfo.ColumnTypeIsIndexable(typ) {
+			continue
+		}
+		ok := func() bool {
+			switch typ.Family() {
+			case types.DateFamily:
+				// TODO(#76419): DateFamily has a broken `-infinity` case.
+				return false
+			case types.JsonFamily:
+				// TODO(#99432): JsonFamily has broken cases. This is because the
+				// test is wrapping JSON objects in multiple single quotes which
+				// causes parsing errors.
+				return false
+			case types.CollatedStringFamily:
+				if typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext {
+					// CITEXT is only supported in 25.3+, so if we happen to run
+					// the test in the mixed version variant, we can't use the
+					// type.
+					return int(clusterversion.MinSupported) >= int(clusterversion.V25_3)
+				}
+				return true
+			case types.LTreeFamily:
+				// LTREE is only supported in 25.4+, so if we happen to run the
+				// test in the mixed version variant, we can't use the type.
+				return int(clusterversion.MinSupported) >= int(clusterversion.V25_4)
+			default:
+				return true
+			}
+		}()
+		if ok {
 			indexableTyps = append(indexableTyps, typ)
 		}
 	}
@@ -942,7 +967,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			runAtMixedClusterVersion := rand.Intn(2) == 0
+			runAtMixedClusterVersion := rng.Intn(2) == 0
 			// Log to make it slightly easier to reproduce a random config.
 			t.Logf("test case (runAtMixedClusterVersion=%t): %#v", runAtMixedClusterVersion, tc)
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(

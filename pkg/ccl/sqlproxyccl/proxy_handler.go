@@ -360,7 +360,7 @@ func (handler *proxyHandler) handle(
 		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
 			// Lots of noise from this log indicates that somebody is spamming
 			// fake cancel requests.
-			log.Warningf(
+			log.Dev.Warningf(
 				ctx, "could not handle cancel request from client %s: %v",
 				incomingConn.RemoteAddr().String(), err,
 			)
@@ -546,7 +546,7 @@ func (handler *proxyHandler) handle(
 	// the session logs.
 	connBegin := timeutil.Now()
 	defer func() {
-		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
+		log.Dev.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
 	// Wrap the client connection with an error annotater. WARNING: The TLS
@@ -612,7 +612,7 @@ func (handler *proxyHandler) validateConnection(
 		if tenant.ClusterName == "" || tenant.ClusterName == clusterName {
 			return nil
 		}
-		log.Errorf(
+		log.Dev.Errorf(
 			ctx,
 			"could not validate connection: cluster name '%s' doesn't match expected '%s'",
 			clusterName,
@@ -885,7 +885,7 @@ func parseClusterIdentifier(
 	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		// Log these non user-facing errors.
-		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifier, err)
+		log.Dev.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifier, err)
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
 		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
 		err = errors.WithHint(err, clusterNameFormHint)
@@ -895,7 +895,7 @@ func parseClusterIdentifier(
 	// This case only happens if tenID is 0 or 1 (system tenant).
 	if tenID < roachpb.MinTenantID.ToUint64() {
 		// Log these non user-facing errors.
-		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifier)
+		log.Dev.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifier)
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
 		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
 		return "", roachpb.MaxTenantID, err

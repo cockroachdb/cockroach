@@ -217,7 +217,7 @@ func (a *sstAdder) AddSSTable(
 				err = pErr.GoError()
 				// Retry on AmbiguousResult.
 				if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, r.CurrentAttempt(), err)
+					log.Dev.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, r.CurrentAttempt(), err)
 					continue
 				}
 				// This range has split -- we need to split the SST to try again.
@@ -229,7 +229,7 @@ func (a *sstAdder) AddSSTable(
 						return err
 					}
 					split := mr.Desc.EndKey.AsRawKey()
-					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
+					log.Dev.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
 					left, right, err := createSplitSSTable(ctx, item.start, split, iter, a.settings)
 					if err != nil {
 						return err
@@ -345,7 +345,7 @@ func addStatsToSplitTables(left, right, original *sstSpan, sendStartTimestamp ti
 		return err
 	}
 	statsIter.SeekGE(storage.MVCCKey{Key: right.start})
-	right.stats, err = storage.ComputeStatsForIter(statsIter, sendStartTimestamp.Unix())
+	right.stats, err = storage.ComputeStatsForIter(statsIter, sendStartTimestamp.UnixNano())
 	statsIter.Close()
 	if err != nil {
 		return err

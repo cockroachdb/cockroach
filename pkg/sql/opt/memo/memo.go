@@ -9,6 +9,7 @@ package memo
 import (
 	"bytes"
 	"context"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -132,7 +133,7 @@ type Memo struct {
 	// rootExpr is the root expression of the memo expression forest. It is set
 	// via a call to SetRoot. After optimization, it is set to be the root of the
 	// lowest cost tree in the forest.
-	rootExpr opt.Expr
+	rootExpr RelExpr
 
 	// rootProps are the physical properties required of the root memo expression.
 	// It is set via a call to SetRoot.
@@ -167,6 +168,7 @@ type Memo struct {
 	testingOptimizerRandomSeed                 int64
 	testingOptimizerCostPerturbation           float64
 	testingOptimizerDisableRuleProbability     float64
+	disableOptimizerRules                      []string
 	enforceHomeRegion                          bool
 	variableInequalityLookupJoinEnabled        bool
 	allowOrdinalColumnReferences               bool
@@ -208,6 +210,7 @@ type Memo struct {
 	usePre_25_2VariadicBuiltins                bool
 	useExistsFilterHoistRule                   bool
 	disableSlowCascadeFastPathForRBRTables     bool
+	useImprovedHoistJoinProject                bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -272,6 +275,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		testingOptimizerRandomSeed:                 evalCtx.SessionData().TestingOptimizerRandomSeed,
 		testingOptimizerCostPerturbation:           evalCtx.SessionData().TestingOptimizerCostPerturbation,
 		testingOptimizerDisableRuleProbability:     evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+		disableOptimizerRules:                      evalCtx.SessionData().DisableOptimizerRules,
 		enforceHomeRegion:                          evalCtx.SessionData().EnforceHomeRegion,
 		variableInequalityLookupJoinEnabled:        evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
 		allowOrdinalColumnReferences:               evalCtx.SessionData().AllowOrdinalColumnReferences,
@@ -313,6 +317,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		usePre_25_2VariadicBuiltins:                evalCtx.SessionData().UsePre_25_2VariadicBuiltins,
 		useExistsFilterHoistRule:                   evalCtx.SessionData().OptimizerUseExistsFilterHoistRule,
 		disableSlowCascadeFastPathForRBRTables:     evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables,
+		useImprovedHoistJoinProject:                evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -366,7 +371,7 @@ func (m *Memo) Metadata() *opt.Metadata {
 
 // RootExpr returns the root memo expression previously set via a call to
 // SetRoot.
-func (m *Memo) RootExpr() opt.Expr {
+func (m *Memo) RootExpr() RelExpr {
 	return m.rootExpr
 }
 
@@ -395,12 +400,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // HasPlaceholders returns true if the memo contains at least one placeholder
 // operator.
 func (m *Memo) HasPlaceholders() bool {
-	rel, ok := m.rootExpr.(RelExpr)
-	if !ok {
-		panic(errors.AssertionFailedf("placeholders only supported when memo root is relational"))
-	}
-
-	return rel.Relational().HasPlaceholder
+	return m.rootExpr.Relational().HasPlaceholder
 }
 
 // IsStale returns true if the memo has been invalidated by changes to any of
@@ -450,6 +450,7 @@ func (m *Memo) IsStale(
 		m.testingOptimizerRandomSeed != evalCtx.SessionData().TestingOptimizerRandomSeed ||
 		m.testingOptimizerCostPerturbation != evalCtx.SessionData().TestingOptimizerCostPerturbation ||
 		m.testingOptimizerDisableRuleProbability != evalCtx.SessionData().TestingOptimizerDisableRuleProbability ||
+		!reflect.DeepEqual(m.disableOptimizerRules, evalCtx.SessionData().DisableOptimizerRules) ||
 		m.enforceHomeRegion != evalCtx.SessionData().EnforceHomeRegion ||
 		m.variableInequalityLookupJoinEnabled != evalCtx.SessionData().VariableInequalityLookupJoinEnabled ||
 		m.allowOrdinalColumnReferences != evalCtx.SessionData().AllowOrdinalColumnReferences ||
@@ -491,6 +492,7 @@ func (m *Memo) IsStale(
 		m.usePre_25_2VariadicBuiltins != evalCtx.SessionData().UsePre_25_2VariadicBuiltins ||
 		m.useExistsFilterHoistRule != evalCtx.SessionData().OptimizerUseExistsFilterHoistRule ||
 		m.disableSlowCascadeFastPathForRBRTables != evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables ||
+		m.useImprovedHoistJoinProject != evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
@@ -555,8 +557,7 @@ func (m *Memo) ResetCost(e RelExpr, cost Cost) {
 func (m *Memo) IsOptimized() bool {
 	// The memo is optimized once the root expression has its physical properties
 	// assigned.
-	rel, ok := m.rootExpr.(RelExpr)
-	return ok && rel.RequiredPhysical() != nil
+	return m.rootExpr != nil && m.rootExpr.RequiredPhysical() != nil
 }
 
 // OptimizationCost returns a rough estimate of the cost of optimization of the

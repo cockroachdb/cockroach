@@ -141,7 +141,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 				s.currentCaptureStartTime = timeutil.Now()
 				err := captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
 				if err != nil {
-					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
+					log.Dev.Warningf(ctx, "error capturing index usage stats: %+v", err)
 				}
 				if s.knobs != nil && s.knobs.onScheduleComplete != nil {
 					s.knobs.onScheduleComplete()

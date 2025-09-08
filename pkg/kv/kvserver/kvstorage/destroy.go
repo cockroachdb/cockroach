@@ -118,28 +118,30 @@ const DestroyReplicaTODO = 0
 // not be cleared.
 func DestroyReplica(
 	ctx context.Context,
-	rangeID roachpb.RangeID,
+	id roachpb.FullReplicaID,
 	reader storage.Reader,
 	writer storage.Writer,
 	nextReplicaID roachpb.ReplicaID,
 	opts ClearRangeDataOptions,
 ) error {
-	diskReplicaID, err := stateloader.Make(rangeID).LoadRaftReplicaID(ctx, reader)
+	diskReplicaID, err := stateloader.Make(id.RangeID).LoadRaftReplicaID(ctx, reader)
 	if err != nil {
 		return err
 	}
-	if diskReplicaID.ReplicaID >= nextReplicaID {
-		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
+	if repID := diskReplicaID.ReplicaID; repID != id.ReplicaID {
+		return errors.AssertionFailedf("replica %v has a mismatching ID %d", id, repID)
+	} else if repID >= nextReplicaID {
+		return errors.AssertionFailedf("replica %v must not survive its own tombstone", id)
 	}
 	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
+	if err := ClearRangeData(ctx, id.RangeID, reader, writer, opts); err != nil {
 		return err
 	}
 
 	// Save a tombstone to ensure that replica IDs never get reused. Assert that
 	// the provided tombstone moves the existing one strictly forward. Failure to
 	// do so indicates that something is going wrong in the replica lifecycle.
-	sl := stateloader.Make(rangeID)
+	sl := stateloader.Make(id.RangeID)
 	ts, err := sl.LoadRangeTombstone(ctx, reader)
 	if err != nil {
 		return err

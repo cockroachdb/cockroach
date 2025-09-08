@@ -137,11 +137,11 @@ func (c *serverController) waitForTenantServer(
 			if err == nil {
 				return s, nil
 			}
-			log.Infof(ctx, "waiting for server for %s to become available", name)
+			log.Dev.Infof(ctx, "waiting for server for %s to become available", name)
 			select {
 			case <-waitCh:
 			case <-t.C:
-				log.Infof(ctx, "timed out waiting for server for %s to become available", name)
+				log.Dev.Infof(ctx, "timed out waiting for server for %s to become available", name)
 				return nil, err
 			}
 		}

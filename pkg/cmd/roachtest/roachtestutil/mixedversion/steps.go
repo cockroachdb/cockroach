@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -584,7 +587,6 @@ func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-
 	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
 		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt,
 	)
@@ -876,4 +878,135 @@ func (s restartNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand
 
 func (s restartNodeStep) ConcurrencyDisabled() bool {
 	return true
+}
+
+type networkPartitionInjectStep struct {
+	f          *failures.Failer
+	partition  failures.NetworkPartition
+	targetNode option.NodeListOption
+}
+
+func (s networkPartitionInjectStep) Background() shouldStop { return nil }
+
+func (s networkPartitionInjectStep) Description() string {
+	var desc string
+	switch s.partition.Type {
+	case failures.Bidirectional:
+		desc = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+	case failures.Incoming:
+		desc = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+	case failures.Outgoing:
+		desc = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+	}
+	return desc
+}
+
+func (s networkPartitionInjectStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	h.runner.monitor.ExpectProcessDead(s.targetNode)
+	if h.DeploymentMode() == SeparateProcessDeployment {
+		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
+		h.runner.monitor.ExpectProcessDead(s.targetNode, opt)
+	}
+
+	args := failures.NetworkPartitionArgs{Partitions: []failures.NetworkPartition{s.partition}}
+
+	if err := s.f.Setup(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := s.f.Inject(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to inject failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	return s.f.WaitForFailureToPropagate(ctx, l)
+}
+
+func (s networkPartitionInjectStep) ConcurrencyDisabled() bool {
+	return true
+}
+
+type networkPartitionRecoveryStep struct {
+	f          *failures.Failer
+	partition  failures.NetworkPartition
+	targetNode option.NodeListOption
+}
+
+func (s networkPartitionRecoveryStep) Background() shouldStop { return nil }
+
+func (s networkPartitionRecoveryStep) Description() string {
+	var desc string
+	switch s.partition.Type {
+	case failures.Bidirectional:
+		desc = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
+	case failures.Incoming:
+		desc = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
+	case failures.Outgoing:
+		desc = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
+	}
+	return desc
+}
+
+func (s networkPartitionRecoveryStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	if err := s.f.Recover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := s.f.WaitForFailureToRecover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	h.runner.monitor.ExpectProcessAlive(s.targetNode)
+	if h.DeploymentMode() == SeparateProcessDeployment {
+		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
+		h.runner.monitor.ExpectProcessAlive(s.targetNode, opt)
+	}
+	return s.f.Cleanup(ctx, l)
+
+}
+
+func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
+	return false
+}
+
+type alterReplicationFactorStep struct {
+	replicationFactor int
+	targetNode        option.NodeListOption
+}
+
+func (s alterReplicationFactorStep) Background() shouldStop { return nil }
+
+func (s alterReplicationFactorStep) Description() string {
+	return fmt.Sprintf("alter replication factor to %d", s.replicationFactor)
+}
+
+func (s alterReplicationFactorStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	stmt := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING num_replicas = %d", s.replicationFactor)
+	if err := h.System.Exec(
+		rng,
+		stmt,
+	); err != nil {
+		return errors.Wrap(err, "failed to change replication factor")
+	}
+
+	replicationLogger, loggerName, err := roachtestutil.LoggerForCmd(l, s.targetNode, "range-replication")
+	if err != nil {
+		return errors.Wrapf(err, "failed to create logger %s", loggerName)
+	}
+
+	l.Printf("waiting to reach replication factor of %dX; details in %s.log", s.replicationFactor, loggerName)
+	db := h.System.Connect(s.targetNode[0])
+	if err := roachtestutil.WaitForReplication(ctx, replicationLogger, db, s.replicationFactor, roachprod.AtLeastReplicationFactor); err != nil {
+		return errors.Wrapf(err, "failed to reach replication factor of %dX", s.replicationFactor)
+	}
+	return nil
+}
+
+func (s alterReplicationFactorStep) ConcurrencyDisabled() bool {
+	return false
 }

@@ -50,10 +50,27 @@ func TestWALFailover(t *testing.T) {
 		return nil
 	}
 
+	var settings *cluster.Settings
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal_failover_config"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "mkenv":
+				// Mock a cluster version, defaulting to latest.
+				version := clusterversion.Latest.Version()
+				if td.HasArg("min-version") {
+					var major, minor int
+					td.ScanArgs(t, "min-version", &major, &minor)
+					version = roachpb.Version{
+						Major: int32(major),
+						Minor: int32(minor),
+					}
+				}
+				// Match the current offsetting policy.
+				if clusterversion.Latest.Version().Major > clusterversion.DevOffset {
+					version.Major += clusterversion.DevOffset
+				}
+				settings = cluster.MakeTestingClusterSettingsWithVersions(version, version, true /* initializeVersion */)
+
 				dir := td.CmdArgs[0].String()
 				if e := getEnv(dir); e != nil {
 					return fmt.Sprintf("env %s already exists", e.Dir)
@@ -62,6 +79,7 @@ func TestWALFailover(t *testing.T) {
 				require.NoError(t, memfs.MkdirAll(dir, os.ModePerm))
 
 				var envConfig fs.EnvConfig
+				envConfig.Version = settings.Version
 				if td.HasArg("encrypted-at-rest") {
 					envConfig.EncryptionOptions = &storageconfig.EncryptionOptions{}
 				}
@@ -106,22 +124,6 @@ func TestWALFailover(t *testing.T) {
 					envs = append(envs, e)
 				}
 				openEnv.Ref()
-
-				// Mock a cluster version, defaulting to latest.
-				version := clusterversion.Latest.Version()
-				if td.HasArg("min-version") {
-					var major, minor int
-					td.ScanArgs(t, "min-version", &major, &minor)
-					version = roachpb.Version{
-						Major: int32(major),
-						Minor: int32(minor),
-					}
-				}
-				// Match the current offsetting policy.
-				if clusterversion.Latest.Version().Major > clusterversion.DevOffset {
-					version.Major += clusterversion.DevOffset
-				}
-				settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true /* initializeVersion */)
 
 				engine, err := Open(context.Background(), openEnv, settings, WALFailover(cfg, envs, defaultFS, nil))
 				if err != nil {

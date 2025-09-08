@@ -85,7 +85,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
 		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
 	}); err != nil {
-		log.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
+		log.Dev.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
 	}
 }
 
@@ -106,7 +106,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 		}
 		r.metrics.ClaimedJobs.Inc(int64(numRows))
 		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
-			log.Infof(ctx, "claimed %d jobs", numRows)
+			log.Dev.Infof(ctx, "claimed %d jobs", numRows)
 		}
 		return nil
 	})
@@ -150,7 +150,7 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 		row := it.Cur()
 		id := jobspb.JobID(*row[0].(*tree.DInt))
 		if _, skip := testingIgnoreIDs[id]; skip {
-			log.Warningf(ctx, "skipping execution of job %d as it is ignored by testing knob", id)
+			log.Dev.Warningf(ctx, "skipping execution of job %d as it is ignored by testing knob", id)
 			continue
 		}
 		claimedToResume[id] = struct{}{}
@@ -188,7 +188,7 @@ func (r *Registry) resumeClaimedJobs(
 		go func(id jobspb.JobID) {
 			defer done()
 			if err := r.resumeJob(ctx, id, s); err != nil && ctx.Err() == nil {
-				log.Errorf(ctx, "could not run claimed job %d: %v", id, err)
+				log.Dev.Errorf(ctx, "could not run claimed job %d: %v", id, err)
 			}
 		}(id)
 	}
@@ -207,7 +207,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
 		if aj.session.ID() != s.ID() {
-			log.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
+			log.Dev.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
 		} else {
@@ -225,7 +225,7 @@ func (r *Registry) resumeJob(
 	ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session,
 ) (retErr error) {
 	ctx = logtags.AddTag(ctx, "job", jobID)
-	log.Infof(ctx, "job %d: resuming execution", jobID)
+	log.Dev.Infof(ctx, "job %d: resuming execution", jobID)
 
 	job, err := r.loadJobForResume(ctx, jobID, s)
 	if err != nil {
@@ -416,7 +416,7 @@ func (r *Registry) runJob(
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
-		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		log.Dev.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
 
 	r.maybeRecordExecutionFailure(ctx, err, job)
@@ -455,7 +455,7 @@ func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, ex isql.Executor, txn 
 			sessiondata.NodeUserSessionDataOverride,
 			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
 		if err != nil {
-			log.Warningf(ctx, "could not clear job claim: %s", err.Error())
+			log.Dev.Warningf(ctx, "could not clear job claim: %s", err.Error())
 			return
 		}
 		log.VEventf(ctx, 2, "cleared leases for %d jobs", n)
@@ -516,7 +516,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 						StatePauseRequested,
 						StatePaused)
 				})
-				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
+				log.Dev.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StateReverting:
 				if err := job.WithTxn(txn).Update(ctx, func(
 					txn isql.Txn, md JobMetadata, ju *JobUpdater,
@@ -551,7 +551,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)
 				}
-				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
+				log.Dev.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
 					id, s.ID())
 			default:
 				return errors.AssertionFailedf("unexpected job state %s: %v", stateString, job)

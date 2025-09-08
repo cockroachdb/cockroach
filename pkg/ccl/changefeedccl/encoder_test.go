@@ -994,6 +994,9 @@ func BenchmarkEncoders(b *testing.B) {
 	rowAndWrapped := []changefeedbase.EnvelopeType{
 		changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeWrapped,
 	}
+	wrappedBareEnriched := []changefeedbase.EnvelopeType{
+		changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched,
+	}
 
 	for _, tc := range []struct {
 		format         changefeedbase.FormatType
@@ -1013,6 +1016,12 @@ func BenchmarkEncoders(b *testing.B) {
 			supportsDiff:   false,
 			envelopes:      rowOnly,
 		},
+		{
+			format:         changefeedbase.OptFormatProtobuf,
+			benchEncodeKey: false,
+			supportsDiff:   true,
+			envelopes:      wrappedBareEnriched,
+		},
 	} {
 		b.Run(string(tc.format), func(b *testing.B) {
 			for numKeyCols := 1; numKeyCols <= maxKeyCols; numKeyCols++ {
@@ -1020,12 +1029,15 @@ func BenchmarkEncoders(b *testing.B) {
 				b.Logf("column types: %v, keys: %v", colTypes, colTypes[:numKeyCols])
 
 				if tc.benchEncodeKey {
-					b.Run(fmt.Sprintf("encodeKey/%dcols", numKeyCols),
-						func(b *testing.B) {
-							opts := changefeedbase.EncodingOptions{Format: tc.format}
-							bench(b, encodeKey, opts, updatedRows, prevRows)
-						},
-					)
+					testutils.RunValues(b, "envelope", tc.envelopes,
+						func(t *testing.B, envelope changefeedbase.EnvelopeType) {
+							b.Run(fmt.Sprintf("encodeKey/%dcols/envelope=%s", numKeyCols, envelope),
+								func(b *testing.B) {
+									opts := changefeedbase.EncodingOptions{Format: tc.format, Envelope: envelope}
+									bench(b, encodeKey, opts, updatedRows, prevRows)
+								},
+							)
+						})
 				}
 
 				for _, envelope := range tc.envelopes {

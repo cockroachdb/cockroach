@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/google/go-cmp/cmp"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -524,7 +525,12 @@ func TestTypes(t *testing.T) {
 			if !tc.actual.Identical(tc.expected) {
 				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
 			}
-			if !reflect.DeepEqual(tc.actual, tc.expected) {
+			if !cmp.Equal(tc.actual, tc.expected, cmp.FilterPath(
+				func(path cmp.Path) bool {
+					// VisibleType is only for compatibility with v25.3 and earlier.
+					return path.Last().String() == "VisibleType"
+				}, cmp.Ignore()),
+			) {
 				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
 			}
 
@@ -969,9 +975,10 @@ func TestUpgradeType(t *testing.T) {
 				Locale:      &emptyLocale,
 			}},
 			expected: &T{InternalType: InternalType{
-				Family: BitFamily,
-				Oid:    oid.T_varbit,
-				Locale: &emptyLocale,
+				Family:      BitFamily,
+				VisibleType: visibleVARBIT,
+				Oid:         oid.T_varbit,
+				Locale:      &emptyLocale,
 			}},
 		},
 	}
@@ -1060,6 +1067,7 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{Uuid, Uuid},
 		{RefCursor, RefCursor},
 		{CIText, CIText},
+		{LTree, LTree},
 	}
 
 	for _, tc := range testCases {

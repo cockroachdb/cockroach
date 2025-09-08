@@ -99,7 +99,7 @@ func (m *StoreKeyManager) Load(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "loaded active store key: %s, old store key: %s",
+	log.Dev.Infof(ctx, "loaded active store key: %s, old store key: %s",
 		proto.CompactTextString(m.activeKey.Info), proto.CompactTextString(m.oldKey.Info))
 	return nil
 }
@@ -318,9 +318,9 @@ func (m *DataKeyManager) Load(ctx context.Context) error {
 			defer m.writeMu.mu.Unlock()
 			m.writeMu.mu.activeKey = key
 		}()
-		log.Infof(ctx, "loaded active data key: %s", m.writeMu.mu.activeKey.Info.String())
+		log.Dev.Infof(ctx, "loaded active data key: %s", m.writeMu.mu.activeKey.Info.String())
 	} else {
-		log.Infof(ctx, "no active data key yet")
+		log.Dev.Infof(ctx, "no active data key yet")
 	}
 	return nil
 }
@@ -481,14 +481,14 @@ func generateAndSetNewDataKey(
 			return nil, err
 		}
 		if n != keyLength {
-			log.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyLength)
+			log.Dev.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyLength)
 		}
 		keyID := make([]byte, keyIDLength)
 		if n, err = rand.Read(keyID); err != nil {
 			return nil, err
 		}
 		if n != keyIDLength {
-			log.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyIDLength)
+			log.Dev.Fatalf(ctx, "rand.Read returned no error but fewer bytes %d than promised %d", n, keyIDLength)
 		}
 		// Hex encoding to make it human readable.
 		key.Info.KeyId = hex.EncodeToString(keyID)
@@ -505,9 +505,9 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 ) (err error) {
 	defer func() {
 		if err != nil {
-			log.Infof(ctx, "error while attempting to rotate data key: %s", err)
+			log.Dev.Infof(ctx, "error while attempting to rotate data key: %s", err)
 		} else {
-			log.Infof(ctx, "rotated to new active data key: %s",
+			log.Dev.Infof(ctx, "rotated to new active data key: %s",
 				proto.CompactTextString(m.writeMu.mu.activeKey.Info))
 		}
 	}()

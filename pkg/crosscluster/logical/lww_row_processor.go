@@ -652,7 +652,7 @@ func (lww *lwwQuerier) InsertRow(
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
 			if pgerror.GetPGCode(err) != pgcode.UniqueViolation {
-				log.Warningf(ctx, "replicated optimistic insert failed (query: %s): %s", stmt.SQL, err.Error())
+				log.Dev.Warningf(ctx, "replicated optimistic insert failed (query: %s): %s", stmt.SQL, err.Error())
 				return batchStats{}, err
 			}
 			optimisticInsertConflicts++
@@ -679,7 +679,7 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, nil
 	}
 	if err != nil {
-		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
+		log.Dev.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
 	return batchStats{optimisticInsertConflicts: optimisticInsertConflicts}, nil
@@ -713,7 +713,7 @@ func (lww *lwwQuerier) DeleteRow(
 	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
 	rowCount, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, sess, stmt, datums...)
 	if err != nil {
-		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
+		log.Dev.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
 	if rowCount != 1 {

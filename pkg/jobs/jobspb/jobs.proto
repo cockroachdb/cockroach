@@ -272,19 +272,19 @@ message LogicalReplicationDetails {
   }
 
   Discard discard = 11;
-  
+
   // CreateTable is true if the job should create the table(s) in the
   // destination.
   bool create_table = 12;
-  
+
   // IngestedExternalCatalog is the catalog written to the destination cluster
   // when CreateTable is true.
   sql.catalog.externalcatalog.externalpb.ExternalCatalog ingested_external_catalog = 13  [(gogoproto.nullable) = false];
-  
+
   // ReverseStreamCommand is CREATE LDR command the coordinator will issue once
   // the offline initial scan completes, but before the tables are made public.
   string reverse_stream_command = 14;
-  
+
   // ParentID is set on the reverse stream job in automatic bidirectional
   // replication, and is equal to the job ID that issued the reverse stream
   // command.
@@ -376,7 +376,7 @@ message BackupDetails {
   // sub-paths of it based on date and time, etc. The actual path -- which is
   // derived from this destination -- is then captured in the field "URI" below.
   message Destination {
-    // To is a collection path 
+    // To is a collection path
     repeated string to = 1;
     // Subdir is the path within the collection path in to to backup to.
     string subdir = 2;
@@ -401,7 +401,7 @@ message BackupDetails {
 
   // EncryptionOptions contains user inputed data initially, but once
   // ResolveDest is called at the beginning of resumption, this field will
-  // contain the encryption key. 
+  // contain the encryption key.
   //
   // TODO(msbutler): use seperate job info key to persist hydrated encryption
   // keys so encrypted backup logic becomes easier to reason about. This
@@ -410,7 +410,7 @@ message BackupDetails {
 
   // EncryptionInfo should only ever get set on the first encrypted backup in
   // the chain because it persists the salt that each key in the chain must
-  // have. 
+  // have.
   //
   // TODO(msbutler): understand if only the full ever sets EncryptionInfo.
   EncryptionInfo encryption_info = 9;
@@ -1574,7 +1574,7 @@ message Payload {
   string pause_reason = 28;
 
   reserved 32;
-  
+
   // CreationClusterID is populated at creation with the ClusterID, in case a
   // job resuming later, needs to use this information, e.g. to determine if it
   // has been restored into a different cluster, which might mean it should

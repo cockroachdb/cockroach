@@ -150,7 +150,7 @@ func TestHashGroupJoiner(t *testing.T) {
 			if spillForced {
 				suffix = ", spill forced"
 			}
-			log.Infof(ctx, "%s%s", tc.description, suffix)
+			log.Dev.Infof(ctx, "%s%s", tc.description, suffix)
 			var spilled bool
 			var numRuns int
 			colexectestutils.RunTests(

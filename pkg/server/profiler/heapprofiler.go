@@ -71,7 +71,7 @@ func NewHeapProfiler(ctx context.Context, dir string, st *cluster.Settings) (*He
 		),
 	}
 
-	log.Infof(ctx,
+	log.Dev.Infof(ctx,
 		"writing go heap profiles to %s at least every %s", log.SafeManaged(dir), hp.resetInterval())
 
 	return hp, nil
@@ -88,12 +88,12 @@ func takeHeapProfile(ctx context.Context, path string, _ ...interface{}) (succes
 	// Try writing a go heap profile.
 	f, err := os.Create(path)
 	if err != nil {
-		log.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
 		return false
 	}
 	defer f.Close()
 	if err = pprof.WriteHeapProfile(f); err != nil {
-		log.Warningf(ctx, "error writing go heap profile %s: %v", path, err)
+		log.Dev.Warningf(ctx, "error writing go heap profile %s: %v", path, err)
 		return false
 	}
 	return true

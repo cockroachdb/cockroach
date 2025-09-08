@@ -707,7 +707,7 @@ func ingestWithRetry(
 			if ctx.Err() != nil {
 				return res, ctx.Err()
 			}
-			log.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
+			log.Dev.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
 				job.ID(), reloadErr)
 		} else {
 			job = reloadedJob
@@ -715,7 +715,7 @@ func ingestWithRetry(
 			// progress state.
 			curProgress := getFractionCompleted(job)
 			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
-				log.Infof(ctx, "import made %d%% progress, resetting retry duration", int(math.Round(100*madeProgress)))
+				log.Dev.Infof(ctx, "import made %d%% progress, resetting retry duration", int(math.Round(100*madeProgress)))
 				lastProgress = curProgress
 				lastProgressChange = timeutil.Now()
 				r.Reset()
@@ -724,10 +724,10 @@ func ingestWithRetry(
 
 		maxRetryDuration := retryDuration.Get(&execCtx.ExecCfg().Settings.SV)
 		if timeutil.Since(lastProgressChange) > maxRetryDuration {
-			log.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
+			log.Dev.Warningf(ctx, "encountered retryable error but exceeded retry duration, stopping: %+v", err)
 			break
 		} else {
-			log.Warningf(ctx, "encountered retryable error: %+v", err)
+			log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 		}
 	}
 
@@ -752,7 +752,7 @@ func emitImportJobEvent(
 		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &importEvent, int64(job.ID()),
 			job.Payload(), p.User(), status)
 	}); err != nil {
-		log.Warningf(ctx, "failed to log event: %v", err)
+		log.Dev.Warningf(ctx, "failed to log event: %v", err)
 	}
 }
 
@@ -834,12 +834,12 @@ func (r *importResumer) OnFailOrCancel(
 	// If the import completed preparation and started writing, verify it has
 	// stopped writing before proceeding to revert it.
 	if details.PrepareComplete {
-		log.Infof(ctx, "need to verify that no nodes are still importing since job had started writing...")
+		log.Dev.Infof(ctx, "need to verify that no nodes are still importing since job had started writing...")
 		const maxWait = time.Minute * 5
 		if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, r.job, maxWait); err != nil {
-			log.Errorf(ctx, "unable to verify that attempted IMPORT job %d had stopped writing before reverting after %s: %v", r.job.ID(), maxWait, err)
+			log.Dev.Errorf(ctx, "unable to verify that attempted IMPORT job %d had stopped writing before reverting after %s: %v", r.job.ID(), maxWait, err)
 		} else {
-			log.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", r.job.ID())
+			log.Dev.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", r.job.ID())
 		}
 
 	}
@@ -850,7 +850,7 @@ func (r *importResumer) OnFailOrCancel(
 		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
-			log.Errorf(ctx, "drop tables failed: %s", err.Error())
+			log.Dev.Errorf(ctx, "drop tables failed: %s", err.Error())
 			return err
 		}
 

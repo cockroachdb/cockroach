@@ -160,7 +160,7 @@ func (s *hotRangesLogger) shouldLog(ctx context.Context) bool {
 	// drastically lightening the overhead of fetching them.
 	resp, err := s.getHotRanges(context.Background(), true)
 	if err != nil {
-		log.Warningf(ctx, "failed to get hot ranges: %s", err)
+		log.Dev.Warningf(ctx, "failed to get hot ranges: %s", err)
 		return false
 	}
 	cpuThreshold := TelemetryHotRangesStatsCPUThreshold.Get(&s.st.SV)
@@ -203,7 +203,7 @@ func (s *hotRangesLogger) getHotRanges(
 func (s *hotRangesLogger) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
 	resp, err := s.getHotRanges(ctx, false)
 	if err != nil {
-		log.Warningf(ctx, "failed to get hot ranges: %s", err)
+		log.Dev.Warningf(ctx, "failed to get hot ranges: %s", err)
 		return
 	}
 

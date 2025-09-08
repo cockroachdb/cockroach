@@ -125,7 +125,7 @@ func (l *grpcLogger) InfoDepth(depth int, args ...interface{}) {
 	if !l.shouldLog(severity.INFO, depth) {
 		return
 	}
-	log.InfofDepth(context.TODO(), depth, "", l.sanitize(args)...)
+	log.Dev.InfofDepth(context.TODO(), depth, "", l.sanitize(args)...)
 }
 
 func (l *grpcLogger) WarningDepth(depth int, args ...interface{}) {
@@ -133,7 +133,7 @@ func (l *grpcLogger) WarningDepth(depth int, args ...interface{}) {
 	if !l.shouldLog(severity.WARNING, depth) {
 		return
 	}
-	log.WarningfDepth(context.TODO(), depth, "", l.sanitize(args)...)
+	log.Dev.WarningfDepth(context.TODO(), depth, "", l.sanitize(args)...)
 }
 
 func (l *grpcLogger) ErrorDepth(depth int, args ...interface{}) {
@@ -141,13 +141,13 @@ func (l *grpcLogger) ErrorDepth(depth int, args ...interface{}) {
 	if !l.shouldLog(severity.ERROR, depth) {
 		return
 	}
-	log.ErrorfDepth(context.TODO(), depth, "", l.sanitize(args)...)
+	log.Dev.ErrorfDepth(context.TODO(), depth, "", l.sanitize(args)...)
 }
 
 func (l *grpcLogger) FatalDepth(depth int, args ...interface{}) {
 	depth += depthLoggerDelta
 	// Never suppress fatals.
-	log.FatalfDepth(context.TODO(), depth, "", l.sanitize(args)...)
+	log.Dev.FatalfDepth(context.TODO(), depth, "", l.sanitize(args)...)
 }
 
 func (l *grpcLogger) vDepth(i int, depth int) bool {

@@ -242,7 +242,7 @@ func TestLint(t *testing.T) {
 				continue
 			}
 			switch name {
-			case "extract", "trim", "overlay", "position", "substring", "st_x", "st_y":
+			case "extract", "trim", "overlay", "position", "substring", "st_x", "st_y", "index":
 				// Exempt special forms: EXTRACT(... FROM ...), etc.
 			default:
 				names = append(names, strings.ToUpper(name))
@@ -1457,6 +1457,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt|asn1)\.Marshal\(`),
+			stream.GrepNot(`nolint:protomarshal`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
@@ -1583,6 +1584,7 @@ func TestLint(t *testing.T) {
 			":!sql/plpgsql/plpgsql_error.go",
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
+			":!sql/schemachanger/scerrors/errors.go",
 			":!util/timeutil/timeout_error.go",
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
@@ -2396,6 +2398,7 @@ func TestLint(t *testing.T) {
 				filter,
 				stream.GrepNot("sql/colexec/execgen/cmd/execgen/*"),
 				stream.GrepNot("sql/colexec/execgen/testdata/*"),
+				stream.GrepNot("sql/lexbase/allkeywords/main.go"),
 				stream.GrepNot("testutils/lint/lint_test.go"),
 			), func(s string) {
 				// s here is of the form
@@ -2732,7 +2735,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/util/timeutil/timeout_error\.go:.*invalid direct cast on error object`),
 			// Direct error cast OK in this case for a low-dependency helper binary.
 			stream.GrepNot(`pkg/cmd/github-pull-request-make/main\.go:.*invalid direct cast on error object`),
-			// The logging package translates log.Fatal calls into errors.
+			// The logging package translates log.Dev.Fatal calls into errors.
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.
@@ -2849,17 +2852,21 @@ func TestLint(t *testing.T) {
 	t.Run("TestNoEnumeratingAllTables", func(t *testing.T) {
 		t.Parallel()
 		const (
-			// sysTableExample and virtTableExample are the names of a system and
-			// virtual tables respectively, that have been chosen to serve as
-			// indicators, if they are detected in a test, that that test may be
-			// enumerating *all* system or virtual tables which is generally
-			// undesirable outside of a few specific allow-listed cases. There is
-			// nothing special about these two tables other than that they are not
-			// directly referenced in tests other than those deliberately enumerating
-			// all tables, so they're well-suited for this purpose. We could add
-			// others here as well if needed, and add exemptions if one of these is
-			// intentionally used in a test.
-			sysTableExample  = "span_stats_buckets"
+			// sysTableExample and virtTableExample are the names of a system
+			// and virtual tables respectively, that have been chosen to serve
+			// as indicators, if they are detected in a test, that that test may
+			// be enumerating *all* system or virtual tables which is generally
+			// undesirable outside of a few specific allow-listed cases. There
+			// is nothing special about these two tables other than that they
+			// are not directly referenced in tests other than those
+			// deliberately enumerating all tables, so they're well-suited for
+			// this purpose. We could add others here as well if needed, and add
+			// exemptions if one of these is intentionally used in a test.
+			//
+			// Use of `SELECT crdb_internal.generate_test_objects(...)` in tests
+			// may trip this in which case it may be simplest to use a new
+			// table.
+			sysTableExample  = "span_stats_unique_keys"
 			virtTableExample = "logical_replication_node_processors"
 		)
 		cmd, stderr, filter, err := dirCmd(

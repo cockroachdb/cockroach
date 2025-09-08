@@ -691,7 +691,7 @@ func (ag *hashAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		case aggEmittingRows:
 			ag.runningState, row, meta = ag.emitRow()
 		default:
-			log.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
+			log.Dev.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
 		}
 
 		if row == nil && meta == nil {
@@ -713,7 +713,7 @@ func (ag *orderedAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		case aggEmittingRows:
 			ag.runningState, row, meta = ag.emitRow()
 		default:
-			log.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
+			log.Dev.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
 		}
 
 		if row == nil && meta == nil {

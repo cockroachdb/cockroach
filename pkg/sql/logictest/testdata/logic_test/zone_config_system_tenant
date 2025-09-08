@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs
+# LogicTest: !3node-tenant-default-configs !local-prepared
 # Zone config logic tests that are only meant to work for the system tenant.
 
 # Verify that the timeseries range has a zone config after bootstrap. It should

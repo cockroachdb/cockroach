@@ -180,15 +180,21 @@ type backupDriver struct {
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
+	startOptions := option.NewStartOpts(option.NoBackupSchedule)
+	startOptions.RoachprodOpts.ExtraArgs = append(
+		startOptions.RoachprodOpts.ExtraArgs,
+		"--vmodule=cloud_logging_transport=1")
 	bd.c.Start(
-		ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule),
+		ctx, bd.t.L(), startOptions,
 		install.MakeClusterSettings(
 			install.ClusterSettingsOption{
 				// Large imports can run into a death spiral where splits fail because
 				// there is a snapshot backlog, which makes the snapshot backlog worse
 				// because add sst causes ranges to fall behind and need recovery snapshots
 				// to catch up.
-				"kv.snapshot_rebalance.max_rate": "256 MiB",
+				"kv.snapshot_rebalance.max_rate":                    "256 MiB",
+				"server.debug.default_vmodule":                      "s3_storage=2",
+				"cloudstorage.s3.client_retry_token_bucket.enabled": "false",
 			},
 			install.EnvOption{
 				fmt.Sprintf("COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE=%s", azureCredentialsFilePath),

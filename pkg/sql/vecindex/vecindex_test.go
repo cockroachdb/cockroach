@@ -20,10 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -32,8 +35,182 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDatadrivenVecIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "test is too slow under race")
+
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		if !strings.HasSuffix(path, ".ddt") {
+			// Skip files that are not data-driven tests.
+			return
+		}
+
+		// Start up the server separately for each test, and only include one
+		// test per file. Otherwise, there's still some instance of lingering
+		// non-determinism that causes rare stress failures.
+		// TODO(andyk): Find the source of non-determinism.
+		ctx := context.Background()
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		runner := sqlutils.MakeSQLRunner(sqlDB)
+		mgr := srv.ExecutorConfig().(sql.ExecutorConfig).VecIndexManager
+
+		// Enable vector indexes and make them deterministic.
+		runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+		runner.Exec(t, `SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true`)
+
+		ti := &testIndex{ctx: ctx, runner: runner, mgr: mgr}
+		ti.IndexTestState = commontest.NewIndexTestState(t, ti)
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var result string
+			switch d.Cmd {
+			case "new-index":
+				result = ti.NewIndex(d)
+
+			case "recall":
+				result = ti.Recall(d)
+
+			case "format-tree":
+				result = ti.FormatTree(ctx, d, nil)
+
+			default:
+				t.Fatalf("unknown cmd: %s", d.Cmd)
+			}
+
+			return result
+		})
+	})
+}
+
+// testIndex implements the commontest.TestIndex interface.
+type testIndex struct {
+	*commontest.IndexTestState
+
+	ctx    context.Context
+	runner *sqlutils.SQLRunner
+	mgr    *vecindex.Manager
+}
+
+// MakeNewIndex implements the commontest.IndexTestState interface.
+func (ti *testIndex) MakeNewIndex(
+	ctx context.Context, dims int, metric vecpb.DistanceMetric, options *cspann.IndexOptions,
+) *cspann.Index {
+	opClass := "vector_l2_ops"
+	switch metric {
+	case vecpb.CosineDistance:
+		opClass = "vector_cosine_ops"
+	case vecpb.InnerProductDistance:
+		opClass = "vector_ip_ops"
+	}
+
+	stmt := `
+	CREATE TABLE t (
+		id STRING PRIMARY KEY,
+		v VECTOR(%d),
+		VECTOR INDEX (v %s) WITH (min_partition_size=%d, max_partition_size=%d, build_beam_size=4)
+	)
+	`
+	ti.runner.Exec(ti.T,
+		fmt.Sprintf(stmt, dims, opClass, options.MinPartitionSize, options.MaxPartitionSize))
+
+	// Get the table descriptor to find the vector index ID.
+	var tableID uint32
+	ti.runner.QueryRow(ti.T, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
+
+	// Get the index ID from crdb_internal.table_indexes
+	var indexID uint32
+	ti.runner.QueryRow(ti.T,
+		`SELECT index_id FROM crdb_internal.table_indexes WHERE descriptor_id = $1 AND index_name = 't_v_idx'`,
+		tableID).Scan(&indexID)
+	require.Greater(ti.T, indexID, uint32(0))
+
+	// Get the index from the index manager.
+	index, err := ti.mgr.Get(ctx, catid.DescID(tableID), catid.IndexID(indexID))
+	require.NoError(ti.T, err)
+	return index
+}
+
+// InsertVectors implements the commontest.IndexTestState interface.
+func (ti *testIndex) InsertVectors(
+	ctx context.Context, treeKey cspann.TreeKey, keys []string, vectors vector.Set,
+) {
+	const batchSize = 3
+	args := make([]any, batchSize*2)
+	for i := 0; i < vectors.Count; i += batchSize {
+		var valuesClause strings.Builder
+		count := min(batchSize, vectors.Count-i)
+		batchVectors := vectors.Slice(i, count)
+		batchKeys := keys[i : i+count]
+		for j := range count {
+			if j > 0 {
+				valuesClause.WriteString(", ")
+			}
+			valuesClause.WriteString(fmt.Sprintf("($%d, $%d)", j*2+1, j*2+2))
+			args[j*2] = batchKeys[j]
+			args[j*2+1] = batchVectors.At(j).String()
+		}
+
+		// Execute the batch insert.
+		query := fmt.Sprintf("INSERT INTO t (id, v) VALUES %s", valuesClause.String())
+		ti.runner.Exec(ti.T, query, args[:count*2]...)
+
+		require.NoError(ti.T, ti.Index.ProcessFixups(ctx))
+	}
+}
+
+// SearchVectors implements the commontest.IndexTestState interface.
+func (ti *testIndex) SearchVectors(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	queryVector vector.T,
+	beamSize, topK, rerankMultiplier int,
+) []string {
+	// Rerank multiplier is not supported by this implementation.
+	require.Equal(ti.T, -1, rerankMultiplier)
+
+	op := "<->"
+	switch ti.Index.Quantizer().GetDistanceMetric() {
+	case vecpb.CosineDistance:
+		op = "<=>"
+	case vecpb.InnerProductDistance:
+		op = "<#>"
+	}
+
+	ti.runner.Exec(ti.T, fmt.Sprintf("SET vector_search_beam_size = %d", beamSize))
+
+	query := fmt.Sprintf(`SELECT id FROM t ORDER BY v %s $1 LIMIT %d`, op, topK)
+	rows := ti.runner.Query(ti.T, query, queryVector.String())
+	defer rows.Close()
+
+	var prediction []string
+	for rows.Next() {
+		var id []byte
+		require.NoError(ti.T, rows.Scan(&id))
+		prediction = append(prediction, string(id))
+	}
+
+	return prediction
+}
+
+func (ti *testIndex) NewIndex(d *datadriven.TestData) string {
+	ti.runner.Exec(ti.T, `DROP TABLE IF EXISTS t`)
+
+	count := ti.IndexTestState.NewIndex(ti.ctx, d, nil)
+	return fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
+		count, ti.Index.Quantizer().GetDims())
+}
+
+func (ti *testIndex) Recall(d *datadriven.TestData) string {
+	topK, _, recall := ti.IndexTestState.Recall(ti.ctx, d, nil)
+	return fmt.Sprintf("%.2f%% recall@%d\n", recall, topK)
+}
 
 // TestVecIndexConcurrency builds an index on multiple goroutines, with
 // background splits and merges enabled.
@@ -105,9 +282,9 @@ func TestVecIndexConcurrency(t *testing.T) {
 	info := log.Every(time.Second)
 	metrics := mgr.Metrics().(*vecindex.Metrics)
 	logProgress := func() {
-		log.Infof(ctx, "%d vectors inserted", insertCount.Load())
-		log.Infof(ctx, "%d successful splits", metrics.SuccessfulSplits.Count())
-		log.Infof(ctx, "%d pending splits/merges", metrics.PendingSplitsMerges.Value())
+		log.Dev.Infof(ctx, "%d vectors inserted", insertCount.Load())
+		log.Dev.Infof(ctx, "%d successful splits", metrics.SuccessfulSplits.Count())
+		log.Dev.Infof(ctx, "%d pending splits/merges", metrics.PendingSplitsMerges.Value())
 	}
 
 	vecOffset := 0

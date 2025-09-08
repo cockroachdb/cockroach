@@ -23,11 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -432,7 +433,7 @@ func (s *state) AddNode() Node {
 		stores:      []StoreID{},
 		mmAllocator: mmAllocator,
 		storepool:   sp,
-		as:          mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator, s.settings.ST),
+		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -1146,7 +1147,7 @@ func (s *state) UpdateStorePool(
 		copiedDesc := *copiedDetail.Desc
 		// TODO(mma): Support origin timestamps.
 		ts := s.clock.Now()
-		storeLoadMsg := mmaprototypehelpers.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())
+		storeLoadMsg := mmaintegration.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())
 		node.mmAllocator.SetStore(StoreAttrAndLocFromDesc(copiedDesc))
 		ctx := logtags.AddTag(context.Background(), fmt.Sprintf("n%d", nodeID), "")
 		ctx = logtags.AddTag(ctx, "t", ts.Sub(s.settings.StartTime))
@@ -1397,7 +1398,7 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 func (s *state) SetClusterSetting(Key string, Value interface{}) {
 	switch Key {
 	case "LBRebalancingMode":
-		kvserver.LoadBasedRebalancingMode.Override(context.Background(), &s.settings.ST.SV, kvserver.LBRebalancingMode(Value.(int64)))
+		kvserverbase.LoadBasedRebalancingMode.Override(context.Background(), &s.settings.ST.SV, kvserverbase.LBRebalancingMode(Value.(int64)))
 	default:
 		panic("other cluster settings not supported")
 	}
@@ -1433,7 +1434,7 @@ type node struct {
 	stores      []StoreID
 	storepool   *storepool.StorePool
 	mmAllocator mmaprototype.Allocator
-	as          *mmaprototypehelpers.AllocatorSync
+	as          *mmaintegration.AllocatorSync
 }
 
 // NodeID returns the ID of this node.
@@ -1455,7 +1456,7 @@ func (n *node) MMAllocator() mmaprototype.Allocator {
 	return n.mmAllocator
 }
 
-func (n *node) AllocatorSync() *mmaprototypehelpers.AllocatorSync {
+func (n *node) AllocatorSync() *mmaintegration.AllocatorSync {
 	return n.as
 }
 

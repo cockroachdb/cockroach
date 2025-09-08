@@ -16,6 +16,7 @@ go_library(
         "services.go",
         "session.go",
         "staging.go",
+        ":typegen-cluster-settings",  # keep
     ],
     embedsrcs = [
         "files/cockroachdb-logging.yaml",
@@ -34,6 +35,7 @@ go_library(
         "//pkg/roachprod/errors",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/roachprodutil",
+        "//pkg/roachprod/roachprodutil/codec",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
@@ -49,6 +51,7 @@ go_library(
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_version//:version",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sys//unix",
@@ -58,6 +61,7 @@ go_library(
 go_test(
     name = "install_test",
     srcs = [
+        "cluster_settings_test.go",
         "cluster_synced_test.go",
         "cockroach_test.go",
         "expander_test.go",
@@ -84,5 +88,22 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+genrule(
+    name = "typegen-cluster-settings",
+    srcs = ["cluster_settings.go"],
+    outs = ["types_generated.go"],
+    cmd = """$(location //pkg/roachprod/roachprodutil/codec/cmd/typegen:typegen) \
+       -output $@ $(location cluster_settings.go)
+""",
+    tools = [
+        "//pkg/roachprod/roachprodutil/codec/cmd/typegen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )

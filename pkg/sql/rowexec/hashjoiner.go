@@ -195,7 +195,7 @@ func (h *hashJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) 
 		case hjEmittingRightUnmatched:
 			h.runningState, row, meta = h.emitRightUnmatched()
 		default:
-			log.Fatalf(h.Ctx(), "unsupported state: %d", h.runningState)
+			log.Dev.Fatalf(h.Ctx(), "unsupported state: %d", h.runningState)
 		}
 
 		if row == nil && meta == nil {

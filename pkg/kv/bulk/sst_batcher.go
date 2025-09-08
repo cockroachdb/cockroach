@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -69,7 +70,7 @@ var (
 		settings.ApplicationLevel,
 		"bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled",
 		"if set, kvserver will compute an accurate stats diff for every addsstable request",
-		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", true),
+		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", false),
 	)
 
 	sstBatcherElasticCPUControlEnabled = settings.RegisterBoolSetting(
@@ -220,7 +221,7 @@ type SSTBatcher struct {
 	disallowShadowingBelow hlc.Timestamp
 
 	// pacer for admission control during SST ingestion
-	pacer CPUPacer
+	pacer *admission.Pacer
 
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
@@ -444,7 +445,9 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	// Pace based on admission control before adding the key.
-	b.pacer.Pace(ctx)
+	if err := b.pacer.Pace(ctx); err != nil {
+		return err
+	}
 
 	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
 		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
@@ -540,10 +543,10 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	if !b.batch.flushKeyChecked && b.rc != nil {
 		b.batch.flushKeyChecked = true
 		if k, err := keys.Addr(nextKey); err != nil {
-			log.Warningf(ctx, "failed to get RKey for flush key lookup: %v", err)
+			log.Dev.Warningf(ctx, "failed to get RKey for flush key lookup: %v", err)
 		} else {
 			if r, err := b.rc.Lookup(ctx, k); err != nil {
-				log.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
+				log.Dev.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
 			} else {
 				k := r.Desc.EndKey.AsRawKey()
 				b.batch.flushKey = k
@@ -565,7 +568,7 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		return nil
 	}
 
-	if b.batch.sstWriter.DataSize >= ingestFileSize(b.settings) {
+	if flushLimit := ingestFileSize(b.settings); b.batch.sstWriter.DataSize >= flushLimit {
 		// We're at/over size target, so we want to flush, but first check if we are
 		// at a new row boundary. Having row-aligned boundaries is not actually
 		// required by anything, but has the nice property of meaning a split will
@@ -576,13 +579,20 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		// starts, so when we split at that row, that overhang into the RHS that we
 		// just wrote will be rewritten by the subsequent scatter. By waiting for a
 		// row boundary, we ensure any split is actually between files.
-		prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
-		nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
-		if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
-			// An error decoding either key implies it is not a valid row key and thus
-			// not the same row for our purposes; we don't care what the error is.
-			return nil // keep going to row boundary.
+		//
+		// That said, only do this if we are only moderately over the flush target;
+		// if we are subtantially over the limit, just flush the partial row as we
+		// cannot buffer indefinitely.
+		if b.batch.sstWriter.DataSize < 2*flushLimit {
+			prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
+			nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
+			if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
+				// An error decoding either key implies it is not a valid row key and thus
+				// not the same row for our purposes; we don't care what the error is.
+				return nil // keep going to row boundary.
+			}
 		}
+
 		if b.mustSyncBeforeFlush {
 			err := b.syncFlush()
 			if err != nil {
@@ -742,13 +752,13 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 
 			splitAbove, err := keys.EnsureSafeSplitKey(nextKey)
 			if err != nil {
-				log.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
+				log.Dev.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
 			} else {
 				beforeSplit := timeutil.Now()
 				err := b.db.AdminSplit(ctx, splitAbove, expire)
 				b.batch.stats.SplitWait += timeutil.Since(beforeSplit)
 				if err != nil {
-					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
+					log.Dev.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
 				} else {
 					b.batch.stats.Splits++
 				}
@@ -757,13 +767,13 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 
 		splitAt, err := keys.EnsureSafeSplitKey(start)
 		if err != nil {
-			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
+			log.Dev.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
 			beforeSplit := timeutil.Now()
 			err := b.db.AdminSplit(ctx, splitAt, expire)
 			b.batch.stats.SplitWait += timeutil.Since(beforeSplit)
 			if err != nil {
-				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
+				log.Dev.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
 				b.batch.stats.Splits++
 
@@ -778,7 +788,7 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 						if strings.Contains(err.Error(), "existing range size") {
 							log.VEventf(ctx, 1, "%s scattered non-empty range rejected: %v", b.name, err)
 						} else {
-							log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
+							log.Dev.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 						}
 					} else {
 						b.batch.stats.Scatters++
@@ -918,7 +928,7 @@ func (b *SSTBatcher) maybeDelay(ctx context.Context) (limit.Reservation, error) 
 	// is on by default.
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
 		if delay > time.Second || log.V(1) {
-			log.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
+			log.Dev.Infof(ctx, "%s delaying %s before flushing ingestion buffer...", b.name, delay)
 		}
 		select {
 		case <-ctx.Done():
@@ -936,7 +946,7 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 		b.cancelFlush()
 	}
 	if err := b.syncFlush(); err != nil {
-		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
+		log.Dev.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
 	b.pacer.Close()
 	b.mem.Close(ctx)

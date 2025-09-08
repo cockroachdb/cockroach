@@ -8,6 +8,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"net"
 	"runtime/pprof"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -58,6 +60,8 @@ func (p *peer[Conn]) setUnhealthyLocked(connUnhealthyFor int64) {
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
 	p.AvgRoundTripLatency.Update(0)
+	p.TCPRTT.Update(0)
+	p.TCPRTTVar.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -77,6 +81,8 @@ func (p *peer[Conn]) setInactiveLocked() {
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(0)
 	p.AvgRoundTripLatency.Update(0)
+	p.TCPRTT.Update(0)
+	p.TCPRTTVar.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -196,6 +202,12 @@ type PeerSnap[Conn rpcConn] struct {
 	// INVARIANT: deleted once => deleted forever
 	// INVARIANT: deleted      => deleteAfter > 0
 	deleted bool
+	// tcpConn is the raw TCP network connection when available.
+	//
+	// We store the *net.TCPConn rather than the raw file descriptor so that we
+	// can invoke syscall.RawConn.Control() on it, which guarantees an
+	// up-to-date file descriptor.
+	tcpConn *net.TCPConn
 }
 
 func (p *peer[Conn]) snap() PeerSnap[Conn] {
@@ -502,7 +514,7 @@ func runSingleHeartbeat(
 	pingDuration, _, err := updateClockOffsetTracking(
 		ctx, remoteClocks, k.NodeID,
 		sendTime, timeutil.Unix(0, response.ServerTime), receiveTime,
-		opts.ToleratedOffset,
+		opts.ToleratedOffset, k.Class,
 	)
 	if err != nil {
 		if opts.FatalOnOffsetViolation {
@@ -602,10 +614,12 @@ func (p *peer[Conn]) onInitialHeartbeatSucceeded(
 }
 
 func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) {
+	snap := p.snap()
+
 	// Gauge updates.
 	// ConnectionHealthy is already one.
 	// ConnectionUnhealthy is already zero.
-	p.ConnectionHealthyFor.Update(now.Sub(p.snap().connected).Nanoseconds() + 1) // add 1ns for unit tests w/ manual clock
+	p.ConnectionHealthyFor.Update(now.Sub(snap.connected).Nanoseconds() + 1) // add 1ns for unit tests w/ manual clock
 	// ConnectionInactive is already zero.
 	// ConnectionUnhealthyFor is already zero.
 	p.AvgRoundTripLatency.Update(int64(p.roundTripLatency.Value()) + 1) // add 1ns for unit tests w/ manual clock
@@ -613,6 +627,11 @@ func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.
 	// Counter updates.
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
+
+	if rttInfo, ok := sysutil.GetRTTInfo(snap.tcpConn); ok {
+		p.TCPRTT.Update(rttInfo.RTT.Nanoseconds())
+		p.TCPRTTVar.Update(rttInfo.RTTVar.Nanoseconds())
+	}
 }
 
 func maybeLogOnFailedHeartbeat[Conn rpcConn](

@@ -130,7 +130,7 @@ func (p *planner) writeTypeSchemaChange(
 				// dropped.
 				return !beingDropped
 			})
-		log.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
+		log.Dev.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
 	} else {
 		// Or, create a new job.
 		newRecord := jobs.Record{
@@ -148,7 +148,7 @@ func (p *planner) writeTypeSchemaChange(
 			NonCancelable: !beingDropped,
 		}
 		p.extendedEvalCtx.jobs.uniqueToCreate[typeDesc.ID] = &newRecord
-		log.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
+		log.Dev.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)
@@ -243,7 +243,7 @@ func refreshTypeDescriptorLeases(
 		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, cachedRegions, id); updateErr != nil {
 			// Swallow the descriptor not found error.
 			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"could not find type descriptor %d to refresh lease; "+
 						"assuming it was dropped and moving on",
 					id,
@@ -407,7 +407,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		var idsToRemove []int
 		populateIDsToRemove := func(holder context.Context, txn descs.Txn) error {
 			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
-			if err != nil {
+			if err != nil || typeDesc.GetParentID() != keys.SystemDatabaseID {
 				return err
 			}
 			for _, member := range typeDesc.EnumMembers {
@@ -1413,7 +1413,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		case errors.Is(tcErr, catalog.ErrDescriptorNotFound):
 			// If the descriptor for the ID can't be found, we assume that another
 			// job executed already and dropped the type.
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				t.typeID,
@@ -1421,7 +1421,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 			return nil
 		case !IsPermanentSchemaChangeError(tcErr):
 			// If this isn't a permanent error, then retry.
-			log.Infof(ctx, "retrying type schema change due to retryable error %v", tcErr)
+			log.Dev.Infof(ctx, "retrying type schema change due to retryable error %v", tcErr)
 		default:
 			return tcErr
 		}
@@ -1484,7 +1484,7 @@ func (t *typeChangeResumer) OnFailOrCancel(
 			pgerror.GetPGCode(rollbackErr) == pgcode.UndefinedObject:
 			// If the descriptor for the ID can't be found, we assume that another
 			// job executed already and dropped the type.
-			log.Infof(
+			log.Dev.Infof(
 				ctx,
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				tc.typeID,

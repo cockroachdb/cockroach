@@ -69,7 +69,8 @@ func TestPrepareSnapApply(t *testing.T) {
 		}
 	}
 
-	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: 4}
+	const replicaID = 4
+	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: replicaID}
 	descA := desc(101, "a", "b")
 	descB := desc(102, "b", "z")
 	createRangeData(t, eng, *descA)
@@ -79,7 +80,7 @@ func TestPrepareSnapApply(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, sl.SetRaftReplicaID(ctx, eng, id.ReplicaID))
 	for _, rID := range []roachpb.RangeID{101, 102} {
-		require.NoError(t, stateloader.Make(rID).SetRaftReplicaID(ctx, eng, id.ReplicaID))
+		require.NoError(t, stateloader.Make(rID).SetRaftReplicaID(ctx, eng, replicaID))
 	}
 
 	swb := snapWriteBuilder{
@@ -88,10 +89,13 @@ func TestPrepareSnapApply(t *testing.T) {
 		sl:       sl,
 		writeSST: writeSST,
 
-		truncState:    kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
-		hardState:     raftpb.HardState{Term: 20, Commit: 100},
-		desc:          desc(id.RangeID, "a", "k"),
-		subsumedDescs: []*roachpb.RangeDescriptor{descA, descB},
+		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
+		hardState:  raftpb.HardState{Term: 20, Commit: 100},
+		desc:       desc(id.RangeID, "a", "k"),
+		subsume: []destroyReplicaInfo{
+			{id: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, desc: descA},
+			{id: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, desc: descB},
+		},
 	}
 
 	err := swb.prepareSnapApply(ctx)

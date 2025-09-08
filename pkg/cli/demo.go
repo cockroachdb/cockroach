@@ -213,8 +213,8 @@ func runDemoInternal(
 	demoCtx.WorkloadGenerator = gen
 
 	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
-		log.Infof,
-		log.Warningf,
+		log.Dev.Infof,
+		log.Dev.Warningf,
 		log.Ops.Shoutf,
 		func(ctx context.Context) (*stop.Stopper, error) {
 			// Override the default server store spec.

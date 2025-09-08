@@ -125,12 +125,12 @@ func pullImage(
 	// acceptance test even though that image is already present. So we first
 	// check to see if our image is present in order to avoid this slowness.
 	if hasImage(ctx, l, ref) == nil {
-		log.Infof(ctx, "ImagePull %s already exists", ref)
+		log.Dev.Infof(ctx, "ImagePull %s already exists", ref)
 		return nil
 	}
 
-	log.Infof(ctx, "ImagePull %s starting", ref)
-	defer log.Infof(ctx, "ImagePull %s complete", ref)
+	log.Dev.Infof(ctx, "ImagePull %s starting", ref)
+	defer log.Dev.Infof(ctx, "ImagePull %s complete", ref)
 
 	rc, err := l.client.ImagePull(ctx, ref, options)
 	if err != nil {
@@ -307,7 +307,7 @@ func (c *Container) WaitUntilNotRunning(ctx context.Context) error {
 
 		out := io.MultiWriter(cmdLog, os.Stderr)
 		if err := c.Logs(ctx, out); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
@@ -317,10 +317,10 @@ func (c *Container) WaitUntilNotRunning(ctx context.Context) error {
 			// NB: TEST_UNDECLARED_OUTPUTS_DIR is set for remote Bazel tests.
 			undeclaredOutsDir := os.Getenv("TEST_UNDECLARED_OUTPUTS_DIR")
 			if undeclaredOutsDir != "" {
-				log.Shoutf(ctx, severity.INFO, "command left-over files in %s",
+				log.Dev.Shoutf(ctx, severity.INFO, "command left-over files in %s",
 					strings.Replace(volumesDir, undeclaredOutsDir, "outputs.zip", 1))
 			} else {
-				log.Shoutf(ctx, severity.INFO, "command left-over files in %s", volumesDir)
+				log.Dev.Shoutf(ctx, severity.INFO, "command left-over files in %s", volumesDir)
 			}
 		}
 
@@ -367,7 +367,7 @@ func (c *Container) Inspect(ctx context.Context) (types.ContainerJSON, error) {
 func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return nil
 	}
 	bindings, ok := containerInfo.NetworkSettings.Ports[port]
@@ -376,7 +376,7 @@ func (c *Container) Addr(ctx context.Context, port nat.Port) *net.TCPAddr {
 	}
 	portNum, err := strconv.Atoi(bindings[0].HostPort)
 	if err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 		return nil
 	}
 	return &net.TCPAddr{
@@ -405,7 +405,7 @@ func (cli resilientDockerClient) ContainerStart(
 		// Keep going if ContainerStart timed out, but client's context is not
 		// expired.
 		if errors.Is(err, context.DeadlineExceeded) && clientCtx.Err() == nil {
-			log.Warningf(clientCtx, "ContainerStart timed out, retrying")
+			log.Dev.Warningf(clientCtx, "ContainerStart timed out, retrying")
 			continue
 		}
 		return err
@@ -424,13 +424,13 @@ func (cli resilientDockerClient) ContainerCreate(
 		ctx, config, hostConfig, networkingConfig, platformSpec, containerName,
 	)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
-		log.Infof(ctx, "unable to create container %s: %v", containerName, err)
+		log.Dev.Infof(ctx, "unable to create container %s: %v", containerName, err)
 		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
 			All:   true,
 			Limit: -1, // no limit, see docker/docker/client/container_list.go
 		})
 		if cerr != nil {
-			log.Infof(ctx, "unable to list containers: %v", cerr)
+			log.Dev.Infof(ctx, "unable to list containers: %v", cerr)
 			return container.CreateResponse{}, err
 		}
 		for _, c := range containers {
@@ -440,19 +440,19 @@ func (cli resilientDockerClient) ContainerCreate(
 				if n != containerName {
 					continue
 				}
-				log.Infof(ctx, "trying to remove %s", c.ID)
+				log.Dev.Infof(ctx, "trying to remove %s", c.ID)
 				options := types.ContainerRemoveOptions{
 					RemoveVolumes: true,
 					Force:         true,
 				}
 				if rerr := cli.ContainerRemove(ctx, c.ID, options); rerr != nil {
-					log.Infof(ctx, "unable to remove container: %v", rerr)
+					log.Dev.Infof(ctx, "unable to remove container: %v", rerr)
 					return container.CreateResponse{}, err
 				}
 				return cli.ContainerCreate(ctx, config, hostConfig, networkingConfig, platformSpec, containerName)
 			}
 		}
-		log.Warningf(ctx, "error indicated existing container %s, "+
+		log.Dev.Warningf(ctx, "error indicated existing container %s, "+
 			"but none found:\nerror: %s\ncontainers: %+v",
 			containerName, err, containers)
 		// We likely raced with a previous (late) removal of the container.

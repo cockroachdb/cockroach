@@ -694,7 +694,9 @@ func (sr *systemTableRow) skip() bool {
 // callback will be passed the value associated with that column, if
 // found, and its return value overwrites the value for that
 // column. The callback is not called if the column name is invalid.
-func (sr *systemTableRow) processColumn(column string, fn func(interface{}) interface{}) {
+func (sr *systemTableRow) processColumn(
+	column string, skipMissing bool, fn func(interface{}) interface{},
+) {
 	if sr.skip() {
 		return
 	}
@@ -703,6 +705,9 @@ func (sr *systemTableRow) processColumn(column string, fn func(interface{}) inte
 	hasCol := colIdx < len(sr.columns) && sr.columns[colIdx] == column
 
 	if !hasCol {
+		if skipMissing {
+			return
+		}
 		sr.err = fmt.Errorf("could not find column %s on %s", column, sr.table)
 		return
 	}
@@ -713,7 +718,7 @@ func (sr *systemTableRow) processColumn(column string, fn func(interface{}) inte
 // Matches allows the caller to only apply certain changes if the
 // value of a certain column matches a given value.
 func (sr *systemTableRow) Matches(column string, value interface{}) *systemTableRow {
-	sr.processColumn(column, func(actualValue interface{}) interface{} {
+	sr.processColumn(column, false /*skipMissing */, func(actualValue interface{}) interface{} {
 		sr.matches = reflect.DeepEqual(actualValue, value)
 		return actualValue
 	})
@@ -721,11 +726,11 @@ func (sr *systemTableRow) Matches(column string, value interface{}) *systemTable
 	return sr
 }
 
-// WithSentinel replaces the contents of the given columns with a
-// fixed sentinel value.
-func (sr *systemTableRow) WithSentinel(columns ...string) *systemTableRow {
+// WithSentinelIfExists replaces the contents of the given columns with a
+// fixed sentinel value, if the column exists.
+func (sr *systemTableRow) WithSentinelIfExists(columns ...string) *systemTableRow {
 	for _, column := range columns {
-		sr.processColumn(column, func(value interface{}) interface{} {
+		sr.processColumn(column, true /* skipMissing */, func(value interface{}) interface{} {
 			return systemTableSentinel
 		})
 	}
@@ -820,7 +825,7 @@ func (sc *systemTableContents) settingsHandler(
 		// `name` column equals 'version'
 		Matches("name", "version").
 		// use the sentinel value for every column in the settings table
-		WithSentinel(columns...).
+		WithSentinelIfExists(columns...).
 		Values()
 }
 
@@ -838,7 +843,7 @@ func (sc *systemTableContents) scheduledJobsHandler(
 	values []interface{}, columns []string,
 ) ([]interface{}, error) {
 	return newSystemTableRow(sc.table, values, columns).
-		WithSentinel("next_run", "schedule_details", "schedule_state").
+		WithSentinelIfExists("next_run", "schedule_details", "schedule_state").
 		Values()
 }
 
@@ -849,7 +854,7 @@ func (sc *systemTableContents) usersHandler(
 	values []interface{}, columns []string,
 ) ([]interface{}, error) {
 	return newSystemTableRow(sc.table, values, columns).
-		WithSentinel("estimated_last_login_time").
+		WithSentinelIfExists("estimated_last_login_time").
 		Values()
 }
 
@@ -857,7 +862,7 @@ func (sc *systemTableContents) commentsHandler(
 	values []interface{}, columns []string,
 ) ([]interface{}, error) {
 	return newSystemTableRow(sc.table, values, columns).
-		WithSentinel("object_id"). // object_id is rekeyed
+		WithSentinelIfExists("object_id"). // object_id is rekeyed
 		Values()
 }
 
@@ -2696,7 +2701,7 @@ func (u *CommonTestUtils) resetCluster(
 	}
 
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
-	settings = append(settings, install.BinaryOption(cockroachPath), install.SecureOption(true))
+	settings = append(settings, install.BinaryOption(cockroachPath), install.SimpleSecureOption(true))
 	return clusterupgrade.StartWithSettings(
 		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(opts...), settings...,
 	)
@@ -2954,8 +2959,13 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   the cluster relatively busy while the backup and restores
 			//   take place. Its schema is also more complex, and the
 			//   operations more closely resemble a customer workload.
-			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun)
-			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun)
+
+			// Use the same versioned workload binary as the cluster. The bank workload
+			// is no longer backwards compatible after #149374, so we need to use the same
+			// version as the cockroach cluster.
+			// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, true /* overrideBinary */)
+			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)

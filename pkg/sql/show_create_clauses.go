@@ -169,7 +169,7 @@ func formatViewQueryForDisplay(
 	defer func() {
 		parsed, parseErr := parser.ParseOne(query)
 		if parseErr != nil {
-			log.Warningf(ctx, "error parsing query for view %s (%v): %+v",
+			log.Dev.Warningf(ctx, "error parsing query for view %s (%v): %+v",
 				desc.GetName(), desc.GetID(), err)
 			return
 		}
@@ -187,7 +187,7 @@ func formatViewQueryForDisplay(
 
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, evalCtx, semaCtx, sessionData, desc)
 	if err != nil {
-		log.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
+		log.Dev.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
 		return desc.GetViewQuery(), nil
 	}
@@ -195,7 +195,7 @@ func formatViewQueryForDisplay(
 	// Convert sequences referenced by ID in the view back to their names.
 	sequenceReplacedViewQuery, err := formatQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery, false /* multiStmt */, catpb.Function_SQL)
 	if err != nil {
-		log.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
+		log.Dev.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
 		return typeReplacedViewQuery, nil
 	}

@@ -345,7 +345,9 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		for indexBatch := range indexEntryCh {
 			for _, indexEntry := range indexBatch.indexEntries {
 				// Pace the admission control before processing each index entry.
-				pacer.Pace(ctx)
+				if err := pacer.Pace(ctx); err != nil {
+					return err
+				}
 
 				// If there is at least one vector index being written, we need to check to see
 				// if this IndexEntry is going to a vector index and then re-encode it for that
@@ -635,7 +637,7 @@ func (b *indexBatchRetry) buildBatchWithRetry(ctx context.Context, db isql.DB) e
 					return errors.Wrapf(err, "failed after %d retries", r.CurrentAttempt())
 				}
 				b.nextChunkSize = max(1, b.nextChunkSize/2)
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"out of memory while building index entries; retrying with batch size %d. Silencing error: %v",
 					b.nextChunkSize, err)
 				continue

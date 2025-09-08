@@ -23,7 +23,8 @@ import (
 // this to make sure all descriptors mutated are at one version when the schema
 // change finish in the user transaction. In schema change jobs, we do similar
 // thing for affected descriptors. But, in some scenario, jobs are not created
-// for mutated descriptors.
+// for mutated descriptors. Some descriptors only have their versions bumped and
+// those are not waited on.
 func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 	descIDsInJobs catalog.DescriptorIDSet, cachedRegions *regions.CachedDatabaseRegions,
 ) error {
@@ -39,6 +40,9 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 		if descIDsInJobs.Contains(idVersion.ID) {
 			continue
 		}
+		if ex.extraTxnState.descCollection.IsVersionBumpOfUncommittedDescriptor(idVersion.ID) {
+			continue
+		}
 		if _, err := WaitToUpdateLeases(ex.Ctx(), ex.planner.LeaseMgr(), cachedRegions, idVersion.ID); err != nil {
 			// In most cases (normal schema changes), deleted descriptor should have
 			// been handled by jobs. So, normally we won't hit into the situation of
@@ -49,6 +53,44 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				continue
 			}
+			return err
+		}
+	}
+	return nil
+}
+
+// waitForNewDescriptorsVersionPropagation is used to wait until descriptors
+// that were version bumped but not mutated propagate to all nodes across the
+// cluster.
+//
+// This is used to support cache invalidation of the internal user and role
+// tables without blocking on long-running transactions.
+func (ex *connExecutor) waitForNewVersionPropagation(
+	descIDsInJobs catalog.DescriptorIDSet, cachedRegions *regions.CachedDatabaseRegions,
+) error {
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil {
+		return err
+	}
+	// If no schema change occurred, then nothing needs to be done here.
+	if len(withNewVersion) == 0 {
+		return nil
+	}
+	for _, idVersion := range withNewVersion {
+		if descIDsInJobs.Contains(idVersion.ID) {
+			continue
+		}
+		if !ex.extraTxnState.descCollection.IsVersionBumpOfUncommittedDescriptor(idVersion.ID) {
+			continue
+		}
+
+		// TODO(sql-foundations): Change this back to WaitForNewVersion once we
+		// address the flaky behavior around privilege and role membership caching.
+		if _, err := ex.planner.LeaseMgr().WaitForOneVersion(ex.Ctx(), idVersion.ID, cachedRegions, retry.Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     1.5,
+		}); err != nil {
 			return err
 		}
 	}

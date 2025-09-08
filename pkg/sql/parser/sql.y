@@ -778,6 +778,12 @@ func (u *sqlSymUnion) scrubOptions() tree.ScrubOptions {
 func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
 }
+func (u *sqlSymUnion) inspectOptions() tree.InspectOptions {
+    return u.val.(tree.InspectOptions)
+}
+func (u *sqlSymUnion) inspectOption() tree.InspectOption {
+    return u.val.(tree.InspectOption)
+}
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
     return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
 }
@@ -1002,8 +1008,8 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_INVERTED_INDEX
-%token <str> FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
+%token <str> FIRST FIRST_CONTAINED_BY FIRST_CONTAINS FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX
+%token <str> FORCE_INVERTED_INDEX FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
 %token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
@@ -1018,7 +1024,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
-%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
+%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSPECT INSTEAD INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -1251,6 +1257,15 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.ScrubOptions> scrub_option_list
 %type <tree.ScrubOption> scrub_option
 
+// INSPECT
+%type <tree.Statement> inspect_stmt
+%type <tree.Statement> inspect_table_stmt
+%type <tree.Statement> inspect_database_stmt
+%type <tree.InspectOptions> opt_inspect_options_clause
+%type <tree.InspectOptions> inspect_option_list
+%type <tree.InspectOption> inspect_option
+
+
 %type <tree.Statement> comment_stmt
 %type <tree.Statement> commit_stmt
 %type <tree.Statement> copy_stmt
@@ -1444,7 +1459,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options show_backups_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -1828,7 +1843,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
-%nonassoc  CONTAINS CONTAINED_BY '?' JSON_SOME_EXISTS JSON_ALL_EXISTS
+%nonassoc  CONTAINS FIRST_CONTAINS CONTAINED_BY FIRST_CONTAINED_BY '?' JSON_SOME_EXISTS JSON_ALL_EXISTS
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
 // To support target_elem without AS, we must give IDENT an explicit priority
@@ -3839,7 +3854,7 @@ alter_external_connection_stmt:
 				 ConnectionLabelSpec: *($4.labelSpec()),
 		     As: $6.expr(),
 		}
-	} 
+	}
 | ALTER EXTERNAL CONNECTION IF EXISTS /*$6=*/label_spec AS /*$8=*/string_or_placeholder
 	{
 		   $$.val = &tree.AlterExternalConnection{
@@ -4911,11 +4926,11 @@ logical_replication_create_table_options:
   }
 | UNIDIRECTIONAL
   {
-   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)}
   }
 | BIDIRECTIONAL ON string_or_placeholder
   {
-   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
   }
 
 
@@ -6879,6 +6894,7 @@ preparable_stmt:
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN
 | import_stmt    // EXTEND WITH HELP: IMPORT
 | insert_stmt    // EXTEND WITH HELP: INSERT
+| inspect_stmt   // EXTEND WITH HELP: INSPECT
 | pause_stmt     // help texts in sub-rule
 | reset_stmt     // help texts in sub-rule
 | restore_stmt   // EXTEND WITH HELP: RESTORE
@@ -7710,11 +7726,11 @@ preparable_set_stmt:
 // EXPERIMENTAL SCRUB TABLE <table> ...
 // EXPERIMENTAL SCRUB DATABASE <database>
 //
-// The various checks that ca be run with SCRUB includes:
+// The various checks that can be run with SCRUB includes:
 //   - Physical table data (encoding)
 //   - Secondary index integrity
 //   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
-// %SeeAlso: SCRUB TABLE, SCRUB DATABASE
+// %SeeAlso: INSPECT, SCRUB TABLE, SCRUB DATABASE
 scrub_stmt:
   scrub_table_stmt
 | scrub_database_stmt
@@ -7751,7 +7767,7 @@ scrub_database_stmt:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT ALL
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT (<constraint>...)
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
-// %SeeAlso: SCRUB DATABASE, SRUB
+// %SeeAlso: SCRUB DATABASE, SCRUB
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
   {
@@ -7804,6 +7820,93 @@ scrub_option:
 | PHYSICAL
   {
     $$.val = &tree.ScrubOptionPhysical{}
+  }
+
+// %Help: INSPECT - run checks against databases or tables
+// %Category: Misc
+// %Text:
+// INSPECT TABLE <table> ...
+// INSPECT DATABASE <database> ...
+//
+// %SeeAlso: INSPECT TABLE, INSPECT DATABASE, SCRUB
+inspect_stmt:
+  inspect_table_stmt    // EXTEND WITH HELP: INSPECT TABLE
+| inspect_database_stmt // EXTEND WITH HELP: INSPECT DATABASE
+| INSPECT error // SHOW HELP: INSPECT
+
+// %Help: INSPECT TABLE - run inspect checks on a table
+// %Category: Misc
+// %Text:
+// INSPECT TABLE <tablename>
+//             [AS OF SYSTEM TIME <expr>]
+//             [WITH OPTIONS <option> [, ...]]
+//
+// Options:
+//   INSPECT TABLE ... WITH OPTIONS INDEX ALL
+//   INSPECT TABLE ... WITH OPTIONS INDEX (<index>...)
+// %SeeAlso: INSPECT DATABASE, INSPECT
+inspect_table_stmt:
+  INSPECT TABLE table_name opt_as_of_clause opt_inspect_options_clause
+  {
+    $$.val = &tree.Inspect{
+      Typ: tree.InspectTable,
+      Table: $3.unresolvedObjectName(),
+      AsOf: $4.asOfClause(),
+      Options: $5.inspectOptions(),
+    }
+  }
+| INSPECT TABLE error // SHOW HELP: INSPECT TABLE
+
+// %Help: INSPECT DATABASE - run inspect checks on a database
+// %Category: Misc
+// %Text:
+// INSPECT DATABASE <database>
+//                             [AS OF SYSTEM TIME <expr>]
+//                             [WITH OPTIONS <option> [, ...]]
+// Options:
+//   INSPECT DATABASE ... WITH OPTIONS INDEX ALL
+//   INSPECT DATABASE ... WITH OPTIONS INDEX (<index>...)
+// %SeeAlso: INSPECT TABLE, INSPECT
+inspect_database_stmt:
+  INSPECT DATABASE db_name opt_as_of_clause opt_inspect_options_clause
+  {
+    $$.val = &tree.Inspect{
+      Typ: tree.InspectDatabase,
+      Database: $3.unresolvedObjectName(),
+      AsOf: $4.asOfClause(),
+      Options: $5.inspectOptions(),
+    }
+  }
+| INSPECT DATABASE error // SHOW HELP: INSPECT DATABASE
+
+opt_inspect_options_clause:
+  WITH OPTIONS inspect_option_list
+  {
+    $$.val = $3.inspectOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.InspectOptions{}
+  }
+
+inspect_option_list:
+  inspect_option
+  {
+    $$.val = tree.InspectOptions{$1.inspectOption()}
+  }
+| inspect_option_list ',' inspect_option
+  {
+    $$.val = append($1.inspectOptions(), $3.inspectOption())
+  }
+
+inspect_option:
+  INDEX ALL
+  {
+    $$.val = &tree.InspectOptionIndex{}
+  }
+| INDEX_BEFORE_PAREN '(' table_index_name_list ')'
+  {
+    $$.val = &tree.InspectOptionIndex{IndexNames: $3.newTableIndexNames()}
   }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
@@ -8771,10 +8874,11 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_with_show_backups_options
  {
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
+      Options: *$5.showBackupOptions(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -8856,6 +8960,38 @@ show_backup_details:
     /* SKIP DOC */
 	$$.val = tree.BackupValidateDetails
 	}
+
+opt_with_show_backups_options:
+  WITH show_backups_options_list
+  {
+    $$.val = $2.showBackupOptions()
+  }
+| WITH OPTIONS '(' show_backups_options_list ')'
+  {
+    $$.val = $4.showBackupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
+
+show_backups_options_list:
+  show_backups_options
+  {
+    $$.val = $1.showBackupOptions()
+  }
+| show_backups_options_list ',' show_backups_options
+  {
+    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+show_backups_options:
+ INDEX
+ {
+    $$.val = &tree.ShowBackupOptions{Index: true}
+ }
 
 opt_with_show_backup_options:
   WITH show_backup_options_list
@@ -15602,6 +15738,9 @@ character_with_length:
       return 1
     }
     $$.val = types.MakeScalar(types.StringFamily, colTyp.Oid(), colTyp.Precision(), n, colTyp.Locale())
+    // TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
+    // VisibleType.
+    $$.val.(*types.T).InternalType.VisibleType = colTyp.InternalType.VisibleType
   }
 
 character_without_length:
@@ -15996,9 +16135,17 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Contains), Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr FIRST_CONTAINS a_expr
+  {
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FirstContains), Left: $1.expr(), Right: $3.expr()}
+  }
 | a_expr CONTAINED_BY a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.ContainedBy), Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr FIRST_CONTAINED_BY a_expr
+  {
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FirstContainedBy), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '=' a_expr
   {
@@ -17257,7 +17404,9 @@ all_op:
 | '#' { $$.val = treebin.MakeBinaryOperator(treebin.Bitxor) }
 | FLOORDIV { $$.val = treebin.MakeBinaryOperator(treebin.FloorDiv) }
 | CONTAINS { $$.val = treecmp.MakeComparisonOperator(treecmp.Contains) }
+| FIRST_CONTAINS { $$.val = treebin.MakeBinaryOperator(treebin.FirstContains) }
 | CONTAINED_BY { $$.val = treecmp.MakeComparisonOperator(treecmp.ContainedBy) }
+| FIRST_CONTAINED_BY { $$.val = treebin.MakeBinaryOperator(treebin.FirstContainedBy) }
 | LSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.LShift) }
 | RSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.RShift) }
 | CONCAT { $$.val = treebin.MakeBinaryOperator(treebin.Concat) }
@@ -18381,6 +18530,7 @@ unreserved_keyword:
 | INJECT
 | INPUT
 | INSERT
+| INSPECT
 | INSTEAD
 | INTO_DB
 | INVERTED
@@ -18937,6 +19087,7 @@ bare_label_keywords:
 | INPUT
 | INSENSITIVE
 | INSERT
+| INSPECT
 | INSTEAD
 | INT
 | INTEGER

@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -283,4 +285,54 @@ func PrefixCmdOutputWithTimestamp(cmd string) string {
 	// Don't prefix blank lines with timestamps.
 	awkCmd := `awk 'NF { cmd="date +\"%H:%M:%S\""; cmd | getline ts; close(cmd); print ts ":", $0; next } { print }'`
 	return fmt.Sprintf(`bash -c '%s' 2>&1 |`, cmd) + awkCmd
+}
+
+// SimulateMultiRegionCluster injects artificial latency between nodes
+// to simulate a multi-region cluster with nodes distributed according
+// to regionToNodeMap. The actual cluster itself must have been provisioned
+// in the same region/zone.
+func SimulateMultiRegionCluster(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	regionToNodeMap failures.RegionToNodes,
+	l *logger.Logger,
+) (func(), error) {
+	latencyFailer, err := c.GetFailer(l, c.All(), failures.NetworkLatencyName, false /* disableStateValidation */)
+	if err != nil {
+		return nil, err
+	}
+
+	args, err := failures.MakeNetworkLatencyArgs(regionToNodeMap)
+	if err != nil {
+		return nil, err
+	}
+
+	failerLogger, fileName, err := LoggerForCmd(l, c.All(), "MultiRegionClusterSetup")
+	if err != nil {
+		return nil, err
+	}
+	l.Printf("Simulating Multi Region cluster; details in %s.log", fileName)
+
+	if err = latencyFailer.Setup(ctx, failerLogger, args); err != nil {
+		return nil, err
+	}
+
+	// We want to inject the failure mode after service registration but before
+	// the cluster actually starts. We also want to only inject it the first time,
+	// as it will persist through restarts.
+	var once sync.Once
+	c.RegisterClusterHook("inject multi-region latency", option.PreStartHook, time.Minute, func(ctx context.Context) error {
+		once.Do(func() {
+			err = latencyFailer.Inject(ctx, failerLogger, args)
+		})
+		return err
+	})
+	cleanupFunc := func() {
+		if err = latencyFailer.Cleanup(context.Background(), failerLogger); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return cleanupFunc, nil
 }

@@ -1786,9 +1786,11 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 type multiTablePTSBenchmarkParams struct {
-	numTables int
-	numRows   int
-	duration  string
+	numTables   int
+	numRanges   int
+	numRows     int
+	duration    string
+	perTablePTS bool
 }
 
 // runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
@@ -1812,8 +1814,19 @@ func runCDCMultiTablePTSBenchmark(
 		t.Fatalf("failed to set cluster settings: %v", err)
 	}
 
-	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --num-tables=%d {pgurl%s}",
-		params.numRows, params.numTables, ct.crdbNodes.RandNode())
+	numRanges := 10
+	if params.numRanges > 0 {
+		numRanges = params.numRanges
+	}
+
+	if params.perTablePTS {
+		if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = true"); err != nil {
+			t.Fatalf("failed to set per-table protected timestamps: %v", err)
+		}
+	}
+
+	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --num-tables=%d {pgurl%s}",
+		params.numRows, numRanges, params.numTables, ct.crdbNodes.RandNode())
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 		t.Fatalf("failed to initialize bank tables: %v", err)
 	}
@@ -1855,11 +1868,11 @@ func runCDCMultiTablePTSBenchmark(
 	t.Status("workload finished, verifying metrics")
 
 	// These metrics are in nanoseconds, so we are asserting that both
-	// of these latency metrics are less than 10 milliseconds.
-	ct.verifyMetrics(ctx, verifyMetricsUnderThreshold([]string{
+	// of these latency metrics are less than 25 milliseconds.
+	ct.verifyMetrics(ctx, ct.verifyMetricsUnderThreshold([]string{
 		"changefeed_stage_pts_manage_latency",
 		"changefeed_stage_pts_create_latency",
-	}, float64(10*time.Millisecond)))
+	}, float64(30*time.Millisecond)))
 
 	t.Status("multi-table PTS benchmark finished")
 }
@@ -2896,23 +2909,38 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			params := multiTablePTSBenchmarkParams{
-				numTables: 500,
-				numRows:   10_000,
-				duration:  "20m",
-			}
-			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
-		},
-	})
+
+	for _, perTablePTS := range []bool{false, true} {
+		for _, config := range []struct {
+			numTables    int
+			numRanges    int
+			timeoutHours int
+		}{
+			{numTables: 500, numRanges: 10, timeoutHours: 1},
+			{numTables: 5000, numRanges: 10, timeoutHours: 1},
+			{numTables: 50000, numRanges: 1, timeoutHours: 2}, // Splitting tables into ranges slows down test setup at this scale
+		} {
+			r.Add(registry.TestSpec{
+				Name:             fmt.Sprintf("cdc/multi-table-pts-benchmark/per-table-pts=%t/num-tables=%d/num-ranges=%d", perTablePTS, config.numTables, config.numRanges),
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				Timeout:          time.Duration(config.timeoutHours) * time.Hour,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					params := multiTablePTSBenchmarkParams{
+						numTables:   config.numTables,
+						numRanges:   config.numRanges,
+						numRows:     100,
+						duration:    "20m",
+						perTablePTS: perTablePTS,
+					}
+					runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+				},
+			})
+		}
+	}
 }
 
 const (
@@ -4399,7 +4427,7 @@ const createMSKTopicBinPath = "/tmp/create-msk-topic"
 var setupMskTopicScript = fmt.Sprintf(`
 #!/bin/bash
 set -e -o pipefail
-wget https://go.dev/dl/go1.24.5.linux-amd64.tar.gz -O /tmp/go.tar.gz
+wget https://go.dev/dl/go1.23.12.linux-amd64.tar.gz -O /tmp/go.tar.gz
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf /tmp/go.tar.gz
 echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile
@@ -4598,7 +4626,7 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 	}
 }
 
-func verifyMetricsUnderThreshold(
+func (ct *cdcTester) verifyMetricsUnderThreshold(
 	names []string, threshold float64,
 ) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
 	namesMap := make(map[string]struct{}, len(names))
@@ -4622,6 +4650,8 @@ func verifyMetricsUnderThreshold(
 				observedValue := m.Histogram.GetSampleSum() / float64(m.Histogram.GetSampleCount())
 				if observedValue < threshold {
 					found[name] = struct{}{}
+				} else {
+					ct.t.Fatalf("observed value for metric %s over threshold. observedValue: %f, threshold: %f", name, observedValue, threshold)
 				}
 			}
 

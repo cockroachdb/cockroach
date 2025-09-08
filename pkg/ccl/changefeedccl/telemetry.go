@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,10 +56,11 @@ func makePeriodicTelemetryLogger(
 	description string,
 	jobID jobspb.JobID,
 	s *cluster.Settings,
+	numTargets uint,
 ) (*periodicTelemetryLogger, error) {
 	return &periodicTelemetryLogger{
 		ctx:               ctx,
-		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID),
+		changefeedDetails: makeCommonChangefeedEventDetails(ctx, details, description, jobID, numTargets),
 		sinkTelemetryData: sinkTelemetryData{},
 		settings:          s,
 	}, nil
@@ -104,7 +106,9 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
 	}
-	log.StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
+
+	shouldMigrate := log.ShouldMigrateEvent(&ptl.settings.SV)
+	getChangefeedEventMigrator(shouldMigrate).StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
 }
 
 func (ptl *periodicTelemetryLogger) close() {
@@ -120,7 +124,9 @@ func (ptl *periodicTelemetryLogger) close() {
 		LoggingInterval:              loggingInterval,
 		Closing:                      true,
 	}
-	log.StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
+
+	shouldMigrate := log.ShouldMigrateEvent(&ptl.settings.SV)
+	getChangefeedEventMigrator(shouldMigrate).StructuredEvent(ptl.ctx, severity.INFO, continuousTelemetryEvent)
 }
 
 func wrapMetricsRecorderWithTelemetry(
@@ -131,9 +137,10 @@ func wrapMetricsRecorderWithTelemetry(
 	s *cluster.Settings,
 	mb metricsRecorder,
 	knobs TestingKnobs,
+	targets changefeedbase.Targets,
 ) (*telemetryMetricsRecorder, error) {
 	var logger telemetryLogger
-	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s)
+	logger, err := makePeriodicTelemetryLogger(ctx, details, description, jobID, s, targets.Size)
 	if err != nil {
 		return &telemetryMetricsRecorder{}, err
 	}

@@ -206,9 +206,9 @@ func TestInvertedJoiner(t *testing.T) {
 		return tree.NewDInt(tree.DInt(row))
 	}
 	bFn := func(row int) tree.Datum {
-		arr := tree.NewDArray(types.Int)
-		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
-		return arr
+		return tree.NewDArrayFromDatums(
+			types.Int, tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))},
+		)
 	}
 	cFn := func(row int) tree.Datum {
 		j, err := json.ParseJSON(fmt.Sprintf(`{"c1": %d, "c2": %d}`, row/10, row%10))
@@ -749,9 +749,9 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		return tree.NewDInt(tree.DInt(row))
 	}
 	bFn := func(row int) tree.Datum {
-		arr := tree.NewDArray(types.Int)
-		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
-		return arr
+		return tree.NewDArrayFromDatums(
+			types.Int, tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))},
+		)
 	}
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"a INT PRIMARY KEY, b INT ARRAY, INVERTED INDEX bi (b)",

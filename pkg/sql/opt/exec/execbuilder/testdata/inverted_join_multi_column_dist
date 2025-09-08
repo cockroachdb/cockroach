@@ -73,6 +73,7 @@ INSERT INTO j2 (
 statement ok
 ALTER TABLE j2 SPLIT AT VALUES (44), (88)
 
+retry
 statement ok
 ALTER TABLE j2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 44), (ARRAY[3], 88)
 
@@ -81,7 +82,7 @@ SELECT start_key, end_key, replicas, lease_holder
 FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE j2 WITH DETAILS] ORDER BY lease_holder
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/72>  …/1/44        {1}       1
+<before:/Table/73>  …/1/44        {1}       1
 …/1/44              …/1/88        {2}       2
 …/1/88              <after:/Max>  {3}       3
 
@@ -153,6 +154,7 @@ INSERT INTO a2 (
 statement ok
 ALTER TABLE a2 SPLIT AT VALUES (8), (16)
 
+retry
 statement ok
 ALTER TABLE a2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 8), (ARRAY[3], 16)
 

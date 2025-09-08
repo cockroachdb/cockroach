@@ -31,17 +31,12 @@ var _ jobs.Resumer = &inspectResumer{}
 
 // Resume implements the Resumer interface
 func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	log.Infof(ctx, "starting INSPECT job")
+	log.Dev.Infof(ctx, "starting INSPECT job")
 
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
 
-	var knobs sql.InspectTestingKnobs
-	if inspectKnobs := execCfg.InspectTestingKnobs; inspectKnobs != nil {
-		knobs = *inspectKnobs
-	}
-
-	if err := maybeRunOnJobStartHook(knobs); err != nil {
+	if err := c.maybeRunOnJobStartHook(execCfg); err != nil {
 		return err
 	}
 
@@ -75,11 +70,11 @@ func (c *inspectResumer) CollectProfile(ctx context.Context, execCtx interface{}
 	return nil
 }
 
-func maybeRunOnJobStartHook(knobs sql.InspectTestingKnobs) error {
-	if knobs.OnInspectJobStart != nil {
-		return knobs.OnInspectJobStart()
+func (c *inspectResumer) maybeRunOnJobStartHook(execCfg *sql.ExecutorConfig) error {
+	if execCfg.InspectTestingKnobs == nil || execCfg.InspectTestingKnobs.OnInspectJobStart == nil {
+		return nil
 	}
-	return nil
+	return execCfg.InspectTestingKnobs.OnInspectJobStart()
 }
 
 // getPrimaryIndexSpans returns the primary index spans for all tables involved in
@@ -126,8 +121,9 @@ func (c *inspectResumer) planInspectProcessors(
 	jobID := c.job.ID()
 	newProcessorSpec := func(spans []roachpb.Span) *execinfrapb.InspectSpec {
 		return &execinfrapb.InspectSpec{
-			JobID: jobID,
-			Spans: spans,
+			JobID:          jobID,
+			InspectDetails: c.job.Details().(jobspb.InspectDetails),
+			Spans:          spans,
 		}
 	}
 

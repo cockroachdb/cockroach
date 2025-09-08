@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 statement ok
 CREATE TABLE ltable(
   lk int primary key,

@@ -154,7 +154,7 @@ func (pt *progressTracker) updateJobCallback(
 			d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
 		}()
 	default:
-		log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
+		log.Dev.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 	}
 }
 
@@ -166,7 +166,7 @@ func (pt *progressTracker) ingestUpdate(
 ) (bool, error) {
 	var progDetails backuppb.RestoreProgress
 	if err := pbtypes.UnmarshalAny(&rawProgress.ProgressDetails, &progDetails); err != nil {
-		log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+		log.Dev.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 	}
 	pt.mu.Lock()
 	defer pt.mu.Unlock()

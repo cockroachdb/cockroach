@@ -371,34 +371,22 @@ func TestInvertedIndexKey(t *testing.T) {
 		expectedKeysExcludingEmptyArray int
 	}{
 		{
-			value: &tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{},
-			},
+			value:                           tree.NewDArrayFromDatums(types.Int, tree.Datums{}),
 			expectedKeys:                    1,
 			expectedKeysExcludingEmptyArray: 0,
 		},
 		{
-			value: &tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.NewDInt(1)},
-			},
+			value:                           tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(1)}),
 			expectedKeys:                    1,
 			expectedKeysExcludingEmptyArray: 1,
 		},
 		{
-			value: &tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.NewDString("foo")},
-			},
+			value:                           tree.NewDArrayFromDatums(types.String, tree.Datums{tree.NewDString("foo")}),
 			expectedKeys:                    1,
 			expectedKeysExcludingEmptyArray: 1,
 		},
 		{
-			value: &tree.DArray{
-				ParamTyp: types.Int,
-				Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(1)},
-			},
+			value: tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(1)}),
 			// The keys should be deduplicated.
 			expectedKeys:                    2,
 			expectedKeysExcludingEmptyArray: 2,
@@ -985,8 +973,8 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 
 		rightArr, _ := right.(*tree.DArray)
 		// An inverted expression can only be generated if the value array is
-		// non-empty or contains atleast one non-NULL element.
-		ok := rightArr.Len() > 0 && rightArr.HasNonNulls
+		// non-empty or contains at least one non-NULL element.
+		ok := rightArr.Len() > 0 && rightArr.HasNonNulls()
 		// A unique span expression can be guaranteed when the input is of
 		// the form:
 		// Array A && Array containing one or more entries of same non-null

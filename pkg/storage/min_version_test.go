@@ -7,7 +7,6 @@ package storage
 
 import (
 	"context"
-	"io"
 	"os"
 	"testing"
 
@@ -34,16 +33,16 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, mem.MkdirAll(dir, os.ModeDir))
 
 	// Expect !ok min version file doesn't exist.
-	v, ok, err := getMinVersion(mem, dir)
+	v, ok, err := fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.Equal(t, roachpb.Version{}, v)
 	require.False(t, ok)
 
 	// Expect min version to not be at least any target version.
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.False(t, ok)
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version2)
 	require.NoError(t, err)
 	require.False(t, ok)
 
@@ -51,16 +50,16 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, writeMinVersionFile(mem, dir, version1))
 
 	// Expect min version to be version1.
-	v, ok, err = getMinVersion(mem, dir)
+	v, ok, err = fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, version1.Equal(v))
 
 	// Expect min version to be at least version1 but not version2.
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version2)
 	require.NoError(t, err)
 	require.False(t, ok)
 
@@ -68,22 +67,22 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, writeMinVersionFile(mem, dir, version2))
 
 	// Expect min version to be at least version1 and version2.
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version2)
 	require.NoError(t, err)
 	require.True(t, ok)
 
 	// Expect min version to be version2.
-	v, ok, err = getMinVersion(mem, dir)
+	v, ok, err = fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, version2.Equal(v))
 
 	// Expect no-op when trying to update min version to a lower version.
 	require.NoError(t, writeMinVersionFile(mem, dir, version1))
-	v, ok, err = getMinVersion(mem, dir)
+	v, ok, err = fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, version2.Equal(v))
@@ -93,7 +92,13 @@ func TestSetMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	p, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(0))
+	settings := cluster.MakeClusterSettings()
+	e, err := fs.InitEnv(context.Background(), vfs.NewMem(), "" /* dir */, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* diskWriteStats */)
+	// In practice InitEnv is infallible with this configuration.
+	require.NoError(t, err)
+	p, err := Open(context.Background(), e, settings, CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
 	require.Equal(t, MinimumSupportedFormatVersion, p.db.FormatMajorVersion())
@@ -121,6 +126,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	baseFS := vfs.NewMem()
 	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
 		EncryptionOptions: &storageconfig.EncryptionOptions{},
+		Version:           st.Version,
 	}, nil /* statsCollector */)
 	require.NoError(t, err)
 
@@ -131,7 +137,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
-	v, ok, err := getMinVersion(env.UnencryptedFS, "")
+	v, ok, err := fs.GetMinVersion(env.UnencryptedFS, "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, st.Version.LatestVersion(), v)
@@ -199,48 +205,4 @@ func (f fauxEncryptedFile) ReadAt(p []byte, off int64) (int, error) {
 		p[i] = p[i] - 1
 	}
 	return n, err
-}
-
-func TestSafeWriteToFile(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Use an in-memory FS that strictly enforces syncs.
-	mem := vfs.NewCrashableMem()
-	syncDir := func(dir string) {
-		fdir, err := mem.OpenDir(dir)
-		require.NoError(t, err)
-		require.NoError(t, fdir.Sync())
-		require.NoError(t, fdir.Close())
-	}
-	readFile := func(mem *vfs.MemFS, filename string) []byte {
-		f, err := mem.Open("foo/bar")
-		require.NoError(t, err)
-		b, err := io.ReadAll(f)
-		require.NoError(t, err)
-		require.NoError(t, f.Close())
-		return b
-	}
-
-	require.NoError(t, mem.MkdirAll("foo", os.ModePerm))
-	syncDir("")
-	f, err := mem.Create("foo/bar", fs.UnspecifiedWriteCategory)
-	require.NoError(t, err)
-	_, err = io.WriteString(f, "Hello world")
-	require.NoError(t, err)
-	require.NoError(t, f.Sync())
-	require.NoError(t, f.Close())
-	syncDir("foo")
-
-	// Discard any unsynced writes to make sure we set up the test
-	// preconditions correctly.
-	crashFS := mem.CrashClone(vfs.CrashCloneCfg{})
-	require.Equal(t, []byte("Hello world"), readFile(crashFS, "foo/bar"))
-
-	// Use SafeWriteToFile to atomically, durably change the contents of the
-	// file.
-	require.NoError(t, safeWriteToUnencryptedFile(crashFS, "foo", "foo/bar", []byte("Hello everyone"), fs.UnspecifiedWriteCategory))
-
-	// Discard any unsynced writes.
-	crashFS = crashFS.CrashClone(vfs.CrashCloneCfg{})
-	require.Equal(t, []byte("Hello everyone"), readFile(crashFS, "foo/bar"))
 }

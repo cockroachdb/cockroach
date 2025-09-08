@@ -33,7 +33,7 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	node := c.Node(1)
 	t.Status("setting up cockroach")
 	// pg_regress does not support ssl connections.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(false)), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SimpleSecureOption(false)), c.All())
 
 	db, err := c.ConnE(ctx, t.L(), node[0])
 	if err != nil {
@@ -516,8 +516,6 @@ func registerPGRegress(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPGRegress(ctx, t, c)
 		},
-		// TODO(#150543): remove this.
-		SkipPostValidations: registry.PostValidationInvalidDescriptors,
 	})
 }
 

@@ -337,7 +337,7 @@ func (p *planner) runExecBuild(
 		}
 		// TODO(yuzefovich): make the logging conditional on the verbosity
 		// level once new DistSQL planning is no longer experimental.
-		log.Infof(
+		log.Dev.Infof(
 			ctx, "distSQLSpecExecFactory failed planning with %v, falling back to the old path", err,
 		)
 	}
@@ -406,11 +406,8 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// descriptor versions are bumped at most once per transaction, even if there
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
-		// memo (for prepare) or reusing a saved memo (for execute). If
-		// RemoteRegions is set in the eval context we're building a memo for the
-		// purposes of generating the proper error message, and memo reuse or
-		// caching should not be done.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() && len(p.EvalContext().RemoteRegions) == 0
+		// memo (for prepare) or reusing a saved memo (for execute).
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {
@@ -430,11 +427,11 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
 		// msg is guaranteed to be a constant string by the fmtsafe linter, so
 		// it is safe to convert to a redact.SafeString.
 		//
-		// Also, note that passing msg directly to log.InfofDepth() would cause
+		// Also, note that passing msg directly to log.Dev.InfofDepth() would cause
 		// a heap allocation to box it, even if the else path is taken. With the
 		// type conversion, a new implicit variable is created that only causes
 		// a heap allocation if this branch is taken.
-		log.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
+		log.Dev.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
 	} else {
 		log.Event(ctx, msg)
 	}
@@ -590,7 +587,7 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 	opc.flags.Set(planFlagOptimized)
 	mem := f.Memo()
 	if prep := opc.p.stmt.Prepared; opc.allowMemoReuse && prep != nil {
-		costWithOptimizationCost := mem.RootExpr().(memo.RelExpr).Cost()
+		costWithOptimizationCost := mem.RootExpr().Cost()
 		costWithOptimizationCost.Add(mem.OptimizationCost())
 		prep.Costs.AddCustom(costWithOptimizationCost)
 	}
@@ -635,16 +632,20 @@ func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 // ideal generic query plan is always chosen, if it exists. A non-ideal generic
 // plan is chosen if CustomPlanThreshold custom plans have already been built
 // and the generic plan is optimal or it has not yet been built.
-func (opc *optPlanningCtx) chooseGenericPlan() bool {
+func (opc *optPlanningCtx) chooseGenericPlan(ctx context.Context) bool {
 	ps := opc.p.stmt.Prepared
 	// Always use an ideal generic plan.
 	if ps.IdealGenericPlan {
+		opc.log(ctx, "ideal generic plan")
 		return true
 	}
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
 	case sessiondatapb.PlanCacheModeAuto:
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			log.Eventf(ctx, "%s", ps.Costs.Summary())
+		}
 		return ps.Costs.NumCustom() >= prep.CustomPlanThreshold &&
 			(!ps.Costs.HasGeneric() || ps.Costs.IsGenericOptimal())
 	default:
@@ -706,7 +707,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 
 	// NOTE: The generic or base memos returned below could be nil if they have
 	// not yet been built.
-	if opc.chooseGenericPlan() {
+	if opc.chooseGenericPlan(ctx) {
 		return prep.GenericMemo, nil
 	}
 	return prep.BaseMemo, nil
@@ -772,10 +773,10 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 			prep.IdealGenericPlan = true
 		case memoTypeGeneric:
 			prep.GenericMemo = newMemo
-			prep.Costs.SetGeneric(newMemo.RootExpr().(memo.RelExpr).Cost())
+			prep.Costs.SetGeneric(newMemo.RootExpr().Cost())
 			// Now that the cost of the generic plan is known, we need to
 			// re-evaluate the decision to use a generic or custom plan.
-			if !opc.chooseGenericPlan() {
+			if !opc.chooseGenericPlan(ctx) {
 				// The generic plan that we just built is too expensive, so we need
 				// to build a custom plan. We recursively call fetchPreparedMemo in
 				// case we have a custom plan that can be reused as a starting point
@@ -961,11 +962,11 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if opc.gf.Initialized() {
 		planTop.instrumentation.planGist = opc.gf.PlanGist()
 	}
-	planTop.instrumentation.costEstimate = mem.RootExpr().(memo.RelExpr).Cost().C
-	available := mem.RootExpr().(memo.RelExpr).Relational().Statistics().Available
+	planTop.instrumentation.costEstimate = mem.RootExpr().Cost().C
+	available := mem.RootExpr().Relational().Statistics().Available
 	planTop.instrumentation.statsAvailable = available
 	if available {
-		planTop.instrumentation.outputRows = mem.RootExpr().(memo.RelExpr).Relational().Statistics().RowCount
+		planTop.instrumentation.outputRows = mem.RootExpr().Relational().Statistics().RowCount
 	}
 
 	if stmt.ExpectedTypes != nil {
@@ -1045,7 +1046,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	f.FoldingControl().AllowStableFolds()
 	f.CopyAndReplace(
 		savedMemo,
-		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootExpr(),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)
@@ -1066,7 +1067,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
 	f.CopyAndReplace(
 		savedMemo,
-		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootExpr(),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)
@@ -1091,7 +1092,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	savedMemo.Metadata().UpdateTableMeta(origCtx, f.EvalContext(), optTables)
 	f.CopyAndReplace(
 		savedMemo,
-		savedMemo.RootExpr().(memo.RelExpr),
+		savedMemo.RootExpr(),
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)

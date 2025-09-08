@@ -280,7 +280,7 @@ func (f fetchNode) Close(ctx context.Context) {
 		// fetch began, so that subsequent reads in the transaction can still see
 		// writes from that transaction.
 		if err := f.cursor.txn.SetReadSeqNum(f.origTxnSeqNum); err != nil {
-			log.Warningf(ctx, "error resetting transaction read seq num after CURSOR operation: %v", err)
+			log.Dev.Warningf(ctx, "error resetting transaction read seq num after CURSOR operation: %v", err)
 		}
 	}
 }

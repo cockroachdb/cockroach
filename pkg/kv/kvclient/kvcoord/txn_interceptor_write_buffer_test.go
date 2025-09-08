@@ -32,7 +32,7 @@ func makeMockTxnWriteBuffer(
 	st := cluster.MakeClusterSettings()
 	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
 	bufferedWritesGetTransformEnabled.Override(ctx, &st.SV, true)
-	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
 
 	var metrics TxnMetrics
 	if len(optionalMetrics) > 0 {
@@ -1336,6 +1336,75 @@ func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
+// TestTxnWriteBufferResumeSpans verifies that the txnWriteBuffer behaves
+// correctly in presence of BatchRequest's limits that result in non-nil
+// ResumeSpans.
+// TODO(yuzefovich): extend the test for Scans and ReverseScans.
+func TestTxnWriteBufferResumeSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+
+	txn := makeTxnProto()
+	txn.Sequence = 1
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	// Delete 3 keys while setting MaxSpanRequestKeys to 2 (only the first two
+	// Dels should be processed).
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn, MaxSpanRequestKeys: 2}
+	for _, k := range []roachpb.Key{keyA, keyB, keyC} {
+		del := delArgs(k, txn.Sequence)
+		// Set MustAcquireExclusiveLock so that Del is transformed into Get.
+		del.MustAcquireExclusiveLock = true
+		ba.Add(del)
+	}
+
+	// Simulate a scenario where each transformed Get finds something and the
+	// limit is reached after the second Get.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Equal(t, int64(2), ba.MaxSpanRequestKeys)
+		require.Len(t, ba.Requests, 3)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[2].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Responses = []kvpb.ResponseUnion{
+			{Value: &kvpb.ResponseUnion_Get{
+				Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("a")}},
+			}},
+			{Value: &kvpb.ResponseUnion_Get{
+				Get: &kvpb.GetResponse{Value: &roachpb.Value{RawBytes: []byte("b")}},
+			}},
+			{Value: &kvpb.ResponseUnion_Get{
+				Get: &kvpb.GetResponse{ResponseHeader: kvpb.ResponseHeader{
+					ResumeSpan: &roachpb.Span{Key: keyC},
+				}},
+			}},
+		}
+		return br, nil
+	})
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Even though the txnWriteBuffer did not send any Del requests to the KV
+	// layer above, the responses should still be populated.
+	require.Len(t, br.Responses, 3)
+	require.Equal(t, &kvpb.DeleteResponse{FoundKey: true}, br.Responses[0].GetInner())
+	require.Equal(t, &kvpb.DeleteResponse{FoundKey: true}, br.Responses[1].GetInner())
+	// The last Del wasn't processed, so we should see the ResumeSpan set in the
+	// header.
+	require.NotNil(t, br.Responses[2].GetInner().(*kvpb.DeleteResponse).ResumeSpan)
+
+	// Verify that only two writes are buffered.
+	require.Equal(t, 2, len(twb.testingBufferedWritesAsSlice()))
+}
+
 // TestTxnWriteBufferMustSortBatchesBySequenceNumber verifies that flushed
 // batches are sorted in sequence number order, as currently required by the txn
 // pipeliner interceptor.
@@ -1517,7 +1586,7 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 
 	putAEstimate := int64(len(keyA)+valA.Size()) + bufferedWriteStructOverhead + bufferedValueStructOverhead
 
-	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, putAEstimate)
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, putAEstimate)
 
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
@@ -1670,7 +1739,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 				txn.Sequence = 10
 
 				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
-				bufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
+				BufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
 
 				ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
 				if isReverse {
@@ -1708,7 +1777,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 		txn := makeTxnProto()
 		txn.Sequence = 10
 
-		bufferedWritesMaxBufferSize.Override(ctx, &st.SV, 10*(lockKeyInfoSize+int64(len(keyA))))
+		BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 10*(lockKeyInfoSize+int64(len(keyA))))
 
 		ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
 		ba.Add(&kvpb.ScanRequest{
@@ -2038,6 +2107,49 @@ func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	br, pErr = twb.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
+}
+
+func TestTxnWriteBufferSplitsBatchesWithSkipLocked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+
+	ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+	ba.Add(delArgs(roachpb.Key("a"), txn.Sequence))
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Arrange for the next scan to flush the buffer and assert that it is split
+	// across two batches.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+	BufferedWritesMaxBufferSize.Override(ctx, &st.SV, 1)
+	ba = &kvpb.BatchRequest{
+		Header: kvpb.Header{
+			Txn:        &txn,
+			WaitPolicy: lock.WaitPolicy_SkipLocked},
+	}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:      roachpb.Key("a"),
+			EndKey:   roachpb.Key("c"),
+			Sequence: txn.Sequence,
+		}})
+
+	prevCalled := mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 2, mockSender.NumCalled()-prevCalled, "expected 2 batches to be sent")
 }
 
 // TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
@@ -2421,7 +2533,7 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
 		{
 			name: "flushed due to size limit",
 			setup: func(twb *txnWriteBuffer) {
-				bufferedWritesMaxBufferSize.Override(context.Background(), &twb.st.SV, 1)
+				BufferedWritesMaxBufferSize.Override(context.Background(), &twb.st.SV, 1)
 			},
 			ba: func(ba *kvpb.BatchRequest) {
 				putA := putArgs(keyA, "valA", txn.Sequence)

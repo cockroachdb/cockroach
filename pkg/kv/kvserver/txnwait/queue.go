@@ -343,7 +343,7 @@ func (q *Queue) Clear(disable bool) {
 	metrics.PusheeWaiting.Dec(int64(len(q.mu.txns)))
 
 	if log.V(1) {
-		log.Infof(
+		log.Dev.Infof(
 			context.Background(),
 			"clearing %d push waiters and %d query waiters",
 			waitingPushesCount,
@@ -394,7 +394,7 @@ func (q *Queue) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 	}
 
 	if log.V(1) {
-		log.Infof(
+		log.Dev.Infof(
 			context.Background(),
 			"clearing %d push waiters and %d query waiters",
 			waitingPushesCount,
@@ -503,7 +503,7 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	metrics.PusheeWaiting.Dec(1)
 
 	if log.V(1) && waitingPushes.Len() > 0 {
-		log.Infof(ctx, "updating %d push waiters for %s", waitingPushes.Len(), txn.ID.Short())
+		log.Dev.Infof(ctx, "updating %d push waiters for %s", waitingPushes.Len(), txn.ID.Short())
 	}
 	// Send on pending waiter channels outside of the mutex lock.
 	for e := waitingPushes.Front(); e != nil; e = e.Next() {
@@ -698,7 +698,7 @@ func (q *Queue) waitForPush(
 		select {
 		case <-slowTimer.C:
 			metrics.PusherSlow.Inc(1)
-			log.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
+			log.Dev.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
 				req.PusherTxn.ID.Short(),
 				timeutil.Since(tBegin).Seconds(),
 				req.PusheeTxn.ID.Short(),
@@ -706,7 +706,7 @@ func (q *Queue) waitForPush(
 			//nolint:deferloop
 			defer func() {
 				metrics.PusherSlow.Dec(1)
-				log.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
+				log.Dev.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
 					req.PusherTxn.ID.Short(),
 					timeutil.Since(tBegin).Seconds(),
 					req.PusheeTxn.ID.Short(),
@@ -840,7 +840,7 @@ func (q *Queue) waitForPush(
 					// in a deadlock, but we don't want these to be too spammy.
 					level := log.Level(1)
 					if q.every.ShouldLog() {
-						level = 0 // will behave like a log.Infof
+						level = 0 // will behave like a log.Dev.Infof
 					}
 					log.VEventf(
 						ctx,

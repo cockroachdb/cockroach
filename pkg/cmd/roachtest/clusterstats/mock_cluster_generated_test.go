@@ -379,10 +379,10 @@ func (mr *MockClusterMockRecorder) Get(arg0, arg1, arg2, arg3 interface{}, arg4 
 }
 
 // GetFailer mocks base method.
-func (m *MockCluster) GetFailer(arg0 *logger.Logger, arg1 option.NodeListOption, arg2 string, arg3 ...failures.ClusterOptionFunc) (*failures.Failer, error) {
+func (m *MockCluster) GetFailer(arg0 *logger.Logger, arg1 option.NodeListOption, arg2 string, arg3 bool, arg4 ...failures.ClusterOptionFunc) (*failures.Failer, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2}
-	for _, a := range arg3 {
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetFailer", varargs...)
@@ -392,9 +392,9 @@ func (m *MockCluster) GetFailer(arg0 *logger.Logger, arg1 option.NodeListOption,
 }
 
 // GetFailer indicates an expected call of GetFailer.
-func (mr *MockClusterMockRecorder) GetFailer(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+func (mr *MockClusterMockRecorder) GetFailer(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailer", reflect.TypeOf((*MockCluster)(nil).GetFailer), varargs...)
 }
 

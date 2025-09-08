@@ -1012,7 +1012,7 @@ func (rd *replicationDriver) maybeRunSchemaChangeWorkload(
 			if err != nil && ctx.Err() == nil {
 				// Implies the workload context was not cancelled and the workload cmd returned a
 				// different error.
-				return errors.Wrapf(err, `schema change workload context was not cancelled. Error returned by workload cmd`)
+				return errors.Wrapf(handleSchemaChangeWorkloadError(err), `schema change workload context was not cancelled. Error returned by workload cmd`)
 			}
 			return nil
 		})
@@ -1987,6 +1987,7 @@ func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
 		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
+		`SET CLUSTER SETTING bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled = true;`,
 	)
 
 	if additionalDuration != 0 {

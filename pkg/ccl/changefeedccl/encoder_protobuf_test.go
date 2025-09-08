@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -163,7 +163,7 @@ func Test_ProtoEncoderAllTypes(t *testing.T) {
 			}, false)
 
 			opts := changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}
-			enc := newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets)
+			enc := newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets, nil)
 
 			evCtx := eventContext{updated: hlc.Timestamp{WallTime: 42}}
 			valBytes, err := enc.EncodeValue(ctx, evCtx, row, cdcevent.Row{})
@@ -370,6 +370,12 @@ func convertProtobufValueToDatum(
 			return nil, err
 		}
 		return tree.NewDJSON(j), nil
+	case types.LTreeFamily:
+		l, err := tree.ParseDLTree(val.GetStringValue())
+		if err != nil {
+			return nil, err
+		}
+		return l, nil
 	case types.EnumFamily:
 		logical := val.GetStringValue()
 		return tree.NewDEnum(tree.DEnum{
@@ -440,7 +446,7 @@ func Test_ProtoEncoder_Escaping(t *testing.T) {
 	}, false)
 
 	opts := changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}
-	enc := newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets)
+	enc := newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets, nil)
 
 	valBytes, err := enc.EncodeValue(ctx, eventContext{updated: hlc.Timestamp{WallTime: 42}}, row, cdcevent.Row{})
 	require.NoError(t, err)
@@ -485,7 +491,7 @@ func TestProtoEncoder_BareEnvelope_WithMetadata(t *testing.T) {
 		},
 	}
 
-	encoder := newProtobufEncoder(context.Background(), encOpts, mkTargets(tableDesc))
+	encoder := newProtobufEncoder(context.Background(), encOpts, mkTargets(tableDesc), nil)
 
 	valueBytes, err := encoder.EncodeValue(context.Background(), evCtx, row, cdcevent.Row{})
 	require.NoError(t, err)

@@ -1,4 +1,4 @@
-# LogicTest: !local-schema-locked
+# LogicTest: !local-schema-locked !local-prepared
 
 subtest cursor
 
@@ -680,3 +680,82 @@ read committed
 
 statement ok
 COMMIT
+
+subtest show
+
+# Test isolation level column in SHOW TRANSACTIONS, SHOW QUERIES, SHOW SESSIONS.
+
+user testuser2
+
+statement ok
+SET default_transaction_isolation = 'READ COMMITTED'
+
+user testuser
+
+statement ok
+SET default_transaction_isolation = 'READ COMMITTED'
+
+query T rowsort
+SELECT isolation_level FROM [SHOW TRANSACTIONS]
+----
+READ COMMITTED
+
+query TT colnames
+SELECT isolation_level, query FROM [SHOW QUERIES] ORDER BY isolation_level, query
+----
+isolation_level  query
+READ COMMITTED   SELECT isolation_level, query FROM [SHOW CLUSTER STATEMENTS] ORDER BY isolation_level, query
+
+query TTT colnames
+SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW SESSIONS]
+ORDER BY isolation_level, user_name, active_queries
+----
+isolation_level  user_name  active_queries
+READ COMMITTED   testuser   SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY isolation_level, user_name, active_queries
+READ COMMITTED   testuser2  ·
+SERIALIZABLE     root       ·
+
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
+
+query TT colnames
+SELECT isolation_level, query FROM [SHOW QUERIES] ORDER BY isolation_level, query
+----
+isolation_level  query
+SERIALIZABLE     SELECT isolation_level, query FROM [SHOW CLUSTER STATEMENTS] ORDER BY isolation_level, query
+
+# If there is no active query for a session, use the default transaction
+# isolation level. Otherwise, use the isolation level of the active query.
+query TTT colnames
+SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW SESSIONS]
+ORDER BY isolation_level, user_name, active_queries
+----
+isolation_level  user_name  active_queries
+READ COMMITTED   testuser2  ·
+SERIALIZABLE     root       ·
+SERIALIZABLE     testuser   SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY isolation_level, user_name, active_queries
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+query TTT colnames
+SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW SESSIONS]
+ORDER BY isolation_level, user_name, active_queries
+----
+isolation_level  user_name  active_queries
+READ COMMITTED   testuser   SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY isolation_level, user_name, active_queries
+READ COMMITTED   testuser2  ·
+SERIALIZABLE     root       ·
+
+statement ok
+COMMIT
+
+statement ok
+RESET default_transaction_isolation
+
+user testuser2
+
+statement ok
+RESET default_transaction_isolation
+
+subtest end

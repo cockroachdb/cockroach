@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -556,6 +557,44 @@ hosts file.
 					}
 				}
 			}
+
+			// Optionally, export an SSH client config file for the clusters.
+			// Only export if a pattern is specified or if the --mine flag is set.
+			if exportSSHConfig != "" && (listPattern != "" || listMine) {
+				hostTemplate := `Host %[1]s
+    HostName %[2]s
+    User %[3]s
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+%[4]s
+`
+				var allKeys strings.Builder
+				paths := make([]string, len(config.DefaultPubKeyNames))
+				for idx, name := range config.DefaultPubKeyNames {
+					paths[idx] = filepath.Join(config.SSHDirectory, name)
+				}
+				for _, p := range paths {
+					if _, notFoundErr := os.Stat(p); notFoundErr == nil {
+						allKeys.WriteString(fmt.Sprintf("    IdentityFile %s\n", p))
+					}
+				}
+
+				var configBuf strings.Builder
+				for _, c := range filteredCloud.Clusters {
+					for _, cVM := range c.VMs {
+						if cVM.PublicIP == "" {
+							continue
+						}
+						configBuf.WriteString(
+							fmt.Sprintf(hostTemplate, cVM.Name, cVM.PublicIP, config.SharedUser, allKeys.String()),
+						)
+					}
+				}
+				err = os.WriteFile(filepath.Join(exportSSHConfig), []byte(configBuf.String()), 0600)
+				if err != nil {
+					return errors.Wrapf(err, "failed to write SSH config file to %s", exportSSHConfig)
+				}
+			}
 			return nil
 		}),
 	}
@@ -736,7 +775,7 @@ cluster setting will be set to its value.
 			clusterSettingsOpts := []install.ClusterSettingOption{
 				install.TagOption(tag),
 				install.PGUrlCertsDirOption(pgurlCertsDir),
-				install.SecureOption(isSecure),
+				isSecure,
 				install.UseTreeDistOption(useTreeDist),
 				install.EnvOption(nodeEnv),
 				install.NumRacksOption(numRacks),
@@ -773,7 +812,7 @@ Note that if the cluster is started in insecure mode, set the insecure mode here
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			clusterSettingsOpts := []install.ClusterSettingOption{
-				install.SecureOption(isSecure),
+				isSecure,
 			}
 			return roachprod.UpdateTargets(context.Background(), config.Logger, args[0], clusterSettingsOpts...)
 		}),
@@ -857,7 +896,7 @@ environment variables to the cockroach process.
 			clusterSettingsOpts := []install.ClusterSettingOption{
 				install.TagOption(tag),
 				install.PGUrlCertsDirOption(pgurlCertsDir),
-				install.SecureOption(isSecure),
+				isSecure,
 				install.UseTreeDistOption(useTreeDist),
 				install.EnvOption(nodeEnv),
 				install.NumRacksOption(numRacks),
@@ -1723,7 +1762,7 @@ roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --
 				return errors.Newf("Too many arguments for --time-range, expected 1 or 2, got: %d", len(grafanaTimeRange))
 			}
 
-			return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure, req)
+			return roachprod.AddGrafanaAnnotation(context.Background(), args[0] /* host */, isSecure.DefaultSecure, req)
 		}),
 	}
 	initGrafanaAnnotationCmdFlags(grafanaAnnotationCmd)

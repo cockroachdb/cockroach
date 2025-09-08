@@ -161,7 +161,7 @@ func (s *Server) handleMetricsHelper(w http.ResponseWriter, r *http.Request, use
 		pm.ScrapeRegistry(s.metricsRegistry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true), metric.WithUseStaticLabels(useStaticLabels))
 	}
 	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
-		log.Errorf(r.Context(), "%v", err)
+		log.Dev.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
@@ -175,7 +175,7 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 		if retErr != nil {
 			// Lots of noise from this log indicates that somebody is spamming
 			// fake cancel requests.
-			log.Warningf(
+			log.Dev.Warningf(
 				r.Context(), "could not handle cancel request from client %s: %v",
 				r.RemoteAddr, retErr,
 			)
@@ -280,7 +280,7 @@ func (s *Server) ServeSQL(
 		if s.handler.RequireProxyProtocol {
 			ln = s.requireProxyProtocolOnListener(ln)
 		}
-		log.Infof(ctx, "proxy server listening at %s", ln.Addr())
+		log.Dev.Infof(ctx, "proxy server listening at %s", ln.Addr())
 		if err := s.Stopper.RunAsyncTask(ctx, "listener-serve", func(ctx context.Context) {
 			_ = s.serve(ctx, ln, s.handler.RequireProxyProtocol)
 		}); err != nil {
@@ -289,7 +289,7 @@ func (s *Server) ServeSQL(
 	}
 	if proxyProtocolLn != nil {
 		proxyProtocolLn = s.requireProxyProtocolOnListener(proxyProtocolLn)
-		log.Infof(ctx, "proxy with required proxy headers server listening at %s", proxyProtocolLn.Addr())
+		log.Dev.Infof(ctx, "proxy with required proxy headers server listening at %s", proxyProtocolLn.Addr())
 		if err := s.Stopper.RunAsyncTask(ctx, "proxy-protocol-listener-serve", func(ctx context.Context) {
 			_ = s.serve(ctx, proxyProtocolLn, true /* requireProxyProtocol */)
 		}); err != nil {
@@ -304,7 +304,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, requireProxyProtoco
 	err := s.Stopper.RunAsyncTask(ctx, "listen-quiesce", func(ctx context.Context) {
 		<-s.Stopper.ShouldQuiesce()
 		if err := ln.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
-			log.Fatalf(ctx, "closing proxy listener: %s", err)
+			log.Dev.Fatalf(ctx, "closing proxy listener: %s", err)
 		}
 	})
 	if err != nil {
@@ -345,7 +345,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, requireProxyProtoco
 					ctx = logtags.AddTag(ctx, key, value)
 				}
 
-				// log.Infof automatically prints hints (one per line) that are
+				// log.Dev.Infof automatically prints hints (one per line) that are
 				// associated with the input error object. This causes
 				// unnecessary log spam, especially when proxy hints are meant
 				// for the user. We will intentionally create a new error object
@@ -355,7 +355,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, requireProxyProtoco
 				// facing errors (i.e. one that contains hints).
 				if s.shouldLogError(ctx, err, conn, reqTags) {
 					errWithoutHints := errors.Newf("%s", err.Error()) // nolint:errwrap
-					log.Infof(ctx, "connection closed: %v", errWithoutHints)
+					log.Dev.Infof(ctx, "connection closed: %v", errWithoutHints)
 				}
 			}
 		})
@@ -427,7 +427,7 @@ func (s *Server) shouldLogError(
 	// Instead of panicking, we'll skip throttling.
 	tenantIDStr, ok := tenantID.(string)
 	if !ok {
-		log.Errorf(
+		log.Dev.Errorf(
 			ctx,
 			"unexpected error: cannot extract tenant ID from request tags; found: %v",
 			tenantID,
@@ -440,7 +440,7 @@ func (s *Server) shouldLogError(
 	// will always return a valid IP.
 	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
 	if err != nil {
-		log.Errorf(
+		log.Dev.Errorf(
 			ctx,
 			"unexpected error: cannot extract remote IP from connection; found: %v",
 			conn.RemoteAddr().String(),

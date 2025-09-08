@@ -174,7 +174,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				details.Table.ID,
 			); err != nil {
 				if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
-					log.Infof(ctx, "concurrent create stats job found, skipping")
+					log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
 					return nil
 				}
 				return err
@@ -199,12 +199,12 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
 	}); err != nil {
 		if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
-			log.Infof(ctx, "concurrent create stats job found, skipping")
+			log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
 			return nil
 		}
 		if job != nil {
 			if cleanupErr := job.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
 		return err
@@ -216,7 +216,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			if delErr := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); delErr != nil {
-				log.Warningf(ctx, "failed to delete job: %v", delErr)
+				log.Dev.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
 			if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
 				return nil

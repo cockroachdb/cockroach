@@ -169,11 +169,11 @@ func (l *Instance) clearSession(ctx context.Context) (createNewSession bool) {
 
 func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession bool) {
 	if l.mu.s == nil {
-		log.Fatal(ctx, "expected session to be set")
+		log.Dev.Fatal(ctx, "expected session to be set")
 	}
 	// When the session is set, blockCh should not be set.
 	if l.mu.blockCh != nil {
-		log.Fatal(ctx, "unexpected blockCh")
+		log.Dev.Fatal(ctx, "unexpected blockCh")
 	}
 
 	l.mu.s = nil
@@ -222,7 +222,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 				break
 			}
 			if everySecond.ShouldLog() {
-				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
+				log.Dev.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
 			}
 			// Unauthenticated errors are unrecoverable, we should break instead
 			// of retrying.
@@ -232,7 +232,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 			// Previous insert was ambiguous, so select a new session ID,
 			// since there may be a row that exists.
 			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"failed to create a session due to an ambiguous result error: %s",
 					s.ID().String())
 				s.id = ""
@@ -244,7 +244,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "created new SQL liveness session %s", s.ID())
+	log.Dev.Infof(ctx, "created new SQL liveness session %s", s.ID())
 	return s, nil
 }
 
@@ -286,7 +286,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Fatalf(ctx, "expected canceled ctx on err: %s", err)
+			log.Dev.Fatalf(ctx, "expected canceled ctx on err: %s", err)
 		}
 		return false, err
 	}
@@ -301,7 +301,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 func (l *Instance) heartbeatLoop(ctx context.Context) {
 	err := l.heartbeatLoopInner(ctx)
 	if err == nil {
-		log.Fatal(ctx, "expected heartbeat to always terminate with an error")
+		log.Dev.Fatal(ctx, "expected heartbeat to always terminate with an error")
 	}
 
 	// Keep track of the fact that this Instance is not usable anymore. Further
@@ -313,9 +313,9 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 	select {
 	case <-l.drain:
-		log.Infof(ctx, "draining heartbeat loop")
+		log.Dev.Infof(ctx, "draining heartbeat loop")
 	default:
-		log.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
+		log.Dev.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
 		if l.mu.s != nil {
 			_ = l.clearSessionLocked(ctx)
 		}
@@ -328,7 +328,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	defer func() {
-		log.Warning(ctx, "exiting heartbeat loop")
+		log.Dev.Warning(ctx, "exiting heartbeat loop")
 	}()
 	// Operations below retry endlessly after the stopper started quiescing if we
 	// don't cancel their ctx.
@@ -430,7 +430,7 @@ func NewSQLInstance(
 func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
 	l.currentRegion = regionPhysicalRep
 
-	log.Infof(ctx, "starting SQL liveness instance")
+	log.Dev.Infof(ctx, "starting SQL liveness instance")
 	// Detach from ctx's cancelation.
 	taskCtx := l.AnnotateCtx(context.Background())
 	taskCtx = logtags.WithTags(taskCtx, logtags.FromContext(ctx))
@@ -472,7 +472,7 @@ func (l *Instance) PauseLivenessHeartbeat(ctx context.Context) {
 	firstToBlock := l.mu.blockedExtensions == 0
 	l.mu.blockedExtensions++
 	if firstToBlock {
-		log.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
+		log.Dev.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
 	}
 }
 
@@ -482,7 +482,7 @@ func (l *Instance) UnpauseLivenessHeartbeat(ctx context.Context) {
 	l.mu.blockedExtensions--
 	lastToUnblock := l.mu.blockedExtensions == 0
 	if lastToUnblock {
-		log.Infof(ctx, "enabling sqlliveness extension due to restored availability")
+		log.Dev.Infof(ctx, "enabling sqlliveness extension due to restored availability")
 	}
 }
 

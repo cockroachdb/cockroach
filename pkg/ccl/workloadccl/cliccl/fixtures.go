@@ -249,7 +249,7 @@ func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 		return err
 	}
 	for _, table := range fixture.Tables {
-		log.Infof(ctx, `stored backup %s`, table.BackupURI)
+		log.Dev.Infof(ctx, `stored backup %s`, table.BackupURI)
 	}
 	return nil
 }
@@ -265,14 +265,14 @@ type restoreDataLoader struct {
 func (l restoreDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
 ) (int64, error) {
-	log.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
+	log.Dev.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
 	err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
 	if err != nil {
 		return 0, errors.Wrap(err, `restoring fixture`)
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "restored %d tables (took %s)",
+	log.Dev.Infof(ctx, "restored %d tables (took %s)",
 		len(gen.Tables()), elapsed)
 	// As of #134516, RESTORE no longer returns the number of bytes restored.
 	// We still return 0 here to implement the interface, although as of right
@@ -308,7 +308,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
+			log.Dev.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}
@@ -339,7 +339,7 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
+			log.Dev.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}

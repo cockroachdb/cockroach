@@ -28,7 +28,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return nil, err
 	}
 	header := arrayHeader{
-		hasNulls: d.HasNulls,
+		hasNulls: d.HasNulls(),
 		// TODO(justin): support multiple dimensions.
 		numDimensions: 1,
 		elementType:   elementType,
@@ -41,14 +41,14 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return nil, err
 	}
 	nullBitmapStart := len(scratch)
-	if d.HasNulls {
+	if d.HasNulls() {
 		for i := 0; i < numBytesInBitArray(d.Len()); i++ {
 			scratch = append(scratch, 0)
 		}
 	}
 	for i, e := range d.Array {
 		var err error
-		if d.HasNulls && e == tree.DNull {
+		if d.HasNulls() && e == tree.DNull {
 			setBit(scratch[nullBitmapStart:], i)
 		} else {
 			scratch, err = encodeArrayElement(scratch, e)
@@ -73,29 +73,23 @@ func decodeArray(a *tree.DatumAlloc, arrayType *types.T, b []byte) (tree.Datum, 
 func decodeArrayWithHeader(
 	header arrayHeader, a *tree.DatumAlloc, arrayType, elementType *types.T, b []byte,
 ) (tree.Datum, []byte, error) {
-	result := tree.DArray{
-		Array:    make(tree.Datums, header.length),
-		ParamTyp: elementType,
-	}
-	var err error
-	if err = result.MaybeSetCustomOid(arrayType); err != nil {
-		return nil, b, err
-	}
-	var val tree.Datum
+	elements := make(tree.Datums, header.length)
 	for i := uint64(0); i < header.length; i++ {
 		if header.isNull(i) {
-			result.Array[i] = tree.DNull
-			result.HasNulls = true
+			elements[i] = tree.DNull
 		} else {
-			result.HasNonNulls = true
-			val, b, err = DecodeUntaggedDatum(a, elementType, b)
+			var err error
+			elements[i], b, err = DecodeUntaggedDatum(a, elementType, b)
 			if err != nil {
 				return nil, b, err
 			}
-			result.Array[i] = val
 		}
 	}
-	return &result, b, nil
+	result := tree.NewDArrayFromDatums(elementType, elements)
+	if err := result.MaybeSetCustomOid(arrayType); err != nil {
+		return nil, b, err
+	}
+	return result, b, nil
 }
 
 // arrayHeader is a parameter passing struct between
@@ -241,6 +235,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.IPAddr, nil
 	case types.JsonFamily:
 		return encoding.JSON, nil
+	case types.LTreeFamily:
+		return encoding.LTree, nil
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	case types.ArrayFamily:
@@ -362,6 +358,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 			return nil, err
 		}
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
+	case *tree.DLTree:
+		return encoding.EncodeUntaggedLTreeValue(b, t.LTree), nil
 	default:
 		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}

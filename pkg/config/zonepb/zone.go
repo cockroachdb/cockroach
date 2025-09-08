@@ -1320,7 +1320,7 @@ func (z *ZoneConfig) EnsureFullyHydrated() error {
 func (z ZoneConfig) AsSpanConfig() roachpb.SpanConfig {
 	spanConfig, err := z.toSpanConfig()
 	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 	return spanConfig
 }

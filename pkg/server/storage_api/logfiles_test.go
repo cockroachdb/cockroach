@@ -99,13 +99,13 @@ func TestStatusLocalLogs(t *testing.T) {
 	time.Sleep(sleepBuffer)
 	// Ignoring fmtsafe lintrule is essential in this test to make filtering
 	// log events easier and compare entry messages later on.
-	// Changing formatting to log.Error(logCtx, "%s", spy.MsgErr) will wrap
+	// Changing formatting to log.Dev.Error(logCtx, "%s", spy.MsgErr) will wrap
 	// message with < > brackets and would require to strip them of later.
-	log.Errorf(logCtx, "%s", redact.Safe(spy.MsgErr))
+	log.Dev.Errorf(logCtx, "%s", redact.Safe(spy.MsgErr))
 	time.Sleep(sleepBuffer)
-	log.Warningf(logCtx, "%s", redact.Safe(spy.MsgWarn))
+	log.Dev.Warningf(logCtx, "%s", redact.Safe(spy.MsgWarn))
 	time.Sleep(sleepBuffer)
-	log.Infof(logCtx, "%s", redact.Safe(spy.MsgInf))
+	log.Dev.Infof(logCtx, "%s", redact.Safe(spy.MsgInf))
 	time.Sleep(sleepBuffer)
 
 	// Ensure all log lines above are written to disk.
@@ -263,17 +263,17 @@ func TestStatusLocalLogsTenantFilter(t *testing.T) {
 	// be a sufficient buffer.
 	// See util/log/clog.go formatHeader() for more details.
 	const sleepBuffer = time.Microsecond * 20
-	log.Errorf(ctxSysTenant, "system tenant msg 1")
+	log.Dev.Errorf(ctxSysTenant, "system tenant msg 1")
 	time.Sleep(sleepBuffer)
-	log.Errorf(ctxAppTenant, "app tenant msg 1")
+	log.Dev.Errorf(ctxAppTenant, "app tenant msg 1")
 	time.Sleep(sleepBuffer)
-	log.Warningf(ctxSysTenant, "system tenant msg 2")
+	log.Dev.Warningf(ctxSysTenant, "system tenant msg 2")
 	time.Sleep(sleepBuffer)
-	log.Warningf(ctxAppTenant, "app tenant msg 2")
+	log.Dev.Warningf(ctxAppTenant, "app tenant msg 2")
 	time.Sleep(sleepBuffer)
-	log.Infof(ctxSysTenant, "system tenant msg 3")
+	log.Dev.Infof(ctxSysTenant, "system tenant msg 3")
 	time.Sleep(sleepBuffer)
-	log.Infof(ctxAppTenant, "app tenant msg 3")
+	log.Dev.Infof(ctxAppTenant, "app tenant msg 3")
 	timestampEnd := timeutil.Now().UnixNano()
 
 	var listFilesResp serverpb.LogFilesListResponse
@@ -384,7 +384,7 @@ func TestStatusLogRedaction(t *testing.T) {
 
 			// Log something.
 			logCtx := ts.AnnotateCtx(context.Background())
-			log.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
+			log.Dev.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
 
 			// Determine the log file name.
 			var wrapper serverpb.LogFilesListResponse
@@ -485,7 +485,7 @@ func TestStatusLogCorruptedEntry(t *testing.T) {
 
 	logCtx := ts.AnnotateCtx(context.Background())
 
-	log.Errorf(logCtx, "TestStatusLogCorruptedEntry test message")
+	log.Dev.Errorf(logCtx, "TestStatusLogCorruptedEntry test message")
 	log.FlushFiles()
 
 	files, err := log.ListLogFiles()
@@ -500,7 +500,7 @@ func TestStatusLogCorruptedEntry(t *testing.T) {
 	require.NoError(t, err)
 	err = f.Close()
 	require.NoError(t, err)
-	log.Errorf(logCtx, "TestStatusLogCorruptedEntry test message 2")
+	log.Dev.Errorf(logCtx, "TestStatusLogCorruptedEntry test message 2")
 	log.FlushFiles()
 
 	var wrapper serverpb.LogEntriesResponse

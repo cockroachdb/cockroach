@@ -18,27 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// CPUPacer wraps an admission.Pacer for use in bulk operations where any errors
-// pacing can just be logged (at most once a minute).
-type CPUPacer struct {
-	pacer    *admission.Pacer
-	logEvery *log.EveryN
-}
-
-func (p *CPUPacer) Pace(ctx context.Context) {
-	if err := p.pacer.Pace(ctx); err != nil {
-		if p.logEvery.ShouldLog() {
-			// TODO(dt): consider just returning this error/eliminating this wrapper,
-			// and making callers bubble up this error if it is only ever a ctx cancel
-			// error that the caller should be bubbling up anyway.
-			log.Warningf(ctx, "failed to pace SST batcher: %v", err)
-		}
-	}
-}
-func (p *CPUPacer) Close() {
-	p.pacer.Close()
-}
-
 var cpuPacerRequestDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"bulkio.elastic_cpu_control.request_duration",
@@ -48,24 +27,21 @@ var cpuPacerRequestDuration = settings.RegisterDurationSetting(
 
 // NewCPUPacer creates a new AC pacer for SST batcher. It may return an empty
 // Pacer which noops if pacing is disabled or its arguments are nil.
-func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) CPUPacer {
+func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) *admission.Pacer {
 	if db == nil || db.AdmissionPacerFactory == nil || !setting.Get(db.SettingsValues()) {
-		log.Infof(ctx, "admission control is not configured to pace bulk ingestion")
-		return CPUPacer{}
+		log.Dev.Infof(ctx, "admission control is not configured to pace bulk ingestion")
+		return nil
 	}
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
 		tenantID = roachpb.SystemTenantID
 	}
-	every := log.Every(time.Minute)
-	return CPUPacer{pacer: db.AdmissionPacerFactory.NewPacer(
+	return db.AdmissionPacerFactory.NewPacer(
 		cpuPacerRequestDuration.Get(db.SettingsValues()),
 		admission.WorkInfo{
 			TenantID:        tenantID,
 			Priority:        admissionpb.BulkNormalPri,
 			CreateTime:      timeutil.Now().UnixNano(),
 			BypassAdmission: false,
-		}),
-		logEvery: &every,
-	}
+		})
 }

@@ -106,7 +106,7 @@ func makeSpanConfigIngestor(
 
 	destTenantStartKey := keys.MakeTenantPrefix(details.DestinationTenantID)
 	destTenantSpan := roachpb.Span{Key: destTenantStartKey, EndKey: destTenantStartKey.PrefixEnd()}
-	log.Infof(ctx, "initialized span config ingestor")
+	log.Dev.Infof(ctx, "initialized span config ingestor")
 	return &spanConfigIngestor{
 		accessor:                 execCfg.SpanConfigKVAccessor,
 		settings:                 execCfg.Settings,
@@ -133,7 +133,7 @@ func (sc *spanConfigIngestor) ingestSpanConfigs(
 	group.GoCtx(func(ctx context.Context) error {
 		defer func() {
 			if err := sc.client.Close(ctx); err != nil {
-				log.Warningf(ctx, "error closing span config client: %s", err.Error())
+				log.Dev.Warningf(ctx, "error closing span config client: %s", err.Error())
 			}
 		}()
 		return sc.consumeSpanConfigs(ctx, sub)
@@ -192,7 +192,7 @@ func (sc *spanConfigIngestor) bufferRecord(
 		return err
 	}
 	if !ok {
-		log.Warningf(ctx, "could not rekey this span as part of an ephemeral table %s", sourceSpan)
+		log.Dev.Warningf(ctx, "could not rekey this span as part of an ephemeral table %s", sourceSpan)
 		// No need to replicate the span cfgs for ephemeral tables in the app tenant
 		//
 		// TODO(msbutler): This error handling isn't ideal as the span for this span
@@ -285,7 +285,7 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 				// We expect the underlying sqlliveness session's expiration to be
 				// extended automatically, which makes this retry loop effective in the
 				// face of these retryable lease expired errors from the RPC.
-				log.Infof(ctx, "lease expired while updating span config records, retrying..")
+				log.Dev.Infof(ctx, "lease expired while updating span config records, retrying..")
 				continue
 			}
 			return err // not a retryable error, bubble up
@@ -309,7 +309,7 @@ func (sc *spanConfigIngestor) resetBuffer() {
 func (sc *spanConfigIngestor) flushFullScan(
 	ctx context.Context, sessionStart, sessionExpiration hlc.Timestamp,
 ) error {
-	log.Infof(ctx, "flushing full span configuration state (%d records)", len(sc.bufferedUpdates))
+	log.Dev.Infof(ctx, "flushing full span configuration state (%d records)", len(sc.bufferedUpdates))
 
 	if len(sc.bufferedDeletes) != 0 {
 		return errors.AssertionFailedf("full scan flush should not contain records to delete")

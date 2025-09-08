@@ -1390,7 +1390,7 @@ func (c *clusterImpl) FetchDebugZip(
 			pgURLOpts := roachprod.PGURLOptions{
 				// `cockroach debug zip` does not support non root authentication.
 				Auth:   install.AuthRootCert,
-				Secure: c.IsSecure(),
+				Secure: install.SimpleSecureOption(c.IsSecure()),
 			}
 			// Use roachprod.PgURL directly as we want to bypass the default virtual cluster
 			// logic. The debug zip command already handles fetching all virtual clusters by passing
@@ -1932,9 +1932,15 @@ func (c *clusterImpl) PutE(
 }
 
 // PutCockroach uploads a binary with or without runtime assertions enabled,
-// as determined by t.Cockroach(). Note that we upload to all nodes even if they
-// don't use the binary, so that the test runner can always fetch logs.
+// as determined by t.Cockroach(). If --cockroach-stage flag is set, it stages
+// the binary from cloud storage instead of uploading a local binary.
+// Note that we upload/stage to all nodes even if they don't use the binary,
+// so that the test runner can always fetch logs.
 func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
+	if roachtestflags.CockroachStage != "" {
+		// Use staging instead of upload when --cockroach-stage is specified
+		return c.Stage(ctx, l, "cockroach", roachtestflags.CockroachStage, ".", c.All())
+	}
 	return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
 }
 
@@ -2116,7 +2122,7 @@ func (c *clusterImpl) configureClusterSettingOptions(
 	return []install.ClusterSettingOption{
 		install.TagOption(settings.Tag),
 		install.PGUrlCertsDirOption(settings.PGUrlCertsDir),
-		install.SecureOption(settings.Secure),
+		install.SimpleSecureOption(settings.Secure),
 		install.UseTreeDistOption(settings.UseTreeDist),
 		install.EnvOption(settings.Env),
 		install.NumRacksOption(settings.NumRacks),
@@ -2190,7 +2196,7 @@ func (c *clusterImpl) StartE(
 		}
 	}
 	// N.B. If `SkipInit` is set, we don't wait for SQL since node(s) may not join the cluster in any definite time.
-	if !startOpts.RoachprodOpts.SkipInit {
+	if !startOpts.RoachprodOpts.SkipInit && !startOpts.RoachprodOpts.SkipWaitForSQL {
 		// Wait for SQL to be ready on all nodes, for 'system' tenant, only.
 		for _, n := range nodes {
 			conn, err := c.ConnE(ctx, l, nodes[0], option.VirtualClusterName(install.SystemInterfaceName))
@@ -2310,7 +2316,7 @@ func (c *clusterImpl) StopServiceForVirtualClusterE(
 	}
 
 	return roachprod.StopServiceForVirtualCluster(
-		ctx, l, c.MakeNodes(nodes), c.IsSecure(), stopOpts.RoachprodOpts,
+		ctx, l, c.MakeNodes(nodes), install.SimpleSecureOption(c.IsSecure()), stopOpts.RoachprodOpts,
 	)
 }
 
@@ -2521,7 +2527,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 		DefaultVirtualCluster: c.defaultVirtualCluster,
 	}
 	if err := roachprod.Run(
-		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
+		ctx, l, c.MakeNodes(nodes), "", "", install.SimpleSecureOption(c.IsSecure()),
 		l.Stdout, l.Stderr, args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	); err != nil {
 		if err := ctx.Err(); err != nil {
@@ -2557,6 +2563,9 @@ func (c *clusterImpl) RunWithDetailsSingleNode(
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
 	results, err := c.RunWithDetails(ctx, testLogger, options, args...)
+	if err != nil {
+		return install.RunResultDetails{}, err
+	}
 	return results[0], errors.CombineErrors(err, results[0].Err)
 }
 
@@ -2592,7 +2601,9 @@ func (c *clusterImpl) RunWithDetails(
 	}
 	results, err := roachprod.RunWithDetails(
 		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
-		c.IsSecure(), args, options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
+		install.SimpleSecureOption(c.IsSecure()),
+		args,
+		options.WithExpanderConfig(expanderCfg).WithLogExpandedCommand(),
 	)
 
 	var logFileFull string
@@ -2674,7 +2685,7 @@ func (c *clusterImpl) PopulateEtcHosts(ctx context.Context, l *logger.Logger) er
 func (c *clusterImpl) pgURLErr(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
 ) ([]string, error) {
-	opts.Secure = c.IsSecure()
+	opts.Secure = install.SimpleSecureOption(c.IsSecure())
 
 	// Use CockroachNodeCertsDir if it's an internal url with access to the node.
 	certsDir := install.CockroachNodeCertsDir
@@ -2784,7 +2795,8 @@ func (c *clusterImpl) SQLPorts(
 	sqlInstance int,
 ) ([]int, error) {
 	return roachprod.SQLPorts(
-		ctx, l, c.MakeNodes(nodes), c.IsSecure(), c.virtualCluster(tenant), sqlInstance,
+		ctx, l, c.MakeNodes(nodes), install.SimpleSecureOption(c.IsSecure()),
+		c.virtualCluster(tenant), sqlInstance,
 	)
 }
 
@@ -2796,7 +2808,8 @@ func (c *clusterImpl) AdminUIPorts(
 	sqlInstance int,
 ) ([]int, error) {
 	return roachprod.AdminPorts(
-		ctx, l, c.MakeNodes(nodes), c.IsSecure(), c.virtualCluster(tenant), sqlInstance,
+		ctx, l, c.MakeNodes(nodes), install.SimpleSecureOption(c.IsSecure()),
+		c.virtualCluster(tenant), sqlInstance,
 	)
 }
 
@@ -2830,7 +2843,7 @@ func (c *clusterImpl) adminUIAddr(
 		"", /* path */
 		external,
 		false,
-		false,
+		install.SimpleSecureOption(false),
 	)
 	if err != nil {
 		return nil, err
@@ -3341,11 +3354,12 @@ func (c *clusterImpl) GetFailer(
 	l *logger.Logger,
 	nodes option.NodeListOption,
 	failureModeName string,
+	disableStateValidation bool,
 	opts ...failures.ClusterOptionFunc,
 ) (*failures.Failer, error) {
 	fr := failures.GetFailureRegistry()
 	clusterOpts := append(opts, failures.Secure(c.IsSecure()), failures.LocalCertsPath(c.localCertsDir))
-	failer, err := fr.GetFailer(c.MakeNodes(nodes), failureModeName, l, clusterOpts...)
+	failer, err := fr.GetFailer(c.MakeNodes(nodes), failureModeName, l, disableStateValidation, clusterOpts...)
 	if err != nil {
 		return nil, err
 	}

@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
+        "//pkg/sql/parserutils",
         "//pkg/sql/pgrepl/pgreplparser",
         "//pkg/sql/pgrepl/pgrepltree",
         "//pkg/sql/pgwire/hba",

@@ -40,7 +40,7 @@ func ConstructTracingAggregatorProducerMeta(
 	agg.ForEachAggregatedEvent(func(name string, event tracing.AggregatorEvent) {
 		if data, err := tracing.AggregatorEventToBytes(ctx, event); err != nil {
 			// This should never happen but if it does skip the aggregated event.
-			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
+			log.Dev.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
 			return
 		} else {
 			aggEvents.Events[name] = data

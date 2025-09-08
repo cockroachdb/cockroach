@@ -251,9 +251,11 @@ const (
 	SinkParamConfluentAPIKey    = `api_key`
 	SinkParamConfluentAPISecret = `api_secret`
 
-	SinkSchemeAzureKafka        = `azure-event-hub`
-	SinkParamAzureAccessKeyName = `shared_access_key_name`
-	SinkParamAzureAccessKey     = `shared_access_key`
+	SinkSchemeAzureKafka             = `azure-event-hub`
+	SinkParamAzureAccessKeyName      = `shared_access_key_name`
+	SinkParamAzureAccessKeyNameCamel = `SharedAccessKeyName`
+	SinkParamAzureAccessKey          = `shared_access_key`
+	SinkParamAzureAccessKeyCamel     = `SharedAccessKey`
 
 	RegistryParamCACert     = `ca_cert`
 	RegistryParamClientCert = `client_cert`
@@ -935,8 +937,8 @@ func (e EncodingOptions) Validate() error {
 	}
 
 	if e.Envelope == OptEnvelopeEnriched {
-		if e.Format != OptFormatJSON && e.Format != OptFormatAvro {
-			return errors.Errorf(`%s=%s is only usable with %s=%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro)
+		if e.Format != OptFormatJSON && e.Format != OptFormatAvro && e.Format != OptFormatProtobuf {
+			return errors.Errorf(`%s=%s is only usable with %s=%s/%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro, OptFormatProtobuf)
 		}
 	} else {
 		if len(e.EnrichedProperties) > 0 {

@@ -232,7 +232,11 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 
 	// Note: the ttl-restart test depends on this message to know what nodes are
 	// involved in a TTL job.
-	log.Infof(ctx, "TTL processor started processorID=%d tableID=%d", t.ProcessorID, tableID)
+	log.Dev.Infof(ctx, "TTL processor started processorID=%d tableID=%d", t.ProcessorID, tableID)
+
+	// Each node sets up two rate limiters (one for SELECT, one for DELETE) per
+	// table. The limiters apply to all ranges assigned to this processor, whether
+	// or not the node is the leaseholder for those ranges.
 
 	selectRateLimit := ttlSpec.SelectRateLimit
 	// Default 0 value to "unlimited" in case job started on node <= v23.2.
@@ -476,7 +480,7 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 				IsRetryableError: kv.IsAutoRetryLimitExhaustedError,
 				OnRetry: func(err error, nextBatchSize int) error {
 					metrics.NumDeleteBatchRetries.Inc(1)
-					log.Infof(ctx,
+					log.Dev.Infof(ctx,
 						"row-level TTL reached the auto-retry limit, reducing batch size to %d rows. Error: %v",
 						nextBatchSize, err)
 					return nil
@@ -569,7 +573,7 @@ func (c *coordinatorStreamUpdater) UpdateProgress(
 		return errors.Errorf("output receiver rejected progress metadata: %v", status)
 	}
 	if c.progressLogger.ShouldLog() {
-		log.Infof(ctx, "TTL processor progress: %v", progressMsg)
+		log.Dev.Infof(ctx, "TTL processor progress: %v", progressMsg)
 	}
 	return nil
 }
@@ -633,7 +637,7 @@ func (d *directJobProgressUpdater) updateFractionCompleted(ctx context.Context) 
 	if err != nil {
 		return err
 	}
-	log.Infof(
+	log.Dev.Infof(
 		ctx,
 		"TTL fractionCompleted updated processorID=%d tableID=%d deletedRowCount=%d processedSpanCount=%d totalSpanCount=%d fractionCompleted=%.3f",
 		d.proc.ProcessorID, d.proc.ttlSpec.RowLevelTTLDetails.TableID, deletedRowCount, processedSpanCount, totalSpanCount, fractionCompleted,
@@ -684,7 +688,7 @@ func (d *directJobProgressUpdater) FinalizeProgress(
 				fractionCompleted = f.FractionCompleted
 			}
 			ju.UpdateProgress(progress)
-			log.VInfof(
+			log.Dev.VInfof(
 				ctx,
 				2, /* level */
 				"TTL processorRowCount updated processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d fractionCompleted=%.3f",

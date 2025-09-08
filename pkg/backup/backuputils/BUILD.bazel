@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
+        "//pkg/util/encoding",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
@@ -20,7 +21,10 @@ go_library(
 
 go_test(
     name = "backuputils_test",
-    srcs = ["memory_backed_quota_pool_test.go"],
+    srcs = [
+        "memory_backed_quota_pool_test.go",
+        "utils_test.go",
+    ],
     embed = [":backuputils"],
     deps = [
         "//pkg/settings/cluster",

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -734,6 +735,23 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AlwaysDistributeFullScans), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`use_soft_limit_for_distribute_scan`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_soft_limit_for_distribute_scan`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_soft_limit_for_distribute_scan", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseSoftLimitForDistributeScan(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseSoftLimitForDistributeScan), nil
+		},
+		GlobalDefault: globalTrue,
 	},
 
 	// CockroachDB extension.
@@ -2853,6 +2871,43 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_optimizer_rules`: {
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			var rules []string
+			if s != "" {
+				rulesRaw := strings.Split(s, ",")
+				rules = make([]string, 0, len(rulesRaw))
+				for _, rule := range rulesRaw {
+					trimmed := strings.TrimSpace(rule)
+					if trimmed != "" {
+						if _, ok := opt.RuleNameMap[strings.ToLower(trimmed)]; !ok {
+							p.BufferClientNotice(ctx, pgnotice.Newf(
+								"rule %s does not exist and will be ignored", trimmed,
+							))
+						} else {
+							rules = append(rules, trimmed)
+						}
+					}
+				}
+			}
+			return p.applyOnSessionDataMutators(
+				ctx,
+				local,
+				func(m sessionDataMutator) error {
+					m.SetDisableOptimizerRules(rules)
+					return nil
+				},
+			)
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strings.Join(evalCtx.SessionData().DisableOptimizerRules, ", "), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
+	},
+
+	// CockroachDB extension.
 	`copy_fast_path_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`copy_fast_path_enabled`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -3055,31 +3110,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`enforce_home_region_follower_reads_enabled`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enforce_home_region_follower_reads_enabled`),
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				"enforce_home_region_follower_reads_enabled is deprecated and will be removed in a future "+
-					"release",
-			))
-			return p.applyOnSessionDataMutators(
-				ctx,
-				local,
-				func(m sessionDataMutator) error {
-					b, err := paramparse.ParseBoolVar("enforce_home_region_follower_reads_enabled", s)
-					if err != nil {
-						return err
-					}
-					m.SetEnforceHomeRegionFollowerReadsEnabled(b)
-					return nil
-				},
-			)
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`enforce_home_region_follower_reads_enabled`: makeBackwardsCompatBoolVar("enforce_home_region_follower_reads_enabled", false),
 
 	// CockroachDB extension.
 	`optimizer_always_use_histograms`: {
@@ -4224,6 +4256,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension.
+	`enable_inspect_command`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_inspect_command`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_inspect_command", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableInspectCommand(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableInspectCommand), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions
 	// that see a transaction retry error. For statements experiencing contention
@@ -4315,6 +4364,41 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseProcTxnControlExtendedProtocolFix), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`allow_unsafe_internals`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`allow_unsafe_internals`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("allow_unsafe_internals", s)
+			if err != nil {
+				return err
+			}
+			m.SetAllowUnsafeInternals(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	`optimizer_use_improved_hoist_join_project`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_improved_hoist_join_project`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_improved_hoist_join_project", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseImprovedHoistJoinProject(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
+			), nil
 		},
 		GlobalDefault: globalTrue,
 	},

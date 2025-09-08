@@ -201,14 +201,23 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
 
 			if backpressureLogLimiter.ShouldLog() {
-				log.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
+				log.Dev.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
 			}
 		}
 
 		// Register a callback on an ongoing split for this range in the splitQueue.
 		splitC := make(chan error, 1)
-		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, func(err error) {
-			splitC <- err
+		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, processCallback{
+			onEnqueueResult: func(rank int, err error) {},
+			onProcessResult: func(err error) {
+				select {
+				case splitC <- err:
+				default:
+					// Drop the error if the channel is already full. This prevents
+					// blocking if the callback is invoked multiple times.
+					return
+				}
+			},
 		}) {
 			// No split ongoing. We may have raced with its completion. There's
 			// no good way to prevent this race, so we conservatively allow the

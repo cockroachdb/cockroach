@@ -165,7 +165,7 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 			sj.SetScheduleStatus(string(jobs.StatePending))
 			return jobs.ScheduledJobTxn(txn).Update(ctx, sj)
 		}); err != nil && ctx.Err() == nil {
-			log.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
+			log.Dev.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
 		} else {
 			return
 		}

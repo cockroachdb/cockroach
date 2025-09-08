@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -164,7 +163,6 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	// also holds a lease on the system database descriptor, which we will wait to
 	// be released. Reducing the lease duration makes this part of the test speed
 	// up.
-	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	upgradePausePoint := make(chan struct{})
 	upgradeResumePoint := make(chan struct{})
@@ -206,6 +204,8 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		"CREATE SCHEMA bar",
 		"CREATE TYPE bar.bar AS ENUM ('hello')",
 		"CREATE FUNCTION bar.bar(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL",
+		// Insert an invalid object into the system.comments table
+		"INSERT INTO system.comments VALUES(0, 4124323, 0, 'comment for dead object')",
 	)
 
 	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "test")
@@ -276,12 +276,12 @@ func TestFirstUpgradeRepair(t *testing.T) {
 
 	// Check that the corruption is detected by invalid_objects.
 	const qDetectCorruption = `SELECT count(*) FROM "".crdb_internal.invalid_objects`
-	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"2"}})
+	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"3"}})
 
 	// Check that the corruption is detected by kv_repairable_catalog_corruptions.
 	const qDetectRepairableCorruption = `
 		SELECT count(*) FROM "".crdb_internal.kv_repairable_catalog_corruptions`
-	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"2"}})
+	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"3"}})
 
 	// Wait long enough for precondition check to be effective.
 	tdb.Exec(t, "CREATE DATABASE test2")
@@ -375,7 +375,6 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 	// also holds a lease on the system database descriptor, which we will wait to
 	// be released. Reducing the lease duration makes this part of the test speed
 	// up.
-	lease.LeaseDuration.Override(ctx, &settings.SV, time.Second*30)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
 	testServer, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,

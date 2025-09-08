@@ -91,7 +91,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		// they start a server, but without
 		// disk and interactively. We don't want to litter the console
 		// with warning or error messages unless overridden; however,
-		// should the command encounter a log.Fatal event, we want
+		// should the command encounter a log.Dev.Fatal event, we want
 		// to inform the user (who is guaranteed to be looking at the screen).
 		//
 		// NB: this can be overridden from the command line as usual.

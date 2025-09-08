@@ -457,7 +457,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
-				log.Warningf(ctx, "mutation job %d not found", jobID)
+				log.Dev.Warningf(ctx, "mutation job %d not found", jobID)
 				continue
 			}
 			return err
@@ -468,7 +468,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 			status := md.State
 			switch status {
 			case jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed, jobs.StateRevertFailed:
-				log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
+				log.Dev.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 				return nil
 			case jobs.StateRunning, jobs.StatePending:
 				status = jobs.StateSucceeded
@@ -477,7 +477,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 				// they're eligible to ever succeed, so mark them as failed.
 				status = jobs.StateFailed
 			}
-			log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
+			log.Dev.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
 			ju.UpdateState(status)
 			return nil
 		}); err != nil {

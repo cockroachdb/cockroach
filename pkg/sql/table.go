@@ -87,7 +87,7 @@ func (p *planner) createDropDatabaseJob(
 		NonCancelable: true,
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
-	log.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
+	log.Dev.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
 	return nil
 }
 
@@ -114,7 +114,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 		NonCancelable: true,
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
-	log.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
+	log.Dev.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
 	return nil
 }
 
@@ -201,9 +201,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		if mutationID != descpb.InvalidMutationID {
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 				MutationID: mutationID, JobID: newRecord.JobID})
+			log.Dev.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
+				newRecord.JobID, tableDesc.ID, mutationID)
 		}
-		log.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
-			newRecord.JobID, tableDesc.ID, mutationID)
 		return nil
 	}
 
@@ -244,7 +244,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	if record.Description != jobDesc {
 		record.AppendDescription(jobDesc)
 	}
-	log.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
+	log.Dev.Infof(ctx, "job %d: updated with schema change for table %d, mutation %d",
 		record.JobID, tableDesc.ID, mutationID)
 	return nil
 }
@@ -287,6 +287,31 @@ func (p *planner) writeSchemaChange(
 	return p.writeTableDesc(ctx, tableDesc)
 }
 
+// writeVersionBump performs a mutation-free write to a specified table in order
+// to ensure a version bump. It does so without queuing a schema change job.
+func (p *planner) writeVersionBump(ctx context.Context, id descpb.ID) error {
+	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if !p.EvalContext().TxnImplicit {
+		telemetry.Inc(sqltelemetry.SchemaChangeInExplicitTxnCounter)
+	}
+	if tableDesc.Dropped() {
+		// We don't allow schema changes on a dropped table.
+		return errors.Errorf("no schema changes allowed on table %q as it is being dropped",
+			tableDesc.Name)
+	}
+	// Exit early with an error if the table is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
+		return scerrors.ConcurrentSchemaChangeError(tableDesc)
+	}
+
+	return p.writeTableDesc(ctx, tableDesc, descs.WithOnlyVersionBump())
+}
+
 func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch,
 ) error {
@@ -312,16 +337,18 @@ func (p *planner) writeDropTable(
 	return p.writeTableDesc(ctx, tableDesc)
 }
 
-func (p *planner) writeTableDesc(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+func (p *planner) writeTableDesc(
+	ctx context.Context, tableDesc *tabledesc.Mutable, opts ...descs.WriteDescOption,
+) error {
 	b := p.txn.NewBatch()
-	if err := p.writeTableDescToBatch(ctx, tableDesc, b); err != nil {
+	if err := p.writeTableDescToBatch(ctx, tableDesc, b, opts...); err != nil {
 		return err
 	}
 	return p.txn.Run(ctx, b)
 }
 
 func (p *planner) writeTableDescToBatch(
-	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch, opts ...descs.WriteDescOption,
 ) error {
 	if tableDesc.IsVirtualTable() {
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)
@@ -342,6 +369,6 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	return p.Descriptors().WriteDescToBatch(
-		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), tableDesc, b,
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), tableDesc, b, opts...,
 	)
 }

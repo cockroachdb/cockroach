@@ -197,7 +197,7 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...Scra
 			family.Metric = append(family.Metric, m)
 
 		default:
-			log.Infof(context.Background(), "metric %s is not compatible with any prometheus metric type", name)
+			log.Dev.Infof(context.Background(), "metric %s is not compatible with any prometheus metric type", name)
 			return
 		}
 	}

@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	loadmonitor "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -566,7 +567,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// can still happen with this code.
 		rs.visited++
 		repl.mu.RLock()
-		destroyed := repl.mu.destroyStatus
+		destroyed := repl.shMu.destroyStatus
 		initialized := repl.IsInitialized()
 		repl.mu.RUnlock()
 		if initialized && destroyed.IsAlive() && !visitor(repl) {
@@ -1184,6 +1185,7 @@ type StoreConfig struct {
 	// One MMAllocator per node which guides mma store rebalancer to make
 	// allocation changes when LBRebalancingMultiMetric is enabled.
 	MMAllocator          mmaprototype.Allocator
+	AllocatorSync        *mmaintegration.AllocatorSync
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer
 	RPCContext           *rpc.Context
@@ -1368,7 +1370,7 @@ var logRangeAndNodeEventsEnabled = settings.RegisterBoolSetting(
 // behavior of the consistency checker for tests.
 type ConsistencyTestingKnobs struct {
 	// If non-nil, OnBadChecksumFatal is called on a replica with a mismatching
-	// checksum, instead of log.Fatal.
+	// checksum, instead of log.Dev.Fatal.
 	OnBadChecksumFatal func(roachpb.StoreIdent)
 
 	ConsistencyQueueResultHook func(response kvpb.CheckConsistencyResponse)
@@ -1476,7 +1478,7 @@ func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
 ) *Store {
 	if !cfg.Valid() {
-		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
+		log.Dev.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
@@ -1673,7 +1675,7 @@ func NewStore(
 	// common case and do something more effective.
 	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.TODOEngine(), s.limiters.BulkIOWriteRate)
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
-		log.Warningf(ctx, "failed to clear snapshot storage: %v", err)
+		log.Dev.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
 	s.protectedtsReader = cfg.ProtectedTimestampReader
 
@@ -1717,7 +1719,7 @@ func NewStore(
 		authorizer = cfg.RPCContext.TenantRPCAuthorizer
 	}
 	if authorizer == nil {
-		log.Fatalf(ctx, "programming error: missing authorizer from config")
+		log.Dev.Fatalf(ctx, "programming error: missing authorizer from config")
 	}
 
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(&cfg.Settings.SV, &cfg.TestingKnobs.TenantRateKnobs, authorizer)
@@ -1921,7 +1923,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						// transferAllAway() traverses all stores/replicas without
 						// checking for the timeout otherwise.
 						if verbose || log.V(1) {
-							log.Infof(ctx, "lease transfer aborted due to exceeded timeout")
+							log.Dev.Infof(ctx, "lease transfer aborted due to exceeded timeout")
 						}
 						return
 					default:
@@ -1977,7 +1979,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						desc := r.Desc()
 						if verbose || log.V(1) {
 							// This logging is useful to troubleshoot incomplete drains.
-							log.Infof(ctx, "attempting to acquire proscribed lease %v for range %s",
+							log.Dev.Infof(ctx, "attempting to acquire proscribed lease %v for range %s",
 								drainingLeaseStatus.Lease, desc)
 						}
 
@@ -2009,7 +2011,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 					if verbose || log.V(1) {
 						// This logging is useful to troubleshoot incomplete drains.
-						log.Infof(ctx, "attempting to transfer lease %v for range %s", drainingLeaseStatus.Lease, desc)
+						log.Dev.Infof(ctx, "attempting to transfer lease %v for range %s", drainingLeaseStatus.Lease, desc)
 					}
 
 					start := timeutil.Now()
@@ -2046,7 +2048,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					}
 				}); err != nil {
 				if verbose || log.V(1) {
-					log.Errorf(ctx, "error running draining task: %+v", err)
+					log.Dev.Errorf(ctx, "error running draining task: %+v", err)
 				}
 				wg.Done()
 				return false
@@ -2096,7 +2098,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					}
 					err = errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
 					if everySecond.ShouldLog() {
-						log.Infof(ctx, "%v", err)
+						log.Dev.Infof(ctx, "%v", err)
 					}
 				}
 				if err == nil {
@@ -2112,11 +2114,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// You expect this message when shutting down a server in an unhealthy
 			// cluster, or when draining all nodes with replicas for some range at the
 			// same time. If we see it on healthy ones, there's likely something to fix.
-			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
+			log.Dev.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
 				"service might briefly deteriorate if the node is terminated: %s",
 				transferTimeout, LeaseTransferPerIterationTimeout.Name(), tErr.Cause())
 		} else {
-			log.Warningf(ctx, "drain error: %+v", err)
+			log.Dev.Warningf(ctx, "drain error: %+v", err)
 		}
 	}
 }
@@ -2315,7 +2317,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// Log progress regularly, but not for the first replica (we only want to
 		// log when this is slow). The last replica is logged after iteration.
 		if logEvery.ShouldLog() && i > 0 {
-			log.Infof(ctx, "initialized %d/%d replicas", i, len(repls))
+			log.Dev.Infof(ctx, "initialized %d/%d replicas", i, len(repls))
 		}
 
 		if repl.Desc == nil {
@@ -2371,7 +2373,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			rep.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 		}
 	}
-	log.Infof(ctx, "initialized %d/%d replicas", len(repls), len(repls))
+	log.Dev.Infof(ctx, "initialized %d/%d replicas", len(repls), len(repls))
 
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
@@ -2708,7 +2710,7 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 	sp, err := keys.SpanAddr(updated)
 	if err != nil {
-		log.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
+		log.Dev.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
 			updated, err)
 		return
 	}
@@ -2744,7 +2746,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 				conf, sp, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
-					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
+					log.Dev.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
 				changed = repl.SetSpanConfig(conf, sp)
@@ -2756,7 +2758,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 		},
 	); err != nil {
 		// Errors here should not be possible, but if there is one, log loudly.
-		log.Errorf(ctx, "unexpected error visiting replicas: %v", err)
+		log.Dev.Errorf(ctx, "unexpected error visiting replicas: %v", err)
 	}
 }
 
@@ -2769,7 +2771,7 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 		key := repl.Desc().StartKey
 		conf, confSpan, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
 		if err != nil {
-			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
+			log.Dev.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
 			return true // more
 		}
 
@@ -3070,7 +3072,7 @@ func (s *Store) getOverlappingKeyRangeLocked(
 			it = iit
 			return iterutil.StopIteration()
 		}); err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 
 	return it
@@ -3416,6 +3418,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()
 
+	// TODO(wenyihu6): it would be nicer if we can sort the replicas so that we
+	// can always get the nudger story on the same set of replicas, will this
+	// introduce a lot of overhead? For now, it seems fine since we usually see <
+	// 15 ranges on decommission stall.
+	var logBudgetOnDecommissioningNudger = 15
+
 	// We want to avoid having to read this multiple times during the replica
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
@@ -3486,7 +3494,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Decommissioning {
 				// NB: Enqueue is disabled by default from here and throttled async if
 				// enabled.
-				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder)
+				maybeLog := logBudgetOnDecommissioningNudger > 0
+				if maybeLog {
+					logBudgetOnDecommissioningNudger--
+				}
+				rep.maybeEnqueueProblemRange(ctx, goNow, metrics.LeaseValid, metrics.Leaseholder, maybeLog)
 				decommissioningRangeCount++
 			}
 		}
@@ -3923,7 +3935,7 @@ func (s *Store) ReplicateQueueDryRun(
 		return collectAndFinish(), nil
 	}
 	_, err = s.replicateQueue.processOneChange(
-		ctx, repl, desc, conf, false /* scatter */, true, /* dryRun */
+		ctx, repl, desc, conf, false /* scatter */, true /* dryRun */, -1, /*priorityAtEnqueue*/
 	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
@@ -4102,7 +4114,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl, confReader, -1 /*priorityAtEnqueue*/)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return processErr, nil
 }
@@ -4139,7 +4151,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			processed, err := s.replicaGCQueue.process(ctx, repl, nil, -1 /*priorityAtEnqueue*/)
 			if err != nil {
 				return errors.Wrapf(err, "on %s", repl.Desc())
 			}
@@ -4174,7 +4186,7 @@ func (s *Store) WaitForSpanConfigSubscription(ctx context.Context) error {
 			return nil
 		}
 
-		log.Warningf(ctx, "waiting for span config subscription...")
+		log.Dev.Warningf(ctx, "waiting for span config subscription...")
 		continue
 	}
 
@@ -4248,7 +4260,7 @@ func (s *storeForTruncatorImpl) acquireReplicaForTruncator(
 	if isAlive := func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		return r.mu.destroyStatus.IsAlive()
+		return r.shMu.destroyStatus.IsAlive()
 	}(); !isAlive {
 		r.raftMu.Unlock()
 		return nil

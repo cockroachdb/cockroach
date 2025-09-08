@@ -7,6 +7,7 @@ package state
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 
@@ -29,32 +30,41 @@ func (s requestCounts) Less(i, j int) bool {
 }
 func (s requestCounts) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-func evenDistribution(n int) []float64 {
+func evenDistribution(numOfStores int) []float64 {
 	distribution := []float64{}
-	frac := 1.0 / float64(n)
-	for i := 0; i < n; i++ {
+	frac := 1.0 / float64(numOfStores)
+	for i := 0; i < numOfStores; i++ {
 		distribution = append(distribution, frac)
 	}
 	return distribution
 }
 
-func skewedDistribution(n, k int) []float64 {
-	distribution := []float64{}
-	rem := k
-	for i := 0; i < n; i++ {
-		rem /= 2
-		distribution = append(distribution, float64(rem))
+func skewedDistribution(numOfStores int) []float64 {
+	weights := make([]float64, numOfStores)
+	// Sum of weights. Since weights computed won't add up to 1, we normalize it
+	// by dividing the sum of weights. Sum is pre-computed here using the partial
+	// sum formula of a geometric series: sum of 2^(-i) from i = 0 to k gives
+	// 2-2^(-k).
+	// Example: given 3 stores, cur(weights before normalization) is 1, 0.5, 0.25,
+	// sum is 2.0-2^(-2) = 1.75. After normalization, weights are 0.57, 0.29,
+	// 0.14.
+	sum := 2.0 - math.Pow(2, float64(-(numOfStores-1)))
+	cur := float64(1)
+	for i := 0; i < numOfStores; i++ {
+		// cur is 1, 0.5, 0.25, ...
+		weights[i] = cur / sum
+		cur /= 2
 	}
-	return distribution
+	return weights
 }
 
-func exactDistribution(counts []int) []float64 {
-	distribution := make([]float64, len(counts))
+func exactDistribution(storeReplicaCount []int) []float64 {
+	distribution := make([]float64, len(storeReplicaCount))
 	total := 0
-	for _, count := range counts {
+	for _, count := range storeReplicaCount {
 		total += count
 	}
-	for i, count := range counts {
+	for i, count := range storeReplicaCount {
 		distribution[i] = float64(count) / float64(total)
 	}
 	return distribution
@@ -92,7 +102,8 @@ func newWeighted(weightedStores []float64) weighted {
 		prefixSumWeight += item
 		cumulativeWeights[i] = prefixSumWeight
 	}
-	if cumulativeWeights[len(weightedStores)-1] != float64(1) {
+	const epsilon = 1e-10
+	if math.Abs(cumulativeWeights[len(weightedStores)-1]-float64(1)) > epsilon {
 		panic(fmt.Sprintf("total cumulative weights for all stores should sum up to 1 but got %.2f\n",
 			cumulativeWeights[len(weightedStores)-1]))
 	}
@@ -125,16 +136,16 @@ func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) [
 // randDistribution generates a random distribution across stores. It achieves
 // this by creating an array of size n, selecting random numbers from [0, 10)
 // for each index, and returning the exact distribution of this result.
-func randDistribution(randSource *rand.Rand, n int) []float64 {
+func randDistribution(randSource *rand.Rand, numOfStores int) []float64 {
 	total := float64(0)
-	distribution := make([]float64, n)
-	for i := 0; i < n; i++ {
+	distribution := make([]float64, numOfStores)
+	for i := 0; i < numOfStores; i++ {
 		num := float64(randSource.Intn(10))
 		distribution[i] = num
 		total += num
 	}
 
-	for i := 0; i < n; i++ {
+	for i := 0; i < numOfStores; i++ {
 		distribution[i] = distribution[i] / total
 	}
 	return distribution
@@ -274,7 +285,7 @@ func makeStoreList(stores int) []StoreID {
 func RangesInfoSkewedDistribution(
 	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
 ) RangesInfo {
-	distribution := skewedDistribution(stores, ranges)
+	distribution := skewedDistribution(stores)
 	storeList := makeStoreList(stores)
 
 	return RangesInfoWithDistribution(
@@ -373,19 +384,19 @@ func RangesInfoWithReplicaPlacement(
 	}
 
 	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
-	rp.findReplicaPlacementForEveryStoreSet(numRanges)
+	result := rp.findReplicaPlacementForEveryStoreSet(numRanges)
 
 	rf := int(config.NumReplicas)
 
 	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
 		nextStoreSet := 0
-		for i := 0; i < len(rp); i++ {
-			if rp[i].Weight > 0 {
+		for i := 0; i < len(result); i++ {
+			if result[i].Ranges > 0 {
 				nextStoreSet = i
 				break
 			}
 		}
-		ratio := rp[nextStoreSet]
+		ratio := result[nextStoreSet]
 		if len(ratio.StoreIDs) != rf {
 			panic(fmt.Sprintf("expected %d replicas, got %d", rf, len(ratio.StoreIDs)))
 		}
@@ -399,7 +410,7 @@ func RangesInfoWithReplicaPlacement(
 			}
 		}
 		ret[rngIdx].Leaseholder = StoreID(ratio.LeaseholderID)
-		rp[nextStoreSet].Weight--
+		result[nextStoreSet].Ranges--
 	}
 	return ret
 }

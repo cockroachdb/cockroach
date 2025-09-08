@@ -136,7 +136,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
-		log.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
+		log.Dev.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
 	}
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
@@ -358,12 +358,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		return nil
 	}
 
-	// If snapshots containing shared files are allowed, and this range is a
-	// non-system range, take advantage of shared storage to minimize the amount
-	// of data we're iterating on and sending over the network.
-	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
-	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
-
 	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span) error {
 		timingTag.start("iter")
 		defer timingTag.stop("iter")
@@ -419,7 +413,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			LockTable:  true,
 			// In shared/external mode, the user span come from external SSTs and
 			// are not iterated over here.
-			UserKeys: !(sharedReplicate || externalReplicate),
+			UserKeys: !(header.SharedReplicate || header.ExternalReplicate),
 		},
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: false,
@@ -428,9 +422,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}
 
 	var valBuf []byte
-	if sharedReplicate || externalReplicate {
+	// If snapshots containing shared files are allowed, and this range is a
+	// non-system range, take advantage of shared storage to minimize the amount
+	// of data we're iterating on and sending over the network.
+	if header.SharedReplicate || header.ExternalReplicate {
 		var sharedVisitor func(sst *pebble.SharedSSTMeta) error
-		if sharedReplicate {
+		if header.SharedReplicate {
 			sharedVisitor = func(sst *pebble.SharedSSTMeta) error {
 				sharedSSTCount++
 				snap.sharedBackings = append(snap.sharedBackings, sst.Backing)
@@ -459,7 +456,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 		}
 		var externalVisitor func(sst *pebble.ExternalFile) error
-		if externalReplicate {
+		if header.ExternalReplicate {
 			externalVisitor = func(sst *pebble.ExternalFile) error {
 				externalSSTCount++
 				externalSSTs = append(externalSSTs, kvserverpb.SnapshotRequest_ExternalTable{
@@ -605,7 +602,7 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 		// disk space (which is reclaimed on node restart). It is unexpected
 		// though, so log a warning.
 		if err := kvSS.scratch.Close(); err != nil {
-			log.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
+			log.Dev.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
 	}
 }

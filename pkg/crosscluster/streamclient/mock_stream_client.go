@@ -94,20 +94,20 @@ func (m *MockStreamClient) Subscribe(
 	if events, ok = m.PartitionEvents[string(token)]; !ok {
 		return nil, errors.Newf("no events found for partition %s", string(token))
 	}
-	log.Infof(ctx, "%q beginning subscription from time %v ", string(token), initialScanTime)
+	log.Dev.Infof(ctx, "%q beginning subscription from time %v ", string(token), initialScanTime)
 
-	log.Infof(ctx, "%q emitting %d events", string(token), len(events))
+	log.Dev.Infof(ctx, "%q emitting %d events", string(token), len(events))
 	eventCh := make(chan crosscluster.Event, len(events))
 	for _, event := range events {
-		log.Infof(ctx, "%q emitting event %v", string(token), event)
+		log.Dev.Infof(ctx, "%q emitting event %v", string(token), event)
 		eventCh <- event
 	}
-	log.Infof(ctx, "%q done emitting %d events", string(token), len(events))
+	log.Dev.Infof(ctx, "%q done emitting %d events", string(token), len(events))
 	go func() {
 		if m.DoneCh != nil {
-			log.Infof(ctx, "%q waiting for doneCh", string(token))
+			log.Dev.Infof(ctx, "%q waiting for doneCh", string(token))
 			<-m.DoneCh
-			log.Infof(ctx, "%q received event on doneCh", string(token))
+			log.Dev.Infof(ctx, "%q received event on doneCh", string(token))
 		}
 		close(eventCh)
 	}()

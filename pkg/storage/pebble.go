@@ -7,13 +7,15 @@ package storage
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,7 +55,6 @@ import (
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -511,12 +512,6 @@ var MVCCMerger = &pebble.Merger{
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
-// MinimumSupportedFormatVersion is the version that provides features that the
-// Cockroach code relies on unconditionally (like range keys). New stores are by
-// default created with this version. It should correspond to the minimum
-// supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
-
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
@@ -853,10 +848,6 @@ func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Stor
 	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 
-// ConfigureForSharedStorage is used to configure a pebble Options for shared
-// storage.
-var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage) error
-
 // newPebble creates a new Pebble instance, at the specified path.
 // Do not use directly (except in test); use Open instead.
 //
@@ -938,7 +929,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.EnableColumnarBlocks = func() bool { return true }
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
 	}
@@ -1070,9 +1060,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// in it is needed for CRDB to function properly.
 	if cfg.sharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.sharedStorage, ctx: logCtx}
-		if ConfigureForSharedStorage == nil {
-			return nil, errors.New("shared storage requires CCL features")
-		}
 		if err := ConfigureForSharedStorage(cfg.opts, esWrapper); err != nil {
 			return nil, errors.Wrap(err, "error when configuring shared storage")
 		}
@@ -1081,42 +1068,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			cfg.opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: logCtx, factory: cfg.remoteStorageFactory}
 		}
 	}
+	// If the store cluster version is not empty, it means that we initialized
+	// the env using a min-version file. We can use that to determine if the
+	// store should already exist or not.
+	initFromMinVersionFile := cfg.env.StoreClusterVersion != (roachpb.Version{})
 
-	// Read the current store cluster version.
-	storeClusterVersion, minVerFileExists, err := getMinVersion(p.cfg.env.UnencryptedFS, cfg.env.Dir)
-	if err != nil {
-		return nil, err
-	}
-	if minVerFileExists {
-		// Avoid running a binary too new for this store. This is what you'd catch
-		// if, say, you restarted directly from v21.2 into v22.2 (bumping the min
-		// version) without going through v22.1 first.
-		//
-		// Note that "going through" above means that v22.1 successfully upgrades
-		// all existing stores. If v22.1 crashes half-way through the startup
-		// sequence (so now some stores have v21.2, but others v22.1) you are
-		// expected to run v22.1 again (hopefully without the crash this time) which
-		// would then rewrite all the stores.
-		if v := cfg.settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
-			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
-				return nil, errors.Errorf(
-					"store last used with cockroach non-development version v%s "+
-						"cannot be opened by development version v%s",
-					storeClusterVersion, v.LatestVersion(),
-				)
-			}
-			return nil, errors.Errorf(
-				"store last used with cockroach version v%s "+
-					"is too old for running version v%s (which requires data from v%s or later)",
-				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
-			)
-		}
-		cfg.opts.ErrorIfNotExists = true
-	} else {
+	if !initFromMinVersionFile {
 		if cfg.opts.ErrorIfNotExists || cfg.opts.ReadOnly {
-			// Make sure the message is not confusing if the store does exist but
-			// there is no min version file.
-			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, MinVersionFilename)
+			filename := p.cfg.env.UnencryptedFS.PathJoin(cfg.env.Dir, fs.MinVersionFilename)
 			return nil, errors.Errorf(
 				"pebble: database %q does not exist (missing required file %q)",
 				cfg.env.Dir, filename,
@@ -1128,6 +1087,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		// attempt that failed right before writing out the min version file. We set
 		// a flag to disallow the open in case 1.
 		cfg.opts.ErrorIfNotPristine = true
+	} else {
+		cfg.opts.ErrorIfNotExists = true
 	}
 
 	if WorkloadCollectorEnabled {
@@ -1137,10 +1098,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	db, err := pebble.Open(cfg.env.Dir, cfg.opts)
 	if err != nil {
 		// Decorate the errors caused by the flags we set above.
-		if minVerFileExists && errors.Is(err, pebble.ErrDBDoesNotExist) {
+		if initFromMinVersionFile && errors.Is(err, pebble.ErrDBDoesNotExist) {
 			err = errors.Wrap(err, "min version file exists but store doesn't")
 		}
-		if !minVerFileExists && errors.Is(err, pebble.ErrDBNotPristine) {
+		if !initFromMinVersionFile && errors.Is(err, pebble.ErrDBNotPristine) {
 			err = errors.Wrap(err, "store has no min-version file; this can "+
 				"happen if the store was created by an old CockroachDB version that is no "+
 				"longer supported")
@@ -1149,7 +1110,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	p.db = db
 
-	if !minVerFileExists {
+	storeClusterVersion := cfg.env.StoreClusterVersion
+	if storeClusterVersion == (roachpb.Version{}) {
 		storeClusterVersion = cfg.settings.Version.ActiveVersionOrEmpty(ctx).Version
 		if storeClusterVersion == (roachpb.Version{}) {
 			// If there is no active version, use the minimum supported version.
@@ -1230,7 +1192,7 @@ Error details: %s
 `, path, redact.Sprintf("%+v", corruptionError))
 
 	if err := fs.WriteFile(p.cfg.env.UnencryptedFS, path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	}
 }
 
@@ -1245,9 +1207,9 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 		DataCorruption: func(info pebble.DataCorruptionInfo) {
 			if !info.IsRemote {
 				p.writePreventStartupFile(ctx, info.Details)
-				log.Fatalf(ctx, "local corruption detected: %+v", info.Details)
+				log.Dev.Fatalf(ctx, "local corruption detected: %+v", info.Details)
 			} else {
-				log.Errorf(ctx, "remote corruption detected: %+v", info.Details)
+				log.Dev.Errorf(ctx, "remote corruption detected: %+v", info.Details)
 			}
 		},
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
@@ -1292,17 +1254,17 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 					log.MakeProcessUnavailable()
 
 					if p.cfg.diskMonitor != nil {
-						log.Fatalf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
+						log.Dev.Fatalf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
 					} else {
-						log.Fatalf(ctx, "disk stall detected: %s", info)
+						log.Dev.Fatalf(ctx, "disk stall detected: %s", info)
 					}
 				} else {
 					if p.cfg.diskMonitor != nil {
 						p.async(func() {
-							log.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
+							log.Dev.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
 						})
 					} else {
-						p.async(func() { log.Errorf(ctx, "disk stall detected: %s", info) })
+						p.async(func() { log.Dev.Errorf(ctx, "disk stall detected: %s", info) })
 					}
 				}
 				return
@@ -1333,13 +1295,13 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			switch info.Kind {
 			case pebble.IneffectualSingleDelete:
 				if p.singleDelLogEvery.ShouldLog() {
-					log.Infof(p.logCtx, "possible ineffectual SingleDel on key %s", roachpb.Key(info.UserKey))
+					log.Dev.Infof(p.logCtx, "possible ineffectual SingleDel on key %s", roachpb.Key(info.UserKey))
 				}
 				atomic.AddInt64(&p.singleDelIneffectualCount, 1)
 
 			case pebble.NondeterministicSingleDelete:
 				if p.singleDelLogEvery.ShouldLog() {
-					log.Infof(p.logCtx, "possible nondeterministic SingleDel on key %s", roachpb.Key(info.UserKey))
+					log.Dev.Infof(p.logCtx, "possible nondeterministic SingleDel on key %s", roachpb.Key(info.UserKey))
 				}
 				atomic.AddInt64(&p.singleDelInvariantViolationCount, 1)
 			}
@@ -1390,9 +1352,9 @@ func (p *Pebble) Close() {
 		// This is tricky, because the Reader interface requires Close return
 		// nothing.
 		if buildutil.CrdbTestBuild {
-			log.Fatalf(p.logCtx, "error during engine close: %s\n", err)
+			log.Dev.Fatalf(p.logCtx, "error during engine close: %s\n", err)
 		} else {
-			log.Errorf(p.logCtx, "error during engine close: %s\n", err)
+			log.Dev.Errorf(p.logCtx, "error during engine close: %s\n", err)
 		}
 	}
 
@@ -1424,6 +1386,7 @@ func (p *Pebble) aggregateIterStats(stats IteratorStats) {
 	p.iterStats.ExternalSteps += stats.Stats.ForwardStepCount[pebble.InterfaceCall] + stats.Stats.ReverseStepCount[pebble.InterfaceCall]
 	p.iterStats.InternalSeeks += stats.Stats.ForwardSeekCount[pebble.InternalIterCall] + stats.Stats.ReverseSeekCount[pebble.InternalIterCall]
 	p.iterStats.InternalSteps += stats.Stats.ForwardStepCount[pebble.InternalIterCall] + stats.Stats.ReverseStepCount[pebble.InternalIterCall]
+	p.iterStats.ValueRetrievalCount += stats.Stats.InternalStats.SeparatedPointValue.CountFetched
 }
 
 func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
@@ -1503,8 +1466,18 @@ func (p *Pebble) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.db.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
+	return p.db.ScanInternal(ctx, pebble.ScanInternalOptions{
+		IterOptions: pebble.IterOptions{
+			LowerBound: rawLower,
+			UpperBound: rawUpper,
+			KeyTypes:   pebble.IterKeyTypePointsAndRanges,
+		},
+		VisitPointKey:     visitPointKey,
+		VisitRangeDel:     visitRangeDel,
+		VisitRangeKey:     visitRangeKey,
+		VisitSharedFile:   visitSharedFile,
+		VisitExternalFile: visitExternalFile,
+	})
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2296,7 +2269,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		if err := safeWriteToUnencryptedFile(
+		if err := fs.SafeWriteToUnencryptedFile(
 			p.cfg.env.UnencryptedFS, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 			fs.UnspecifiedWriteCategory,
@@ -2330,22 +2303,21 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V25_3: pebble.FormatValueSeparation,
-	clusterversion.V25_2: pebble.FormatTableFormatV6,
+	clusterversion.V25_4_PebbleFormatV2BlobFiles: pebble.FormatV2BlobFiles,
+	clusterversion.V25_3:                         pebble.FormatValueSeparation,
+	clusterversion.V25_2:                         pebble.FormatTableFormatV6,
 }
 
+// MinimumSupportedFormatVersion is the version that provides features that the
+// Cockroach code relies on unconditionally (like range keys). New stores are by
+// default created with this version. It should correspond to the minimum
+// supported binary version.
+const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
+
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
-var pebbleFormatVersionKeys []clusterversion.Key = func() []clusterversion.Key {
-	versionKeys := make([]clusterversion.Key, 0, len(pebbleFormatVersionMap))
-	for k := range pebbleFormatVersionMap {
-		versionKeys = append(versionKeys, k)
-	}
-	// Sort the keys in reverse order.
-	sort.Slice(versionKeys, func(i, j int) bool {
-		return versionKeys[i] > versionKeys[j]
-	})
-	return versionKeys
-}()
+var pebbleFormatVersionKeys = slices.SortedFunc(maps.Keys(pebbleFormatVersionMap), func(a, b clusterversion.Key) int {
+	return cmp.Compare(b, a)
+})
 
 // pebbleFormatVersion finds the most recent pebble format version supported by
 // the given cluster version.
@@ -2353,7 +2325,61 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if clusterVersion.AtLeast(k.Version().FenceVersion()) {
+		// We switch to using a new format as soon as we reach the fence version.
+		//
+		// This allows us to guarantee that all nodes in the cluster are using the
+		// new format when the cluster version is k.Version(); see
+		// minPebbleFormatVersionInCluster.
+		//
+		// Note that at this point, other nodes in the cluster might not be at the
+		// fence version yet. But this node's local Pebble format change does not
+		// affect other nodes, as long as minPebbleFormatVersionInCluster still
+		// returns the old format (which it does for the fence version).
+		if clusterVersion.Cmp(k.Version().FenceVersion()) >= 0 {
+			return pebbleFormatVersionMap[k]
+		}
+	}
+	// This should never happen in production. But we tolerate tests creating
+	// imaginary older versions; we must still use the earliest supported
+	// format.
+	return MinimumSupportedFormatVersion
+}
+
+// minPebbleFormatVersionInCluster returns the minimum pebble format version
+// supported by any node in the cluster.
+func minPebbleFormatVersionInCluster(clusterVersion roachpb.Version) pebble.FormatMajorVersion {
+	// Say clusterVersion is exactly the version for a key in
+	// pebbleFormatVersionMap. All nodes in the cluster are guaranteed to be at
+	// least at the corresponding fence version, which means they already upgraded
+	// the pebble format version (see pebbleFormatVersion()).
+	for _, k := range pebbleFormatVersionKeys {
+		// Nodes switch to using the new format as soon as we reach the fence
+		// version (k.Version().FenceVersion()). If we are at the non-fence version
+		// (k.Version()), we are guaranteed that all nodes in the cluster are at the
+		// fence version (at least), which means they have already upgraded their
+		// stores.
+		//
+		// -- More details about how this happens --
+		//
+		// Say that pebbleFormatVersionMap defines a new Pebble format version 31 at
+		// cluster version 24.3-6. Then pebbleFormatVersion() returns 31 for the
+		// first time at cluster version 24.3-5(fence);
+		// minPebbleFormatVersionInCluster() returns 31 for the first time at
+		// cluster version 24.3-6.
+		//
+		// The upgrade manager bumps the cluster version on all nodes for each
+		// version, including the fence version 24.3-5(fence), using
+		// upgrademanager.bumpClusterVersion(). The latter issues RPCs to all nodes
+		// to upgrade their version, which includes bumping the Pebble format to 31,
+		// via server.bumpClusterVersion() which invokes
+		// kvstorage.WriteClusterVersionToEngines(). The
+		// upgrademanager.bumpClusterVersion() code also detects any node joins that
+		// raced with the operation and retries until the cluster stabilizes. This
+		// guarantees that before the upgrade process to 25.3-6 starts, all nodes in
+		// the cluster are at version 25.3-5(fence); and thus all stores have been
+		// ratcheted to Pebble format 31 and are ready to accept sstables in the new
+		// format, which can happen as soon as any node is upgraded to 25.3-6.
+		if clusterVersion.Cmp(k.Version()) >= 0 {
 			return pebbleFormatVersionMap[k]
 		}
 	}
@@ -2952,8 +2978,18 @@ func (p *pebbleSnapshot) ScanInternal(
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
 	// TODO(sumeer): set category.
-	return p.efos.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
+	return p.efos.ScanInternal(ctx, pebble.ScanInternalOptions{
+		IterOptions: pebble.IterOptions{
+			LowerBound: rawLower,
+			UpperBound: rawUpper,
+			KeyTypes:   pebble.IterKeyTypePointsAndRanges,
+		},
+		VisitPointKey:     visitPointKey,
+		VisitRangeDel:     visitRangeDel,
+		VisitRangeKey:     visitRangeKey,
+		VisitSharedFile:   visitSharedFile,
+		VisitExternalFile: visitExternalFile,
+	})
 }
 
 // ExceedMaxSizeError is the error returned when an export request

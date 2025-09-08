@@ -13,7 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -22,6 +24,7 @@ import (
 )
 
 type replicaToApplyChanges interface {
+	RangeUsageInfo() allocator.RangeUsageInfo
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 	changeReplicasImpl(
 		ctx context.Context,
@@ -46,7 +49,7 @@ type mmaStoreRebalancer struct {
 	mma   mmaprototype.Allocator
 	st    *cluster.Settings
 	sp    *storepool.StorePool
-	// TODO(wenyihu6): add allocator sync
+	as    *mmaintegration.AllocatorSync
 }
 
 func newMMAStoreRebalancer(
@@ -57,6 +60,7 @@ func newMMAStoreRebalancer(
 		mma:   mma,
 		st:    st,
 		sp:    sp,
+		as:    s.cfg.AllocatorSync,
 	}
 }
 
@@ -65,7 +69,7 @@ func newMMAStoreRebalancer(
 func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 	timer := time.NewTicker(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
 	defer timer.Stop()
-	log.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", LoadBasedRebalancingMode.Get(&m.st.SV))
+	log.Dev.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV))
 
 	for {
 		select {
@@ -77,7 +81,7 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
 			timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
-			if LoadBasedRebalancingMode.Get(&m.st.SV) != LBRebalancingMultiMetric {
+			if kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV) != kvserverbase.LBRebalancingMultiMetric {
 				continue
 			}
 
@@ -125,7 +129,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {
-		log.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
+		log.Dev.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
 			numIgnoredRanges)
 	}
 
@@ -136,7 +140,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	// TODO(wenyihu6): add allocator sync and post apply here
 	for _, change := range changes {
 		if err := m.applyChange(ctx, change); err != nil {
-			log.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
+			log.Dev.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
 		}
 	}
 
@@ -150,15 +154,23 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
+		m.as.MarkChangesAsFailed(change.ChangeIDs())
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
-	if change.IsTransferLease() {
-		return m.applyLeaseTransfer(ctx, repl, change)
-	} else if change.IsChangeReplicas() {
-		return m.applyReplicaChanges(ctx, repl, change)
+	changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
+	var err error
+	switch {
+	case change.IsTransferLease():
+		err = m.applyLeaseTransfer(ctx, repl, change)
+	case change.IsChangeReplicas():
+		err = m.applyReplicaChanges(ctx, repl, change)
+	default:
+		return errors.Errorf("unknown change type for range %d", change.RangeID)
 	}
-
-	return errors.Errorf("unknown change type for range %d", change.RangeID)
+	// Inform allocator sync that the change has been applied which applies
+	// changes to store pool and inform mma.
+	m.as.PostApply(changeID, err == nil /*success*/)
+	return err
 }
 
 // applyLeaseTransfer applies a lease transfer change.

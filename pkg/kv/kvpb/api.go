@@ -57,7 +57,6 @@ const (
 	isLocking                                                 // locking cmds acquire locks for their transaction
 	isIntentWrite                                             // intent write cmds leave intents when they succeed
 	isRange                                                   // range commands may span multiple keys
-	isReverse                                                 // reverse commands traverse ranges in descending direction
 	isAlone                                                   // requests which must be alone in a batch
 	isPrefix                                                  // requests which, in a batch, must not be split from the following request
 	isUnsplittable                                            // range command that must not be split during sending
@@ -1973,7 +1972,7 @@ func (sr *ScanRequest) flags() flag {
 func (rsr *ReverseScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(rsr.KeyLockingStrength)
 	maybeWrite := flagForLockDurability(rsr.KeyLockingDurability)
-	return isRead | maybeWrite | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	return isRead | maybeWrite | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
@@ -2494,10 +2493,14 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 		humanizeCount(s.NumReverseScans),
 	)
 	if s.SeparatedPointCount != 0 {
-		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
+		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s, "+
+			"count-fetched: %s, reader-cache-misses: %s)",
 			humanizeCount(s.SeparatedPointCount),
 			humanizeutil.IBytes(int64(s.SeparatedPointValueBytes)),
-			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)))
+			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)),
+			humanizeCount(s.SeparatedPointValueCountFetched),
+			humanizeCount(s.SeparatedPointValueReaderCacheMisses),
+		)
 	}
 }
 

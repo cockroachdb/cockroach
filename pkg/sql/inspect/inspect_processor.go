@@ -12,8 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -87,7 +90,7 @@ func (p *inspectProcessor) Run(ctx context.Context, output execinfra.RowReceiver
 // Each span is read from a buffered channel and passed to processSpan.
 // The function blocks until all spans are processed or an error occurs.
 func (p *inspectProcessor) runInspect(ctx context.Context, output execinfra.RowReceiver) error {
-	log.Infof(ctx, "INSPECT processor started processorID=%d concurrency=%d", p.processorID, p.concurrency)
+	log.Dev.Infof(ctx, "INSPECT processor started processorID=%d concurrency=%d", p.processorID, p.concurrency)
 
 	group := ctxgroup.WithContext(ctx)
 
@@ -142,7 +145,14 @@ func (p *inspectProcessor) runInspect(ctx context.Context, output execinfra.RowR
 	})
 
 	// Wait for all goroutines to finish.
-	return group.Wait()
+	if err := group.Wait(); err != nil {
+		return err
+	}
+	log.Dev.Infof(ctx, "INSPECT processor completed processorID=%d issuesFound=%t", p.processorID, p.logger.hasIssues())
+	if p.logger.hasIssues() {
+		return pgerror.Newf(pgcode.DataException, "INSPECT found inconsistencies")
+	}
+	return nil
 }
 
 // getProcessorConcurrency returns the number of concurrent workers to use for
@@ -156,12 +166,22 @@ func getProcessorConcurrency(flowCtx *execinfra.FlowCtx) int {
 	return runtime.GOMAXPROCS(0)
 }
 
+// getInspectLogger returns a logger for the inspect processor.
+func getInspectLogger(flowCtx *execinfra.FlowCtx) inspectLogger {
+	knobs := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).InspectTestingKnobs
+	if knobs == nil || knobs.InspectIssueLogger == nil {
+		// TODO(148301): Implement a proper logger that writes to system.inspect_errors.
+		return &logSink{}
+	}
+	return knobs.InspectIssueLogger.(inspectLogger)
+}
+
 // processSpan executes all configured inspect checks against a single span.
 // It instantiates a fresh set of checks from the configured factories and uses
 // an inspectRunner to drive their execution.
 func (p *inspectProcessor) processSpan(
 	ctx context.Context, span roachpb.Span, workerIndex int,
-) error {
+) (err error) {
 	checks := make([]inspectCheck, len(p.checkFactories))
 	for i, factory := range p.checkFactories {
 		checks[i] = factory()
@@ -170,12 +190,17 @@ func (p *inspectProcessor) processSpan(
 		checks: checks,
 		logger: p.logger,
 	}
+	defer func() {
+		if closeErr := runner.Close(ctx); closeErr != nil {
+			err = errors.CombineErrors(err, closeErr)
+		}
+	}()
 
 	// Process all checks on the given span.
 	for {
-		ok, err := runner.Step(ctx, p.cfg, span, workerIndex)
-		if err != nil {
-			return err
+		ok, stepErr := runner.Step(ctx, p.cfg, span, workerIndex)
+		if stepErr != nil {
+			return stepErr
 		}
 		if !ok {
 			break
@@ -193,7 +218,7 @@ func (p *inspectProcessor) processSpan(
 func newInspectProcessor(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, spec execinfrapb.InspectSpec,
 ) (execinfra.Processor, error) {
-	checkFactories, err := buildInspectCheckFactories(spec)
+	checkFactories, err := buildInspectCheckFactories(flowCtx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -204,9 +229,8 @@ func newInspectProcessor(
 		checkFactories: checkFactories,
 		cfg:            flowCtx.Cfg,
 		spanSrc:        newSliceSpanSource(spec.Spans),
-		// TODO(148301): log to cockroach.log for now, but later log to system.inspect_errors
-		logger:      &logSink{},
-		concurrency: getProcessorConcurrency(flowCtx),
+		logger:         getInspectLogger(flowCtx),
+		concurrency:    getProcessorConcurrency(flowCtx),
 	}, nil
 }
 
@@ -216,12 +240,20 @@ func newInspectProcessor(
 //
 // This indirection ensures that each check instance is freshly created per span,
 // avoiding shared state across concurrent workers.
-func buildInspectCheckFactories(spec execinfrapb.InspectSpec) ([]inspectCheckFactory, error) {
+func buildInspectCheckFactories(
+	flowCtx *execinfra.FlowCtx, spec execinfrapb.InspectSpec,
+) ([]inspectCheckFactory, error) {
 	checkFactories := make([]inspectCheckFactory, 0, len(spec.InspectDetails.Checks))
 	for _, specCheck := range spec.InspectDetails.Checks {
 		switch specCheck.Type {
 		case jobspb.InspectCheckIndexConsistency:
-			// TODO(148863): implement the index consistency checker. No-op for now.
+			checkFactories = append(checkFactories, func() inspectCheck {
+				return &indexConsistencyCheck{
+					flowCtx: flowCtx,
+					tableID: specCheck.TableID,
+					indexID: specCheck.IndexID,
+				}
+			})
 
 		default:
 			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)

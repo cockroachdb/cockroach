@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/ratelimit"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -89,9 +90,6 @@ const (
 	scheme = "s3"
 
 	checksumAlgorithm = types.ChecksumAlgorithmSha256
-
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	defaultRetryMaxAttempts = 10
 )
 
 // NightlyEnvVarS3Params maps param keys that get added to an S3
@@ -116,6 +114,7 @@ type s3Storage struct {
 	bucket         *string
 	conf           *cloudpb.ExternalStorage_S3
 	ioConf         base.ExternalIODirConfig
+	middleware     cloud.HttpMiddleware
 	settings       *cluster.Settings
 	prefix         string
 	metrics        *cloud.Metrics
@@ -124,47 +123,6 @@ type s3Storage struct {
 	opts   s3ClientConfig
 	cached *s3Client
 }
-
-// retryMaxAttempts defines how many times we will retry a
-// S3 request on a retriable error.
-var retryMaxAttempts = defaultRetryMaxAttempts
-
-// InjectTestingRetryMaxAttempts is used to change the
-// default retries for tests that need quick fail.
-func InjectTestingRetryMaxAttempts(maxAttempts int) {
-	retryMaxAttempts = maxAttempts
-}
-
-// customRetryer implements the `request.Retryer` interface and allows for
-// customization of the retry behaviour of an AWS client.
-type customRetryer struct{}
-
-// isErrReadConnectionReset returns true if the underlying error is a read
-// connection reset error.
-//
-// NB: A read connection reset error is thrown when the SDK is unable to read
-// the response of an underlying API request due to a connection reset. The
-// DefaultRetryer in the AWS SDK does not treat this error as a retryable error
-// since the SDK does not have knowledge about the idempotence of the request,
-// and whether it is safe to retry -
-// https://github.com/aws/aws-sdk-go/pull/2926#issuecomment-553637658.
-//
-// In CRDB all operations with s3 (read, write, list) are considered idempotent,
-// and so we can treat the read connection reset error as retryable too.
-func isErrReadConnectionReset(err error) bool {
-	// The error string must match the one in
-	// github.com/aws/aws-sdk-go/aws/request/connection_reset_error.go. This is
-	// unfortunate but the only solution until the SDK exposes a specialized error
-	// code or type for this class of errors.
-	return err != nil && strings.Contains(err.Error(), "read: connection reset")
-}
-
-// IsErrorRetryable implements the retry.IsErrorRetryable interface.
-func (sr *customRetryer) IsErrorRetryable(e error) aws.Ternary {
-	return aws.BoolTernary(isErrReadConnectionReset(e))
-}
-
-var _ retry.IsErrorRetryable = &customRetryer{}
 
 // s3Client wraps an SDK client and uploader for a given session.
 type s3Client struct {
@@ -185,6 +143,39 @@ var usePutObject = settings.RegisterBoolSetting(
 	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
 	false,
 )
+
+var maxRetries = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.s3.max_retries",
+	"the maximum number of retries per S3 operation",
+	10)
+
+// The v2 S3 client includes a client side retry token bucket. The high level
+// behavior of the token bucket is:
+//
+// 1. The token bucket starts full with 500 tokens.
+// 2. Each request that completes on the first attempt adds 1 token to the bucket.
+// 3. Each failed retry consumes 5 tokens from the bucket.
+//
+// When the token bucket runs out, the only way to make forward progress is to
+// start a new request that succeeds on the first attempt. This is sensible for
+// an RPC service that can bubble up a retryable error to the RPC client, but
+// it doesn't make sense in the context of something like backup/restrore,
+// where we have a fixed number of workers that are sending requests until they
+// complete all of their work. Since there are no client side requests to
+// refill the token bucket, a handful of errors can permanently exhaust the
+// token bucket.
+//
+// TODO(jeffswenson): consider deleting this after we've had time to evaluate
+// it in production. This setting mostly exists so we can keep it turned on by
+// default in the backport.
+var enableClientRetryTokenBucket = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.s3.client_retry_token_bucket.enabled",
+	"enable the client side retry token bucket in the AWS S3 client",
+	// TODO(jeffswenson): change this to false in a seperate PR. This is false in
+	// the backports to stay true to the backport policy.
+	true)
 
 // roleProvider contains fields about the role that needs to be assumed
 // in order to access the external storage.
@@ -219,8 +210,20 @@ type s3ClientConfig struct {
 
 	skipChecksum  bool
 	skipTLSVerify bool
-	// log.V(2) decides session init params so include it in key.
-	verbose bool
+	logMode       aws.ClientLogMode
+}
+
+func getLogMode() aws.ClientLogMode {
+	switch {
+	case log.VDepth(3, 1):
+		return awsVLevel3Logging
+	case log.VDepth(2, 1):
+		return awsVLevel2Logging
+	case log.VDepth(1, 1):
+		return awsVLevel1Logging
+	default:
+		return 0
+	}
 }
 
 func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
@@ -259,7 +262,7 @@ func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 		secret:                conf.Secret,
 		tempToken:             conf.TempToken,
 		auth:                  conf.Auth,
-		verbose:               log.V(2),
+		logMode:               getLogMode(),
 		assumeRoleProvider:    assumeRoleProvider,
 		delegateRoleProviders: delegateRoleProviders,
 	}
@@ -512,6 +515,7 @@ func MakeS3Storage(
 		bucket:         aws.String(conf.Bucket),
 		conf:           conf,
 		ioConf:         args.IOConf,
+		middleware:     args.HttpMiddleware,
 		prefix:         conf.Prefix,
 		metrics:        args.MetricsRecorder,
 		settings:       args.Settings,
@@ -551,7 +555,7 @@ type awsLogAdapter struct {
 }
 
 func (l *awsLogAdapter) Logf(_ logging.Classification, format string, v ...interface{}) {
-	log.Infof(l.ctx, format, v...)
+	log.Dev.Infof(l.ctx, format, v...)
 }
 
 func newLogAdapter(ctx context.Context) *awsLogAdapter {
@@ -560,7 +564,9 @@ func newLogAdapter(ctx context.Context) *awsLogAdapter {
 	}
 }
 
-var awsVerboseLogging = aws.LogRequestEventMessage | aws.LogResponseEventMessage | aws.LogRetries | aws.LogSigning
+const awsVLevel1Logging = aws.LogRetries | aws.LogDeprecatedUsage
+const awsVLevel2Logging = awsVLevel1Logging | aws.LogRequestEventMessage | aws.LogResponseEventMessage | aws.LogRequest | aws.LogResponse
+const awsVLevel3Logging = awsVLevel2Logging | aws.LogSigning
 
 func constructEndpointURI(endpoint string) (string, error) {
 	parsedURL, err := url.Parse(endpoint)
@@ -586,6 +592,8 @@ func constructEndpointURI(endpoint string) (string, error) {
 // configures the client with it as well as returning it (so the caller can
 // remember it for future calls).
 func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
+	// TODO(jeffswenson): we should include the settings in the cache key so that
+	// changing the cluster settings invalidates the cached instance.
 
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
 	if s.opts.region == "" || s.opts.auth == cloud.AuthParamImplicit {
@@ -605,24 +613,24 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 			Client:             s.storageOptions.ClientName,
 			Cloud:              "aws",
 			InsecureSkipVerify: s.opts.skipTLSVerify,
+			HttpMiddleware:     s.middleware,
 		})
 	if err != nil {
 		return s3Client{}, "", err
 	}
 	addLoadOption(config.WithHTTPClient(client))
-
-	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
-
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
-	if s.opts.verbose {
-		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
+	if s.opts.logMode != 0 {
+		addLoadOption(config.WithClientLogMode(s.opts.logMode))
 	}
-	config.WithRetryer(func() aws.Retryer {
+	addLoadOption(config.WithRetryer(func() aws.Retryer {
 		return retry.NewStandard(func(opts *retry.StandardOptions) {
-			opts.MaxAttempts = retryMaxAttempts
-			opts.Retryables = append(opts.Retryables, &customRetryer{})
+			opts.MaxAttempts = int(maxRetries.Get(&s.settings.SV))
+			if !enableClientRetryTokenBucket.Get(&s.settings.SV) {
+				opts.RateLimiter = ratelimit.None
+			}
 		})
-	})
+	}))
 
 	switch s.opts.auth {
 	case "", cloud.AuthParamSpecified:
@@ -907,7 +915,7 @@ func (s *s3Storage) ReadFile(
 			}
 		} else {
 			if stream.ContentLength == nil {
-				log.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
+				log.Dev.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
 				// Some not-actually-s3 services may not set it, or set it in a way the
 				// official SDK finds it (e.g. if they don't use the expected checksummer)
 				// so try a Size() request.

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -123,8 +124,15 @@ type tableEventFilter map[tableEventType]bool
 
 func (filter tableEventFilter) shouldFilter(
 	ctx context.Context, e TableEvent, targets changefeedbase.Targets,
-) (bool, error) {
+) (ok bool, _ error) {
 	et := classifyTableEvent(e)
+
+	if log.V(2) {
+		log.Changefeed.Infof(ctx, "table event %v classified as %v", e, et)
+		defer func() {
+			log.Changefeed.Infof(ctx, "should filter table event %v: %t", e, ok)
+		}()
+	}
 
 	// Truncation events are not ignored and return an error.
 	if et.Contains(tableEventTruncate) {
@@ -191,21 +199,12 @@ func shouldFilterAddColumnEvent(e TableEvent, targets changefeedbase.Targets) (b
 // notDeclarativeOrHasMergedIndex returns true if the descriptor has a declarative
 // schema changer with a merged index.
 func notDeclarativeOrHasMergedIndex(desc catalog.TableDescriptor) bool {
-	// If there are not declarative schema changes then this will always be
+	// If there are no declarative schema changes then this will always be
 	// true.
 	if desc.GetDeclarativeSchemaChangerState() == nil {
 		return true
 	}
-	// For declarative schema changes detect when a new primary index becomes
-	// WRITE_ONLY (i.e. backfill has been completed).
-	for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
-		if target.GetPrimaryIndex() != nil &&
-			target.TargetStatus == scpb.Status_PUBLIC &&
-			desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] == scpb.Status_WRITE_ONLY {
-			return true
-		}
-	}
-	return false
+	return catalog.HasDeclarativeMergedPrimaryIndex(desc)
 }
 
 // Returns true if the changefeed targets a column which has a drop mutation inside the table event.

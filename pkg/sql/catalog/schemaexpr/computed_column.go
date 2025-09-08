@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -176,7 +176,7 @@ func ValidateColumnHasNoDependents(desc catalog.TableDescriptor, col catalog.Col
 			continue
 		}
 
-		expr, err := parser.ParseExpr(c.GetComputeExpr())
+		expr, err := parserutils.ParseExpr(c.GetComputeExpr())
 		if err != nil {
 			// At this point, we should be able to parse the computed expression.
 			return errors.WithAssertionFailure(err)
@@ -237,7 +237,7 @@ func MakeComputedExprs(
 		}
 	}
 
-	exprs, err := parser.ParseExprs(exprStrings)
+	exprs, err := parserutils.ParseExprs(exprStrings)
 	if err != nil {
 		return nil, catalog.TableColSet{}, err
 	}

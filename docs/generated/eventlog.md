@@ -32,6 +32,11 @@ Events in this category are logged to the `TELEMETRY` channel.
 
 An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED statements that are run.
 
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
+
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -54,6 +59,11 @@ An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED stateme
 
 An event of type `changefeed_canceled` is an event for any changefeed cancellations.
 
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
+
 
 
 
@@ -72,6 +82,11 @@ An event of type `changefeed_canceled` is an event for any changefeed cancellati
 ### `changefeed_emitted_bytes`
 
 An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
+
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |
@@ -99,6 +114,11 @@ An event of type `changefeed_emitted_bytes` is an event representing the bytes e
 An event of type `changefeed_failed` is an event for any changefeed failure since the plan hook
 was triggered.
 
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
+
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -122,6 +142,11 @@ was triggered.
 An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
 successfully starts running. Failed CREATE statements will show up as
 ChangefeedFailed events.
+
+Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `CHANGEFEED` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |
@@ -409,6 +434,35 @@ is shut down inside the same process as the KV layer.
 | `InstanceID` | The ID of the server instance. | no |
 | `TenantName` | The name of the tenant at the time the event was emitted. | yes |
 
+## Contention events
+
+Aggregated information about contention events.
+
+Events in this category are logged to the `SQL_EXEC` channel.
+
+
+### `aggregated_contention_info`
+
+An event of type `aggregated_contention_info` is recorded periodically when contention events
+are resolved.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `WaitingStmtFingerprintId` |  | no |
+| `WaitingTxnFingerprintId` |  | no |
+| `BlockingTxnFingerprintId` |  | no |
+| `ContendedKey` |  | partially |
+| `Duration` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Debugging events
 
 Events in this category pertain to debugging operations performed by
@@ -522,6 +576,7 @@ An event of type `runtime_stats` is recorded every 10 seconds as server health m
 | `GCRunCount` | The total number of GC runs. | no |
 | `NetHostRecvBytes` | The bytes received on all network interfaces since this process started. | no |
 | `NetHostSendBytes` | The bytes sent on all network interfaces since this process started. | no |
+| `GoLimitBytes` | The soft Go memory limit in bytes. | no |
 
 
 #### Common fields
@@ -634,6 +689,7 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 |--|--|--|
 | `SettingName` | The name of the affected cluster setting. | no |
 | `Value` | The new value of the cluster setting. | yes |
+| `DefaultValue` | The current default value of the cluster setting. | yes |
 
 
 #### Common fields
@@ -2769,6 +2825,11 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
+In version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `SQL_PERF`.
+
 Events in this category are logged to the `SQL_PERF` channel.
 
 
@@ -2898,6 +2959,11 @@ SQL statements.
 Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
+
+In version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `SQL_INTERNAL_PERF`.
 
 Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
@@ -3362,6 +3428,11 @@ Fields in this struct should be updated in sync with apps_stats.proto.
 An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
 contains common SQL event/execution details.
 
+Note: in version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `TELEMETRY`.
+
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -3469,6 +3540,11 @@ contains common SQL event/execution details.
 ### `sampled_transaction`
 
 An event of type `sampled_transaction` is the event logged to telemetry at the end of transaction execution.
+
+Note: in version 26.1, these events will be moved to the `SQL_EXEC` channel.
+To test compatability before this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to false. This will send the
+events to `SQL_EXEC` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |

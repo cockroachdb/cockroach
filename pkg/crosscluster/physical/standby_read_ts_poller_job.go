@@ -134,7 +134,7 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 			}
 			tenantID, replicatedTime, err := tenantInfoAccessor.ReadFromTenantInfo(ctx)
 			if err != nil {
-				log.Warningf(ctx, "failed to read tenant info of tenant {%d}: %v", tenantID, err)
+				log.Dev.Warningf(ctx, "failed to read tenant info of tenant {%d}: %v", tenantID, err)
 				continue
 			}
 			// No need to call SetupOrAdvanceStandbyReaderCatalog() if
@@ -143,7 +143,7 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 				continue
 			}
 			if log.V(1) {
-				log.Infof(ctx, "attempting to advance reader tenant catalog to %s",
+				log.Dev.Infof(ctx, "attempting to advance reader tenant catalog to %s",
 					replicatedTime)
 			}
 			previousReplicatedTimestamp = replicatedTime
@@ -154,12 +154,12 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 				execCfg.InternalDB,
 				execCfg.Settings,
 			); err != nil {
-				log.Warningf(ctx, "failed to advance replicated timestamp for reader tenant {%d}: %v", tenantID, err)
+				log.Dev.Warningf(ctx, "failed to advance replicated timestamp for reader tenant {%d}: %v", tenantID, err)
 			} else {
 				if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					return r.job.ProgressStorage().Set(ctx, txn, math.NaN(), replicatedTime)
 				}); err != nil {
-					log.Warningf(ctx, "failed to set standby poller job read time %v", err)
+					log.Dev.Warningf(ctx, "failed to set standby poller job read time %v", err)
 				}
 			}
 		}

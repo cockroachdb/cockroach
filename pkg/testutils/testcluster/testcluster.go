@@ -154,7 +154,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	// serially when we lose quorum (2 out of 3 servers have stopped) the last
 	// server may never finish due to waiting for a Raft command that can't
 	// commit due to the lack of quorum.
-	log.Infof(ctx, "TestCluster quiescing nodes")
+	log.Dev.Infof(ctx, "TestCluster quiescing nodes")
 	var wg sync.WaitGroup
 	wg.Add(len(tc.mu.serverStoppers))
 	for i, s := range tc.mu.serverStoppers {
@@ -995,7 +995,7 @@ func (tc *TestCluster) waitForNewReplicas(
 			// snapshot has been transferred and the descriptor initialized.
 			store, err := tc.findMemberStore(target.StoreID)
 			if err != nil {
-				log.Errorf(context.TODO(), "unexpected error: %s", err)
+				log.Dev.Errorf(context.TODO(), "unexpected error: %s", err)
 				return err
 			}
 			repl := store.LookupReplica(rKey)
@@ -1269,7 +1269,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		if err != nil {
 			return err
 		}
-		log.Infof(ctx, "test: advancing clock to lease expiration")
+		log.Dev.Infof(ctx, "test: advancing clock to lease expiration")
 		manual.Increment(lhStore.GetStoreConfig().LeaseExpiration())
 
 		// Heartbeat the destination server's liveness record so that if we are
@@ -1287,7 +1287,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		}
 		ls, err := r.TestingAcquireLease(ctx)
 		if err != nil {
-			log.Infof(ctx, "TestingAcquireLease failed: %s", err)
+			log.Dev.Infof(ctx, "TestingAcquireLease failed: %s", err)
 			if lErr := (*kvpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) && lErr.Lease != nil {
 				newLease = lErr.Lease
 			} else {
@@ -1315,7 +1315,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		}
 		return nil
 	}, 3*testutils.SucceedsSoonDuration())
-	log.Infof(ctx, "MoveRangeLeaseNonCooperatively: acquired lease: %s. err: %v", newLease, err)
+	log.Dev.Infof(ctx, "MoveRangeLeaseNonCooperatively: acquired lease: %s. err: %v", newLease, err)
 	return newLease, err
 }
 
@@ -1333,7 +1333,7 @@ func (tc *TestCluster) ensureLeaderStepsDown(
 
 	// Wait until we find a leader for the range, and record it.
 	testutils.SucceedsSoon(t, func() error {
-		log.Infof(ctx, "waiting for a leader to step up")
+		log.Dev.Infof(ctx, "waiting for a leader to step up")
 		for _, s := range tc.Servers {
 			curStore, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 			if err != nil {
@@ -1346,7 +1346,7 @@ func (tc *TestCluster) ensureLeaderStepsDown(
 			}
 
 			if curR.RaftStatus().RaftState == raftpb.StateLeader {
-				log.Infof(ctx, "current leader is %v at term: %d", curR.RaftStatus().ID,
+				log.Dev.Infof(ctx, "current leader is %v at term: %d", curR.RaftStatus().ID,
 					curR.RaftStatus().Term)
 				leaderStore = curStore
 				leaderNode = s
@@ -1374,7 +1374,7 @@ func (tc *TestCluster) ensureLeaderStepsDown(
 			})
 
 	// Advance the manual clock past the lease's expiration.
-	log.Infof(ctx, "test: advancing clock to lease expiration")
+	log.Dev.Infof(ctx, "test: advancing clock to lease expiration")
 	manual.Increment(leaderStore.GetStoreConfig().LeaseExpiration())
 
 	// Wait for the leader to step down. Sometimes this might take a while since
@@ -1559,12 +1559,12 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store
 // TODO(andrei): This method takes inexplicably long.
 // I think it shouldn't need any retries. See #38565.
 func (tc *TestCluster) WaitForFullReplication() error {
-	log.Infof(context.TODO(), "WaitForFullReplication")
+	log.Dev.Infof(context.TODO(), "WaitForFullReplication")
 	start := timeutil.Now()
 	defer func() {
 		took := timeutil.Since(start)
 		debugTimings.WaitForRepDuration.Add(took.Nanoseconds())
-		log.Infof(context.TODO(), "WaitForFullReplication took: %s", took)
+		log.Dev.Infof(context.TODO(), "WaitForFullReplication took: %s", took)
 	}()
 
 	if len(tc.Servers) < 3 {
@@ -1584,30 +1584,30 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		for _, s := range tc.Servers {
 			err := s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				if n := s.ClusterNodeCount(); n != len(tc.Servers) {
-					log.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
+					log.Dev.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
 					notReplicated = true
 					return nil
 				}
 				// Force upreplication. Otherwise, if we rely on the scanner to do it,
 				// it'll take a while.
 				if err := s.ForceReplicationScanAndProcess(); err != nil {
-					log.Infof(context.TODO(), "%v", err)
+					log.Dev.Infof(context.TODO(), "%v", err)
 					notReplicated = true
 					return nil
 				}
 				if err := s.ComputeMetrics(context.TODO()); err != nil {
 					// This can sometimes fail since ComputeMetrics calls
 					// updateReplicationGauges which needs the system config gossiped.
-					log.Infof(context.TODO(), "%v", err)
+					log.Dev.Infof(context.TODO(), "%v", err)
 					notReplicated = true
 					return nil
 				}
 				if n := s.Metrics().UnderReplicatedRangeCount.Value(); n > 0 {
-					log.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
+					log.Dev.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
 					notReplicated = true
 				}
 				if n := s.Metrics().OverReplicatedRangeCount.Value(); n > 0 {
-					log.Infof(context.TODO(), "%s has %d overreplicated ranges", s, n)
+					log.Dev.Infof(context.TODO(), "%s has %d overreplicated ranges", s, n)
 					notReplicated = true
 				}
 				return nil
@@ -1793,7 +1793,7 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 			} else {
 				results[i], err = valRes.Value.GetInt()
 				if err != nil {
-					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value, key, err)
+					log.Dev.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value, key, err)
 				}
 			}
 			return nil

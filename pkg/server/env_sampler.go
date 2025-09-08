@@ -97,7 +97,7 @@ func startSampleEnvironment(
 			// to the current directory (.). If running the process
 			// from a directory which is not writable, we won't
 			// be able to create a sub-directory here.
-			log.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
+			log.Dev.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
 			hasValidDumpDir = false
 		}
 		if hasValidDumpDir {
@@ -125,7 +125,7 @@ func startSampleEnvironment(
 			// to the current directory (.). If wrunning the process
 			// from a directory which is not writable, we won't
 			// be able to create a sub-directory here.
-			log.Warningf(ctx, "cannot create memory dump dir -- memory profile dumps will be disabled: %v", err)
+			log.Dev.Warningf(ctx, "cannot create memory dump dir -- memory profile dumps will be disabled: %v", err)
 			hasValidDumpDir = false
 		}
 
@@ -149,22 +149,23 @@ func startSampleEnvironment(
 			}
 			queryProfiler, err = profiler.NewActiveQueryProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
-				log.Warningf(ctx, "failed to start query profiler worker: %v", err)
+				log.Dev.Warningf(ctx, "failed to start query profiler worker: %v", err)
 			}
 			cpuProfiler, err = profiler.NewCPUProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
 			if err != nil {
-				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
+				log.Dev.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
 		}
 	}
 
 	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName)
 	if err != nil {
-		log.Warningf(ctx, "failed to initialize flight recorder: %v", err)
-	}
-	err = simpleFlightRecorder.Start(ctx, cfg.stopper)
-	if err != nil {
-		log.Warningf(ctx, "failed to start flight recorder: %v", err)
+		log.Dev.Warningf(ctx, "failed to initialize flight recorder: %v", err)
+	} else {
+		err = simpleFlightRecorder.Start(ctx, cfg.stopper)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to start flight recorder: %v", err)
+		}
 	}
 
 	return cfg.stopper.RunAsyncTaskEx(ctx,

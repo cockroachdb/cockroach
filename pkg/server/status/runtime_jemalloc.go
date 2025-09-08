@@ -140,12 +140,12 @@ func getJemallocStats(ctx context.Context) (cgoAlloc uint, cgoTotal uint, _ erro
 		for i := 0; i < v.NumField(); i++ {
 			stats[i] = t.Field(i).Name + ": " + humanize.IBytes(uint64(v.Field(i).Interface().(C.size_t)))
 		}
-		log.Infof(ctx, "jemalloc stats: %s", redact.Safe(strings.Join(stats, " ")))
+		log.Dev.Infof(ctx, "jemalloc stats: %s", redact.Safe(strings.Join(stats, " ")))
 	}
 
 	// NB: the `!V(MaxInt32)` condition is a workaround to not spew this to the
 	// logs whenever log interception (log spy) is active. If we refactored
-	// je_malloc_stats_print to return a string that we can `log.Infof` instead,
+	// je_malloc_stats_print to return a string that we can `log.Dev.Infof` instead,
 	// we wouldn't need this.
 	if log.V(1) && !log.V(math.MaxInt32) {
 		if log.V(3) {
@@ -221,8 +221,8 @@ func jemallocMaybePurge(
 	// C.jemalloc_stats_print_abbreviated()
 	res, err := C.jemalloc_purge()
 	if err != nil || res != 0 {
-		log.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
+		log.Dev.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
 	} else {
-		log.Infof(ctx, "jemalloc arenas purged (took %s)", thisPurge.Elapsed())
+		log.Dev.Infof(ctx, "jemalloc arenas purged (took %s)", thisPurge.Elapsed())
 	}
 }

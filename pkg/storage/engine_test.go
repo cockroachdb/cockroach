@@ -16,7 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -763,7 +763,7 @@ func TestEngineScan1(t *testing.T) {
 	for i, t := range testCases {
 		sortedKeys[i] = string(t.key.Key)
 	}
-	sort.Strings(sortedKeys)
+	slices.Sort(sortedKeys)
 
 	keyvals, err := Scan(context.Background(), engine, roachpb.Key("chinese"), roachpb.Key("german"), 0)
 	if err != nil {
@@ -1072,7 +1072,10 @@ func TestCreateCheckpoint(t *testing.T) {
 }
 
 func mustInitTestEnv(t testing.TB, baseFS vfs.FS, dir string) *fs.Env {
-	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{}, nil /* statsCollector */)
+	settings := cluster.MakeTestingClusterSettings()
+	e, err := fs.InitEnv(context.Background(), baseFS, dir, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	require.NoError(t, err)
 	return e
 }
@@ -1308,7 +1311,7 @@ func TestEngineFS(t *testing.T) {
 			if err != nil {
 				break
 			}
-			sort.Strings(result)
+			slices.Sort(result)
 			got := strings.Join(result, ",")
 			want := s[3]
 			if got != want {
@@ -1457,7 +1460,7 @@ func TestFS(t *testing.T) {
 				t.Helper()
 
 				got, err := e.List(dir)
-				sort.Strings(got)
+				slices.Sort(got)
 				require.NoError(t, err)
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("e.List(%q) = %#v, want %#v", dir, got, want)
@@ -1607,7 +1610,7 @@ func TestScanLocks(t *testing.T) {
 	for k := range locks {
 		keys = append(keys, roachpb.Key(k))
 	}
-	sort.Slice(keys, func(i, j int) bool { return bytes.Compare(keys[i], keys[j]) < 0 })
+	slices.SortFunc(keys, roachpb.Key.Compare)
 
 	testcases := map[string]struct {
 		from        roachpb.Key

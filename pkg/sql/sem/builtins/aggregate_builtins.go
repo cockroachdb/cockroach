@@ -1996,7 +1996,7 @@ type arrayCatAggregate struct {
 	acc mon.BoundAccount
 	// seenNonNull tracks whether at least one non-NULL datum was added. This is
 	// needed to handle a case of only empty arrays added correctly (we want to
-	// return an empty array too rather that NULL).
+	// return an empty array too rather than NULL).
 	seenNonNull bool
 }
 

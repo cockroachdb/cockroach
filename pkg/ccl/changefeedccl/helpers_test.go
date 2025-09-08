@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -27,10 +26,10 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -116,15 +117,15 @@ func readNextMessages(
 			return nil, ctx.Err()
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "about to read a message (%d out of %d)", len(actual), numMessages)
+			log.Changefeed.Infof(context.Background(), "about to read a message (%d out of %d)", len(actual), numMessages)
 		}
 		m, err := f.Next()
 		if log.V(1) {
 			if m != nil {
-				log.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
+				log.Changefeed.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
 					m.Topic, m.Key, m.Value, m.Resolved, timeutil.Since(lastMessage))
 			} else {
-				log.Infof(context.Background(), `err %v`, err)
+				log.Changefeed.Infof(context.Background(), `err %v`, err)
 			}
 		}
 		lastMessage = timeutil.Now()
@@ -358,7 +359,7 @@ func assertPayloadsBaseErr(
 	}()
 
 	if log.V(1) {
-		log.Infof(ctx, "expected messages: \n%s", strings.Join(expected, "\n"))
+		log.Changefeed.Infof(ctx, "expected messages: \n%s", strings.Join(expected, "\n"))
 	}
 
 	actual, err := readNextMessages(ctx, f, len(expected))
@@ -385,7 +386,7 @@ func assertPayloadsBaseErr(
 	}
 
 	var actualFormatted []string
-	for _, m := range actual {
+	for i, m := range actual {
 		if useProtobuf {
 			var msg changefeedpb.Message
 			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
@@ -403,6 +404,11 @@ func assertPayloadsBaseErr(
 				if err != nil {
 					return err
 				}
+			case *changefeedpb.Message_Enriched:
+				m.Value, err = gojson.Marshal(env.Enriched)
+				if err != nil {
+					return err
+				}
 
 			default:
 				return errors.Newf("unexpected message type: %T", env)
@@ -415,6 +421,7 @@ func assertPayloadsBaseErr(
 			if err != nil {
 				return err
 			}
+			actual[i] = m
 		}
 		actualFormatted = append(actualFormatted, m.String())
 
@@ -931,6 +938,7 @@ func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
 		`connection reset by peer`,
 		`knobs.RaiseRetryableError`,
 		`test error`,
+		`context canceled`,
 	}
 	shouldIgnoreErr := func(err error) bool {
 		if err == nil || errors.Is(err, context.Canceled) {
@@ -1718,68 +1726,20 @@ func forceTableGC(
 	}
 }
 
-// All structured logs should contain this property which stores the snake_cased
-// version of the name of the message struct
-type BaseEventStruct struct {
-	EventType string
-}
-
-var cmLogRe = regexp.MustCompile(`event_log\.go`)
-
-func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []string {
-	var matchingEntries []string
-	testutils.SucceedsSoon(t, func() error {
-		log.FlushFiles()
-		entries, err := log.FetchEntriesFromFiles(startTime,
-			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for _, e := range entries {
-			jsonPayload := []byte(e.Message)
-			var baseStruct BaseEventStruct
-			if err := gojson.Unmarshal(jsonPayload, &baseStruct); err != nil {
-				continue
-			}
-			if baseStruct.EventType != eventType {
-				continue
-			}
-
-			matchingEntries = append(matchingEntries, e.Message)
-		}
-
-		return nil
-	})
-
-	return matchingEntries
-}
-
-func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedEmittedBytes {
-	logs := checkStructuredLogs(t, "changefeed_emitted_bytes", startTime)
-	matchingEntries := make([]eventpb.ChangefeedEmittedBytes, len(logs))
-
-	for i, m := range logs {
-		jsonPayload := []byte(m)
-		var event eventpb.ChangefeedEmittedBytes
-		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
-			t.Errorf("unmarshalling %q: %v", m, err)
-		}
-		matchingEntries[i] = event
-	}
-
-	return matchingEntries
-}
-
 // verifyLogsWithEmittedBytes fetches changefeed_emitted_bytes telemetry logs produced
 // after startTime for a particular job and asserts that at least one message has positive emitted bytes.
 // This function also asserts the LoggingInterval and Closing fields of
 // each message.
 func verifyLogsWithEmittedBytesAndMessages(
-	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
+	t *testing.T,
+	jobID jobspb.JobID,
+	logSpy *logtestutils.StructuredLogSpy[eventpb.ChangefeedEmittedBytes],
+	sv *settings.Values,
+	interval int64,
+	closing bool,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		emittedBytesLogs := checkContinuousChangefeedLogs(t, startTime)
+		emittedBytesLogs := logSpy.GetUnreadLogs(getChangefeedLoggingChannel(sv))
 		if len(emittedBytesLogs) == 0 {
 			return errors.New("no logs found")
 		}
@@ -1803,37 +1763,6 @@ func verifyLogsWithEmittedBytesAndMessages(
 		}
 		return nil
 	})
-}
-
-func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {
-	return checkStructuredChangefeedLogs[eventpb.CreateChangefeed](t, `create_changefeed`, startTime)
-}
-
-func checkAlterChangefeedLogs(t *testing.T, startTime int64) []eventpb.AlterChangefeed {
-	return checkStructuredChangefeedLogs[eventpb.AlterChangefeed](t, `alter_changefeed`, startTime)
-}
-
-func checkChangefeedFailedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedFailed {
-	return checkStructuredChangefeedLogs[eventpb.ChangefeedFailed](t, `changefeed_failed`, startTime)
-}
-
-func checkChangefeedCanceledLogs(t *testing.T, startTime int64) []eventpb.ChangefeedCanceled {
-	return checkStructuredChangefeedLogs[eventpb.ChangefeedCanceled](t, `changefeed_canceled`, startTime)
-}
-
-func checkStructuredChangefeedLogs[E any](t *testing.T, name string, startTime int64) []E {
-	var matchingEntries []E
-
-	for _, m := range checkStructuredLogs(t, name, startTime) {
-		jsonPayload := []byte(m)
-		var event E
-		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
-			t.Errorf("unmarshalling %q: %v", m, err)
-		}
-		matchingEntries = append(matchingEntries, event)
-	}
-
-	return matchingEntries
 }
 
 func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKey string) {

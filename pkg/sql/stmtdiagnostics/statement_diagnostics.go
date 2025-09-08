@@ -186,7 +186,7 @@ func (r *Registry) poll(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
+				log.Dev.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
 			}
 			lastPoll = timeutil.Now()
 		}
@@ -207,6 +207,33 @@ func (r *Registry) poll(ctx context.Context) {
 			return
 		}
 		poll()
+	}
+}
+
+type StmtDiagnostic struct {
+	requestID       RequestID
+	req             Request
+	stmtFingerprint string
+	stmt            string
+	bundle          []byte
+	collectionErr   error
+}
+
+func NewStmtDiagnostic(
+	requestID RequestID,
+	req Request,
+	stmtFingerprint string,
+	stmt string,
+	bundle []byte,
+	collectionErr error,
+) StmtDiagnostic {
+	return StmtDiagnostic{
+		requestID:       requestID,
+		req:             req,
+		stmtFingerprint: stmtFingerprint,
+		stmt:            stmt,
+		bundle:          bundle,
+		collectionErr:   collectionErr,
 	}
 }
 
@@ -553,127 +580,137 @@ func (r *Registry) InsertStatementDiagnostics(
 	var diagID CollectedInstanceID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("stmt-diag-insert-bundle")
-		if requestID != 0 {
-			row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
-				requestID)
-			if err != nil {
-				return err
-			}
-			if row == nil {
-				return errors.New("failed to check completed statement diagnostics")
-			}
-			cnt := int(*row[0].(*tree.DInt))
-			if cnt == 0 {
-				// Someone else already marked the request as completed. We've traced for nothing.
-				// This can only happen once per node, per request since we're going to
-				// remove the request from the registry.
-				return nil
-			}
-		}
-
-		// Generate the values that will be inserted.
-		errorVal := tree.DNull
-		if collectionErr != nil {
-			errorVal = tree.NewDString(collectionErr.Error())
-		}
-
-		bundleChunksVal := tree.NewDArray(types.Int)
-		bundleToUpload := bundle
-		for len(bundleToUpload) > 0 {
-			chunkSize := int(bundleChunkSize.Get(&r.st.SV))
-			chunk := bundleToUpload
-			if len(chunk) > chunkSize {
-				chunk = chunk[:chunkSize]
-			}
-			bundleToUpload = bundleToUpload[len(chunk):]
-
-			// Insert the chunk into system.statement_bundle_chunks.
-			row, err := txn.QueryRowEx(
-				ctx, "stmt-bundle-chunks-insert", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
-				"statement diagnostics bundle",
-				tree.NewDBytes(tree.DBytes(chunk)),
-			)
-			if err != nil {
-				return err
-			}
-			if row == nil {
-				return errors.New("failed to check statement bundle chunk")
-			}
-			chunkID := row[0].(*tree.DInt)
-			if err := bundleChunksVal.Append(chunkID); err != nil {
-				return err
-			}
-		}
-
-		collectionTime := timeutil.Now()
-
-		// Insert the collection metadata into system.statement_diagnostics.
-		row, err := txn.QueryRowEx(
-			ctx, "stmt-diag-insert", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"INSERT INTO system.statement_diagnostics "+
-				"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
-				"VALUES ($1, $2, $3, $4, $5) RETURNING id",
-			stmtFingerprint, stmt, collectionTime, bundleChunksVal, errorVal,
-		)
+		id, err := r.innerInsertStatementDiagnostics(ctx, NewStmtDiagnostic(requestID, req, stmtFingerprint, stmt, bundle, collectionErr), txn)
 		if err != nil {
 			return err
 		}
-		if row == nil {
-			return errors.New("failed to insert statement diagnostics")
-		}
-		diagID = CollectedInstanceID(*row[0].(*tree.DInt))
-
-		if requestID != 0 {
-			// Link the request from system.statement_diagnostics_request to the
-			// diagnostic ID we just collected, marking it as completed if we're
-			// able.
-			shouldMarkCompleted := true
-			if collectUntilExpiration.Get(&r.st.SV) {
-				// Two other conditions need to hold true for us to continue
-				// capturing future traces, i.e. not mark this request as
-				// completed.
-				// - Requests need to be of the sampling sort (also implies
-				//   there's a latency threshold) -- a crude measure to prevent
-				//   against unbounded collection;
-				// - Requests need to have an expiration set -- same reason as
-				// above.
-				if req.samplingProbability > 0 && !req.expiresAt.IsZero() {
-					shouldMarkCompleted = false
-				}
-			}
-			_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"UPDATE system.statement_diagnostics_requests "+
-					"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
-				shouldMarkCompleted, diagID, requestID)
-			if err != nil {
-				return err
-			}
-		} else {
-			// Insert a completed request into system.statement_diagnostics_request.
-			// This is necessary because the UI uses this table to discover completed
-			// diagnostics.
-			//
-			// This bundle was collected via explicit EXPLAIN ANALYZE (DEBUG).
-			_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"INSERT INTO system.statement_diagnostics_requests"+
-					" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
-					" VALUES (true, $1, $2, $3)",
-				stmtFingerprint, diagID, collectionTime)
-			if err != nil {
-				return err
-			}
-		}
+		diagID = id
 		return nil
 	})
+
+	return diagID, err
+}
+
+func (r *Registry) innerInsertStatementDiagnostics(
+	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn,
+) (CollectedInstanceID, error) {
+	var diagID CollectedInstanceID
+	if diagnostic.requestID != 0 {
+		row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
+			diagnostic.requestID)
+		if err != nil {
+			return diagID, err
+		}
+		if row == nil {
+			return diagID, errors.New("failed to check completed statement diagnostics")
+		}
+		cnt := int(*row[0].(*tree.DInt))
+		if cnt == 0 {
+			// Someone else already marked the request as completed. We've traced for nothing.
+			// This can only happen once per node, per request since we're going to
+			// remove the request from the registry.
+			return diagID, nil
+		}
+	}
+
+	// Generate the values that will be inserted.
+	errorVal := tree.DNull
+	if diagnostic.collectionErr != nil {
+		errorVal = tree.NewDString(diagnostic.collectionErr.Error())
+	}
+
+	bundleChunksVal := tree.NewDArray(types.Int)
+	bundleToUpload := diagnostic.bundle
+	for len(bundleToUpload) > 0 {
+		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
+		chunk := bundleToUpload
+		if len(chunk) > chunkSize {
+			chunk = chunk[:chunkSize]
+		}
+		bundleToUpload = bundleToUpload[len(chunk):]
+
+		// Insert the chunk into system.statement_bundle_chunks.
+		row, err := txn.QueryRowEx(
+			ctx, "stmt-bundle-chunks-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
+			"statement diagnostics bundle",
+			tree.NewDBytes(tree.DBytes(chunk)),
+		)
+		if err != nil {
+			return diagID, err
+		}
+		if row == nil {
+			return diagID, errors.New("failed to check statement bundle chunk")
+		}
+		chunkID := row[0].(*tree.DInt)
+		if err := bundleChunksVal.Append(chunkID); err != nil {
+			return diagID, err
+		}
+	}
+
+	collectionTime := timeutil.Now()
+
+	// Insert the collection metadata into system.statement_diagnostics.
+	row, err := txn.QueryRowEx(
+		ctx, "stmt-diag-insert", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		"INSERT INTO system.statement_diagnostics "+
+			"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
+			"VALUES ($1, $2, $3, $4, $5) RETURNING id",
+		diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal,
+	)
 	if err != nil {
-		return 0, err
+		return diagID, err
+	}
+	if row == nil {
+		return diagID, errors.New("failed to insert statement diagnostics")
+	}
+	diagID = CollectedInstanceID(*row[0].(*tree.DInt))
+
+	if diagnostic.requestID != 0 {
+		// Link the request from system.statement_diagnostics_request to the
+		// diagnostic ID we just collected, marking it as completed if we're
+		// able.
+		shouldMarkCompleted := true
+		if collectUntilExpiration.Get(&r.st.SV) {
+			// Two other conditions need to hold true for us to continue
+			// capturing future traces, i.e. not mark this request as
+			// completed.
+			// - Requests need to be of the sampling sort (also implies
+			//   there's a latency threshold) -- a crude measure to prevent
+			//   against unbounded collection;
+			// - Requests need to have an expiration set -- same reason as
+			// above.
+			if diagnostic.req.samplingProbability > 0 && !diagnostic.req.expiresAt.IsZero() {
+				shouldMarkCompleted = false
+			}
+		}
+		_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"UPDATE system.statement_diagnostics_requests "+
+				"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
+			shouldMarkCompleted, diagID, diagnostic.requestID)
+		if err != nil {
+			return diagID, err
+		}
+	} else {
+		// Insert a completed request into system.statement_diagnostics_request.
+		// This is necessary because the UI uses this table to discover completed
+		// diagnostics.
+		//
+		// This bundle was collected via explicit EXPLAIN ANALYZE (DEBUG).
+		_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.statement_diagnostics_requests"+
+				" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
+				" VALUES (true, $1, $2, $3)",
+			diagnostic.stmtFingerprint, diagID, collectionTime)
+		if err != nil {
+			return diagID, err
+		}
 	}
 	return diagID, nil
 }
@@ -739,7 +776,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if prob, ok := row[4].(*tree.DFloat); ok {
 			samplingProbability = float64(*prob)
 			if samplingProbability < 0 || samplingProbability > 1 {
-				log.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
+				log.Dev.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
 					id, samplingProbability)
 				samplingProbability = 1.0
 			}

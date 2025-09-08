@@ -26,27 +26,37 @@ type ReplicaPlacement []Ratio
 // findReplicaPlacementForEveryStoreSet finds the replica placement for every
 // store set. We are overloading the Weight field here to calculate the actual
 // number of ranges to place with the given ratio.
-func (pr ReplicaPlacement) findReplicaPlacementForEveryStoreSet(numRanges int) {
+func (pr ReplicaPlacement) findReplicaPlacementForEveryStoreSet(
+	numRanges int,
+) []RatioWithRangesCount {
+	result := make([]RatioWithRangesCount, len(pr))
 	totalWeight := 0
 	for i := 0; i < len(pr); i++ {
 		totalWeight += pr[i].Weight
 	}
+	if totalWeight == 0 {
+		panic(fmt.Sprintf("zero total weight: %v", pr))
+	}
 	totalRangesToAllocate := numRanges
 	for i := 0; i < len(pr); i++ {
-		pr[i].Weight = int(float64(pr[i].Weight) * float64(numRanges) / float64(totalWeight))
-		totalRangesToAllocate -= pr[i].Weight
+		result[i] = RatioWithRangesCount{
+			Ratio:  pr[i],
+			Ranges: int(float64(pr[i].Weight) * float64(numRanges) / float64(totalWeight)),
+		}
+		totalRangesToAllocate -= result[i].Ranges
 	}
 	// Distribute the remaining ranges evenly across all ratios.
 	for i := 0; i < totalRangesToAllocate; i++ {
-		pr[i%len(pr)].Weight += 1
+		result[i%len(result)].Ranges += 1
 	}
+	return result
 }
 
-// Ratio struct to represent weight and store IDs
+// Ratio struct to represent weight and store IDs. All fields should be
+// read-only so that we can reuse the state across simulation runs.
 type Ratio struct {
 	// Weight is the relative weight of this ratio. It is used to calculate the
-	// number of ranges to place with the given ratio. findReplicaPlacementForEveryStoreSet
-	// later re-assigns the Weight field to the actual number of ranges to place.
+	// number of ranges to place with the given ratio.
 	Weight int
 	// StoreIDs is the list of store IDs to place replicas on.
 	StoreIDs []int
@@ -58,7 +68,21 @@ type Ratio struct {
 	LeaseholderID int
 }
 
-func (r Ratio) String() string {
+// RatioWithRangesCount wraps read-only Ratio with a mutable field to represent
+// the number of ranges to place with this ratio.
+// findReplicaPlacementForEveryStoreSet assigns the field based on the actual
+// number of ranges to place computed based on Ratio.
+type RatioWithRangesCount struct {
+	Ratio
+	// Ranges is the number of ranges to place with this ratio.
+	Ranges int
+}
+
+func (r RatioWithRangesCount) String() string {
+	return "{" + r.storeAndTypes() + "}:" + strconv.Itoa(r.Ranges)
+}
+
+func (r Ratio) storeAndTypes() string {
 	storeAndTypes := make([]string, len(r.StoreIDs))
 	for i := range r.StoreIDs {
 		s := "s" + strconv.Itoa(r.StoreIDs[i]) + ":"
@@ -73,7 +97,11 @@ func (r Ratio) String() string {
 		}
 		storeAndTypes[i] = s
 	}
-	return "{" + strings.Join(storeAndTypes, ",") + "}:" + strconv.Itoa(r.Weight)
+	return strings.Join(storeAndTypes, ",")
+}
+
+func (r Ratio) String() string {
+	return "{" + r.storeAndTypes() + "}:" + strconv.Itoa(r.Weight)
 }
 
 func (pr ReplicaPlacement) String() string {

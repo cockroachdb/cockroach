@@ -8,6 +8,7 @@ package upgrades
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -16,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -79,7 +79,7 @@ func upgradeDescriptors(
 	batchSize := 100
 	// Any batch size below this will use high priority.
 	const HighPriBatchSize = 25
-	repairBatchTimeLimit := lease.LeaseDuration.Get(&d.Settings.SV)
+	repairBatchTimeLimit := 1 * time.Minute
 	currentIdx := 0
 	idsToRewrite := ids.Ordered()
 	for currentIdx <= len(idsToRewrite) {
@@ -102,7 +102,18 @@ func upgradeDescriptors(
 				b := txn.KV().NewBatch()
 				for _, mut := range muts {
 					if !mut.GetPostDeserializationChanges().HasChanges() {
-						continue
+						// In the upgrade to 25.4, we do a one-time rewrite of all
+						// descriptors in order to upgrade them to use the new type
+						// serialization format.
+						// See https://github.com/cockroachdb/cockroach/issues/152629.
+						if d.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+							continue
+						}
+						// Skip the unconditional rewrite if this is a database descriptor,
+						// as those never reference types.
+						if mut.DescriptorType() == catalog.Database {
+							continue
+						}
 					}
 					key := catalogkeys.MakeDescMetadataKey(d.Codec, mut.GetID())
 					b.CPut(key, mut.DescriptorProto(), mut.GetRawBytesInStorage())
@@ -116,7 +127,7 @@ func upgradeDescriptors(
 			if kv.IsAutoRetryLimitExhaustedError(err) ||
 				errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 				batchSize = max(batchSize/2, 1)
-				log.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
+				log.Dev.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
 					batchSize,
 					batchSize <= HighPriBatchSize)
 				continue
@@ -196,7 +207,7 @@ func FirstUpgradeFromReleasePrecondition(
 		return err
 	} else if hasRows {
 		// Attempt to repair catalog corruptions in batches.
-		log.Info(ctx, "auto-repairing catalog corruptions detected during upgrade attempt")
+		log.Dev.Info(ctx, "auto-repairing catalog corruptions detected during upgrade attempt")
 		var n int
 		const repairQuery = `
 SELECT
@@ -215,7 +226,7 @@ WHERE
 		batchSize := 100
 		// Any batch size below this will use high priority.
 		const HighPriBatchSize = 25
-		repairBatchTimeLimit := lease.LeaseDuration.Get(&d.Settings.SV)
+		repairBatchTimeLimit := 1 * time.Minute
 		for {
 			var rowsUpdated tree.DInt
 			err := timeutil.RunWithTimeout(ctx, "descriptor-repair", repairBatchTimeLimit, func(ctx context.Context) error {
@@ -245,7 +256,7 @@ WHERE
 				if kv.IsAutoRetryLimitExhaustedError(err) ||
 					errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 					batchSize = max(batchSize/2, 1)
-					log.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
+					log.Dev.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
 						batchSize,
 						batchSize <= HighPriBatchSize)
 					continue
@@ -257,14 +268,14 @@ WHERE
 				break
 			}
 			n += int(rowsUpdated)
-			log.Infof(ctx, "repaired %d catalog corruptions", rowsUpdated)
+			log.Dev.Infof(ctx, "repaired %d catalog corruptions", rowsUpdated)
 		}
 		if n == 0 {
-			log.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
+			log.Dev.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
 		} else {
 			// Repairs have actually been performed: stop all time travel henceforth.
 			withAOST = false
-			log.Infof(ctx, "%d catalog corruptions have been repaired in total", n)
+			log.Dev.Infof(ctx, "%d catalog corruptions have been repaired in total", n)
 		}
 	}
 	// Check for all known catalog corruptions.

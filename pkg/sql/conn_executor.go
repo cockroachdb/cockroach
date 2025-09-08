@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -430,6 +429,9 @@ type ServerMetrics struct {
 
 	// InsightsMetrics contains metrics related to outlier detection.
 	InsightsMetrics insights.Metrics
+
+	// IngesterMetrics contains metrics related to SQL stats ingestion.
+	IngesterMetrics sslocal.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -444,6 +446,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
+		nil, /* discardedStatsCount */
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -454,11 +457,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
+		serverMetrics.StatsMetrics.DiscardedStatsCount,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
-	sqlStatsIngester := sslocal.NewSQLStatsIngester(cfg.SQLStatsTestingKnobs, insightsProvider)
+	sqlStatsIngester := sslocal.NewSQLStatsIngester(
+		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, insightsProvider, localSQLStats)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -672,6 +677,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 		InsightsMetrics:            insights.NewMetrics(),
+		IngesterMetrics:            sslocal.NewIngesterMetrics(),
 	}
 }
 
@@ -905,7 +911,7 @@ func (s *Server) SetupConn(
 		}
 		return nil
 	}); err != nil {
-		log.Errorf(ctx, "error setting up client session: %s", err)
+		log.Dev.Errorf(ctx, "error setting up client session: %s", err)
 		return ConnectionHandler{}, err
 	}
 
@@ -1018,12 +1024,12 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 	name := strings.ToLower(varName)
 	v, ok := varGen[name]
 	if !ok {
-		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
+		log.Dev.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
 	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorIterator.sessionDataMutatorBase)
 	if !hasDefault {
-		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
+		log.Dev.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
 	}
 	return defVal
@@ -1163,6 +1169,7 @@ func (s *Server) newConnExecutor(
 			mon:                          txnMon,
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
+			execType:                     executorType,
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
@@ -1238,7 +1245,7 @@ func (s *Server) newConnExecutor(
 				displayLevel = tree.RepeatableReadIsolation
 			}
 			if logIsolationLevelLimiter.ShouldLog() {
-				log.Warningf(ctx, msgFmt, displayLevel)
+				log.Dev.Warningf(ctx, msgFmt, displayLevel)
 			}
 			ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msgFmt, displayLevel))
 		}
@@ -1255,7 +1262,6 @@ func (s *Server) newConnExecutor(
 		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
-		underOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
@@ -1366,7 +1372,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForExplicitClose); err != nil {
-		log.Warningf(ctx, "error closing cursors: %v", err)
+		log.Dev.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
 	// Free any memory used by the stats collector.
@@ -1380,7 +1386,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		payloadErr = connExecutorNormalCloseErr
 		payload := eventNonRetryableErrPayload{err: payloadErr}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
-			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+			log.Dev.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
 		switch t := ex.machine.CurState().(type) {
 		case stateNoTxn:
@@ -1411,7 +1417,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
-			log.Errorf(
+			log.Dev.Errorf(
 				ctx,
 				"error deleting temporary objects at session close, "+
 					"the temp tables deletion job will retry periodically: %s",
@@ -1431,7 +1437,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	if ex.sessionTracing.Enabled() {
 		if err := ex.sessionTracing.StopTracing(); err != nil {
-			log.Warningf(ctx, "error stopping tracing: %s", err)
+			log.Dev.Warningf(ctx, "error stopping tracing: %s", err)
 		}
 	}
 
@@ -2132,7 +2138,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		closeReason = cursorCloseForTxnRollback
 	}
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, closeReason); err != nil {
-		log.Warningf(ctx, "error closing cursors: %v", err)
+		log.Dev.Warningf(ctx, "error closing cursors: %v", err)
 	}
 
 	switch ev.eventType {
@@ -2611,7 +2617,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			// pausable portals hasn't been cleared yet.
 			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 			if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
-				log.Warningf(ctx, "error closing cursors: %v", err)
+				log.Dev.Warningf(ctx, "error closing cursors: %v", err)
 			}
 		}
 		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
@@ -3536,14 +3542,6 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	}
 
 	retryable := errIsRetryable(err)
-	if retryable && execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
-		// Retry only # of remote regions times if the retry is due to the
-		// enforce_home_region setting.
-		retryable = int(ex.state.mu.autoRetryCounter) < len(ex.planner.EvalContext().RemoteRegions)
-		if !retryable {
-			err = execinfra.MaybeGetNonRetryableDynamicQueryHasNoHomeRegionError(err)
-		}
-	}
 	if retryable {
 		var rc rewindCapability
 		var canAutoRetry bool
@@ -3691,7 +3689,7 @@ func txnPriorityToProto(mode tree.UserPriority) roachpb.UserPriority {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		log.Fatalf(context.Background(), "unknown user priority: %s", mode)
+		log.Dev.Fatalf(context.Background(), "unknown user priority: %s", mode)
 	}
 	return pri
 }
@@ -3803,34 +3801,36 @@ func bufferedWritesIsAllowedForIsolationLevel(
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	*evalCtx = extendedEvalContext{
 		Context: eval.Context{
-			Planner:                        p,
-			StreamManagerFactory:           p,
-			PrivilegedAccessor:             p,
-			SessionAccessor:                p,
-			JobExecContext:                 p,
-			ClientNoticeSender:             p,
-			Sequence:                       p,
-			Tenant:                         p,
-			Regions:                        p,
-			Gossip:                         p,
-			PreparedStatementState:         &ex.extraTxnState.prepStmtsNamespace,
-			SessionDataStack:               ex.sessionDataStack,
-			ReCache:                        ex.server.reCache,
-			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.persistedSQLStats,
-			SchemaTelemetryController:      ex.server.schemaTelemetryController,
-			IndexUsageStatsController:      ex.server.indexUsageStatsController,
-			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
-			RangeProber:                    p.execCfg.RangeProber,
-			StmtDiagnosticsRequestInserter: ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
-			CatalogBuiltins:                &p.evalCatalogBuiltins,
-			QueryCancelKey:                 ex.queryCancelKey,
-			DescIDGenerator:                ex.getDescIDGenerator(),
-			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
-			JobsProfiler:                   p,
-			RNGFactory:                     &ex.rng.external,
-			ULIDEntropyFactory:             &ex.rng.ulidEntropy,
-			CidrLookup:                     p.execCfg.CidrLookup,
+			Planner:                          p,
+			StreamManagerFactory:             p,
+			PrivilegedAccessor:               p,
+			SessionAccessor:                  p,
+			JobExecContext:                   p,
+			ClientNoticeSender:               p,
+			Sequence:                         p,
+			Tenant:                           p,
+			Regions:                          p,
+			Gossip:                           p,
+			PreparedStatementState:           &ex.extraTxnState.prepStmtsNamespace,
+			SessionDataStack:                 ex.sessionDataStack,
+			ReCache:                          ex.server.reCache,
+			ToCharFormatCache:                ex.server.toCharFormatCache,
+			SQLStatsController:               ex.server.persistedSQLStats,
+			SchemaTelemetryController:        ex.server.schemaTelemetryController,
+			IndexUsageStatsController:        ex.server.indexUsageStatsController,
+			ConsistencyChecker:               p.execCfg.ConsistencyChecker,
+			RangeProber:                      p.execCfg.RangeProber,
+			StmtDiagnosticsRequestInserter:   ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
+			CatalogBuiltins:                  &p.evalCatalogBuiltins,
+			QueryCancelKey:                   ex.queryCancelKey,
+			DescIDGenerator:                  ex.getDescIDGenerator(),
+			RangeStatsFetcher:                p.execCfg.RangeStatsFetcher,
+			JobsProfiler:                     p,
+			RNGFactory:                       &ex.rng.external,
+			ULIDEntropyFactory:               &ex.rng.ulidEntropy,
+			CidrLookup:                       p.execCfg.CidrLookup,
+			StartedRoutineStatementCounters:  ex.metrics.StartedStatementCounters.toRoutineStmtCounters(),
+			ExecutedRoutineStatementCounters: ex.metrics.ExecutedStatementCounters.toRoutineStmtCounters(),
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -3870,7 +3870,7 @@ func (ex *connExecutor) initPCRReaderCatalog(ctx context.Context) {
 			return nil
 		})
 	if err != nil {
-		log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+		log.Dev.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
 	}
 }
 
@@ -4000,22 +4000,6 @@ func (ex *connExecutor) resetPlanner(
 ) {
 	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
 	ex.maybeAdjustMaxTimestampBound(p, txn)
-	// Make sure the default locality specifies the actual gateway region at the
-	// start of query compilation. It could have been overridden to a remote
-	// region when the enforce_home_region session setting is true.
-	p.EvalContext().Locality = p.EvalContext().OriginalLocality
-	if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
-		if int(ex.state.mu.autoRetryCounter) <= len(p.EvalContext().RemoteRegions) {
-			// Set a fake gateway region for use by the optimizer to inform its
-			// decision on which region to access first in locality-optimized
-			// scan and join operations. This setting does not affect the
-			// distsql planner, and local plans will continue to be run from the
-			// actual gateway region.
-			p.EvalContext().Locality = p.EvalContext().Locality.CopyReplaceKeyValue(
-				"region" /* key */, string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]),
-			)
-		}
-	}
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 }
 
@@ -4081,17 +4065,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				return advanceInfo{}, err
 			}
 			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
-				// TODO (xinhaoz): This is a temporary hook until
-				// https://github.com/cockroachdb/cockroach/issues/141024
-				// is resolved. The reason this exists is because we
-				// need to recompute the statement fingerprint id for
-				// statements currently in the stats collector, which
-				// were computed once already for insights. There is an
-				// acknowledgement that this means the fingerprint id
-				// given to insights for upgraded transactions are
-				// currently incorrect.
 				ex.extraTxnState.txnFinishClosure.implicit = false
-				ex.statsCollector.UpgradeToExplicitTransaction()
 			}
 		}
 	case txnStart:
@@ -4112,7 +4086,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				"programming error: non-error event %s generated even though res.Err() has been set to: %s",
 				errors.Safe(advInfo.txnEvent.eventType.String()),
 				res.Err())
-			log.Errorf(ex.Ctx(), "%v", err)
+			log.Dev.Errorf(ex.Ctx(), "%v", err)
 			sentryutil.SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV, err)
 			return advanceInfo{}, err
 		}
@@ -4182,6 +4156,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs, cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
+			if err := ex.waitForNewVersionPropagation(descIDsInJobs, cachedRegions); err != nil {
+				return advanceInfo{}, err
+			}
 			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
@@ -4189,7 +4166,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if ex.extraTxnState.descCollection.HasUncommittedNewOrDroppedDescriptors() {
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
-				log.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
+				log.Dev.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
 			}
 		}
 		fallthrough
@@ -4452,7 +4429,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			// This shouldn't happen, but might as well not completely give up if we
 			// fail to parse a parseable sql for some reason. We unfortunately can't
 			// just log the SQL either as it could contain sensitive information.
-			log.Warningf(ex.Ctx(), "failed to re-parse sql during session "+
+			log.Dev.Warningf(ex.Ctx(), "failed to re-parse sql during session "+
 				"serialization")
 			continue
 		}
@@ -4532,6 +4509,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		TraceID:                    uint64(ex.planner.extendedEvalCtx.Tracing.connSpan.TraceID()),
 		GoroutineID:                ex.ctxHolder.goroutineID,
 		AuthenticationMethod:       sd.AuthenticationMethod,
+		DefaultIsolationLevel:      tree.IsolationLevel(sd.DefaultTxnIsolationLevel).String(),
 	}
 }
 
@@ -4604,8 +4582,15 @@ type StatementCounters struct {
 	UpdateCount telemetry.CounterWithAggMetric
 	InsertCount telemetry.CounterWithAggMetric
 	DeleteCount telemetry.CounterWithAggMetric
+
 	// CRUDQueryCount includes all 4 CRUD statements above.
 	CRUDQueryCount telemetry.CounterWithAggMetric
+
+	// Basic CRUD statements within the UDF/SP body.
+	RoutineSelectCount telemetry.CounterWithAggMetric
+	RoutineUpdateCount telemetry.CounterWithAggMetric
+	RoutineInsertCount telemetry.CounterWithAggMetric
+	RoutineDeleteCount telemetry.CounterWithAggMetric
 
 	// Transaction operations.
 	TxnBeginCount    telemetry.CounterWithAggMetric
@@ -4685,6 +4670,14 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertStarted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
+		RoutineSelectCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineSelectStarted, internal)),
+		RoutineUpdateCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineUpdateStarted, internal)),
+		RoutineInsertCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineInsertStarted, internal)),
+		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDeleteStarted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4738,6 +4731,14 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaInsertExecuted, internal)),
 		DeleteCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
+		RoutineSelectCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineSelectExecuted, internal)),
+		RoutineUpdateCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineUpdateExecuted, internal)),
+		RoutineInsertCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineInsertExecuted, internal)),
+		RoutineDeleteCount: telemetry.NewCounterWithAggMetric(
+			getMetricMeta(MetaRoutineDeleteExecuted, internal)),
 		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
@@ -4821,6 +4822,18 @@ func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statemen
 		} else {
 			sc.MiscCount.Inc()
 		}
+	}
+}
+
+// toRoutineStmtCounters converts the StatementCounters to a RoutineStatementCounters
+// so that it can be passed along eval ctx to the opt layer, avoiding
+// import cycle.
+func (sc *StatementCounters) toRoutineStmtCounters() eval.RoutineStatementCounters {
+	return eval.RoutineStatementCounters{
+		SelectCount: &sc.RoutineSelectCount,
+		UpdateCount: &sc.RoutineUpdateCount,
+		InsertCount: &sc.RoutineInsertCount,
+		DeleteCount: &sc.RoutineDeleteCount,
 	}
 }
 

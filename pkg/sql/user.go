@@ -197,7 +197,7 @@ func GetUserSessionInitInfo(
 			return nil
 		})
 	}); err != nil {
-		log.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
+		log.Dev.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")
 	}
 
@@ -279,7 +279,7 @@ func retrieveSessionInitInfoWithCache(
 		return errors.Wrap(retErr, "get default settings error")
 	}(); err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
-		log.Warningf(ctx, "user lookup for %q failed: %v", userName, err)
+		log.Dev.Warningf(ctx, "user lookup for %q failed: %v", userName, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account")
 	}
 	return aInfo, settingsEntries, err
@@ -542,56 +542,27 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	return row != nil, nil
 }
 
-// BumpRoleMembershipTableVersion increases the table version for the
-// role membership table.
+// BumpRoleMembershipTableVersion increases the table version for the role
+// membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.RoleMembersTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
-	)
+	return p.writeVersionBump(ctx, keys.RoleMembersTableID)
 }
 
-// bumpUsersTableVersion increases the table version for the
-// users table.
+// bumpUsersTableVersion increases the table version for the users table.
 func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.UsersTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for users table",
-	)
+	return p.writeVersionBump(ctx, keys.UsersTableID)
 }
 
 // bumpRoleOptionsTableVersion increases the table version for the
 // role_options table.
 func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.RoleOptionsTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role options table",
-	)
+	return p.writeVersionBump(ctx, keys.RoleOptionsTableID)
 }
 
 // bumpDatabaseRoleSettingsTableVersion increases the table version for the
 // database_role_settings table.
 func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.DatabaseRoleSettingsTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for database_role_settings table",
-	)
+	return p.writeVersionBump(ctx, keys.DatabaseRoleSettingsTableID)
 }
 
 // BumpPrivilegesTableVersion increases the table version for the
@@ -602,9 +573,7 @@ func (p *planner) BumpPrivilegesTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for system.privileges table",
-	)
+	return p.writeVersionBump(ctx, tableDesc.ID)
 }
 
 func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsername) error {
@@ -750,14 +719,14 @@ func MaybeConvertStoredPasswordHash(
 		autoUpgradePasswordHashesBool, autoDowngradePasswordHashesBool, autoRehashOnCostChangeBool,
 		configuredHashMethod, configuredSCRAMCost, cleartext, currentHash,
 		security.GetExpensiveHashComputeSem(ctx),
-		log.Infof,
+		log.Dev.Infof,
 	)
 	if err != nil {
 		// We're not returning an error: clients should not be refused a
 		// session just because a password conversion failed.
 		//
 		// Simply explain what happened in logs for troubleshooting.
-		log.Warningf(ctx, "password hash conversion failed: %+v", err)
+		log.Dev.Warningf(ctx, "password hash conversion failed: %+v", err)
 		return
 	} else if !converted {
 		// No conversion happening. Nothing to do.
@@ -770,7 +739,7 @@ func MaybeConvertStoredPasswordHash(
 		// point authentication succeeded.
 		//
 		// Simply explain what happened in logs for troubleshooting.
-		log.Warningf(ctx, "storing the new password hash after conversion failed: %+v", err)
+		log.Dev.Warningf(ctx, "storing the new password hash after conversion failed: %+v", err)
 	} else {
 		// Inform the security audit log that the hash was upgraded.
 		log.StructuredEvent(ctx, severity.INFO, &eventpb.PasswordHashConverted{

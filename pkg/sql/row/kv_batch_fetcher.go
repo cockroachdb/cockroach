@@ -55,8 +55,6 @@ var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestValue(
 	1,                                   /* metamorphicValue */
 ))
 
-var logAdmissionPacerErr = log.Every(100 * time.Millisecond)
-
 // elasticCPUDurationPerLowPriReadResponse controls how many CPU tokens are allotted
 // each time we seek admission for response handling during internally submitted
 // low priority reads (like row-level TTL selects).
@@ -604,6 +602,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.DeadlockTimeout = f.deadlockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	ba.Header.IsReverse = f.reverse
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
@@ -753,12 +752,7 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 		// to ensure that they have local plans with a single TableReader
 		// processor in multi-node clusters.
 		if err := f.admissionPacer.Pace(ctx); err != nil {
-			// We're unable to pace things automatically -- shout loudly
-			// semi-infrequently but don't fail the kv fetcher itself. At
-			// worst we'd be over-admitting.
-			if logAdmissionPacerErr.ShouldLog() {
-				log.Errorf(ctx, "automatic pacing: %v", err)
-			}
+			return err
 		}
 	} else if f.responseAdmissionQ != nil {
 		responseAdmission := admission.WorkInfo{

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -190,6 +191,41 @@ func newEnrichedSourceProvider(
 
 func (p *enrichedSourceProvider) KafkaConnectJSONSchema() kcjsonschema.Schema {
 	return kafkaConnectJSONSchema
+}
+
+func (p *enrichedSourceProvider) GetProtobuf(
+	evCtx eventContext, updated, prev cdcevent.Row,
+) (*changefeedpb.EnrichedSource, error) {
+	md := updated.Metadata
+	tableInfo, ok := p.sourceData.tableSchemaInfo[md.TableID]
+	if !ok {
+		return nil, errors.AssertionFailedf("table %d not found in tableSchemaInfo", md.TableID)
+	}
+
+	src := &changefeedpb.EnrichedSource{
+		JobId:              p.sourceData.jobID,
+		ChangefeedSink:     p.sourceData.sink,
+		DbVersion:          p.sourceData.dbVersion,
+		ClusterName:        p.sourceData.clusterName,
+		ClusterId:          p.sourceData.clusterID,
+		SourceNodeLocality: p.sourceData.sourceNodeLocality,
+		NodeName:           p.sourceData.nodeName,
+		NodeId:             p.sourceData.nodeID,
+		Origin:             originCockroachDB,
+		DatabaseName:       tableInfo.dbName,
+		SchemaName:         tableInfo.schemaName,
+		TableName:          tableInfo.tableName,
+		PrimaryKeys:        tableInfo.primaryKeys,
+	}
+
+	if p.opts.mvccTimestamp {
+		src.MvccTimestamp = evCtx.mvcc.AsOfSystemTime()
+	}
+	if p.opts.updated {
+		src.TsNs = evCtx.updated.WallTime
+		src.TsHlc = evCtx.updated.AsOfSystemTime()
+	}
+	return src, nil
 }
 
 // GetJSON returns a json object for the source data.

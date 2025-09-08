@@ -235,29 +235,29 @@ var crdbInternal = virtualSchema{
 	validWithNoDatabaseContext: true,
 }
 
-// SupportedVTables are the crdb_internal tables that are "supported" for real
+// SupportedCRDBInternal are the crdb_internal tables that are "supported" for real
 // customer use in production for legacy reasons. Avoid adding to this list if
 // possible and prefer to add new customer-facing tables that should be public
 // under the non-"internal" namespace of information_schema.
-var SupportedVTables = map[string]struct{}{
-	`"".crdb_internal.cluster_contended_indexes`:     {},
-	`"".crdb_internal.cluster_contended_keys`:        {},
-	`"".crdb_internal.cluster_contended_tables`:      {},
-	`"".crdb_internal.cluster_contention_events`:     {},
-	`"".crdb_internal.cluster_locks`:                 {},
-	`"".crdb_internal.cluster_queries`:               {},
-	`"".crdb_internal.cluster_sessions`:              {},
-	`"".crdb_internal.cluster_transactions`:          {},
-	`"".crdb_internal.index_usage_statistics`:        {},
-	`"".crdb_internal.statement_statistics`:          {},
-	`"".crdb_internal.transaction_contention_events`: {},
-	`"".crdb_internal.transaction_statistics`:        {},
-	`"".crdb_internal.zones`:                         {},
+var SupportedCRDBInternalTables = map[string]struct{}{
+	`cluster_contended_indexes`:     {},
+	`cluster_contended_keys`:        {},
+	`cluster_contended_tables`:      {},
+	`cluster_contention_events`:     {},
+	`cluster_locks`:                 {},
+	`cluster_queries`:               {},
+	`cluster_sessions`:              {},
+	`cluster_transactions`:          {},
+	`index_usage_statistics`:        {},
+	`statement_statistics`:          {},
+	`transaction_contention_events`: {},
+	`transaction_statistics`:        {},
+	`zones`:                         {},
 }
 
 // Note that this map is currently unused but serves to document which vtables
 // are expected to be used in production setting.
-var _ = SupportedVTables
+var _ = SupportedCRDBInternalTables
 
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	comment: `detailed identification strings (RAM, local node only)`,
@@ -776,6 +776,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 			SELECT DISTINCT ON ("tableID") "tableID", "rowCount"
 			FROM system.table_statistics
 			AS OF SYSTEM TIME '%s'
+			WHERE "partialPredicate" IS NULL
 			ORDER BY "tableID", "createdAt" DESC, "rowCount" DESC`,
 			statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalDB.Executor().QueryBufferedEx(
@@ -1127,7 +1128,7 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 			if err := it.Close(); err != nil {
 				// TODO(yuzefovich): this error should be propagated further up
 				// and not simply being logged. Fix it (#61123).
-				log.Warningf(ctx, "error closing an iterator: %v", err)
+				log.Dev.Warningf(ctx, "error closing an iterator: %v", err)
 			}
 		}
 		defer cleanup(ctx)
@@ -1926,7 +1927,7 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 		for ; iter.Valid(); iter.Next(ctx) {
 			nodeID, recording := iter.Value()
 			traceString := recording.String()
-			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID))
+			traceJaegerJSON, err := recording.ToJaegerJSON("", "", fmt.Sprintf("node %d", nodeID), true /* indent */)
 			if err != nil {
 				return false, err
 			}
@@ -2207,7 +2208,7 @@ func populateTransactionsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for the txn string,
 			// and nulls for all other columns.
@@ -2248,7 +2249,8 @@ CREATE TABLE crdb_internal.%s (
   phase            STRING,         -- the current execution phase
   full_scan        BOOL,           -- whether the query contains a full table or index scan
   plan_gist        STRING,         -- Compressed logical plan.
-  database         STRING          -- the database the statement was executed on
+  database         STRING,         -- the database the statement was executed on
+  isolation_level  STRING          -- the isolation level of the query's transaction
 )`
 
 func (p *planner) makeSessionsRequest(
@@ -2413,6 +2415,13 @@ func populateQueriesTable(
 			if shouldRedactOtherUserQuery && session.Username != p.SessionData().User().Normalized() {
 				sql = query.SqlNoConstants
 			}
+
+			// Get isolation level from session's active transaction, or use NULL if none.
+			var isolationLevelDatum tree.Datum = tree.DNull
+			if session.ActiveTxn != nil {
+				isolationLevelDatum = tree.NewDString(session.ActiveTxn.IsolationLevel)
+			}
+
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,
@@ -2428,6 +2437,7 @@ func populateQueriesTable(
 				isFullScanDatum,
 				planGistDatum,
 				tree.NewDString(query.Database),
+				isolationLevelDatum,
 			); err != nil {
 				return err
 			}
@@ -2435,7 +2445,7 @@ func populateQueriesTable(
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, the error for query, and
 			// nulls for all other columns.
@@ -2454,6 +2464,7 @@ func populateQueriesTable(
 				tree.DNull,                             // full_scan
 				tree.DNull,                             // plan_gist
 				tree.DNull,                             // database
+				tree.DNull,                             // isolation_level
 			); err != nil {
 				return err
 			}
@@ -2509,7 +2520,8 @@ CREATE TABLE crdb_internal.%s (
   pg_backend_pid     INT,            -- the numerical ID attached to the session which is used to mimic a Postgres backend PID
   trace_id           INT,            -- the ID of the trace of the session
   goroutine_id       INT,            -- the ID of the goroutine of the session
-  authentication_method STRING       -- the method used to authenticate the session
+  authentication_method STRING,      -- the method used to authenticate the session
+  isolation_level       STRING       -- the isolation level of the session's active transaction or default isolation level if no active transaction
 )
 `
 
@@ -2633,6 +2645,16 @@ func populateSessionsTable(
 				return err
 			}
 		}
+
+		// Get isolation level from session's active transaction, or fall back to
+		// default.
+		var isolationLevelDatum tree.Datum = tree.DNull
+		if session.ActiveTxn != nil {
+			isolationLevelDatum = tree.NewDString(session.ActiveTxn.IsolationLevel)
+		} else if session.DefaultIsolationLevel != "" {
+			isolationLevelDatum = tree.NewDString(session.DefaultIsolationLevel)
+		}
+
 		if err := addRow(
 			tree.NewDInt(tree.DInt(session.NodeID)),
 			sessionID,
@@ -2653,13 +2675,14 @@ func populateSessionsTable(
 			tree.NewDInt(tree.DInt(session.TraceID)),
 			tree.NewDInt(tree.DInt(session.GoroutineID)),
 			tree.NewDString(string(session.AuthenticationMethod)),
+			isolationLevelDatum,
 		); err != nil {
 			return err
 		}
 	}
 
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, error in active queries, and nulls
 			// for all other columns.
@@ -2683,6 +2706,7 @@ func populateSessionsTable(
 				tree.DNull,                             // trace_id
 				tree.DNull,                             // goroutine_id
 				tree.DNull,                             // authentication_method
+				tree.DNull,                             // isolation_level
 			); err != nil {
 				return err
 			}
@@ -2921,7 +2945,7 @@ func populateContentionEventsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 	}
 	return nil
 }
@@ -2986,7 +3010,7 @@ func populateDistSQLFlowsTable(
 		}
 	}
 	for _, rpcErr := range response.Errors {
-		log.Warningf(ctx, "%v", rpcErr.Message)
+		log.Dev.Warningf(ctx, "%v", rpcErr.Message)
 	}
 	return nil
 }
@@ -3332,7 +3356,7 @@ func createRoutinePopulate(
 			}
 		}
 
-		fnDescs, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
+		fnDescs, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
@@ -3410,7 +3434,7 @@ func createRoutinePopulateByFnIndex(
 	// `crdb_internal.create_function_statements` and `crdb_internal.create_procedure_statements`, helping
 	// optimize the queries for the create statements output in `SHOW CREATE ALL ROUTINES`.
 	fnID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-	fnDesc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	fnDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
 	if err != nil || fnDesc == nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || fnDesc == nil {
 			return false, nil
@@ -3418,7 +3442,7 @@ func createRoutinePopulateByFnIndex(
 		return false, err
 	}
 	scID := fnDesc.GetParentSchemaID()
-	sc, err := p.Descriptors().ByIDWithoutLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
+	sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
 	if err != nil || sc == nil {
 		return false, err
 	}
@@ -3931,7 +3955,7 @@ CREATE TABLE crdb_internal.table_indexes (
 						if ts := idx.CreatedAt(); !ts.IsZero() {
 							tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
 							if err != nil {
-								log.Warningf(ctx, "failed to construct timestamp for index: %v", err)
+								log.Dev.Warningf(ctx, "failed to construct timestamp for index: %v", err)
 							} else {
 								createdAt = tsDatum
 							}
@@ -4050,7 +4074,7 @@ CREATE TABLE crdb_internal.index_columns (
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
-							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
+							log.Dev.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
 								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 						} else {
@@ -4058,7 +4082,7 @@ CREATE TABLE crdb_internal.index_columns (
 						}
 						if i >= len(idx.IndexDesc().KeyColumnDirections) {
 							// See comment above.
-							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
+							log.Dev.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
 								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 						} else {
@@ -6665,10 +6689,23 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 				FROM
 					system.namespace AS ns FULL JOIN system.descriptor AS d ON ns.id = d.id
 			),
+		orphaned_comments
+				AS (
+					SELECT
+						0 AS parent_id,
+						0 AS parent_schema_id,
+						'' AS name,
+						object_id AS id,
+						'comment' AS corruption
+					FROM
+						system.comments
+					WHERE
+						object_id NOT IN (SELECT id FROM system.descriptor)
+        ),
 		diag
 			AS (
 				SELECT
-					*,
+					parent_id, parent_schema_id, name, id,
 					CASE
 					WHEN descriptor IS NULL AND id != 29 THEN 'namespace'
 					WHEN updated_descriptor != repaired_descriptor THEN 'descriptor'
@@ -6677,6 +6714,8 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 						AS corruption
 				FROM
 					data
+				UNION
+				SELECT * FROM orphaned_comments
 			)
 	SELECT
 		parent_id, parent_schema_id, name, id, corruption

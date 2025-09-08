@@ -683,7 +683,7 @@ func (ih *instrumentationHelper) Finish(
 				// to proceed with saving the statement bundle. Thus, we
 				// override the canceled context, but first we'll log the error
 				// as a warning.
-				log.Warningf(
+				log.Dev.Warningf(
 					bundleCtx, "context has an error when saving the bundle, proceeding "+
 						"with the background one (with deadline of 10 seconds): %v", bundleCtx.Err(),
 				)
@@ -1191,14 +1191,14 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 				bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, opc.catalog, f, opc.p.stmt.AST)
 				err := bld.Build()
 				if err != nil {
-					log.Warningf(ctx, "unable to build memo: %s", err)
+					log.Dev.Warningf(ctx, "unable to build memo: %s", err)
 					return
 				}
 			}
 			var err error
 			recommendations, err = opc.makeQueryIndexRecommendation(ctx)
 			if err != nil {
-				log.Warningf(ctx, "unable to generate index recommendations: %s", err)
+				log.Dev.Warningf(ctx, "unable to generate index recommendations: %s", err)
 				return
 			}
 		}

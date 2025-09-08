@@ -182,7 +182,7 @@ func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) 
 			// If we fail to process one record, we should still try to process
 			// subsequent records, therefore, just log the error instead of returning
 			// early.
-			log.Infof(ctx, "could not process pts record id %d: %s", scannedRec.ID, err.Error())
+			log.Dev.Infof(ctx, "could not process pts record id %d: %s", scannedRec.ID, err.Error())
 		}
 	}
 
@@ -231,7 +231,7 @@ func processJobPTSRecord(
 				ptsExpired := errors.Newf(
 					"protected timestamp records %s as of %s (age %s) exceeds job configured limit of %s",
 					rec.ID, rec.Timestamp, timeutil.Since(rec.Timestamp.GoTime()), p.MaximumPTSAge)
-				log.Warningf(ctx, "job %d canceled due to %s", jobID, ptsExpired)
+				log.Dev.Warningf(ctx, "job %d canceled due to %s", jobID, ptsExpired)
 				return ju.CancelRequestedWithReason(ctx, md, ptsExpired)
 			}
 			return nil
@@ -253,7 +253,10 @@ func updateJobPTSMetrics(
 		if jobspb.Type(typ) == jobspb.TypeUnspecified { // do not track TypeUnspecified
 			continue
 		}
-		m := jobMetrics.JobMetrics[typ]
+		m := jobMetrics.JobPTSMetrics[typ]
+		if m == nil { // this job doesn't interact with PTS system
+			continue
+		}
 		stats, found := ptsStats[jobspb.Type(typ)]
 		if found {
 			m.NumJobsWithPTS.Update(stats.numRecords)

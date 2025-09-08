@@ -275,7 +275,7 @@ func (w *worker) run(ctx context.Context) error {
 		pholdersColumnNames, numRepeats, err := w.deduceColumnNamesForPlaceholders(ctx, chosenQuery)
 		if err != nil {
 			if w.config.verbose {
-				log.Infof(ctx, "Encountered an error %s while deducing column names corresponding to the placeholders", err.Error())
+				log.Dev.Infof(ctx, "Encountered an error %s while deducing column names corresponding to the placeholders", err.Error())
 				printQueryShortened(ctx, chosenQuery)
 			}
 			continue
@@ -284,7 +284,7 @@ func (w *worker) run(ctx context.Context) error {
 		placeholders, err := w.generatePlaceholders(ctx, chosenQuery, pholdersColumnNames, numRepeats, tableName)
 		if err != nil {
 			if w.config.verbose {
-				log.Infof(ctx, "Encountered an error %s while generating values for the placeholders", err.Error())
+				log.Dev.Infof(ctx, "Encountered an error %s while generating values for the placeholders", err.Error())
 				printQueryShortened(ctx, chosenQuery)
 			}
 			continue
@@ -294,7 +294,7 @@ func (w *worker) run(ctx context.Context) error {
 		rows, err := w.conn.Query(ctx, chosenQuery, placeholders...)
 		if err != nil {
 			if w.config.verbose {
-				log.Infof(ctx, "Encountered an error %s while executing the query", err.Error())
+				log.Dev.Infof(ctx, "Encountered an error %s while executing the query", err.Error())
 				printQueryShortened(ctx, chosenQuery)
 			}
 			continue
@@ -471,7 +471,7 @@ func (w *worker) generatePlaceholders(
 			if !columnMatched {
 				d := w.rng.Int31n(10) + 1
 				if w.config.verbose {
-					log.Infof(ctx, "Couldn't deduce the corresponding to $%d, so generated %d (a small int)", i+1, d)
+					log.Dev.Infof(ctx, "Couldn't deduce the corresponding to $%d, so generated %d (a small int)", i+1, d)
 					printQueryShortened(ctx, query)
 				}
 				p, err := workloadrand.DatumToGoSQL(tree.NewDInt(tree.DInt(d)))
@@ -612,7 +612,7 @@ func (w *querylog) parseFile(ctx context.Context, fileInfo os.DirEntry, re *rege
 			// We reached EOF, so we're done with this file.
 			end := timeutil.Now()
 			elapsed := end.Sub(start)
-			log.Infof(ctx, "Processing of %s is done in %fs", fileInfo.Name(), elapsed.Seconds())
+			log.Dev.Infof(ctx, "Processing of %s is done in %fs", fileInfo.Name(), elapsed.Seconds())
 			break
 		}
 
@@ -667,12 +667,12 @@ func (w *querylog) parseFile(ctx context.Context, fileInfo os.DirEntry, re *rege
 // processQueryLog parses the query log and populates most of w.state.
 func (w *querylog) processQueryLog(ctx context.Context) error {
 	if w.zipPath != "" {
-		log.Infof(ctx, "About to start unzipping %s", w.zipPath)
+		log.Dev.Infof(ctx, "About to start unzipping %s", w.zipPath)
 		w.dirPath = w.zipPath[:len(w.zipPath)-4]
 		if err := unzip(w.zipPath, w.dirPath); err != nil {
 			return err
 		}
-		log.Infof(ctx, "Unzipping to %s is complete", w.dirPath)
+		log.Dev.Infof(ctx, "Unzipping to %s is complete", w.dirPath)
 	}
 
 	files, err := os.ReadDir(w.dirPath)
@@ -688,7 +688,7 @@ func (w *querylog) processQueryLog(ctx context.Context) error {
 	w.state.tableUsed = make(map[string]bool)
 
 	re := regexp.MustCompile(regexQueryLogFormat)
-	log.Infof(ctx, "Starting to parse the query log")
+	log.Dev.Infof(ctx, "Starting to parse the query log")
 	numFiles := w.filesToParse
 	if numFiles > len(files) {
 		numFiles = len(files)
@@ -701,18 +701,18 @@ func (w *querylog) processQueryLog(ctx context.Context) error {
 		}
 		if fileInfo.IsDir() {
 			if w.verbose {
-				log.Infof(ctx, "Unexpected: a directory %s is encountered with the query log, skipping it.", fileInfo.Name())
+				log.Dev.Infof(ctx, "Unexpected: a directory %s is encountered with the query log, skipping it.", fileInfo.Name())
 			}
 			continue
 		}
-		log.Infof(ctx, "Processing %d out of %d", fileNum, numFiles)
+		log.Dev.Infof(ctx, "Processing %d out of %d", fileNum, numFiles)
 		if err = w.parseFile(ctx, fileInfo, re); err != nil {
 			return err
 		}
 	}
-	log.Infof(ctx, "Query log processed")
+	log.Dev.Infof(ctx, "Query log processed")
 	if w.zipPath != "" {
-		log.Infof(ctx, "Unzipped files are about to be removed")
+		log.Dev.Infof(ctx, "Unzipped files are about to be removed")
 		return os.RemoveAll(w.dirPath)
 	}
 	return nil
@@ -817,14 +817,14 @@ WHERE attrelid=$1`, relid)
 // at least one query was issued against the query log. The samples are stored
 // inside corresponding to the table columnInfo.
 func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) (retErr error) {
-	log.Infof(ctx, "Populating samples started")
+	log.Dev.Infof(ctx, "Populating samples started")
 	for _, tableName := range w.state.tableNames {
 		cols := w.state.columnsByTableName[tableName]
 		if cols == nil {
 			// There were no queries touching this table, so we skip it.
 			continue
 		}
-		log.Infof(ctx, "Sampling %s", tableName)
+		log.Dev.Infof(ctx, "Sampling %s", tableName)
 		row := db.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
 		var numRows int
 		if err := row.Scan(&numRows); err != nil {
@@ -874,7 +874,7 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) (retErr er
 			return err
 		}
 	}
-	log.Infof(ctx, "Populating samples is complete")
+	log.Dev.Infof(ctx, "Populating samples is complete")
 	return nil
 }
 
@@ -900,7 +900,7 @@ func (w *worker) querybenchRun(ctx context.Context) error {
 		pholdersColumnNames, numRepeats, err := w.deduceColumnNamesForPlaceholders(ctx, chosenQuery)
 		if err != nil {
 			if w.config.verbose {
-				log.Infof(ctx, "Encountered an error %s while deducing column names corresponding to the placeholders", err.Error())
+				log.Dev.Infof(ctx, "Encountered an error %s while deducing column names corresponding to the placeholders", err.Error())
 				printQueryShortened(ctx, chosenQuery)
 			}
 			continue
@@ -909,7 +909,7 @@ func (w *worker) querybenchRun(ctx context.Context) error {
 		placeholders, err := w.generatePlaceholders(ctx, chosenQuery, pholdersColumnNames, numRepeats, tableName)
 		if err != nil {
 			if w.config.verbose {
-				log.Infof(ctx, "Encountered an error %s while generating values for the placeholders", err.Error())
+				log.Dev.Infof(ctx, "Encountered an error %s while generating values for the placeholders", err.Error())
 				printQueryShortened(ctx, chosenQuery)
 			}
 			continue
@@ -934,7 +934,7 @@ func (w *worker) querybenchRun(ctx context.Context) error {
 		}
 		if skipQuery {
 			if w.config.verbose {
-				log.Infof(ctx, "Could not replace placeholders with values on query")
+				log.Dev.Infof(ctx, "Could not replace placeholders with values on query")
 				printQueryShortened(ctx, chosenQuery)
 			}
 			continue
@@ -945,7 +945,7 @@ func (w *worker) querybenchRun(ctx context.Context) error {
 
 		queryCount++
 		if queryCount%250 == 0 {
-			log.Infof(ctx, "%d queries have been written", queryCount)
+			log.Dev.Infof(ctx, "%d queries have been written", queryCount)
 		}
 		if queryCount == w.config.count {
 			writer.Flush()
@@ -1012,9 +1012,9 @@ type columnInfo struct {
 
 func printQueryShortened(ctx context.Context, query string) {
 	if len(query) > 1000 {
-		log.Infof(ctx, "%s...%s", query[:500], query[len(query)-500:])
+		log.Dev.Infof(ctx, "%s...%s", query[:500], query[len(query)-500:])
 	} else {
-		log.Infof(ctx, "%s", query)
+		log.Dev.Infof(ctx, "%s", query)
 	}
 }
 
