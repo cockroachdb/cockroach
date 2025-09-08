@@ -1503,6 +1503,43 @@ func TestBaseQueueCallbackOnEnqueueResult(t *testing.T) {
 		require.Equal(t, int64(1), bq.enqueueAdd.Count())
 		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
 	})
+	t.Run("queuesizeshrinking", func(t *testing.T) {
+		testQueue := &testQueueImpl{}
+		const oldMaxSize = 15
+		const newMaxSize = 5
+		expectedEnqueueErrorCount := oldMaxSize - newMaxSize
+		bq := makeTestBaseQueue("test", testQueue, tc.store, queueConfig{maxSize: oldMaxSize})
+		r, err := tc.store.GetReplica(1)
+		require.NoError(t, err)
+		var enqueueErrorCount atomic.Int64
+		// Max size is 10, so the replica should be enqueued.
+		for i := 0; i < oldMaxSize; i++ {
+			r.Desc().RangeID = roachpb.RangeID(i + 1)
+			queued, _ := bq.testingAddWithCallback(ctx, r, 1.0, processCallback{
+				onEnqueueResult: func(indexOnHeap int, err error) {
+					if err != nil {
+						enqueueErrorCount.Add(1)
+					}
+				},
+				onProcessResult: func(err error) {
+					t.Fatal("unexpected call to onProcessResult")
+				},
+			})
+			require.True(t, queued)
+		}
+		require.Equal(t, int64(oldMaxSize), bq.enqueueAdd.Count())
+		require.Equal(t, int64(0), bq.enqueueUnexpectedError.Count())
+
+		// Set max size to 5 and add more replicas.
+		bq.SetMaxSize(newMaxSize)
+		testutils.SucceedsSoon(t, func() error {
+			if enqueueErrorCount.Load() != int64(expectedEnqueueErrorCount) {
+				return errors.Errorf("expected %d enqueue errors; got %d",
+					expectedEnqueueErrorCount, enqueueErrorCount.Load())
+			}
+			return nil
+		})
+	})
 }
 
 // TestBaseQueueCallbackOnProcessResult tests that the processCallback is
