@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,7 +33,7 @@ import (
 // created, so typically when a step is added here it is also invoked in a
 // separate upgrade migration so that existing clusters will run it as well.
 func bootstrapSystem(
-	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.SystemDeps,
+	ctx context.Context, cv clusterversion.ClusterVersion, deps upgrade.SystemDeps, job *jobs.Job,
 ) error {
 	var skipSomeSteps bool
 	if deps.TestingKnobs != nil && deps.TestingKnobs.SkipSomeUpgradeSteps {
@@ -51,7 +52,7 @@ func bootstrapSystem(
 			continue
 		}
 		log.Dev.Infof(ctx, "executing system bootstrap step %q", u.name)
-		if err := u.fn(ctx, cv, deps); err != nil {
+		if err := u.fn(ctx, cv, deps, job); err != nil {
 			return errors.Wrapf(err, "system bootstrap step %q failed", u.name)
 		}
 	}
@@ -179,7 +180,7 @@ func optInToDiagnosticsStatReporting(
 }
 
 func populateVersionSetting(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.SystemDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.SystemDeps, _ *jobs.Job,
 ) error {
 	var v roachpb.Version
 	if err := deps.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

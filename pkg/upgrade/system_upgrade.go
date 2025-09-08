@@ -136,7 +136,11 @@ type SystemUpgrade struct {
 
 // SystemUpgradeFunc is used to perform kv-level upgrades. It should only be
 // run from the system tenant.
-type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
+//
+// The job pointer can be used for progress checkpointing. The job can be nil if
+// the upgrade is not run within a job, so the upgrade functions must handle
+// this case correctly.
+type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps, *jobs.Job) error
 
 // NewSystemUpgrade constructs a SystemUpgrade.
 func NewSystemUpgrade(
@@ -153,7 +157,9 @@ func NewSystemUpgrade(
 }
 
 // Run kickstarts the actual upgrade process for system-level upgrades.
-func (m *SystemUpgrade) Run(ctx context.Context, v roachpb.Version, d SystemDeps) error {
+func (m *SystemUpgrade) Run(
+	ctx context.Context, v roachpb.Version, d SystemDeps, job *jobs.Job,
+) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
-	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d)
+	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d, job)
 }
