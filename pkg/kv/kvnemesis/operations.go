@@ -253,7 +253,11 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Put(%s%s, sv(%d))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	verb := "Put"
+	if op.MustAcquireExclusiveLock {
+		verb = "PutMustAcquireExclusiveLock"
+	}
+	fmt.Fprintf(w, `%s.%s(%s%s, sv(%d))`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
@@ -298,7 +302,11 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Del(%s%s /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	verb := "Del"
+	if op.MustAcquireExclusiveLock {
+		verb = "DelMustAcquireExclusiveLock"
+	}
+	fmt.Fprintf(w, `%s.%s(%s%s /* @%s */)`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
