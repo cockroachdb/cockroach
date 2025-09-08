@@ -347,6 +347,7 @@ func NewColBatchScan(
 		shouldCollectStats,
 		false, /* alwaysReallocate */
 		flowCtx.Txn,
+		flowCtx.Codec().TenantID,
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()
