@@ -85,6 +85,31 @@ func GetResolvedSpans(
 	return spans, found, nil
 }
 
+// GetAllResolvedSpans is like GetResolvedSpans except it collects and returns
+// the resolved spans for all frontiers associated with a job ID. The returned
+// spans are not sorted or combined in any way.
+func GetAllResolvedSpans(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID,
+) ([]jobspb.ResolvedSpan, bool, error) {
+	infoStorage := jobs.InfoStorageForJob(txn, jobID)
+
+	var found bool
+	var spans []jobspb.ResolvedSpan
+	if err := infoStorage.Iterate(ctx, frontierPrefix, func(_ string, value []byte) error {
+		found = true
+		var r jobspb.ResolvedSpans
+		if err := protoutil.Unmarshal(value, &r); err != nil {
+			return err
+		}
+		spans = append(spans, r.ResolvedSpans...)
+		return nil
+	}); err != nil || !found {
+		return nil, false, err
+	}
+
+	return spans, found, nil
+}
+
 // Store persists a frontier's current state to storage.
 //
 // All span entries in the frontier and their current timestamps will be
