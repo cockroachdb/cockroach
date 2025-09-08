@@ -132,9 +132,11 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
 	dim := kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension()
 	return &allocatorimpl.LoadScorerOptions{
-		IOOverloadOptions:            src.allocator.IOOverloadOptions(),
-		DiskOptions:                  src.allocator.DiskOptions(),
-		Deterministic:                true,
+		BaseScorerOptions: allocatorimpl.BaseScorerOptions{
+			IOOverload:    src.allocator.IOOverloadOptions(),
+			DiskCapacity:  src.allocator.DiskOptions(),
+			Deterministic: true,
+		},
 		LoadDims:                     []load.Dimension{dim},
 		LoadThreshold:                allocatorimpl.LoadThresholds(&src.settings.ST.SV, dim),
 		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(dim),
