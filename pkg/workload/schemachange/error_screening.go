@@ -66,6 +66,17 @@ func (og *operationGenerator) columnExistsOnTable(
    )`, tableName.Schema(), tableName.Object(), columnName)
 }
 
+func (og *operationGenerator) fnExistsByName(
+	ctx context.Context, tx pgx.Tx, schemaName string, routineName string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS (
+	SELECT routine_name
+    FROM information_schema.routines 
+   WHERE routine_schema = $1
+     AND routine_name = $2
+   )`, schemaName, routineName)
+}
+
 func (og *operationGenerator) tableHasRows(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
 ) (bool, error) {
