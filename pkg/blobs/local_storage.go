@@ -84,7 +84,7 @@ func (l localWriter) Close() error {
 
 	syncErr := l.f.Sync()
 	closeErr := l.f.Close()
-	if err := errors.CombineErrors(closeErr, syncErr); err != nil {
+	if err := errors.CombineErrors(syncErr, closeErr); err != nil {
 		return err
 	}
 	// Finally put the file to its final location.
