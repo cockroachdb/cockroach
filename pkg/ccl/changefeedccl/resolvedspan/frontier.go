@@ -354,6 +354,11 @@ func (f *resolvedSpanFrontier) HasLaggingSpans(sv *settings.Values) bool {
 	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTS)
 }
 
+// LatestTS returns the latest timestamp in the frontier.
+func (f *resolvedSpanFrontier) LatestTS() hlc.Timestamp {
+	return f.latestTS
+}
+
 // All returns an iterator over the resolved spans in the frontier.
 func (f *resolvedSpanFrontier) All() iter.Seq[jobspb.ResolvedSpan] {
 	return func(yield func(jobspb.ResolvedSpan) bool) {

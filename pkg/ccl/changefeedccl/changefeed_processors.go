@@ -1736,6 +1736,8 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 		}
 	}
 
+	cf.updateProgressSkewMetrics()
+
 	return nil
 }
 
@@ -2261,6 +2263,20 @@ func (cf *changeFrontier) maybeEmitResolved(ctx context.Context, newResolved hlc
 	}
 	cf.lastEmitResolved = newResolved.GoTime()
 	return nil
+}
+
+// updateProgressSkewMetrics updates the progress skew metrics.
+func (cf *changeFrontier) updateProgressSkewMetrics() {
+	maxSpanTS := cf.frontier.LatestTS()
+	maxTableTS := cf.frontier.Frontier()
+	for _, f := range cf.frontier.Frontiers() {
+		tableTS := f.Frontier()
+		if tableTS.After(maxTableTS) {
+			maxTableTS = tableTS
+		}
+	}
+
+	cf.sliMetrics.setFastestTS(cf.sliMetricsID, maxSpanTS, maxTableTS)
 }
 
 func frontierIsBehind(frontier hlc.Timestamp, sv *settings.Values) bool {

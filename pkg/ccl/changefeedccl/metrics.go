@@ -88,6 +88,8 @@ type AggMetrics struct {
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
 	SinkErrors                  *aggmetric.AggCounter
 	MaxBehindNanos              *aggmetric.AggGauge
+	SpanProgressSkew            *aggmetric.AggGauge
+	TableProgressSkew           *aggmetric.AggGauge
 
 	Timers *timers.Timers
 
@@ -175,14 +177,18 @@ type sliMetrics struct {
 	KafkaThrottlingNanos        *aggmetric.Histogram
 	SinkErrors                  *aggmetric.Counter
 	MaxBehindNanos              *aggmetric.Gauge
+	SpanProgressSkew            *aggmetric.Gauge
+	TableProgressSkew           *aggmetric.Gauge
 
 	Timers *timers.ScopedTimers
 
 	mu struct {
 		syncutil.Mutex
-		id         int64
-		resolved   map[int64]hlc.Timestamp
-		checkpoint map[int64]hlc.Timestamp
+		id           int64
+		resolved     map[int64]hlc.Timestamp
+		checkpoint   map[int64]hlc.Timestamp
+		fastestSpan  map[int64]hlc.Timestamp
+		fastestTable map[int64]hlc.Timestamp
 	}
 	NetMetrics *cidr.NetMetrics
 
@@ -196,6 +202,8 @@ func (m *sliMetrics) closeId(id int64) {
 	defer m.mu.Unlock()
 	delete(m.mu.checkpoint, id)
 	delete(m.mu.resolved, id)
+	delete(m.mu.fastestSpan, id)
+	delete(m.mu.fastestTable, id)
 }
 
 // setResolved writes a resolved timestamp entry for the given id.
@@ -216,6 +224,18 @@ func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
 	}
 }
 
+// setFastestTS saves the fastest span/table timestamps for a given id.
+func (m *sliMetrics) setFastestTS(id int64, spanTS hlc.Timestamp, tableTS hlc.Timestamp) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.mu.fastestSpan[id]; ok {
+		m.mu.fastestSpan[id] = spanTS
+	}
+	if _, ok := m.mu.fastestTable[id]; ok {
+		m.mu.fastestTable[id] = tableTS
+	}
+}
+
 // claimId claims a unique ID.
 func (m *sliMetrics) claimId() int64 {
 	m.mu.Lock()
@@ -225,6 +245,8 @@ func (m *sliMetrics) claimId() int64 {
 	// ignored until a nonzero timestamp is written.
 	m.mu.checkpoint[id] = hlc.Timestamp{}
 	m.mu.resolved[id] = hlc.Timestamp{}
+	m.mu.fastestSpan[id] = hlc.Timestamp{}
+	m.mu.fastestTable[id] = hlc.Timestamp{}
 	m.mu.id++
 	return id
 }
@@ -1035,6 +1057,18 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaChangefeedSpanProgressSkew := metric.Metadata{
+		Name:        "changefeed.progress_skew.span",
+		Help:        "The time difference between the fastest and slowest span's resolved timestamp",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaChangefeedTableProgressSkew := metric.Metadata{
+		Name:        "changefeed.progress_skew.table",
+		Help:        "The time difference between the fastest and slowest table's resolved timestamp",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -1152,6 +1186,8 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		}),
 		SinkErrors:        b.Counter(metaSinkErrors),
 		MaxBehindNanos:    b.FunctionalGauge(metaChangefeedMaxBehindNanos, functionalGaugeMaxFn),
+		SpanProgressSkew:  b.FunctionalGauge(metaChangefeedSpanProgressSkew, functionalGaugeMaxFn),
+		TableProgressSkew: b.FunctionalGauge(metaChangefeedTableProgressSkew, functionalGaugeMaxFn),
 		Timers:            timers.New(histogramWindow),
 		NetMetrics:        lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 		CheckpointMetrics: checkpoint.NewAggMetrics(b),
@@ -1236,6 +1272,8 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
+	sm.mu.fastestSpan = make(map[int64]hlc.Timestamp)
+	sm.mu.fastestTable = make(map[int64]hlc.Timestamp)
 	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
 
 	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {
@@ -1266,9 +1304,34 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		}
 	}
 
+	maxTimestampSkewGetter := func(
+		base map[int64]hlc.Timestamp, ahead map[int64]hlc.Timestamp,
+	) func() int64 {
+		return func() int64 {
+			sm.mu.Lock()
+			defer sm.mu.Unlock()
+			var maxSkew int64
+			for id, b := range base {
+				a := ahead[id]
+				if a.IsEmpty() || b.IsEmpty() {
+					continue
+				}
+				skew := a.WallTime - b.WallTime
+				if skew > maxSkew {
+					maxSkew = skew
+				}
+			}
+			return maxSkew
+		}
+	}
+
 	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
 	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
 	sm.MaxBehindNanos = a.MaxBehindNanos.AddFunctionalChild(maxBehindNanosGetter(sm.mu.resolved), scope)
+	sm.SpanProgressSkew = a.SpanProgressSkew.AddFunctionalChild(
+		maxTimestampSkewGetter(sm.mu.checkpoint, sm.mu.fastestSpan), scope)
+	sm.TableProgressSkew = a.TableProgressSkew.AddFunctionalChild(
+		maxTimestampSkewGetter(sm.mu.checkpoint, sm.mu.fastestTable), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
