@@ -1333,15 +1333,16 @@ CREATE TABLE public.inspect_errors (
     error_id UUID DEFAULT gen_random_uuid(),
     job_id INT8 NOT NULL,
     error_type STRING NOT NULL,
+	aost TIMESTAMPTZ NOT NULL,
     database_id OID NULL,
     schema_id OID NULL,
     id OID NOT NULL,
     primary_key STRING NULL,
-    details STRING NOT NULL,
+    details JSONB NOT NULL,
     crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL,
     CONSTRAINT "primary" PRIMARY KEY (error_id ASC),
     INDEX object_idx (id ASC),
-	FAMILY "primary" (error_id, job_id, error_type, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
+	FAMILY "primary" (error_id, job_id, error_type, aost, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '90 days');`
 )
 
@@ -5240,19 +5241,20 @@ var (
 				{Name: "error_id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
 				{Name: "job_id", ID: 2, Type: types.Int},
 				{Name: "error_type", ID: 3, Type: types.String},
-				{Name: "database_id", ID: 4, Type: types.Oid, Nullable: true},
-				{Name: "schema_id", ID: 5, Type: types.Oid, Nullable: true},
-				{Name: "id", ID: 6, Type: types.Oid},
-				{Name: "primary_key", ID: 7, Type: types.String, Nullable: true},
-				{Name: "details", ID: 8, Type: types.String},
-				{Name: "crdb_internal_expiration", ID: 9, Type: types.TimestampTZ, DefaultExpr: &inspectErrorsExpirationString, OnUpdateExpr: &inspectErrorsExpirationString, Hidden: true},
+				{Name: "aost", ID: 4, Type: types.TimestampTZ},
+				{Name: "database_id", ID: 5, Type: types.Oid, Nullable: true},
+				{Name: "schema_id", ID: 6, Type: types.Oid, Nullable: true},
+				{Name: "id", ID: 7, Type: types.Oid},
+				{Name: "primary_key", ID: 8, Type: types.String, Nullable: true},
+				{Name: "details", ID: 9, Type: types.Jsonb},
+				{Name: "crdb_internal_expiration", ID: 10, Type: types.TimestampTZ, DefaultExpr: &inspectErrorsExpirationString, OnUpdateExpr: &inspectErrorsExpirationString, Hidden: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 
 					Name:        "primary",
-					ColumnNames: []string{"error_id", "job_id", "error_type", "database_id", "schema_id", "id", "primary_key", "details", "crdb_internal_expiration"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					ColumnNames: []string{"error_id", "job_id", "error_type", "aost", "database_id", "schema_id", "id", "primary_key", "details", "crdb_internal_expiration"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -5270,7 +5272,7 @@ var (
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				KeyColumnNames:      []string{"id"},
 				KeyColumnDirections: singleASC,
-				KeyColumnIDs:        []descpb.ColumnID{6},
+				KeyColumnIDs:        []descpb.ColumnID{7},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 			},
 		),
