@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2725,6 +2726,14 @@ func (t TransferLeaseDecision) String() string {
 	}
 }
 
+// CountBasedRebalanceDisabled returns true if the count based rebalancing
+// should be disabled. Disabled DisableCountBasedRebalancingIfMMAEnabled is true
+// and mma is enabled (LBRebalancingMultiMetric).
+func (a *Allocator) CountBasedRebalanceDisabled() bool {
+	return kvserverbase.DisableCountBasedRebalancingIfMMAEnabled.Get(&a.st.SV) &&
+		kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetric
+}
+
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
@@ -3024,6 +3033,10 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
+	// Return false early if count based rebalancing is disabled.
+	if a.CountBasedRebalanceDisabled() {
+		return false
+	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease
 	// rebalancing is enabled? In happy cases it's nice to keep this working
 	// to even out the number of leases in addition to the number of replicas,
