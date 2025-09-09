@@ -534,7 +534,7 @@ environment:
 		require.Equal(t, 4, len(runCmds["mkdir"]))
 		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
-		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) --setenv=DD_API_KEY=the_secret drtprod execute ./location/to/test.yaml",
+		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) --setenv=DD_API_KEY='the_secret' drtprod execute ./location/to/test.yaml",
 			runCmds["systemd"][0])
 	})
 	t.Run("run command remotely with no failure and targets specified", func(t *testing.T) {

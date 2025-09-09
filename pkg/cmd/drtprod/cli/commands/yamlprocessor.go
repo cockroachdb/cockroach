@@ -305,7 +305,8 @@ func setupAndExecute(
 	// the DD_API_KEY is added to environment
 	ddAPIKey := os.Getenv("DD_API_KEY")
 	if ddAPIKey != "" {
-		envArg = fmt.Sprintf(" --setenv=DD_API_KEY=%s", ddAPIKey)
+		// Use single quotes to prevent shell injection
+		envArg = fmt.Sprintf(" --setenv=DD_API_KEY='%s'", strings.Replace(ddAPIKey, "'", "'\\''", -1))
 	}
 	// Prepare the systemd command to execute the drtprod binary.
 	executeArgs := fmt.Sprintf(
