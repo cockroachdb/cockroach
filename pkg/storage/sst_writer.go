@@ -117,7 +117,13 @@ func makeSSTRewriteOptions(
 // scanned and their keys inserted into new sstables (NB: constructed using
 // MakeIngestionSSTWriter) that ultimately are uploaded to object storage.
 func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
-	format := minPebbleFormatVersionInCluster(cs.Version.ActiveVersion(ctx).Version).MaxTableFormat()
+	// MakeTransportSSTWriter is used to evaluate export requests. The export
+	// requests could be issued by a non-system tenant with an older binary, so we
+	// must emit at the minimum supported version.
+	//
+	// TODO(radu): ideally the tenant would be able to specify the desired format
+	// version (#153283).
+	format := MinimumSupportedFormatVersion.MaxTableFormat()
 
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 
