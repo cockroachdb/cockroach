@@ -20,12 +20,12 @@ subtest end
 subtest scrub_job_implicit_txn
 
 statement ok
-EXPERIMENTAL SCRUB TABLE t1;
+EXPERIMENTAL SCRUB TABLE t1 AS OF SYSTEM TIME '-1us';
 
 query TTB
 SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1
 ----
-EXPERIMENTAL SCRUB TABLE t1  succeeded  true
+EXPERIMENTAL SCRUB TABLE t1 AS OF SYSTEM TIME '-1us'  succeeded  true
 
 subtest end
 

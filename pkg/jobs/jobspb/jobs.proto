@@ -1446,6 +1446,9 @@ message InspectDetails {
 
   // Checks is the list of individual checks this job will perform.
   repeated Check checks = 1;
+
+  // AsOf specifies the timestamp at which the inspect checks should be performed.
+  util.hlc.Timestamp as_of = 2 [(gogoproto.nullable) = false];
 }
 
 message UpdateTableMetadataCacheDetails {}
