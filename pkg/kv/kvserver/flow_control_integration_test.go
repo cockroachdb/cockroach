@@ -2534,7 +2534,7 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 				// Avoid double printing if the lease hasn't moved.
 				h.comment(fmt.Sprintf(`
 -- Observe the total tracked tokens per-stream on new leaseholder n%v.`, newLeaseNode))
-				h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
+				h.query(newLeaseDB, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 			}
 
 			// Allow admission to proceed on n3 and wait for all tokens to be returned.

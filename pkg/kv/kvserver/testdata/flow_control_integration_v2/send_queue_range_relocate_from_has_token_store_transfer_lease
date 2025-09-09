@@ -108,6 +108,11 @@ ORDER BY
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
+  a        | 1        | 0 B                   
+  a        | 2        | 0 B                   
+  a        | 3        | 1.0 MiB               
+  a        | 4        | 0 B                   
+  a        | 6        | 0 B                   
 
 
 -- (Allowing below-raft admission to proceed on n3.)
