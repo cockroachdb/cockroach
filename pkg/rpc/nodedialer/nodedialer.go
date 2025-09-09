@@ -171,7 +171,7 @@ func (n *Dialer) DialInternalClient(
 
 	var client rpc.RestrictedInternalClient
 	useStreamPoolClient := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings)
-	if !rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
+	if !rpcbase.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
 		gc, conn, err := dial(ctx, n.resolver, n.rpcContext.GRPCDialNode, nodeID, class, true /* checkBreaker */)
 		if err != nil {
 			return nil, errors.Wrapf(err, "gRPC")
@@ -429,4 +429,33 @@ func (c *tracingInternalClient) Batch(
 		ba.TraceInfo = sp.Meta().ToProto()
 	}
 	return c.RestrictedInternalClient.Batch(ctx, ba)
+}
+
+// DialRPCClient establishes a connection to a node identified by its ID and
+// returns a client for the requested service type. When DRPC is enabled, it
+// creates a DRPC client; otherwise, it falls back to a gRPC client.
+func DialRPCClient[C any](
+	nd *Dialer,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	class rpcbase.ConnectionClass,
+	grpcClientFn func(*grpc.ClientConn) C,
+	drpcClientFn func(drpc.Conn) C,
+) (C, error) {
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, grpcClientFn,
+		drpcClientFn, nd.rpcContext.Settings)
+}
+
+// DialRPCClientNoBreaker is like DialRPCClient, but will not check the
+// circuit breaker before trying to connect.
+func DialRPCClientNoBreaker[C any](
+	nd *Dialer,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	class rpcbase.ConnectionClass,
+	grpcClientFn func(*grpc.ClientConn) C,
+	drpcClientFn func(drpc.Conn) C,
+) (C, error) {
+	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class, grpcClientFn,
+		drpcClientFn, nd.rpcContext.Settings)
 }

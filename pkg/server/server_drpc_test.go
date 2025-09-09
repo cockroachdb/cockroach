@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,7 +29,7 @@ func TestDRPCSelectQuery(t *testing.T) {
 		defer cancel()
 
 		st := cluster.MakeTestingClusterSettings()
-		rpc.ExperimentalDRPCEnabled.Override(ctx, &st.SV, true)
+		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &st.SV, true)
 
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
