@@ -12,6 +12,7 @@ environment:
   CLUSTER_NODES: 15
   WORKLOAD_NODES: 3
   STORE_COUNT: 2
+  COCKROACH_ROACHPROD_INSECURE: false
 
   # variables used by tpcc_run_multiregion.sh
   NUM_REGIONS: 3
@@ -60,7 +61,7 @@ targets:
           gce-local-ssd-count: $STORE_COUNT
           os-volume-size: 100
           username: drt
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -150,7 +151,7 @@ targets:
           gce-machine-type: n2d-standard-4
           os-volume-size: 100
           username: workload
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -368,3 +369,4 @@ targets:
           - $CLUSTER:11-15
         flags:
           restart: true
+        wait_after: 3300

@@ -29,6 +29,7 @@ for var in "${env_vars[@]}"; do
 done
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
 
 for NODE in $(seq 1 $NUM_REGIONS)
 do

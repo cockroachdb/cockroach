@@ -65,6 +65,7 @@ if [ -z "${PARTITION_TYPE}" ]; then
 fi
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
 
 get_partitions_in_range() {
     local start=$(($1 - 1))
