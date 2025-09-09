@@ -802,6 +802,8 @@ type StoreMetrics struct {
 	StoreID roachpb.StoreID
 	*pebble.Metrics
 	WriteStallCount int64
+	// DiskUnhealthy corresponds to Engine.GetDiskUnhealthy.
+	DiskUnhealthy bool
 	// Optional.
 	DiskStats DiskStats
 	// Config.
