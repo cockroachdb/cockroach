@@ -65,6 +65,9 @@ func registerTPCDSVec(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := clusterConn.Exec(`SET CLUSTER SETTING backup.index.read.enabled = false`); err != nil {
+			t.Fatal(err)
+		}
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`

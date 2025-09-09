@@ -116,6 +116,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			allConns = append(allConns, c.Conn(ctx, t.L(), node))
 		}
 		conn := allConns[0]
+		if _, err := conn.Exec(`SET CLUSTER SETTING backup.index.read.enabled = false`); err != nil {
+			t.Fatal(err)
+		}
 		t.Status("executing setup")
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
