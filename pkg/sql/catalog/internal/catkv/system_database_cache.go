@@ -50,6 +50,8 @@ func NewSystemDatabaseCache(codec keys.SQLCodec, settings *cluster.Settings) *Sy
 		codec,
 		zonepb.DefaultZoneConfigRef(),
 		zonepb.DefaultSystemZoneConfigRef(),
+		// TODO(msbutler): will this be problematic??
+		nil,
 	)
 	var warm nstree.MutableCatalog
 	_ = ms.ForEachCatalogDescriptor(func(desc catalog.Descriptor) error {

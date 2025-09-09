@@ -27,6 +27,7 @@ type InitialValuesOpts struct {
 	DefaultSystemZoneConfig *zonepb.ZoneConfig
 	OverrideKey             clusterversion.Key
 	Codec                   keys.SQLCodec
+	SkipIDs                 map[uint32]struct{}
 }
 
 // GenerateInitialValues generates the initial values with which to bootstrap a
@@ -84,7 +85,7 @@ var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 func buildLatestInitialValues(
 	opts InitialValuesOpts,
 ) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
-	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
+	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig, opts.SkipIDs)
 	kvs, splits = schema.GetInitialValues()
 	return kvs, splits, nil
 }

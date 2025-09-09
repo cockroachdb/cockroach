@@ -452,10 +452,10 @@ func allocateStoreIDs(
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
-func GetBootstrapSchema(
+func GetBootstrapSchemaForTest(
 	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) bootstrap.MetadataSchema {
-	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
+	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig, nil)
 }
 
 // bootstrapCluster initializes the passed-in engines for a new cluster.

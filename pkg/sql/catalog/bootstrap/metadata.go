@@ -43,6 +43,7 @@ type MetadataSchema struct {
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
 	ids           catalog.DescriptorIDSet
+	skipIDs       map[uint32]struct{}
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -51,8 +52,9 @@ func MakeMetadataSchema(
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	skipIDs map[uint32]struct{},
 ) MetadataSchema {
-	ms := MetadataSchema{codec: codec}
+	ms := MetadataSchema{codec: codec, skipIDs: skipIDs}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
 	return ms
 }
@@ -353,7 +355,16 @@ func (ms MetadataSchema) allocateID() (nextID descpb.ID) {
 			maxID = d.GetID()
 		}
 	}
-	return maxID + 1
+	nextID = maxID + 1
+	if len(ms.skipIDs) > 0 {
+		for {
+			if _, ok := ms.skipIDs[uint32(nextID)]; !ok {
+				break
+			}
+			nextID++
+		}
+	}
+	return nextID
 }
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -623,7 +634,7 @@ func addSystemTenantEntry(target *MetadataSchema) {
 }
 
 func testingMinUserDescID(codec keys.SQLCodec) uint32 {
-	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), nil)
 	return uint32(ms.FirstNonSystemDescriptorID())
 }
 
@@ -659,7 +670,7 @@ func GetAndHashInitialValuesToString(tenantID uint64) (initialValues string, has
 	if tenantID > 0 {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
-	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), nil)
 
 	initialValues = InitialValuesToString(ms)
 	h := sha256.Sum256([]byte(initialValues))

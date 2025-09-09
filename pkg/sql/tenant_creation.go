@@ -136,7 +136,7 @@ func (p *planner) createTenantInternal(
 		return tid, nil
 	}
 
-	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig)
+	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig,nil)
 }
 
 // BootstrapTenant bootstraps the span of the newly created tenant identified in
@@ -147,6 +147,7 @@ func BootstrapTenant(
 	txn *kv.Txn,
 	info mtinfopb.TenantInfoWithUsage,
 	zfcg *zonepb.ZoneConfig,
+	skipIDs map[uint32]struct{},
 ) (roachpb.TenantID, error) {
 	tid := roachpb.MustMakeTenantID(info.ID)
 
@@ -186,6 +187,7 @@ func BootstrapTenant(
 		DefaultSystemZoneConfig: zfcg,
 		OverrideKey:             bootstrapVersionOverride,
 		Codec:                   codec,
+		SkipIDs:                 skipIDs,
 	}
 	kvs, splits, err := initialValuesOpts.GenerateInitialValues()
 	if err != nil {
