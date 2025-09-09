@@ -51,10 +51,11 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 // ResolvedTenantReplicationOptions represents options from an
 // evaluated CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	resumeTimestamp    hlc.Timestamp
-	retention          *int32
-	expirationWindow   *time.Duration
-	enableReaderTenant bool
+	resumeTimestamp     hlc.Timestamp
+	retention           *int32
+	expirationWindow    *time.Duration
+	enableReaderTenant  bool
+	readerTenantSkipIDs []uint32
 }
 
 func evalTenantReplicationOptions(
@@ -119,6 +120,13 @@ func (r *resolvedTenantReplicationOptions) ReaderTenantEnabled() bool {
 		return false
 	}
 	return true
+}
+
+func (r *resolvedTenantReplicationOptions) ReaderTenantSkipIDs() []uint32 {
+	if r == nil {
+		return nil
+	}
+	return r.readerTenantSkipIDs
 }
 
 func alterReplicationJobTypeCheck(

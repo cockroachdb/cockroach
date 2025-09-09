@@ -331,7 +331,15 @@ func createReaderTenant(
 		}
 
 		readerInfo.ID = readerID.ToUint64()
-		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg,nil)
+
+		skipIDsMap := make(map[uint32]struct{})
+		if skipIDs := options.ReaderTenantSkipIDs(); len(skipIDs) > 0 {
+			for _, id := range skipIDs {
+				skipIDsMap[id] = struct{}{}
+			}
+		}
+
+		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg, skipIDsMap)
 		if err != nil {
 			return readerID, err
 		}
