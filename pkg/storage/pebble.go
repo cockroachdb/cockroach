@@ -452,9 +452,18 @@ var (
 		settings.SystemVisible,
 		"storage.value_separation.compaction_garbage_threshold",
 		"the max garbage threshold configures the percentage of unreferenced value "+
-			"bytes that trigger blob-file rewrite compactions; 100 disables these compactions",
+			"bytes that begin to trigger blob-file rewrite compactions; 100 disables these compactions",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
 			10, /* default */
+			1 /* min */, 80 /* max */)),
+		settings.IntInRange(1, 100),
+	)
+	valueSeparationCompactionGarbageThresholdHighPriority = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.compaction_garbage_threshold_high_priority",
+		"configures the percentage of unreferenced value bytes that trigger high-priority blob-file rewrite compactions",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
+			20, /* default */
 			1 /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
@@ -936,12 +945,16 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		if !valueSeparationEnabled.Get(&cfg.settings.SV) {
 			return pebble.ValueSeparationPolicy{}
 		}
+		lowPri := float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0
+		highPri := float64(valueSeparationCompactionGarbageThresholdHighPriority.Get(&cfg.settings.SV)) / 100.0
+		highPri = max(highPri, lowPri)
 		return pebble.ValueSeparationPolicy{
-			Enabled:               true,
-			MinimumSize:           int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
-			MaxBlobReferenceDepth: int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
-			RewriteMinimumAge:     valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
-			TargetGarbageRatio:    float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0,
+			Enabled:                  true,
+			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
+			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
+			GarbageRatioLowPriority:  lowPri,
+			GarbageRatioHighPriority: highPri,
 		}
 	}
 	cfg.opts.Experimental.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
