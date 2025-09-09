@@ -522,6 +522,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	lastGossipMaxIOScore, _ := s.cachedCapacity.lastGossiped.IOThresholdMax.Score()
 	updateForMaxIOOverloadScore := cachedMaxIOScore >= gossipMinMaxIOOverloadScore &&
 		cachedMaxIOScore > lastGossipMaxIOScore
+	diskUnhealthy := s.cachedCapacity.cached.IOThreshold.DiskUnhealthy
+	updateForChangeInDiskUnhealth :=
+		s.cachedCapacity.lastGossiped.IOThreshold.DiskUnhealthy != diskUnhealthy
 	s.cachedCapacity.Unlock()
 
 	if s.knobs.DisableLeaseCapacityGossip {
@@ -548,6 +551,9 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	}
 	if updateForMaxIOOverloadScore {
 		reason += fmt.Sprintf("io-overload(%.1f) ", cachedMaxIOScore)
+	}
+	if updateForChangeInDiskUnhealth {
+		reason += fmt.Sprintf("disk-unhealthy(%t) ", diskUnhealthy)
 	}
 	if reason != "" {
 		should = true
