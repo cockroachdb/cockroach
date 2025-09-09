@@ -1659,7 +1659,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
+	pgL, loopbackPgL, grpcLoopbackDialFn, drpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, s.cfg.BaseConfig,
 		s.stopper, s.grpc, s.drpc, ListenAndUpdateAddrs, true /* enableSQLListener */, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
@@ -1669,7 +1669,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	s.loopbackPgL = loopbackPgL
 
 	// Tell the RPC context how to connect in-memory.
-	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDialer(grpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDRPCDialer(drpcLoopbackDialFn)
 
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)

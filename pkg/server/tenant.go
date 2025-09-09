@@ -604,7 +604,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		lf = s.sqlServer.cfg.RPCListenerFactory
 	}
 
-	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
+	pgL, loopbackPgL, grpcLoopbackDialFn, drpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, *s.sqlServer.cfg, s.stopper,
 		s.grpc, s.drpc, lf, enableSQLListener, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
@@ -616,7 +616,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	s.loopbackPgL = loopbackPgL
 
 	// Tell the RPC context how to connect in-memory.
-	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDialer(grpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDRPCDialer(drpcLoopbackDialFn)
 
 	// NB: This is where (*Server).PreStart() reports the listener readiness
 	// via testing knobs: PauseAfterGettingRPCAddress, SignalAfterGettingRPCAddress.

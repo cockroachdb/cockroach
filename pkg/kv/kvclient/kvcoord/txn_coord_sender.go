@@ -281,9 +281,6 @@ func newRootTxnCoordSender(
 		timeSource: timeutil.DefaultTimeSource{},
 		txn:        &tcs.mu.txn,
 	}
-	tcs.interceptorAlloc.txnWriteBuffer.init(
-		&tcs.interceptorAlloc.txnPipeliner,
-	)
 
 	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
 
@@ -363,6 +360,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		allowConcurrentRequests: typ == kv.LeafTxn,
 	}
 	tc.interceptorAlloc.txnSeqNumAllocator.writeSeq = txn.Sequence
+	tc.interceptorAlloc.txnWriteBuffer.init(&tc.interceptorAlloc.txnPipeliner)
 }
 
 func (tc *TxnCoordSender) connectInterceptors() {

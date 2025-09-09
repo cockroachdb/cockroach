@@ -183,6 +183,8 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@io_storj_drpc//drpcctx",
         "@io_storj_drpc//drpcmetadata",
+        "@io_storj_drpc//drpcmux",
+        "@io_storj_drpc//drpcserver",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//credentials",
