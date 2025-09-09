@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -431,9 +432,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		c.GetOptionalFiltersAndFilterColumns(explicitFilters, scanPrivate)
 
 	type candidate struct {
-		index            cat.Index
-		indexCols        opt.ColSet
-		constraint       *constraint.Constraint
+		sp               *memo.ScanPrivate
 		isCovering       bool
 		remainingFilters memo.FiltersExpr
 		partitionFilters memo.FiltersExpr
@@ -446,24 +445,18 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	reject := rejectInvertedIndexes | rejectVectorIndexes
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, explicitFilters, reject)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
-		cand := candidate{
-			index:      index,
-			indexCols:  indexCols,
-			isCovering: isCovering,
-			constProj:  constProj,
-		}
 
 		// Create a prefix sorter that describes which index partitions are
 		// local to the gateway region.
 		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
 		// Build Constraints to scan a subset of the table Spans.
-		var ok bool
-		if cand.partitionFilters, cand.remainingFilters, cand.constraint, ok =
+		partitionFilters, remainingFilters, constraint, ok :=
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
 				filters, optionalFilters, filterColumns,
-			); !ok {
+			)
+		if !ok {
 			return
 		}
 
@@ -485,67 +478,84 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 					continue
 				}
 				for j := 0; j < optionalConstraints.Length(); j++ {
-					if cand.constraint.Contains(c.e.ctx, c.e.evalCtx, optionalConstraints.Constraint(j)) {
+					if constraint.Contains(c.e.ctx, c.e.evalCtx, optionalConstraints.Constraint(j)) {
 						return
 					}
 				}
 			}
 		}
-		candidates = append(candidates, cand)
+
+		// Construct a new constrained ScanPrivate.
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
+		newScanPrivate.Index = index.Ordinal()
+		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
+		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, constraint)
+		// Record whether we were able to use partitions to constrain the scan.
+		newScanPrivate.PartitionConstrainedScan = len(partitionFilters) > 0
+
+		candidates = append(candidates, candidate{
+			sp:               &newScanPrivate,
+			isCovering:       isCovering,
+			constProj:        constProj,
+			remainingFilters: remainingFilters,
+			partitionFilters: partitionFilters,
+		})
 	})
 
-	// Prune a candidate c1 if another candidate c2 exists that:
+	// Identify candidate c1 as suboptimal if another candidate c2 exists where
+	// all of the following are true:
 	//
-	//   1. Has fewer remaining filters than c1.
-	//   2. And constrains a strict superset of the columns constrained by c1.
+	//   1. c1 does not require an index join, or both c1 and c2 require index
+	//   joins, i.e., c1 is not 2. the only candidate that will eliminate an
+	//   index join.
+	//   2. c1 does not provide a required ordering that c2 cannot.
+	//   3. c1 has more remaining filters than c2.
+	//   4. c1 constrains a strict subset of the columns constrained by c2.
 	//
-	// These criteria are an indication that c2 is strictly more selective
-	// than c1.
-	//
-	// TODO(mgartner): What about queries that require specific orderings or
-	// grouping columns that only c1 can provide?
-	var pruned intsets.Fast
+	// These criteria are convincing heuristics indicating that c1 is less
+	// optimal than c2.
 	for i := 0; i < len(candidates); i++ {
 		for j := 0; j < len(candidates); j++ {
-			// Do not compare the same candidate with itself and skip candidates
-			// that have already been pruned.
-			if i == j || pruned.Contains(i) {
+			// Do not compare the same candidate with itself.
+			if i == j {
 				continue
 			}
 			c1, c2 := candidates[i], candidates[j]
-			if c1.isCovering != c2.isCovering {
+			// Skip candidates that have already been determined to be
+			// suboptimal.
+			if c1.sp.IsSuboptimalScan {
 				continue
 			}
-			if len(c1.remainingFilters) > len(c2.remainingFilters) {
-				cols1 := c1.constraint.ConstrainedColumns()
-				cols2 := c2.constraint.ConstrainedColumns()
-				if cols1.Len() < cols2.Len() && cols1.SubsetOf(cols2) {
-					pruned.Add(i)
+			// Criterion 1.
+			if c1.isCovering && !c2.isCovering {
+				continue
+			}
+			// Criterion 2.
+			if ok, _ := ordering.ScanPrivateCanProvide(md, c1.sp, &required.Ordering); ok {
+				if ok, _ := ordering.ScanPrivateCanProvide(md, c2.sp, &required.Ordering); !ok {
+					continue
 				}
+			}
+			// Criterion 3.
+			if len(c1.remainingFilters) <= len(c2.remainingFilters) {
+				continue
+			}
+			// Criterion 4.
+			cols1 := c1.sp.Constraint.ConstrainedColumns()
+			cols2 := c2.sp.Constraint.ConstrainedColumns()
+			if cols1.Len() < cols2.Len() && cols1.SubsetOf(cols2) {
+				c1.sp.IsSuboptimalScan = true
 			}
 		}
 	}
 
 	var pkCols opt.ColSet
-	for i, cand := range candidates {
-		// Skip pruned candidates.
-		if pruned.Contains(i) {
-			continue
-		}
-
-		// Construct new constrained ScanPrivate.
-		newScanPrivate := *scanPrivate
-		newScanPrivate.Distribution.Regions = nil
-		newScanPrivate.Index = cand.index.Ordinal()
-		newScanPrivate.Cols = cand.indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, cand.constraint)
-		// Record whether we were able to use partitions to constrain the scan.
-		newScanPrivate.PartitionConstrainedScan = len(cand.partitionFilters) > 0
-
+	for _, cand := range candidates {
 		// If the alternate index includes the set of needed columns, then
 		// construct a new Scan operator using that index.
 		if cand.isCovering {
-			sb.SetScan(&newScanPrivate)
+			sb.SetScan(cand.sp)
 
 			// Project constants from partial index predicate filters, if there
 			// are any.
@@ -573,12 +583,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// If the index is not covering, scan the needed index columns plus
 		// primary key columns.
-		newScanPrivate.Cols.UnionWith(pkCols)
-		sb.SetScan(&newScanPrivate)
+		cand.sp.Cols.UnionWith(pkCols)
+		sb.SetScan(cand.sp)
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remainingFilters := sb.AddSelectAfterSplit(cand.remainingFilters, newScanPrivate.Cols)
+		remainingFilters := sb.AddSelectAfterSplit(cand.remainingFilters, cand.sp.Cols)
 		sb.AddIndexJoin(scanPrivate.Cols)
 		sb.AddSelect(remainingFilters)
 

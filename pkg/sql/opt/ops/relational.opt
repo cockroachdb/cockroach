@@ -102,6 +102,9 @@ define ScanPrivate {
     # about how often this optimization is getting applied.
     PartitionConstrainedScan bool
 
+    # IsSuboptimalScan TODO
+    IsSuboptimalScan bool
+
     # ExactPrefix caches the exact prefix of the Constraint.
     ExactPrefix int
 }
