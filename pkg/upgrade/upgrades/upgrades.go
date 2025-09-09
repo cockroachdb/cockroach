@@ -103,6 +103,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"set autostats fraction for system stats tables",
+		clusterversion.V25_4_SystemStatsTablesAutostatsFraction.Version(),
+		upgrade.NoPrecondition,
+		systemStatsTablesAutostatsFractionMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore table storage parameters"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
