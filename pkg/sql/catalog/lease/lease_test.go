@@ -2333,7 +2333,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 		// descriptor txn will not wait for the initial version.
 		if expected == descpb.DescriptorState_DROP && next == descpb.DescriptorState_PUBLIC {
 			require.NoError(t,
-				execCfg.LeaseManager.WaitForInitialVersion(ctx, descpb.IDs{testTableID()}, retry.Options{}, nil))
+				execCfg.LeaseManager.WaitForInitialVersion(ctx, descpb.IDs{testTableID()}, nil /* regions */, retry.Options{}))
 		}
 		// Wait for the lease manager's refresh worker to have processed the
 		// descriptor update.

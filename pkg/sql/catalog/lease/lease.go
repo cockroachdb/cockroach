@@ -107,7 +107,7 @@ var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLev
 func (m *Manager) WaitForNoVersion(
 	ctx context.Context,
 	id descpb.ID,
-	cachedDatabaseRegions regionliveness.CachedDatabaseRegions,
+	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) error {
 	versions := []IDVersion{
@@ -125,7 +125,7 @@ func (m *Manager) WaitForNoVersion(
 	defer wsTracker.end()
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
-		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
+		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
 			return err
 		}
@@ -317,8 +317,8 @@ func countSessionsHoldingStaleDescriptor(
 func (m *Manager) WaitForInitialVersion(
 	ctx context.Context,
 	descriptorsIds descpb.IDs,
-	retryOpts retry.Options,
 	regions regionliveness.CachedDatabaseRegions,
+	retryOpts retry.Options,
 ) error {
 	if !WaitForInitialVersion.Get(&m.settings.SV) ||
 		!m.storage.settings.Version.IsActive(ctx, clusterversion.V25_1) {
@@ -561,7 +561,7 @@ func (m *Manager) WaitForOneVersion(
 // The MaxRetries and MaxDuration in retryOpts should not be set.
 func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
-	descriptorId descpb.ID,
+	id descpb.ID,
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) (catalog.Descriptor, error) {
@@ -581,7 +581,7 @@ func (m *Manager) WaitForNewVersion(
 	// enjoyers).
 	for r := retry.Start(retryOpts); r.Next(); {
 		var err error
-		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, descriptorId, true)
+		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
 			return nil, err
 		}
