@@ -1723,9 +1723,9 @@ func (cr *commandRegistry) buildGrafanaAnnotationCmd() *cobra.Command {
 		Long: fmt.Sprintf(`Adds an annotation to the specified grafana instance
 
 By default, we assume the grafana instance needs an authentication token to connect
-to. A service account json and audience will be read in from the environment
-variables %s and %s to attempt authentication through google IDP. Use the --insecure
-option when a token is not necessary.
+to. Unless the %s environment variable exists, the default Google Application Credentials
+will be used to derive an Access Token to authenticate against Google Identity-Aware Proxy.
+Use the --insecure option when a token is not necessary.
 
 --tags specifies the tags the annotation should have.
 
@@ -1740,7 +1740,7 @@ creates an annotation over time range.
 Example:
 # Create an annotation over time range 1-100 on the centralized grafana instance, which needs authentication.
 roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --tags my-cluster --tags test-run-1 --dashboard-uid overview --time-range 1,100
-`, roachprodutil.ServiceAccountJson, roachprodutil.ServiceAccountAudience),
+`, roachprodutil.CredentialsEnvironmentVariable),
 		Args: cobra.ExactArgs(2),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			req := grafana.AddAnnotationRequest{
