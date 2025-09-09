@@ -331,7 +331,7 @@ func createReaderTenant(
 		}
 
 		readerInfo.ID = readerID.ToUint64()
-		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg)
+		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg, 0)
 		if err != nil {
 			return readerID, err
 		}
