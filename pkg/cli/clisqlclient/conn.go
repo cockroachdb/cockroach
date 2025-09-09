@@ -436,6 +436,23 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	defer func(prev bool) { c.alwaysInferResultTypes = prev }(c.alwaysInferResultTypes)
 	c.alwaysInferResultTypes = false
 
+	// Metadata checks require allow_unsafe_internals to be on.
+	allowUnsafeInternals, err := c.getSessionVariable(ctx, "allow_unsafe_internals")
+	if err != nil {
+		fmt.Fprintf(c.errw, "warning: unable to retrieve allow_unsafe_internals setting: %v\n", err)
+	} else if allowUnsafeInternals == "off" {
+		// Temporarily turn on allow_unsafe_internals.
+		if err := c.Exec(ctx, "SET allow_unsafe_internals = on"); err != nil {
+			fmt.Fprintf(c.errw, "warning: unable to set allow_unsafe_internals to true: %v\n", err)
+		} else {
+			defer func() {
+				if resetErr := c.Exec(ctx, "SET allow_unsafe_internals = off"); resetErr != nil {
+					fmt.Fprintf(c.errw, "warning: unable to reset allow_unsafe_internals to false: %v\n", resetErr)
+				}
+			}()
+		}
+	}
+
 	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
 	if c.conn.IsClosed() {
 		return MarkWithConnectionClosed(err)
@@ -544,6 +561,15 @@ func (c *sqlConn) GetServerValue(
 	}
 
 	return dbVals[0], true
+}
+
+// getSessionVariable retrieves the value of a session variable.
+func (c *sqlConn) getSessionVariable(ctx context.Context, varName string) (string, error) {
+	val, ok := c.GetServerValue(ctx, varName, fmt.Sprintf("SHOW %s", varName))
+	if !ok {
+		return "", errors.Newf("unable to retrieve session variable %s", varName)
+	}
+	return toString(val), nil
 }
 
 func (c *sqlConn) GetLastQueryStatistics(ctx context.Context) (results QueryStats, resErr error) {
