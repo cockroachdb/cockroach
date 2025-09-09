@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,14 +84,18 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 		onStartError      error
 		expectedErrRegex  string
 		expectedJobStatus string
+		skipUnderRace     bool
 	}{
 		{desc: "inspect success", expectedJobStatus: "succeeded"},
 		{desc: "inspect failure", onStartError: errors.Newf("inspect validation error"),
 			expectedErrRegex: "inspect validation error", expectedJobStatus: "failed"},
 		// Note: avoiding small statement timeouts, as this can impact the ability to reset.
 		{desc: "statement timeout", setupSQL: "SET statement_timeout = '1s'", tearDownSQL: "RESET statement_timeout",
-			pauseAtStart: true, expectedErrRegex: "canceled", expectedJobStatus: "succeeded"},
+			pauseAtStart: true, expectedErrRegex: "canceled", expectedJobStatus: "succeeded", skipUnderRace: true},
 	} {
+		if tc.skipUnderRace {
+			skip.UnderRace(t, "timing dependent")
+		}
 		t.Run(tc.desc, func(t *testing.T) {
 			// Run in a closure so that we run teardown before verifying job status
 			func() {
