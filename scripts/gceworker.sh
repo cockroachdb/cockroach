@@ -243,14 +243,14 @@ put)
 		echo "or:    $0 put sourcepath"
 		exit 1
 	elif (($# == 1)); then
-		lpath="${1}"
+		lpaths=("${1}")
 		rpath="~"
 	else
-		lpath="${@:1:$#-1}"
+		lpaths=("${@:1:$#-1}")
 		rpath="${@: -1}"
 	fi
 	to="${NAME}:${rpath}"
-	gcloud compute scp --recurse ${lpath} "${to}"
+	gcloud compute scp --recurse "${lpaths[@]}" "${to}"
 	;;
 ip)
 	echo "$(get_ip)"
