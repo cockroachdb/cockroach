@@ -1261,7 +1261,7 @@ func (r *testRunner) runTest(
 				if liveMigrationVMNames != "" {
 					failureMsg = fmt.Sprintf("VMs had live migrations during the test run: %s\n\n**Other Failures:**\n%s", liveMigrationVMNames, failureMsg)
 					t.resetFailures()
-					t.Error(liveMigrationError(hostErrorVMNames))
+					t.Error(liveMigrationError(liveMigrationVMNames))
 				}
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
