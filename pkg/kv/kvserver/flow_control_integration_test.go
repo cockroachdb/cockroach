@@ -1569,7 +1569,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 		h.query(n1, v2FlowTokensQueryStr)
 
 		h.comment(`
--- (Issuing another 1x1MiB, 3x replicated write that's admitted via 
+-- (Issuing another 1x1MiB, 3x replicated write that's admitted via
 -- the work queue on the leaseholder. It shouldn't deduct any tokens.)
 `)
 		h.put(ctx, k, 1, testFlowModeToPri(mode))
@@ -1854,7 +1854,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 --   Block admission [n2,n3,n4,n5].
 --   Regular write -4 MiB.
 --   Regular write -1  MiB.
---   - Blocks on wait-for-eval, however the test bypasses this instance.    
+--   - Blocks on wait-for-eval, however the test bypasses this instance.
 --   - Metrics should reflect 2 streams being prevented from forming a send queue.
 --   Allow admission [n1,n2,n3,n4,n5] (all).
 --   Assert all tokens returned.
@@ -1928,11 +1928,11 @@ func TestFlowControlSendQueue(t *testing.T) {
 -- Send queue metrics from n1, n3's send queue should have been force-flushed.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.comment(`
--- Observe the total tracked tokens per-stream on n1, n3's flushed entries 
+-- Observe the total tracked tokens per-stream on n1, n3's flushed entries
 -- will also be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the deducted 
+-- Per-store tokens available from n1, these should reflect the deducted
 -- tokens from force-flushing n3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -2021,7 +2021,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	setTokenReturnEnabled(true /* enabled */, 0, 1, 2, 3, 4)
 	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 	h.comment(`
--- Per-store tokens available from n1. Expect these to return to the same as 
+-- Per-store tokens available from n1. Expect these to return to the same as
 -- the initial state.
 `)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
@@ -2056,7 +2056,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1. We should expect to see the
 -- 1 MiB write being tracked across a quorum of streams, while the 4 MiB write
--- is tracked across each stream (except s1). Two(/4 non-leader) replica send 
+-- is tracked across each stream (except s1). Two(/4 non-leader) replica send
 -- streams should be prevented from forming a send queue and have higher tracked
 -- tokens than the other two.
 `)
@@ -2242,7 +2242,7 @@ func TestFlowControlSendQueueManyInflight(t *testing.T) {
 -- queue prevented from forming. Lastly, we will unblock admission and stress
 -- the raft in-flights tracker as the queue is drained.`)
 	h.comment(`
--- Initial per-store tokens available from n1. 
+-- Initial per-store tokens available from n1.
 `)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 	h.comment(`-- (Blocking below-raft admission on [n1,n2,n3].)`)
@@ -2456,7 +2456,7 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 -- be tracked here.`)
 			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 			h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 			h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -2744,7 +2744,7 @@ func TestFlowControlRangeSplitMergeMixedVersion(t *testing.T) {
 	h.waitForSendQueueSize(ctx, merged.RangeID, 0 /* expSize 0 MiB */, 0 /* serverIdx */)
 
 	h.comment(`
--- Send queue and flow token metrics from n1, post-split-merge. 
+-- Send queue and flow token metrics from n1, post-split-merge.
 -- We do not expect to see the send queue develop for s3.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
@@ -2957,7 +2957,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 -- be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -3142,7 +3142,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 -- be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -3410,7 +3410,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 -- n3, using 4x1 MiB (deduction, the write itself is small) writes. Then,
 -- we will write 1 MiB to the range and wait for the closedTS to fall
 -- behind on n3. We expect that the closedTS falling behind will trigger
--- an error that is returned to the mux rangefeed client, which will in turn 
+-- an error that is returned to the mux rangefeed client, which will in turn
 -- allows the rangefeed  request to be re-routed to another replica.`)
 	// Block admission on n3, while allowing every other node to admit.
 	setTokenReturnEnabled(true /* enabled */, 0, 1)
@@ -3444,7 +3444,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 -- be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -3813,12 +3813,12 @@ var flowPerStoreDeductionQueryHeaderStrs = []string{
 // v2FlowTokensQueryStr is the query string to fetch flow tokens metrics from
 // the node metrics table.
 const v2FlowTokensQueryStr = `
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -3827,12 +3827,12 @@ ORDER BY
 // flowSendQueueQueryStr is the query string to fetch flow control send queue
 // metrics from the node metrics table.
 const flowSendQueueQueryStr = `
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
