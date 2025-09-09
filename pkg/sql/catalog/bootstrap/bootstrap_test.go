@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -132,5 +133,27 @@ func makeMetadataSchema(tenantID uint64) MetadataSchema {
 	if tenantID > 0 {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
-	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0)
+}
+
+func TestDynamicSystemTableIDOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	offset := uint32(1000)
+
+	defaultMetadata := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0)
+	offsetMetadata := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), offset)
+
+	require.Len(t, defaultMetadata.descs, len(offsetMetadata.descs))
+
+	for i := range defaultMetadata.descs {
+		defaultID := defaultMetadata.descs[i].GetID()
+		if defaultID <= keys.MaxReservedDescID {
+			// Reserved IDs are not offset.
+			require.Equal(t, defaultID, offsetMetadata.descs[i].GetID())
+		} else {
+			require.Equal(t, defaultMetadata.descs[i].GetID()+descpb.ID(offset), offsetMetadata.descs[i].GetID())
+		}
+	}
 }

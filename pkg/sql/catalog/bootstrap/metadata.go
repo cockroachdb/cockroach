@@ -43,6 +43,10 @@ type MetadataSchema struct {
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
 	ids           catalog.DescriptorIDSet
+
+	// dynamicSystemTableIDOffset offsets the dynamically allocated IDs. So, if
+	// this is set to 500, the ids will be 501, 502, etc.
+	dynamicSystemTableIDOffset uint32
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -51,8 +55,9 @@ func MakeMetadataSchema(
 	codec keys.SQLCodec,
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	dynamicSystemTableIDOffset uint32,
 ) MetadataSchema {
-	ms := MetadataSchema{codec: codec}
+	ms := MetadataSchema{codec: codec, dynamicSystemTableIDOffset: dynamicSystemTableIDOffset}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
 	return ms
 }
@@ -347,7 +352,7 @@ func (ms MetadataSchema) FirstNonSystemDescriptorID() descpb.ID {
 }
 
 func (ms MetadataSchema) allocateID() (nextID descpb.ID) {
-	maxID := descpb.ID(keys.MaxReservedDescID)
+	maxID := descpb.ID(keys.MaxReservedDescID) + descpb.ID(ms.dynamicSystemTableIDOffset)
 	for _, d := range ms.descs {
 		if d.GetID() > maxID {
 			maxID = d.GetID()
@@ -623,7 +628,7 @@ func addSystemTenantEntry(target *MetadataSchema) {
 }
 
 func testingMinUserDescID(codec keys.SQLCodec) uint32 {
-	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0)
 	return uint32(ms.FirstNonSystemDescriptorID())
 }
 
@@ -659,7 +664,7 @@ func GetAndHashInitialValuesToString(tenantID uint64) (initialValues string, has
 	if tenantID > 0 {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
-	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0)
 
 	initialValues = InitialValuesToString(ms)
 	h := sha256.Sum256([]byte(initialValues))

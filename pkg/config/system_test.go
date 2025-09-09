@@ -203,7 +203,7 @@ func TestGetLargestID(t *testing.T) {
 
 		// Real SQL layout.
 		func() testCase {
-			ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+			ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0)
 			descIDs := ms.DescriptorIDs()
 			maxDescID := config.ObjectID(descIDs[len(descIDs)-1])
 			kvs, _ /* splits */ := ms.GetInitialValues()
@@ -321,7 +321,7 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	kvs, _ /* splits */ := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(), 0,
 	).GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,
@@ -353,7 +353,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	minKey := roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd())
 
 	schema := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0,
 	)
 	// Real system tables only.
 	baseSql, _ /* splits */ := schema.GetInitialValues()
@@ -460,7 +460,7 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 	minTenID, maxTenID := roachpb.MinTenantID.ToUint64(), roachpb.MaxTenantID.ToUint64()
 
 	schema := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), 0,
 	)
 	minKey := tkey(bootstrap.TestingUserDescID(0))
 
@@ -599,7 +599,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 
 	kvs, _ /* splits */ := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, cfg.DefaultZoneConfig, zonepb.DefaultSystemZoneConfigRef(), 0,
 	).GetInitialValues()
 	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: kvs,

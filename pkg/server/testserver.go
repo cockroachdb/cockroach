@@ -1886,7 +1886,7 @@ func ExpectedInitialRangeCount(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
-	_, splits := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).GetInitialValues()
+	_, splits := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig, 0).GetInitialValues()
 	// N splits means N+1 ranges.
 	return len(config.StaticSplits()) + len(splits) + 1, nil
 }
