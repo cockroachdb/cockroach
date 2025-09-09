@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -113,10 +114,12 @@ func getTargetsFromDatabaseSpec(
 		if err != nil {
 			return err
 		}
+		tableDescToSchemaName := make(map[catalog.TableDescriptor]string)
 		tables, err := descs.GetAllTablesInDatabase(ctx, txn.KV(), databaseDescriptor)
 		if err != nil {
 			return err
 		}
+		dbName := databaseDescriptor.GetName()
 		for _, desc := range tables.OrderedDescriptors() {
 			tableDesc, ok := desc.(catalog.TableDescriptor)
 			if !ok {
@@ -125,6 +128,20 @@ func getTargetsFromDatabaseSpec(
 			// Skip virtual tables
 			if !tableDesc.IsPhysicalTable() {
 				continue
+			}
+			if ts.FilterList != nil && ts.FilterList.FilterType == jobspb.FilterList_EXCLUDE_TABLES {
+				if _, ok := tableDescToSchemaName[tableDesc]; !ok {
+					schemaID := tableDesc.GetParentSchemaID()
+					schema, err := descs.ByIDWithLeased(txn.KV()).Get().Schema(ctx, schemaID)
+					if err != nil {
+						return err
+					}
+					tableDescToSchemaName[tableDesc] = schema.GetName()
+				}
+				fullyQualifiedTableName := fmt.Sprintf("%s.%s.%s", dbName, tableDescToSchemaName[tableDesc], tableDesc.GetName())
+				if _, ok := ts.FilterList.Tables[fullyQualifiedTableName]; ok {
+					continue
+				}
 			}
 			var tableType jobspb.ChangefeedTargetSpecification_TargetType
 			if len(tableDesc.GetFamilies()) == 1 {

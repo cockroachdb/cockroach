@@ -1107,7 +1107,17 @@ message ChangefeedTargetSpecification {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string family_name = 3;
   string statement_time_name = 4;
+  FilterList filter_list = 5 [(gogoproto.nullable) = true];
+}
 
+message Void {}
+
+message FilterList {
+  enum FilterType {
+    EXCLUDE_TABLES = 0;
+  }
+  FilterType filter_type = 1;
+  map<string, Void> tables = 2;
 }
 
 message ChangefeedDetails {
