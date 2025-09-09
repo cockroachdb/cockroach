@@ -12,6 +12,7 @@ environment:
   CLUSTER_NODES: 15
   WORKLOAD_NODES: 3
   STORE_COUNT: 2
+  COCKROACH_ROACHPROD_INSECURE: false
 
   # variables used by tpcc_run_multiregion.sh
   NUM_REGIONS: 3
@@ -34,6 +35,7 @@ environment:
 
 dependent_file_locations:
   - artifacts/roachprod
+  - artifacts/drtprod
   - artifacts/roachtest
   - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
   - pkg/cmd/drtprod/scripts/setup_datadog_cluster
@@ -60,7 +62,7 @@ targets:
           gce-local-ssd-count: $STORE_COUNT
           os-volume-size: 100
           username: drt
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -150,7 +152,7 @@ targets:
           gce-machine-type: n2d-standard-4
           os-volume-size: 100
           username: workload
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -171,6 +173,11 @@ targets:
           - $WORKLOAD_CLUSTER
           - artifacts/roachprod
           - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
+          - drtprod
       - command: put
         args:
           - $WORKLOAD_CLUSTER:1
@@ -368,3 +375,4 @@ targets:
           - $CLUSTER:11-15
         flags:
           restart: true
+        wait_after: 3300
