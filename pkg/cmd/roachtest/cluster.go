@@ -2199,7 +2199,7 @@ func (c *clusterImpl) StartE(
 	if !startOpts.RoachprodOpts.SkipInit && !startOpts.RoachprodOpts.SkipWaitForSQL {
 		// Wait for SQL to be ready on all nodes, for 'system' tenant, only.
 		for _, n := range nodes {
-			conn, err := c.ConnE(ctx, l, nodes[0], option.VirtualClusterName(install.SystemInterfaceName))
+			conn, err := c.ConnE(ctx, l, n, option.VirtualClusterName(install.SystemInterfaceName))
 			if err != nil {
 				return errors.Wrapf(err, "failed to connect to n%d", n)
 			}
