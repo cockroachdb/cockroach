@@ -477,7 +477,25 @@ func (n *scrubNode) runScrubTableJob(
 	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor, asOf hlc.Timestamp,
 ) error {
 	// Consistency check is done async via a job.
-	jobID := p.ExecCfg().JobRegistry.MakeJobID()
+	jobID, err := TriggerInspectJob(ctx, tree.Serialize(n.n), p.ExecCfg(), tableDesc, asOf)
+	if err != nil {
+		return err
+	}
+	// Let the eval context track this job ID for status and error reporting.
+	p.extendedEvalCtx.jobs.addCreatedJobID(jobID)
+	return nil
+}
+
+// TriggerInspectJob starts an inspect job for the snapshot.
+func TriggerInspectJob(
+	ctx context.Context,
+	jobRecordDescription string,
+	execCfg *ExecutorConfig,
+	tableDesc catalog.TableDescriptor,
+	asOf hlc.Timestamp,
+) (jobspb.JobID, error) {
+	// Consistency check is done async via a job.
+	jobID := execCfg.JobRegistry.MakeJobID()
 
 	// TODO(148300): just grab the first secondary index and use that for the
 	// consistency check.
@@ -485,11 +503,12 @@ func (n *scrubNode) runScrubTableJob(
 	// and return a NOTICE.
 	secIndexes := tableDesc.PublicNonPrimaryIndexes()
 	if len(secIndexes) == 0 {
-		return errors.AssertionFailedf("must have at least one secondary index")
+		return jobID, errors.AssertionFailedf("must have at least one secondary index")
 	}
 
+	// TODO(sql-queries): add row count check when that is implemented.
 	jr := jobs.Record{
-		Description: tree.Serialize(n.n),
+		Description: jobRecordDescription,
 		Details: jobspb.InspectDetails{
 			Checks: []*jobspb.InspectDetails_Check{
 				{
@@ -507,22 +526,19 @@ func (n *scrubNode) runScrubTableJob(
 	}
 
 	var sj *jobs.StartableJob
-	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		return p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		return execCfg.JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
 	}); err != nil {
 		if sj != nil {
 			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
 				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
-		return err
+		return jobID, err
 	}
-
-	log.Dev.Infof(ctx, "created and started inspect job %d (no-op)", jobID)
+	log.Dev.Infof(ctx, "created and started import validation inspect job %d (no-op)", jobID)
 	if err := sj.Start(ctx); err != nil {
-		return err
+		return jobID, err
 	}
-	// Let the eval context track this job ID for status and error reporting.
-	p.extendedEvalCtx.jobs.addCreatedJobID(jobID)
-	return nil
+	return jobID, nil
 }
