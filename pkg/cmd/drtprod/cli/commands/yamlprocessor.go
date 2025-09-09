@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -305,7 +306,8 @@ func setupAndExecute(
 	// the DD_API_KEY is added to environment
 	ddAPIKey := os.Getenv("DD_API_KEY")
 	if ddAPIKey != "" {
-		envArg = fmt.Sprintf(" --setenv=DD_API_KEY=%s", ddAPIKey)
+		// Escape shell metacharacters to prevent command injection
+		envArg = fmt.Sprintf(" --setenv=DD_API_KEY='%s'", shellescape.Quote(ddAPIKey))
 	}
 	// Prepare the systemd command to execute the drtprod binary.
 	executeArgs := fmt.Sprintf(
