@@ -91,7 +91,7 @@ func sumCounterIncreases(dataPoints []tspb.TimeSeriesDatapoint) (sum float64) {
 			sum += dataPoints[i].Value
 			continue
 		}
-		sum += dataPoints[i].Value - dataPoints[0].Value
+		sum += dataPoints[i].Value - dataPoints[i-1].Value
 	}
 	return sum
 }
