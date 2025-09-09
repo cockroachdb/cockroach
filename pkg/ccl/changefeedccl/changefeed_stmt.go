@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -631,11 +632,22 @@ func createChangefeedJobRecord(
 		if len(targetDatabaseDescs) == 0 || len(targetDatabaseDescs) > 1 {
 			return nil, changefeedbase.Targets{}, errors.Errorf("changefeed only supports one database target")
 		}
-		if targetDatabaseDescs[0].GetID() == keys.SystemDatabaseID {
+		targetDatabaseDesc := targetDatabaseDescs[0]
+		if targetDatabaseDesc.GetID() == keys.SystemDatabaseID {
 			return nil, changefeedbase.Targets{}, errors.Errorf("changefeed cannot target the system database")
 		}
+		if changefeedStmt.FilterOption != nil {
+			fqTableNames, err := getFullyQualifiedTableNames(
+				ctx, p, sd, targetDatabaseDesc.GetName(), changefeedStmt.FilterOption.Tables,
+			)
+			if err != nil {
+				return nil, changefeedbase.Targets{}, err
+			}
+			changefeedStmt.FilterOption.Tables = fqTableNames
+		}
+		targetSpec := getDatabaseTargetSpec(targetDatabaseDesc, changefeedStmt.FilterOption)
 		details = jobspb.ChangefeedDetails{
-			TargetSpecifications: getDatabaseTargets(targetDatabaseDescs),
+			TargetSpecifications: []jobspb.ChangefeedTargetSpecification{targetSpec},
 			SinkURI:              sinkURI,
 			StatementTime:        statementTime,
 			EndTime:              endTime,
@@ -1144,19 +1156,59 @@ func getTargetsAndTables(
 	return targets, tables, nil
 }
 
-func getDatabaseTargets(
-	targetDatabaseDescs []catalog.DatabaseDescriptor,
-) []jobspb.ChangefeedTargetSpecification {
-	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetDatabaseDescs))
-
-	for i, desc := range targetDatabaseDescs {
-		targets[i] = jobspb.ChangefeedTargetSpecification{
-			DescID:            desc.GetID(),
-			Type:              jobspb.ChangefeedTargetSpecification_DATABASE,
-			StatementTimeName: desc.GetName(),
+func getDatabaseTargetSpec(
+	targetDatabaseDesc catalog.DatabaseDescriptor,
+	filterOpt *tree.ChangefeedFilterOption,
+) jobspb.ChangefeedTargetSpecification {
+	target := jobspb.ChangefeedTargetSpecification{
+		DescID:            targetDatabaseDesc.GetID(),
+		Type:              jobspb.ChangefeedTargetSpecification_DATABASE,
+		StatementTimeName: targetDatabaseDesc.GetName(),
+	}
+	if filterOpt != nil {
+		filterTables := make(map[string]*jobspb.Void)
+		for _, table := range filterOpt.Tables {
+			filterTables[table.FQString()] = &jobspb.Void{}
+		}
+		target.FilterList = &jobspb.FilterList{
+			FilterType: jobspb.FilterList_FilterType(filterOpt.FilterType),
+			Tables:     filterTables,
 		}
 	}
-	return targets
+	return target
+}
+
+func getFullyQualifiedTableNames(
+	ctx context.Context,
+	p sql.PlanHookState,
+	sd *sessiondata.SessionData,
+	targetDatabase string,
+	tableNames tree.TableNames,
+) (tree.TableNames, error) {
+	var fqTableNames tree.TableNames
+
+	for _, tableName := range tableNames {
+		if tableName.SchemaName == "" {
+			// The table name is non-qualified e.g. foo. This will resolve to <targetDatabase>.public.foo.
+			tableName.SchemaName = tree.Name(catconstants.PublicSchemaName)
+			tableName.CatalogName = tree.Name(targetDatabase)
+		} else if tableName.CatalogName == "" {
+			// The table name is partially qualified e.g. foo.bar. This will resolve to
+			// <targetDatabase>.foo.bar.
+			tableName.CatalogName = tree.Name(targetDatabase)
+		} else {
+			// Table name is fully qualfied e.g. foo.bar.fizz. This will resolve to
+			// foo.bar.fizz unless foo != <targetDatabase>, in which case it would fail.
+			if tableName.CatalogName != tree.Name(targetDatabase) {
+				fmt.Println(tableName.CatalogName, tableName.SchemaName, tableName.ObjectName)
+				return nil, errors.AssertionFailedf(
+					"Table %q must be in target database %q", tableName.FQString(), targetDatabase,
+				)
+			}
+		}
+		fqTableNames = append(fqTableNames, tableName)
+	}
+	return fqTableNames, nil
 }
 
 func validateSink(
