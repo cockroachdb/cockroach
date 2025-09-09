@@ -972,9 +972,6 @@ func (r *testRunner) runWorker(
 				case registry.Buffering:
 					c.clusterSettings["kv.transaction.write_buffering.enabled"] = "true"
 					c.clusterSettings["kv.transaction.write_pipelining.enabled"] = "false"
-				case registry.PipeliningBuffering:
-					c.clusterSettings["kv.transaction.write_pipelining.enabled"] = "true"
-					c.clusterSettings["kv.transaction.write_buffering.enabled"] = "true"
 				}
 
 				// Apply metamorphic settings not explicitly defined by the test.
