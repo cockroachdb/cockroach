@@ -41,6 +41,9 @@ func loadTPCHDataset(
 	if err != nil {
 		return err
 	}
+	if _, err := db.Exec(`SET CLUSTER SETTING backup.index.read.enabled = false`); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		if retErr == nil {
 			if _, err = db.Exec("USE tpch"); err != nil {
