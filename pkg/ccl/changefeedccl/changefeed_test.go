@@ -9293,7 +9293,7 @@ func TestCheckpointFrequency(t *testing.T) {
 
 	// Pretend our mean time to update progress is 1 minute, and we just updated progress.
 	require.EqualValues(t, 0, js.checkpointDuration)
-	js.checkpointCompleted(ctx, 12*time.Second)
+	js.checkpointCompleted(ctx, 12*time.Second, false /* frontierPersisted */)
 	require.Less(t, int64(0), js.checkpointDuration.Nanoseconds())
 
 	// Even though frontier advanced, we shouldn't checkpoint.
@@ -9316,7 +9316,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	// When we mark checkpoint completion, job state updated to reflect that.
 	completionTime := timeutil.Now().Add(time.Hour)
 	ts.AdvanceTo(completionTime)
-	js.checkpointCompleted(ctx, 42*time.Second)
+	js.checkpointCompleted(ctx, 42*time.Second, false /* frontierPersisted */)
 	require.Equal(t, completionTime, js.lastProgressUpdate)
 	require.False(t, js.progressUpdatesSkipped)
 }
