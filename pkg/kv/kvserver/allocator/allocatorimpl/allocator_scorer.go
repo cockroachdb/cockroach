@@ -292,6 +292,15 @@ type ScorerOptions interface {
 	// the store represented by `sc` classifies as underfull, aroundTheMean, or
 	// overfull relative to all the stores in `sl`.
 	balanceScore(sl storepool.StoreList, sc roachpb.StoreCapacity) balanceStatus
+	// adjustRangeCountForScoring returns the adjusted range count for scoring.
+	// Scorer options (IOOverloadOnlyScorerOptions) that do not care about range
+	// count convergence returns 0. Otherwise, the returned range count here
+	// should usually be the same as the range count passed in
+	// (RangeCountScorerOptions, LoadScorerOptions, ScatterScorerOptions). This
+	// will later be used to calculate the relative difference when comparing the
+	// range count of the candidate stores. Lower range count means a better
+	// candidate to move the replica to.
+	adjustRangeCountForScoring(rangeCount int) int
 	// rebalanceFromConvergenceScore assigns a convergence score to the store
 	// referred to by `eqClass.existing` based on whether moving a replica away
 	// from this store would converge its stats towards the mean (relative to the
@@ -383,6 +392,13 @@ func (bo BaseScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, _ allocatorRand,
 ) storepool.StoreList {
 	return sl
+}
+
+// adjustRangeCountForScoring returns the provided range count since that is the
+// default behavior. BaseScorerOptionsNoConvergence is the only scorer option
+// that does not want to consider range count in its scoring, so it returns 0.
+func (bo BaseScorerOptions) adjustRangeCountForScoring(rangeCount int) int {
+	return rangeCount
 }
 
 // RangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
@@ -1155,6 +1171,7 @@ func rankedCandidateListForAllocation(
 			}
 			hasNonVoter = StoreHasReplica(s.StoreID, nonVoterReplTargets)
 		}
+		rangeCountScore := options.adjustRangeCountForScoring(int(s.Capacity.RangeCount))
 		candidates = append(candidates, candidate{
 			store:          s,
 			necessary:      necessary,
@@ -1162,7 +1179,7 @@ func rankedCandidateListForAllocation(
 			diversityScore: diversityScore,
 			balanceScore:   balanceScore,
 			hasNonVoter:    hasNonVoter,
-			rangeCount:     int(s.Capacity.RangeCount),
+			rangeCount:     rangeCountScore,
 		})
 	}
 	if options.deterministicForTesting() {
@@ -1270,7 +1287,7 @@ func candidateListForRemoval(
 		candidates[i].balanceScore = options.balanceScore(
 			removalCandidateStoreList, candidates[i].store.Capacity,
 		)
-		candidates[i].rangeCount = int(candidates[i].store.Capacity.RangeCount)
+		candidates[i].rangeCount = options.adjustRangeCountForScoring(int(candidates[i].store.Capacity.RangeCount))
 	}
 	// Re-sort to account for the ordering changes resulting from the addition of
 	// convergesScore, balanceScore, etc.
@@ -1735,7 +1752,7 @@ func rankedCandidateListForRebalancing(
 			balanceScore := options.balanceScore(comparable.candidateSL, existing.store.Capacity)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
-			existing.rangeCount = int(existing.store.Capacity.RangeCount)
+			existing.rangeCount = options.adjustRangeCountForScoring(int(existing.store.Capacity.RangeCount))
 		}
 
 		var candidates candidateList
@@ -1761,7 +1778,7 @@ func rankedCandidateListForRebalancing(
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
-			cand.rangeCount = int(s.Capacity.RangeCount)
+			cand.rangeCount = options.adjustRangeCountForScoring(int(s.Capacity.RangeCount))
 			candidates = append(candidates, cand)
 		}
 
