@@ -175,6 +175,27 @@ var enableMultiLevelWriteAmpHeuristic = settings.RegisterBoolSetting(
 	true,
 )
 
+// LowerBoundSlowOpDurationForDiskUnhealth is a lower bound above which a
+// DiskSlowInfo.Duration event will result in reporting true from
+// Engine.GetDiskUnhealthy. This is a lower bound since the actual threshold
+// is also a function of storage.max_sync_duration.
+//
+// The default of 20s equals the default for storage.max_sync_duration, which
+// is typically used when WAL failover is not configured. In that case, this
+// setting has no effect, since a 20s stall will cause the node to crash, and
+// there isn't any action a higher layer can take when Engine.GetDiskUnhealthy
+// returns true. However, when WAL failover is configured, a higher
+// storage.max_sync_duration is used (see
+// https://www.cockroachlabs.com/docs/stable/wal-failover for the latest
+// recommendation), in which case a higher layer has some time to take action.
+var LowerBoundSlowOpDurationForDiskUnhealth = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"storage.lower_bound_slow_op_duration_for_disk_unhealth",
+	"lower bound duration for disk operations, beyond which the disk will be reported as "+
+		"unhealthy for higher layer actions",
+	20*time.Second,
+	settings.WithPublic)
+
 // SSTableCompressionProfile is an enumeration of compression algorithms
 // available for compressing SSTables (e.g. for backup or transport).
 type SSTableCompressionProfile int64
@@ -704,7 +725,7 @@ type engineConfig struct {
 type Pebble struct {
 	cfg         engineConfig
 	db          *pebble.DB
-	closed      bool
+	closed      atomic.Bool
 	auxDir      string
 	ballastPath string
 	properties  roachpb.StoreProperties
@@ -749,6 +770,8 @@ type Pebble struct {
 	replayer         *replay.WorkloadCollector
 	diskSlowFunc     atomic.Pointer[func(vfs.DiskSlowInfo)]
 	lowDiskSpaceFunc atomic.Pointer[func(pebble.LowDiskSpaceInfo)]
+
+	diskUnhealthyTracker diskUnhealthyTracker
 
 	singleDelLogEvery log.EveryN
 }
@@ -1016,6 +1039,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// and upper values at runtime through Engine.SetCompactionConcurrency.
 	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
+	p.diskUnhealthyTracker = diskUnhealthyTracker{
+		st:          cfg.settings,
+		asyncRunner: p,
+		ts:          timeutil.DefaultTimeSource{},
+	}
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
 	// responsible for crashing the process if a DiskSlow event indicates the
@@ -1232,6 +1260,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
+			p.diskUnhealthyTracker.onDiskSlow(info)
 			maxSyncDuration := fs.MaxSyncDuration.Get(&p.cfg.settings.SV)
 			fatalOnExceeded := fs.MaxSyncDurationFatalOnExceeded.Get(&p.cfg.settings.SV)
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
@@ -1326,7 +1355,7 @@ func (p *Pebble) String() string {
 
 // Close implements the Engine interface.
 func (p *Pebble) Close() {
-	if p.closed {
+	if p.closed.Load() {
 		p.logger.Infof("closing unopened pebble instance")
 		return
 	}
@@ -1334,7 +1363,7 @@ func (p *Pebble) Close() {
 		closeFunc(p)
 	}
 
-	p.closed = true
+	p.closed.Store(true)
 
 	// Wait for any asynchronous goroutines to exit.
 	p.asyncDone.Wait()
@@ -1404,7 +1433,7 @@ func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
 
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
-	return p.closed
+	return p.closed.Load()
 }
 
 // MVCCIterate implements the Engine interface.
@@ -1877,6 +1906,7 @@ func (p *Pebble) GetMetrics() Metrics {
 		Metrics:                          p.db.Metrics(),
 		WriteStallCount:                  atomic.LoadInt64(&p.writeStallCount),
 		WriteStallDuration:               time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
+		DiskUnhealthyDuration:            p.diskUnhealthyTracker.getUnhealthyDuration(),
 		DiskSlowCount:                    atomic.LoadInt64(&p.diskSlowCount),
 		DiskStallCount:                   atomic.LoadInt64(&p.diskStallCount),
 		SingleDelInvariantViolationCount: atomic.LoadInt64(&p.singleDelInvariantViolationCount),
@@ -2522,6 +2552,10 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 	return batch.Commit(true)
 }
 
+func (p *Pebble) GetDiskUnhealthy() bool {
+	return p.diskUnhealthyTracker.getUnhealthy()
+}
+
 type pebbleReadOnly struct {
 	parent *Pebble
 	// The iterator reuse optimization in pebbleReadOnly is for servicing a
@@ -3027,4 +3061,81 @@ func (cco *compactionConcurrencyOverride) Wrap(
 		}
 		return compactionConcurrencyRange()
 	}
+}
+
+const diskUnhealthyResetInterval = 5 * time.Second
+
+// asyncRunner abstracts Pebble.async for testing.
+type asyncRunner interface {
+	async(fn func())
+	Closed() bool
+}
+
+type diskUnhealthyTracker struct {
+	st          *cluster.Settings
+	asyncRunner asyncRunner
+	ts          timeutil.TimeSource
+	mu          struct {
+		syncutil.Mutex
+		lastUnhealthyEventTime      time.Time
+		currentlyUnhealthy          bool
+		cumulativeUnhealthyDuration time.Duration
+		// lastUnhealthySampleTime is the last time currentlyUnhealthy was true,
+		// and the time up to which we have accounted for in
+		// cumulativeUnhealthyDuration. Set on the transition of
+		// currentlyUnhealthy from false to true, and updated by the goroutine
+		// that attempts the transition from true to false.
+		lastUnhealthySampleTime time.Time
+	}
+}
+
+func (dut *diskUnhealthyTracker) onDiskSlow(info pebble.DiskSlowInfo) {
+	unhealthyThreshold := max(LowerBoundSlowOpDurationForDiskUnhealth.Get(&dut.st.SV),
+		fs.MaxSyncDuration.Get(&dut.st.SV)/2)
+	if info.Duration < unhealthyThreshold {
+		return
+	}
+	dut.mu.Lock()
+	defer dut.mu.Unlock()
+	now := dut.ts.Now()
+	dut.mu.lastUnhealthyEventTime = now
+	if !dut.mu.currentlyUnhealthy {
+		dut.mu.currentlyUnhealthy = true
+		dut.mu.lastUnhealthySampleTime = now
+		dut.asyncRunner.async(func() {
+			// Reset the unhealthy status after a while.
+			ticker := dut.ts.NewTicker(diskUnhealthyResetInterval)
+			defer ticker.Stop()
+			for {
+				now := <-ticker.Ch()
+				isClosed := dut.asyncRunner.Closed()
+				dut.mu.Lock()
+				if !dut.mu.currentlyUnhealthy {
+					panic(errors.AssertionFailedf("unexpected currentlyUnhealthy=false"))
+				}
+				dut.mu.cumulativeUnhealthyDuration += now.Sub(dut.mu.lastUnhealthySampleTime)
+				dut.mu.lastUnhealthySampleTime = now
+				if isClosed || dut.ts.Since(dut.mu.lastUnhealthyEventTime) >= diskUnhealthyResetInterval {
+					dut.mu.currentlyUnhealthy = false
+					dut.mu.Unlock()
+					return
+				}
+				dut.mu.Unlock()
+			}
+		})
+	} else {
+		dut.mu.lastUnhealthyEventTime = dut.ts.Now()
+	}
+}
+
+func (dut *diskUnhealthyTracker) getUnhealthy() bool {
+	dut.mu.Lock()
+	defer dut.mu.Unlock()
+	return dut.mu.currentlyUnhealthy
+}
+
+func (dut *diskUnhealthyTracker) getUnhealthyDuration() time.Duration {
+	dut.mu.Lock()
+	defer dut.mu.Unlock()
+	return dut.mu.cumulativeUnhealthyDuration
 }
