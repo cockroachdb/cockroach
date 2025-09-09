@@ -1924,6 +1924,7 @@ var cockroachdbMetrics = map[string]string{
 	"storage_disk_read_time":                                      "storage.disk.read.time",
 	"storage_disk_slow":                                           "storage.disk_slow",
 	"storage_disk_stalled":                                        "storage.disk_stalled",
+	"storage_disk_unhealthy_duration":                             "storage.disk-unhealthy.duration",
 	"storage_disk_weightedio_time":                                "storage.disk.weightedio.time",
 	"storage_disk_write_bytes":                                    "storage.disk.write.bytes",
 	"storage_disk_write_count":                                    "storage.disk.write.count",

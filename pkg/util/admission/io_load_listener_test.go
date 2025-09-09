@@ -340,7 +340,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 		}
 		res := ioll.adjustTokensInner(
 			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1}, 0,
-			pebble.ThroughputMetric{}, 100, 10, 0, 0.50, 10, 100)
+			pebble.ThroughputMetric{}, 100, 10, 0, 0.50, 10, 100, false)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))

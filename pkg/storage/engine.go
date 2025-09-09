@@ -1134,6 +1134,17 @@ type Engine interface {
 	// GetPebbleOptions returns the options used when creating the engine. The
 	// caller must not modify these.
 	GetPebbleOptions() *pebble.Options
+
+	// GetDiskUnhealthy returns true if the engine has determined that the
+	// underlying disk is transiently unhealthy. This can change from false to
+	// true and back to false. The engine has mechanisms to mask disk unhealth
+	// (e.g. if WAL failover is configured), but in some cases the unhealth is
+	// longer than what the engine may be able to successfully mask, but not yet
+	// long enough to crash the node (see
+	// COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT). This method returns true in
+	// this intermediate case. Currently, this mainly feeds into allocation
+	// decisions by the caller (such as shedding leases).
+	GetDiskUnhealthy() bool
 }
 
 // Batch is the interface for batch specific operations.
@@ -1250,6 +1261,9 @@ type Metrics struct {
 	// distinguished in the pebble logs.
 	WriteStallCount    int64
 	WriteStallDuration time.Duration
+	// DiskUnhealthyDuration is the duration for which Engine.GetUnhealthyDisk
+	// has returned true.
+	DiskUnhealthyDuration time.Duration
 
 	// BlockLoadConcurrencyLimit is the current limit on the number of concurrent
 	// sstable block reads.

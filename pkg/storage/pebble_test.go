@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/cockroachkvs"
@@ -1910,4 +1912,76 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 			require.Equal(t, tc.wantEndKey, endKey)
 		})
 	}
+}
+
+type testAsyncRunner struct {
+	b      *strings.Builder
+	closed atomic.Bool
+}
+
+func (r *testAsyncRunner) async(fn func()) {
+	fmt.Fprintf(r.b, "asyncRunner.async\n")
+	go fn()
+}
+
+func (r *testAsyncRunner) Closed() bool {
+	closed := r.closed.Load()
+	fmt.Fprintf(r.b, "asyncRunner.Closed(): %t\n", closed)
+	return closed
+}
+
+func TestDiskUnhealthyTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var b strings.Builder
+	builderStr := func() string {
+		str := b.String()
+		b.Reset()
+		return str
+	}
+	runner := &testAsyncRunner{b: &b}
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
+	st := cluster.MakeTestingClusterSettings()
+	UnhealthyWriteDuration.Override(context.Background(), &st.SV, 5*time.Second)
+	tickReceivedCh := make(chan time.Time, 1)
+	tracker := &diskUnhealthyTracker{
+		st:                    st,
+		asyncRunner:           runner,
+		ts:                    ts,
+		testingTickReceivedCh: tickReceivedCh,
+	}
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_unhealthy_tracker"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "slow-event":
+				var durationSec int
+				d.ScanArgs(t, "dur", &durationSec)
+				tracker.onDiskSlow(vfs.DiskSlowInfo{Duration: time.Duration(durationSec) * time.Second})
+				return builderStr()
+
+			case "advance-time":
+				var durationSec int
+				d.ScanArgs(t, "sec", &durationSec)
+				ts.Advance(time.Duration(durationSec) * time.Second)
+				return ""
+
+			case "receive-runner-tick":
+				tickTime := <-tickReceivedCh
+				fmt.Fprintf(&b, "tickTime: %ds\n", tickTime.Unix())
+				return builderStr()
+
+			case "get-state":
+				fmt.Fprintf(&b, "unhealthy: %t, unhealthy-duration: %v\n",
+					tracker.getUnhealthy(), tracker.getUnhealthyDuration())
+				return builderStr()
+
+			case "close":
+				runner.closed.Store(true)
+				return ""
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 }
