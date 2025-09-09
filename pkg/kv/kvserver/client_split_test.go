@@ -1515,6 +1515,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
 	tdb.Exec(t, "CREATE TABLE t ()")
 	var descID uint32
 	tdb.QueryRow(t, "SELECT 't'::regclass::int").Scan(&descID)
