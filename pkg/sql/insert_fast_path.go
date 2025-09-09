@@ -41,7 +41,6 @@ var insertFastPathNodePool = sync.Pool{
 // limited size (at most mutations.MaxBatchSize).
 type insertFastPathNode struct {
 	zeroInputPlanNode
-	nonReusablePlanNode
 	// input values, similar to a valuesNode.
 	input [][]tree.TypedExpr
 
@@ -49,6 +48,12 @@ type insertFastPathNode struct {
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
 	columns colinfo.ResultColumns
+
+	// reuse is true if this node is configured for reuse across multiple
+	// executions. This means that Close() does not release the node back to
+	// the pool, and that the internal state is reset in Close() so that
+	// the node can be reused.
+	reuse bool
 
 	run insertFastPathRun
 }
@@ -551,7 +556,26 @@ func (n *insertFastPathNode) processBatch(params runParams) error {
 	return nil
 }
 
+// Close implements the planNode interface. If the node has been configured for
+// reuse, then it is reset instead of being closed.
 func (n *insertFastPathNode) Close(ctx context.Context) {
+	if n.reuse {
+		n.run.reset(ctx)
+		return
+	}
+	n.run.close(ctx)
+	*n = insertFastPathNode{}
+	insertFastPathNodePool.Put(n)
+}
+
+// Reuse implements the planNode interface.
+func (n *insertFastPathNode) Reuse() (ok bool) {
+	n.reuse = true
+	return n.reuse
+}
+
+// Destroy implements the planNode interface.
+func (n *insertFastPathNode) Destroy(ctx context.Context) {
 	n.run.close(ctx)
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)

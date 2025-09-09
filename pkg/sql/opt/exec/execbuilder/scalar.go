@@ -130,10 +130,15 @@ func (b *Builder) buildTypedExpr(
 	return scalar.Private().(tree.TypedExpr), nil
 }
 
+// buildPlaceholder builds a placeholder as constant values. If
+// preservePlaceholders is true, the placeholder is built unaltered. At this
+// stage of query execution, only generic query plans contain placeholders. In
+// custom query plans, placeholders are replaced in
+// (*norm.Factory).AssignPlaceholders.
 func (b *Builder) buildPlaceholder(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
-	if b.evalCtx != nil && b.evalCtx.Placeholders != nil {
+	if !b.preservePlaceholders && b.evalCtx != nil && b.evalCtx.Placeholders != nil {
 		return eval.Expr(b.ctx, b.evalCtx, scalar.Private().(*tree.Placeholder))
 	}
 	return b.buildTypedExpr(ctx, scalar)

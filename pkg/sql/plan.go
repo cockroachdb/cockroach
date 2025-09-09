@@ -493,6 +493,15 @@ func (p *planMaybePhysical) planColumns() colinfo.ResultColumns {
 	return planColumns(p.planNode)
 }
 
+// reuse prepares the planNode tree for reuse, and returns ok=true if
+// successful. It returns ok=false if the plan is a physical plan.
+func (p *planMaybePhysical) reuse() (ok bool) {
+	if p.physPlan != nil {
+		return false
+	}
+	return p.planNode.Reuse()
+}
+
 // Close closes the pieces of the plan that haven't been yet closed. Note that
 // it also resets the corresponding fields.
 func (p *planMaybePhysical) Close(ctx context.Context) {
@@ -567,6 +576,24 @@ type postQueryMetadata struct {
 // return an error (for example, foreign key violation).
 type checkPlan struct {
 	plan planMaybePhysical
+}
+
+// reuse prepares the main planNode tree for reuse, and returns ok=true if
+// successful. It returns ok=false the plan has any subqueries, FK cascades, FK or uniqueness checks, or triggers.
+func (p *planComponents) reuse() (ok bool) {
+	if len(p.subqueryPlans) > 0 {
+		return false
+	}
+	if len(p.cascades) > 0 {
+		return false
+	}
+	if len(p.checkPlans) > 0 {
+		return false
+	}
+	if len(p.triggers) > 0 {
+		return false
+	}
+	return p.main.reuse()
 }
 
 // close calls Close on all plan trees.

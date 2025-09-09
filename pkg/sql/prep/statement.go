@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -47,7 +49,10 @@ type Statement struct {
 
 	// GenericMemo, if present, is a fully-optimized memo that can be executed
 	// as-is.
-	GenericMemo *memo.Memo
+	GenericMemo                 *memo.Memo
+	GenericExecPlan             exec.Plan
+	GenericExecPlanQueryMetrics exec.QueryMetrics
+	GenericPlanGist             explain.PlanGist
 
 	// IdealGenericPlan is true if GenericMemo is guaranteed to be optimal
 	// across all executions of the prepared statement. Ideal generic plans are
@@ -111,6 +116,12 @@ func (p *Statement) MemoryEstimate() int64 {
 		size += p.BaseMemo.MemoryEstimate()
 	}
 	if p.GenericMemo != nil {
+		g := p.GenericMemo.MemoryEstimate()
+		if p.GenericExecPlan != nil {
+			// Assume that a cached exec plan is roughly the same size as the
+			// memo.
+			g *= 2
+		}
 		size += p.GenericMemo.MemoryEstimate()
 	}
 	return size

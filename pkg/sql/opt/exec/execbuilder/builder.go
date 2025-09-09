@@ -101,6 +101,7 @@ type Builder struct {
 
 	allowInsertFastPath      bool
 	allowDeleteRangeFastPath bool
+	preservePlaceholders     bool
 
 	// forceForUpdateLocking, if set, is the table ID of the table being mutated
 	// that should be locked using forUpdateLocking in mutation's input
