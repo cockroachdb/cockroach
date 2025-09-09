@@ -330,7 +330,11 @@ func applyClientOp(
 		}
 	case *PutOperation:
 		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			b.Put(o.Key, o.Value())
+			if o.MustAcquireExclusiveLock {
+				b.PutMustAcquireExclusiveLock(o.Key, o.Value())
+			} else {
+				b.Put(o.Key, o.Value())
+			}
 			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
@@ -381,7 +385,11 @@ func applyClientOp(
 		}
 	case *DeleteOperation:
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			b.Del(o.Key)
+			if o.MustAcquireExclusiveLock {
+				b.DelMustAcquireExclusiveLock(o.Key)
+			} else {
+				b.Del(o.Key)
+			}
 			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
@@ -547,7 +555,11 @@ func applyBatchOp(
 				b.Get(subO.Key)
 			}
 		case *PutOperation:
-			b.Put(subO.Key, subO.Value())
+			if subO.MustAcquireExclusiveLock {
+				b.PutMustAcquireExclusiveLock(subO.Key, subO.Value())
+			} else {
+				b.Put(subO.Key, subO.Value())
+			}
 			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
 			if subO.SkipLocked {
@@ -575,7 +587,11 @@ func applyBatchOp(
 				}
 			}
 		case *DeleteOperation:
-			b.Del(subO.Key)
+			if subO.MustAcquireExclusiveLock {
+				b.DelMustAcquireExclusiveLock(subO.Key)
+			} else {
+				b.Del(subO.Key)
+			}
 			setLastReqSeq(b, subO.Seq)
 		case *DeleteRangeOperation:
 			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)

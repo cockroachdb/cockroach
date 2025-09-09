@@ -167,9 +167,17 @@ func TestRandStep(t *testing.T) {
 				}
 			case *PutOperation:
 				if _, ok := keys[string(o.Key)]; ok {
-					client.PutExisting++
+					if o.MustAcquireExclusiveLock {
+						client.PutMustAcquireExclusiveLockExisting++
+					} else {
+						client.PutExisting++
+					}
 				} else {
-					client.PutMissing++
+					if o.MustAcquireExclusiveLock {
+						client.PutMustAcquireExclusiveLockMissing++
+					} else {
+						client.PutMissing++
+					}
 				}
 			case *ScanOperation:
 				if o.Reverse {
@@ -236,9 +244,17 @@ func TestRandStep(t *testing.T) {
 				}
 			case *DeleteOperation:
 				if _, ok := keys[string(o.Key)]; ok {
-					client.DeleteExisting++
+					if o.MustAcquireExclusiveLock {
+						client.DeleteMustAcquireExclusiveLockExisting++
+					} else {
+						client.DeleteExisting++
+					}
 				} else {
-					client.DeleteMissing++
+					if o.MustAcquireExclusiveLock {
+						client.DeleteMustAcquireExclusiveLockMissing++
+					} else {
+						client.DeleteMissing++
+					}
 				}
 			case *DeleteRangeOperation:
 				client.DeleteRange++

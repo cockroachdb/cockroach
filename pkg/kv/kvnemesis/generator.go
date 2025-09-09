@@ -179,6 +179,12 @@ type ClientOperationConfig struct {
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
 	PutExisting int
+	// PutMustAcquireExclusiveLockMissing is an operation that Puts a key that
+	// definitely doesn't exist, with MustAcquireExclusiveLock set to true.
+	PutMustAcquireExclusiveLockMissing int
+	// PutMustAcquireExclusiveLockExisting is an operation that Puts a key that
+	// likely exists, with MustAcquireExclusiveLock set to true.
+	PutMustAcquireExclusiveLockExisting int
 	// Scan is an operation that Scans a key range that may contain values.
 	Scan int
 	// ScanForUpdate is an operation that Scans a key range that may contain
@@ -259,6 +265,12 @@ type ClientOperationConfig struct {
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
 	DeleteExisting int
+	// DeleteMustAcquireExclusiveLockMissing is an operation that Deletes a key
+	// that definitely doesn't exist, with MustAcquireExclusiveLock set to true.
+	DeleteMustAcquireExclusiveLockMissing int
+	// DeleteExisting is an operation that Deletes a key that likely exists, with
+	// MustAcquireExclusiveLock set to true.
+	DeleteMustAcquireExclusiveLockExisting int
 	// DeleteRange is an operation that Deletes a key range that may contain values.
 	DeleteRange int
 	// DeleteRange is an operation that invokes DeleteRangeUsingTombstone.
@@ -388,15 +400,17 @@ func newAllOperationsConfig() GeneratorConfig {
 		GetExistingForUpdateSkipLockedGuaranteedDurability: 1,
 		GetExistingForShareSkipLocked:                      1,
 		GetExistingForShareSkipLockedGuaranteedDurability:  1,
-		PutMissing:                        1,
-		PutExisting:                       1,
-		Scan:                              1,
-		ScanForUpdate:                     1,
-		ScanForUpdateGuaranteedDurability: 1,
-		ScanForShare:                      1,
-		ScanForShareGuaranteedDurability:  1,
-		ScanSkipLocked:                    1,
-		ScanForUpdateSkipLocked:           1,
+		PutMissing:                          1,
+		PutExisting:                         1,
+		PutMustAcquireExclusiveLockMissing:  1,
+		PutMustAcquireExclusiveLockExisting: 1,
+		Scan:                                1,
+		ScanForUpdate:                       1,
+		ScanForUpdateGuaranteedDurability:   1,
+		ScanForShare:                        1,
+		ScanForShareGuaranteedDurability:    1,
+		ScanSkipLocked:                      1,
+		ScanForUpdateSkipLocked:             1,
 		ScanForUpdateSkipLockedGuaranteedDurability: 1,
 		ScanForShareSkipLocked:                      1,
 		ScanForShareSkipLockedGuaranteedDurability:  1,
@@ -412,6 +426,8 @@ func newAllOperationsConfig() GeneratorConfig {
 		ReverseScanForShareSkipLockedGuaranteedDurability:  1,
 		DeleteMissing:                                      1,
 		DeleteExisting:                                     1,
+		DeleteMustAcquireExclusiveLockMissing:              1,
+		DeleteMustAcquireExclusiveLockExisting:             1,
 		DeleteRange:                                        1,
 		DeleteRangeUsingTombstone:                          1,
 		AddSSTable:                                         1,
@@ -777,7 +793,10 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		c.GetMissingForShareSkipLockedGuaranteedDurability,
 	)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
+	addOpGen(allowed, randPutMustAcquireExclusiveLockMissing, c.PutMustAcquireExclusiveLockMissing)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
+	addOpGen(allowed, randDelMustAcquireExclusiveLockMissing, c.DeleteMustAcquireExclusiveLockMissing)
+
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
@@ -806,7 +825,9 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 			c.GetExistingForShareSkipLockedGuaranteedDurability,
 		)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
+		addOpGen(allowed, randPutMustAcquireExclusiveLockExisting, c.PutMustAcquireExclusiveLockExisting)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
+		addOpGen(allowed, randDelMustAcquireExclusiveLockExisting, c.DeleteMustAcquireExclusiveLockExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
@@ -999,6 +1020,19 @@ func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
 	key := randMapKey(rng, g.keys)
 	return put(key, seq)
+}
+
+func randPutMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	g.keys[key] = struct{}{}
+	return putMustAcquireLock(key, seq)
+}
+
+func randPutMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randMapKey(rng, g.keys)
+	return putMustAcquireLock(key, seq)
 }
 
 func randAddSSTable(g *generator, rng *rand.Rand) Operation {
@@ -1313,6 +1347,19 @@ func randDelExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
 	seq := g.nextSeq()
 	return del(key, seq)
+}
+
+func randDelMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
+	key := randMapKey(rng, g.keys)
+	seq := g.nextSeq()
+	return delMustAcquireLock(key, seq)
+}
+
+func randDelMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
+	key := randKey(rng)
+	g.keys[key] = struct{}{}
+	seq := g.nextSeq()
+	return delMustAcquireLock(key, seq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
@@ -1906,7 +1953,16 @@ func getForShareSkipLockedGuaranteedDurability(key string) Operation {
 }
 
 func put(key string, seq kvnemesisutil.Seq) Operation {
-	return Operation{Put: &PutOperation{Key: []byte(key), Seq: seq}}
+	return Operation{Put: &PutOperation{
+		Key: []byte(key),
+		Seq: seq}}
+}
+
+func putMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Put: &PutOperation{
+		Key:                      []byte(key),
+		MustAcquireExclusiveLock: true,
+		Seq:                      seq}}
 }
 
 func scan(key, endKey string) Operation {
@@ -1993,6 +2049,14 @@ func del(key string, seq kvnemesisutil.Seq) Operation {
 	return Operation{Delete: &DeleteOperation{
 		Key: []byte(key),
 		Seq: seq,
+	}}
+}
+
+func delMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Delete: &DeleteOperation{
+		Key:                      []byte(key),
+		Seq:                      seq,
+		MustAcquireExclusiveLock: true,
 	}}
 }
 
