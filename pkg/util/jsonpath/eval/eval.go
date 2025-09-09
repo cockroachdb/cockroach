@@ -267,14 +267,17 @@ func (ctx *jsonpathCtx) executeAnyItem(
 			}
 		}
 	case json.ObjectJSONType:
-		iter, _ := jsonValue.ObjectIter()
+		iter, err := jsonValue.ObjectIter()
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting iterator for json object")
+		}
 		for iter.Next() {
 			if err := processItem(iter.Value()); err != nil {
 				return nil, err
 			}
 		}
 	default:
-		panic(errors.AssertionFailedf("executeAnyItem called with type: %s", jsonValue.Type()))
+		return nil, errors.AssertionFailedf("executeAnyItem called with type: %s", jsonValue.Type())
 	}
 	return agg, nil
 }
