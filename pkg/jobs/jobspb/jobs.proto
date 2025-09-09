@@ -22,6 +22,7 @@ import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "sql/catalog/externalcatalog/externalpb/external.proto";
+import "google/protobuf/empty.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -1107,7 +1108,15 @@ message ChangefeedTargetSpecification {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string family_name = 3;
   string statement_time_name = 4;
+  FilterList filter_list = 5;
+}
 
+message FilterList {
+  enum FilterType {
+    EXCLUDE_TABLES = 0;
+  }
+  FilterType filter_type = 1;
+  map<string, google.protobuf.Empty> tables = 2 [(gogoproto.nullable) = false];
 }
 
 message ChangefeedDetails {
