@@ -1548,6 +1548,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	} else {
 		ctx, hdl, err := ds.stopper.GetHandle(ctx, stop.TaskOpts{
 			TaskName: taskName,
+			SpanOpt:  stop.ChildSpan,
 		})
 		if err != nil {
 			return nil, kvpb.NewError(err)
