@@ -107,6 +107,18 @@ var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
+var importRowCountValidation = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.row_count_validation.unsafe.enabled",
+	"enables asynchronous validation of imported data via INSPECT "+
+		"jobs. When enabled, an INSPECT job runs after import completion to "+
+		"detect potential data corruption. Disabling this setting may result "+
+		"in undetected data corruption if the import process fails.",
+	true,
+	settings.WithUnsafe,
+	settings.WithPublic,
+)
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
@@ -279,8 +291,19 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
+	setPublicTimestamp, err := r.publishTables(ctx, p.ExecCfg(), res)
+	if err != nil {
 		return err
+	}
+
+	if importRowCountValidation.Get(&p.ExecCfg().Settings.SV) {
+		tblDesc := tabledesc.NewBuilder(details.Tables[0].Desc).BuildImmutableTable()
+		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
+			_, err := sql.TriggerInspectJob(ctx, p.ExecCfg(), tblDesc, setPublicTimestamp)
+			if err != nil {
+				return errors.Wrapf(err, "failed to trigger inspect for import validation for table %s", tblDesc.GetName())
+			}
+		}
 	}
 
 	emitImportJobEvent(ctx, p, jobs.StateSucceeded, r.job)
@@ -304,7 +327,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), true, nil, r.res.Rows)
-
 	return nil
 }
 
@@ -422,11 +444,12 @@ func bindTableDescImportProperties(
 // publishTables updates the status of imported tables from OFFLINE to PUBLIC.
 func (r *importResumer) publishTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, res kvpb.BulkOpSummary,
-) error {
+) (hlc.Timestamp, error) {
+	var setPublicTimestamp hlc.Timestamp
 	details := r.job.Details().(jobspb.ImportDetails)
 	// Tables should only be published once.
 	if details.TablesPublished {
-		return nil
+		return setPublicTimestamp, nil
 	}
 
 	log.Event(ctx, "making tables live")
@@ -472,6 +495,14 @@ func (r *importResumer) publishTables(
 			); err != nil {
 				return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
 			}
+			// Try to get the commit timestamp for the transaction that set
+			// the table to public. This timestamp will be used to run the
+			// INSPECT job for this table, to ensure the INSPECT looks at the
+			// snapshot that IMPORT just finished.
+			setPublicTimestamp, err = txn.KV().CommitTimestamp()
+			if err != nil {
+				return err
+			}
 		}
 		if err := txn.KV().Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
@@ -486,7 +517,7 @@ func (r *importResumer) publishTables(
 		return nil
 	})
 	if err != nil {
-		return err
+		return setPublicTimestamp, err
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -497,7 +528,7 @@ func (r *importResumer) publishTables(
 		execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 	}
 
-	return nil
+	return setPublicTimestamp, nil
 }
 
 // checkVirtualConstraints checks constraints that are enforced via runtime
