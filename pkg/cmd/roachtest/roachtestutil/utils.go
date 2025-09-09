@@ -198,7 +198,7 @@ func GetMeanOverLastN(n int, items []float64) float64 {
 // Usage: ROACHTEST_PERF_WORKLOAD_DURATION="5m".
 const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
 
-var workloadDurationRegex = regexp.MustCompile(`^\d+[mhsMHS]$`)
+var workloadDurationRegex = regexp.MustCompile(`^\d+[mhs]$`)
 
 // GetEnvWorkloadDurationValueOrDefault validates EnvWorkloadDurationFlag and
 // returns value set if valid else returns default duration.
