@@ -1042,7 +1042,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		log.Ops.Warningf(ctx, "problem fetching disk stats: %s; disk stats will be empty.", err)
 	} else {
 		rsr.last.disk = diskCounters
-		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
+		subtractDiskCounters(ctx, &diskCounters, &rsr.initialDiskCounters)
 
 		rsr.HostDiskReadBytes.Update(diskCounters.ReadBytes)
 		rsr.HostDiskReadCount.Update(diskCounters.readCount)
@@ -1063,11 +1063,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		}
 	} else {
 		deltaNet = nc // delta since *last* scrape
-		subtractNetworkCounters(&deltaNet, rsr.last.net)
+		subtractNetworkCounters(ctx, &deltaNet, &rsr.last.net)
 		rsr.last.net = nc
 
 		// `nc` will now be the delta since *first* scrape.
-		subtractNetworkCounters(&nc, rsr.initialNetCounters)
+		subtractNetworkCounters(ctx, &nc, &rsr.initialNetCounters)
 		// TODO(tbg): this is awkward: we're computing the delta above,
 		// why don't we increment the counters?
 		rsr.HostNetRecvBytes.Update(int64(nc.IOCounters.BytesRecv))
@@ -1443,19 +1443,38 @@ func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 	return output, nil
 }
 
-// subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
-// saving the results in `from`.
-func subtractDiskCounters(from *DiskStats, sub DiskStats) {
-	from.writeCount -= sub.writeCount
-	from.WriteBytes -= sub.WriteBytes
-	from.writeTime -= sub.writeTime
+// subtractDiskCounters subtracts the counters in `baseline` from the
+// counters in `stats`, saving the results in `stats`. If any counter
+// in `stats` is lower than the corresponding counter in `baseline`
+// (indicating a reset), the value for all metrics in `baseline`
+// is updated to the current value in `stats` to establish a new
+// baseline.
+func subtractDiskCounters(ctx context.Context, stats *DiskStats, baseline *DiskStats) {
+	if stats.WriteBytes < baseline.WriteBytes ||
+		stats.writeCount < baseline.writeCount ||
+		stats.writeTime < baseline.writeTime ||
+		stats.ReadBytes < baseline.ReadBytes ||
+		stats.readCount < baseline.readCount ||
+		stats.readTime < baseline.readTime ||
+		stats.ioTime < baseline.ioTime ||
+		stats.weightedIOTime < baseline.weightedIOTime {
+		*baseline = *stats
+		*stats = DiskStats{}
+		log.Ops.Info(ctx, "runtime: new baseline in disk stats from host. disk metric counters have been reset.")
+		return
+	}
 
-	from.readCount -= sub.readCount
-	from.ReadBytes -= sub.ReadBytes
-	from.readTime -= sub.readTime
+	// Perform normal subtraction
+	stats.writeCount -= baseline.writeCount
+	stats.WriteBytes -= baseline.WriteBytes
+	stats.writeTime -= baseline.writeTime
 
-	from.ioTime -= sub.ioTime
-	from.weightedIOTime -= sub.weightedIOTime
+	stats.readCount -= baseline.readCount
+	stats.ReadBytes -= baseline.ReadBytes
+	stats.readTime -= baseline.readTime
+
+	stats.ioTime -= baseline.ioTime
+	stats.weightedIOTime -= baseline.weightedIOTime
 }
 
 // sumNetworkCounters returns a new net.IOCountersStat whose values are the sum of the
@@ -1475,22 +1494,46 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 	return output
 }
 
-// subtractNetworkCounters subtracts the counters in `sub` from the counters in `from`,
-// saving the results in `from`.
-func subtractNetworkCounters(from *netCounters, sub netCounters) {
-	from.IOCounters.BytesRecv -= sub.IOCounters.BytesRecv
-	from.IOCounters.PacketsRecv -= sub.IOCounters.PacketsRecv
-	from.IOCounters.Errin -= sub.IOCounters.Errin
-	from.IOCounters.Dropin -= sub.IOCounters.Dropin
-	from.IOCounters.BytesSent -= sub.IOCounters.BytesSent
-	from.IOCounters.PacketsSent -= sub.IOCounters.PacketsSent
-	from.IOCounters.Errout -= sub.IOCounters.Errout
-	from.IOCounters.Dropout -= sub.IOCounters.Dropout
-	from.TCPRetransSegs -= sub.TCPRetransSegs
-	from.TCPFastRetrans -= sub.TCPFastRetrans
-	from.TCPTimeouts -= sub.TCPTimeouts
-	from.TCPSlowStartRetrans -= sub.TCPSlowStartRetrans
-	from.TCPLossProbes -= sub.TCPLossProbes
+// subtractNetworkCounters subtracts the counters in `baseline`
+// from the counters in `stats`, saving the results in `stats`. If
+// any counter in `stats` is lower than the corresponding counter
+// in `baseline` (indicating a reset), the value for all metrics in
+// `baseline` is updated to the current value in `stats` to establish
+// a new baseline.
+func subtractNetworkCounters(ctx context.Context, stats *netCounters, baseline *netCounters) {
+	if stats.IOCounters.BytesRecv < baseline.IOCounters.BytesRecv ||
+		stats.IOCounters.PacketsRecv < baseline.IOCounters.PacketsRecv ||
+		stats.IOCounters.Errin < baseline.IOCounters.Errin ||
+		stats.IOCounters.Dropin < baseline.IOCounters.Dropin ||
+		stats.IOCounters.BytesSent < baseline.IOCounters.BytesSent ||
+		stats.IOCounters.PacketsSent < baseline.IOCounters.PacketsSent ||
+		stats.IOCounters.Errout < baseline.IOCounters.Errout ||
+		stats.IOCounters.Dropout < baseline.IOCounters.Dropout ||
+		stats.TCPRetransSegs < baseline.TCPRetransSegs ||
+		stats.TCPFastRetrans < baseline.TCPFastRetrans ||
+		stats.TCPTimeouts < baseline.TCPTimeouts ||
+		stats.TCPSlowStartRetrans < baseline.TCPSlowStartRetrans ||
+		stats.TCPLossProbes < baseline.TCPLossProbes {
+		*baseline = *stats
+		*stats = netCounters{}
+		log.Ops.Info(ctx, "runtime: new baseline in network stats from host. network metric counters have been reset.")
+		return
+	}
+
+	// Perform normal subtraction
+	stats.IOCounters.BytesRecv -= baseline.IOCounters.BytesRecv
+	stats.IOCounters.PacketsRecv -= baseline.IOCounters.PacketsRecv
+	stats.IOCounters.Errin -= baseline.IOCounters.Errin
+	stats.IOCounters.Dropin -= baseline.IOCounters.Dropin
+	stats.IOCounters.BytesSent -= baseline.IOCounters.BytesSent
+	stats.IOCounters.PacketsSent -= baseline.IOCounters.PacketsSent
+	stats.IOCounters.Errout -= baseline.IOCounters.Errout
+	stats.IOCounters.Dropout -= baseline.IOCounters.Dropout
+	stats.TCPRetransSegs -= baseline.TCPRetransSegs
+	stats.TCPFastRetrans -= baseline.TCPFastRetrans
+	stats.TCPTimeouts -= baseline.TCPTimeouts
+	stats.TCPSlowStartRetrans -= baseline.TCPSlowStartRetrans
+	stats.TCPLossProbes -= baseline.TCPLossProbes
 }
 
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.
