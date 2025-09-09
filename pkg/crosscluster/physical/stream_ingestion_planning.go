@@ -7,6 +7,7 @@ package physical
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -33,6 +35,14 @@ import (
 // defaultRetentionTTLSeconds is the default value for how long
 // replicated data will be retained.
 const defaultRetentionTTLSeconds = int32(4 * 60 * 60)
+
+var readerTenantSystemTableIDOffset = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"physical_cluster_replication.reader_system_table_id_offset",
+	"the offset added to dynamically allocated system table IDs in the reader tenant",
+	0,
+	settings.NonNegativeIntWithMaximum(math.MaxUint32-1000),
+)
 
 func streamIngestionJobDescription(
 	p sql.PlanHookState,
@@ -330,8 +340,8 @@ func createReaderTenant(
 			return readerID, err
 		}
 
-		readerInfo.ID = readerID.ToUint64()
-		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg, 0)
+		systemTableIDOffset := readerTenantSystemTableIDOffset.Get(&p.ExecCfg().Settings.SV)
+		_, err = sql.BootstrapTenant(ctx, p.ExecCfg(), p.Txn(), readerInfo, readerZcfg, uint32(systemTableIDOffset))
 		if err != nil {
 			return readerID, err
 		}
