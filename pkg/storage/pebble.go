@@ -430,7 +430,7 @@ var (
 		"storage.value_separation.minimum_size",
 		"the minimum size of a value that will be separated into a blob file",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.minimum_size",
-			1<<10 /* 1 KiB (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
+			256 /* 256 bytes (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
 		settings.IntWithMinimum(1),
 	)
 	valueSeparationMaxReferenceDepth = settings.RegisterIntSetting(
