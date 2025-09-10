@@ -463,11 +463,7 @@ func (c *CustomFuncs) IsZipCorrelated(zip memo.ZipExpr, cols opt.ColSet) bool {
 // FilterOuterCols returns the union of all outer columns from the given filter
 // conditions.
 func (c *CustomFuncs) FilterOuterCols(filters memo.FiltersExpr) opt.ColSet {
-	var colSet opt.ColSet
-	for i := range filters {
-		colSet.UnionWith(filters[i].ScalarProps().OuterCols)
-	}
-	return colSet
+	return filters.OuterCols()
 }
 
 // FiltersBoundBy returns true if all outer references in any of the filter

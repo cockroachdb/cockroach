@@ -783,6 +783,12 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		return hugeCost
 	}
 
+	// Add a huge cost if the scan is considered suboptimal when it is not
+	// providing a specific ordering.
+	if scan.SuboptimalUnorderedScan && required.Ordering.Any() {
+		return hugeCost
+	}
+
 	isUnfiltered := scan.IsUnfiltered(c.mem.Metadata())
 
 	// Normally a full scan of a partial index would not be considered a "full

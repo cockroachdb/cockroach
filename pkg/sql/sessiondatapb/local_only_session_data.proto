@@ -741,6 +741,11 @@ message LocalOnlySessionData {
   bool optimizer_use_improved_hoist_join_project = 186;
   // EnableInspectCommand controls use of the INSPECT command.
   bool enable_inspect_command = 187;
+  // OptimizerAvoidSuboptimalUnorderedScans controls whether the optimizer avoid
+  // constrained scans without the tighest spans when they do not provide an
+  // ordering nor avoid an index-join. See GenerateConstrainedScans for more
+  // details.
+  bool optimizer_avoid_suboptimal_unordered_scans = 188;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
