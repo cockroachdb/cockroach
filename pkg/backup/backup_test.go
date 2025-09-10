@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -6436,60 +6435,6 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	_, err := db.Exec(`RESTORE TABLE foo FROM LATEST IN '` + url + `' WITH into_db = 'into_db'`)
 	// Expect to see the first job write failure.
 	require.Regexp(t, "boom 1", err)
-}
-
-// TestProtectedTimestampsFailDueToLimits ensures that when creating a protected
-// timestamp record fails, we return the correct error.
-func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
-		// The meta table is used to track limits.
-		UseMetaTable: true,
-	}
-	tc := testcluster.StartTestCluster(t, 1, params)
-	defer tc.Stopper().Stop(ctx)
-	db := tc.ServerConn(0)
-	runner := sqlutils.MakeSQLRunner(db)
-	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	runner.Exec(t, "CREATE TABLE bar (k INT PRIMARY KEY, v BYTES)")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_bytes = 1")
-
-	// Creating the protected timestamp record should fail because there are too
-	// many spans. Ensure that we get the appropriate error.
-	_, err := db.Exec(`BACKUP TABLE foo, bar INTO 'nodelocal://1/foo/byte-limit'`)
-	require.ErrorContains(t, err, "pq: protectedts: limit exceeded")
-
-	// TODO(adityamaru): Remove in 22.2 once no records protect spans.
-	t.Run("deprecated-spans-limit", func(t *testing.T) {
-		params := base.TestClusterArgs{}
-		params.ServerArgs.ExternalIODir = dir
-		params.ServerArgs.Knobs.ProtectedTS = &protectedts.TestingKnobs{
-			DisableProtectedTimestampForMultiTenant: true,
-			// The meta table is used to track limits.
-			UseMetaTable: true,
-		}
-		// Test fails within a tenant. Tracked with #76378.
-		params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
-		tc := testcluster.StartTestCluster(t, 1, params)
-		defer tc.Stopper().Stop(ctx)
-		db := tc.ServerConn(0)
-		runner := sqlutils.MakeSQLRunner(db)
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-		runner.Exec(t, "CREATE TABLE bar (k INT PRIMARY KEY, v BYTES)")
-		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.max_spans = 1")
-
-		// Creating the protected timestamp record should fail because there are too
-		// many spans. Ensure that we get the appropriate error.
-		_, err := db.Exec(`BACKUP TABLE foo, bar INTO 'nodelocal://1/foo/spans-limit'`)
-		require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
-	})
 }
 
 // Check if export request is from a lease for a descriptor to avoid picking

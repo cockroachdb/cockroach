@@ -76,27 +76,17 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	// only want to persist the `target` on which the pts record applies. We have
 	// already verified that the record has a valid `target`.
 	r.DeprecatedSpans = nil
-	s := makeSettings(p.settings)
 	encodedTarget, err := protoutil.Marshal(&ptpb.Target{Union: r.Target.GetUnion(),
 		IgnoreIfExcludedFromBackup: r.Target.IgnoreIfExcludedFromBackup})
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 
-	updateMeta := usePTSMetaTable(ctx, p.settings, p.knobs)
 	query := protectInsertRecordCTE
 	args := []interface{}{
 		r.ID, r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
 		len(r.DeprecatedSpans), encodedTarget, encodedTarget}
-
-	if updateMeta {
-		query = protectQuery
-		args = []interface{}{s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
-			r.ID, r.Timestamp.AsOfSystemTime(),
-			r.MetaType, meta,
-			len(r.DeprecatedSpans), encodedTarget, encodedTarget}
-	}
 
 	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-protect", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -122,16 +112,6 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 
 	row := it.Cur()
 	if failed := *row[0].(*tree.DBool); failed {
-		if updateMeta {
-			curBytes := int64(*row[1].(*tree.DInt))
-			recordBytes := int64(len(encodedTarget) + len(r.Meta) + len(r.MetaType))
-			if s.maxBytes > 0 && curBytes+recordBytes > s.maxBytes {
-				return errors.WithHint(
-					errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
-						s.maxBytes),
-					"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
-			}
-		}
 		return protectedts.ErrExists
 	}
 
@@ -172,10 +152,7 @@ func (p storage) MarkVerified(ctx context.Context, id uuid.UUID) error {
 }
 
 func (p storage) Release(ctx context.Context, id uuid.UUID) error {
-	query := releaseQueryWithMeta
-	if !usePTSMetaTable(ctx, p.settings, p.knobs) {
-		query = releaseQuery
-	}
+	query := releaseQuery
 	numRows, err := p.txn.ExecEx(ctx, "protectedts-Release", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		query, id.GetBytesMut())
@@ -247,10 +224,7 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 }
 
 func (p storage) UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error {
-	query := updateTimestampQuery
-	if !usePTSMetaTable(ctx, p.settings, p.knobs) {
-		query = updateTimestampUpsertRecordCTE
-	}
+	query := updateTimestampUpsertRecordCTE
 	row, err := p.txn.QueryRowEx(ctx, "protectedts-update", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		query, id.GetBytesMut(), timestamp.AsOfSystemTime())
@@ -284,11 +258,6 @@ func writeDeprecatedPTSRecord(knobs *protectedts.TestingKnobs, r *ptpb.Record) b
 	return knobs != nil && knobs.WriteDeprecatedPTSRecords && r.DeprecatedSpans != nil && len(r.DeprecatedSpans) > 0
 }
 
-func usePTSMetaTable(
-	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
-) bool {
-	return knobs.UseMetaTable
-}
 
 // New creates a new Storage.
 func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) *Manager {

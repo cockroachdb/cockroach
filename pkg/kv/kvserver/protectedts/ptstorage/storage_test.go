@@ -51,26 +51,13 @@ import (
 func TestStorage(t *testing.T) {
 	skip.UnderRace(t, "very large test which is slow under race")
 	for _, withDeprecatedSpans := range []bool{true, false} {
-		for _, withMetaTable := range []bool{true, false} {
-			for _, test := range testCases {
-				name := test.name
-				if withDeprecatedSpans {
-					name = fmt.Sprintf("%s_withDeprecatedSpans", name)
-					test.runWithDeprecatedSpans = true
-				}
-
-				// Some tests will set test.runWithMetaTable themselves if they
-				// only test metadata. Run these tests once only. We don't
-				// need to run them with `runWithMetaTable` = false.
-				if !withMetaTable && test.runWithMetaTable {
-					continue
-				}
-				if withMetaTable || test.runWithMetaTable {
-					name = fmt.Sprintf("%s_withMetaTable", name)
-					test.runWithMetaTable = true
-				}
-				t.Run(name, test.run)
+		for _, test := range testCases {
+			name := test.name
+			if withDeprecatedSpans {
+				name = fmt.Sprintf("%s_withDeprecatedSpans", name)
+				test.runWithDeprecatedSpans = true
 			}
+			t.Run(name, test.run)
 		}
 	}
 }
@@ -148,64 +135,6 @@ var testCases = []testCase{
 				})
 				require.EqualError(t, err, protectedts.ErrExists.Error())
 			}),
-		},
-	},
-	{
-		name: "Protect - too many spans",
-		// This test is exclusively for metadata.
-		runWithMetaTable: true,
-		ops: []op{
-			protectOp{spans: tableSpans(42)},
-			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				setMaxSpans(ctx, tCtx, 3)
-			}),
-			protectOp{
-				metaType: "asdf",
-				meta:     []byte("asdf"),
-				spans:    tableSpans(1, 2, 3),
-				expErr:   "protectedts: limit exceeded: 1\\+3 > 3 spans",
-			},
-			protectOp{
-				metaType: "asdf",
-				meta:     []byte("asdf"),
-				spans:    tableSpans(1, 2),
-			},
-			releaseOp{idFunc: pickOneRecord},
-			releaseOp{idFunc: pickOneRecord},
-			protectOp{spans: tableSpans(1)},
-			protectOp{spans: tableSpans(2)},
-			protectOp{spans: tableSpans(3)},
-			protectOp{
-				spans:  tableSpans(4),
-				expErr: "protectedts: limit exceeded: 3\\+1 > 3 spans",
-			},
-		},
-		runWithDeprecatedSpans: true,
-	},
-	{
-		name: "Protect - too many bytes",
-		// This test is exclusively for metadata.
-		runWithMetaTable: true,
-		ops: []op{
-			protectOp{spans: tableSpans(42), target: tableTarget(42)},
-			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				_, err := tCtx.tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.max_bytes = $1", 1024)
-				require.NoError(t, err)
-			}),
-			protectOp{
-				spans: append(tableSpans(1, 2),
-					func() roachpb.Span {
-						s := tableSpan(3)
-						s.EndKey = append(s.EndKey, bytes.Repeat([]byte{'a'}, 1024)...)
-						return s
-					}()),
-				target: largeTableTarget(1024),
-				expErr: "protectedts: limit exceeded: .* bytes",
-			},
-			protectOp{
-				spans:  tableSpans(1, 2),
-				target: tableTargets(1, 2),
-			},
 		},
 	},
 	{
@@ -467,7 +396,6 @@ type testCase struct {
 	name                   string
 	ops                    []op
 	runWithDeprecatedSpans bool
-	runWithMetaTable       bool
 }
 
 func (test testCase) run(t *testing.T) {
@@ -479,9 +407,6 @@ func (test testCase) run(t *testing.T) {
 	params.Knobs.ProtectedTS = ptsKnobs
 	if test.runWithDeprecatedSpans {
 		ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-	}
-	if test.runWithMetaTable {
-		ptsKnobs.UseMetaTable = true
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
@@ -499,13 +424,7 @@ func (test testCase) run(t *testing.T) {
 		state, err := pts.GetState(ctx)
 		require.NoError(t, err)
 
-		if test.runWithMetaTable {
-			md, err := pts.GetMetadata(ctx)
-			require.EqualValues(t, tCtx.state.Metadata, md)
-			require.NoError(t, err)
-			require.EqualValues(t, tCtx.state, state)
-		}
-		require.EqualValues(t, tCtx.state.Records, tCtx.state.Records)
+		require.EqualValues(t, tCtx.state.Records, state.Records)
 		for _, r := range tCtx.state.Records {
 			var rec *ptpb.Record
 			rec, err := pts.GetRecord(ctx, r.ID.GetUUID())
@@ -654,97 +573,94 @@ func TestCorruptData(t *testing.T) {
 		}
 	}
 
-	testutils.RunTrueAndFalse(t, "using meta table", func(t *testing.T, withMetaTable bool) {
-		// TODO(adityamaru): Remove test when we delete `spans` field from
-		// record.
-		t.Run("corrupt spans", func(t *testing.T) {
-			// Set the log scope so we can introspect the logged errors.
-			scope := log.Scope(t)
-			defer scope.Close(t)
+	// TODO(adityamaru): Remove test when we delete `spans` field from
+	// record.
+	t.Run("corrupt spans", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
 
-			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{
-						SpanConfig: &spanconfig.TestingKnobs{ManagerDisableJobCreation: true},
-						ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true,
-							UseMetaTable: withMetaTable},
-					},
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SpanConfig:  &spanconfig.TestingKnobs{ManagerDisableJobCreation: true},
+					ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true},
 				},
-			})
-			defer tc.Stopper().Stop(ctx)
-
-			s := tc.Server(0)
-			ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-			tCtx := &testContext{runWithDeprecatedSpans: true}
-			runCorruptDataTest(tCtx, s, tc, ptstorage.WithDatabase(
-				ptp, tc.Server(0).InternalDB().(isql.DB),
-			))
+			},
 		})
+		defer tc.Stopper().Stop(ctx)
 
-		t.Run("corrupt target", func(t *testing.T) {
-			// Set the log scope so we can introspect the logged errors.
-			scope := log.Scope(t)
-			defer scope.Close(t)
+		s := tc.Server(0)
+		ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		tCtx := &testContext{runWithDeprecatedSpans: true}
+		runCorruptDataTest(tCtx, s, tc, ptstorage.WithDatabase(
+			ptp, tc.Server(0).InternalDB().(isql.DB),
+		))
+	})
 
-			var params base.TestServerArgs
-			params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
-			params.Knobs.ProtectedTS = &protectedts.TestingKnobs{UseMetaTable: withMetaTable}
-			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-			defer tc.Stopper().Stop(ctx)
+	t.Run("corrupt target", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
 
-			s := tc.Server(0)
-			pts := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-			runCorruptDataTest(
-				&testContext{}, s, tc,
-				ptstorage.WithDatabase(pts, s.InternalDB().(isql.DB)),
-			)
-		})
-		t.Run("corrupt hlc timestamp", func(t *testing.T) {
-			// Set the log scope so we can introspect the logged errors.
-			scope := log.Scope(t)
-			defer scope.Close(t)
+		var params base.TestServerArgs
+		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
+		params.Knobs.ProtectedTS = &protectedts.TestingKnobs{}
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+		defer tc.Stopper().Stop(ctx)
 
-			var params base.TestServerArgs
-			params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
-			params.Knobs.ProtectedTS = &protectedts.TestingKnobs{UseMetaTable: withMetaTable}
-			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-			defer tc.Stopper().Stop(ctx)
+		s := tc.Server(0)
+		pts := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		runCorruptDataTest(
+			&testContext{}, s, tc,
+			ptstorage.WithDatabase(pts, s.InternalDB().(isql.DB)),
+		)
+	})
+	t.Run("corrupt hlc timestamp", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
 
-			s := tc.Server(0)
-			ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-			pts := ptstorage.WithDatabase(ptp, s.InternalDB().(isql.DB))
-			rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
-			require.NoError(t, pts.Protect(ctx, &rec))
+		var params base.TestServerArgs
+		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
+		params.Knobs.ProtectedTS = &protectedts.TestingKnobs{}
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+		defer tc.Stopper().Stop(ctx)
 
-			// This timestamp has too many logical digits and thus will fail parsing.
-			var d tree.DDecimal
-			d.SetFinite(math.MaxInt32, -12)
-			ie := tc.Server(0).InternalExecutor().(isql.Executor)
-			affected, err := ie.ExecEx(
-				ctx, "corrupt-data", nil, /* txn */
-				sessiondata.NodeUserSessionDataOverride,
-				"UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
-				d.String(), rec.ID.String())
-			require.NoError(t, err)
-			require.Equal(t, 1, affected)
+		s := tc.Server(0)
+		ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		pts := ptstorage.WithDatabase(ptp, s.InternalDB().(isql.DB))
+		rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
+		require.NoError(t, pts.Protect(ctx, &rec))
 
-			msg := regexp.MustCompile("failed to parse timestamp for " + rec.ID.String() +
-				": logical part has too many digits")
-			got, err := pts.GetRecord(ctx, rec.ID.GetUUID())
-			require.Regexp(t, msg, err)
-			require.Nil(t, got)
-			_, err = pts.GetState(ctx)
-			require.NoError(t, err)
-			log.FlushFiles()
+		// This timestamp has too many logical digits and thus will fail parsing.
+		var d tree.DDecimal
+		d.SetFinite(math.MaxInt32, -12)
+		ie := tc.Server(0).InternalExecutor().(isql.Executor)
+		affected, err := ie.ExecEx(
+			ctx, "corrupt-data", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			"UPDATE system.protected_ts_records SET ts = $1 WHERE id = $2",
+			d.String(), rec.ID.String())
+		require.NoError(t, err)
+		require.Equal(t, 1, affected)
 
-			entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
-				log.WithFlattenedSensitiveData)
-			require.NoError(t, err)
-			require.GreaterOrEqual(t, 1, len(entries), "entries: %v", entries)
-			for _, e := range entries {
-				require.Equal(t, severity.ERROR, e.Severity)
-			}
-		})
+		msg := regexp.MustCompile("failed to parse timestamp for " + rec.ID.String() +
+			": logical part has too many digits")
+		got, err := pts.GetRecord(ctx, rec.ID.GetUUID())
+		require.Regexp(t, msg, err)
+		require.Nil(t, got)
+		_, err = pts.GetState(ctx)
+		require.NoError(t, err)
+		log.FlushFiles()
+
+		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
+			log.WithFlattenedSensitiveData)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, 1, len(entries), "entries: %v", entries)
+		for _, e := range entries {
+			require.Equal(t, severity.ERROR, e.Severity)
+		}
 	})
 
 }

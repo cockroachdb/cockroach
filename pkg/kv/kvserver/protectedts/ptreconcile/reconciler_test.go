@@ -39,8 +39,7 @@ func TestReconciler(t *testing.T) {
 
 		srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: withDeprecatedSpans,
-					UseMetaTable: withDeprecatedSpans},
+				ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: withDeprecatedSpans},
 			},
 		})
 		defer srv.Stopper().Stop(ctx)
