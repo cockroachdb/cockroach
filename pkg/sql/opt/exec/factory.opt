@@ -808,6 +808,9 @@ define CancelSessions {
 # CreateStatistics implements CREATE STATISTICS.
 define CreateStatistics {
     Cs *tree.CreateStats
+    Table cat.Table
+    Index cat.Index
+    WhereConstraint *constraint.Constraint
 }
 
 # Export implements EXPORT.

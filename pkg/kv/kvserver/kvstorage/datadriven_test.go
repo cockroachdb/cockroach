@@ -8,6 +8,7 @@ package kvstorage
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -100,7 +101,8 @@ func TestDataDriven(t *testing.T) {
 	// Scan stats (shown after loading the range descriptors) can be non-deterministic.
 	reStripScanStats := regexp.MustCompile(`stats: .*$`)
 
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+	dir := filepath.Join(datapathutils.TestDataPath(t), t.Name())
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		e := newEnv(t)
 		defer e.close()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (output string) {
