@@ -130,7 +130,6 @@ func (n *checkExternalConnectionNode) Next(params runParams) (bool, error) {
 		return false, params.ctx.Err()
 	case row, more := <-n.rows:
 		if !more {
-			n.rows = nil
 			return false, nil
 		}
 		n.row = row
@@ -143,10 +142,12 @@ func (n *checkExternalConnectionNode) Values() tree.Datums {
 }
 
 func (n *checkExternalConnectionNode) Close(_ context.Context) {
-	if n.rows != nil {
-		close(n.rows)
-		n.rows = nil
+	// Wait for `startExec` to close channel. Not sure if this is entirely
+	// necessary, but this avoids any possibility of `startExec` attempting to
+	// close a `nil` channel.
+	for range n.rows {
 	}
+	n.rows = nil
 }
 
 func (n *checkExternalConnectionNode) parseParams(params runParams) error {
