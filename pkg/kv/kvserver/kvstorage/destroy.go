@@ -8,6 +8,8 @@ package kvstorage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -153,4 +155,130 @@ func DestroyReplica(
 	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
 		NextReplicaID: nextReplicaID, // NB: nextReplicaID > 0
 	})
+}
+
+type StoreBatch struct {
+	rState storage.Reader
+	wState storage.Writer
+	rRaft  storage.Reader
+	wRaft  storage.Writer
+}
+
+func (s *StoreBatch) Separated() bool {
+	return s.wState != s.wRaft
+}
+
+// destroyReplicaInfo contains the replica's metadata needed for its removal
+// from storage.
+// FIXME: use the same in prepareSnapApply.
+type destroyReplicaInfo struct {
+	id   roachpb.FullReplicaID
+	keys roachpb.RSpan
+	log  kvpb.RaftSpan
+}
+
+func DestroyReplicaSep(
+	ctx context.Context,
+	info destroyReplicaInfo,
+	batch StoreBatch,
+	nextReplicaID roachpb.ReplicaID,
+	opts ClearRangeDataOptions,
+) error {
+	if info.id.ReplicaID >= nextReplicaID {
+		return errors.AssertionFailedf("replica %v must not survive its own tombstone", info.id)
+	}
+
+	sl := stateloader.Make(info.id.RangeID)
+	// Assert that the replica ID in storage matches the in-memory one.
+	if id, err := sl.LoadRaftReplicaID(ctx, batch.rState); err != nil {
+		return err
+	} else if repID := id.ReplicaID; repID != info.id.ReplicaID {
+		return errors.AssertionFailedf("replica %v has a mismatching ID %d", info.id, repID)
+	}
+	// Assert that the tombstone moves strictly forward. Failure to do so
+	// indicates that something is going wrong in the replica lifecycle.
+	if ts, err := sl.LoadRangeTombstone(ctx, batch.rState); err != nil {
+		return err
+	} else if ts.NextReplicaID >= nextReplicaID {
+		return errors.AssertionFailedf(
+			"cannot rewind tombstone from %d to %d", ts.NextReplicaID, nextReplicaID)
+	}
+
+	// replicated rangeID
+	//	- full
+	// unreplicated rangeID
+	// 	- RangeTombstoneKey (sm, overwrite)
+	// 	- RaftHardStateKey (raft, delete)
+	// 	- RaftLogKey       (raft, delete or partially delete+WAG)
+	// 	- RaftReplicaIDKey (sm, delete)
+	// 	- RaftTruncatedStateKey (raft, delete)
+	// 	- RangeLastReplicaGCTimestampKey (?)
+	// system (range descs etc)
+	// lock table
+	// user keys
+
+	if opts.ClearReplicatedByRangeID {
+		opts.ClearReplicatedByRangeID = false
+		span := rditer.MakeRangeIDReplicatedSpan(info.id.RangeID)
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, batch.rState, batch.wState,
+			span.Key, span.EndKey, ClearRangeThresholdPointKeys,
+		); err != nil {
+			return err
+		}
+	}
+
+	if opts.ClearUnreplicatedByRangeID {
+		// TODO(pav-kv): make this clearing future proof. Right now, we manually
+		// handle each possible key.
+
+		opts.ClearUnreplicatedByRangeID = false
+		// Save a tombstone to ensure that replica IDs never get reused.
+		if err := sl.SetRangeTombstone(ctx, batch.wState, kvserverpb.RangeTombstone{
+			NextReplicaID: nextReplicaID, // NB: nextReplicaID > 0
+		}); err != nil {
+			return err
+		}
+		if err := batch.wRaft.ClearEngineKey(storage.EngineKey{
+			Key: sl.RaftHardStateKey(),
+		}, storage.ClearOptions{}); err != nil {
+			return err
+		}
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, batch.rRaft, batch.wRaft,
+			sl.RaftLogKey(info.log.Last+1),
+			keys.RaftLogPrefix(info.id.RangeID).PrefixEnd(),
+			ClearRangeThresholdPointKeys,
+		); err != nil {
+			return err
+		}
+		if err := batch.wState.ClearEngineKey(storage.EngineKey{
+			Key: sl.RaftReplicaIDKey(),
+		}, storage.ClearOptions{}); err != nil {
+			return err
+		}
+		if err := batch.wRaft.ClearEngineKey(storage.EngineKey{
+			Key: sl.RaftTruncatedStateKey(),
+		}, storage.ClearOptions{}); err != nil {
+			return err
+		}
+		if err := batch.wState.ClearEngineKey(storage.EngineKey{
+			Key: sl.RangeLastReplicaGCTimestampKey(),
+		}, storage.ClearOptions{}); err != nil {
+			return err
+		}
+	}
+
+	// 2.2. (optional) Clear replicated MVCC span.
+	if !opts.ClearReplicatedBySpan.Equal(roachpb.RSpan{}) {
+		if err := ClearRangeData(ctx, info.id.RangeID, batch.rState, batch.wState, ClearRangeDataOptions{
+			ClearReplicatedBySpan: opts.ClearReplicatedBySpan,
+		}); err != nil {
+			return err
+		}
+		opts.ClearReplicatedBySpan = roachpb.RSpan{}
+	}
+
+	// TODO(pav-kv): assert that opts has been cleared, to be future proof.
+	return nil
 }
