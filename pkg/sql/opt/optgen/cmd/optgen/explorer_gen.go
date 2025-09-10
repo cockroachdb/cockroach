@@ -31,7 +31,6 @@ func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.nestIndent("import (\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
 	g.w.unnest(")\n\n")
 
 	g.genDispatcher()
@@ -62,7 +61,6 @@ func (g *explorerGen) genDispatcher() {
 	g.w.writeIndent("state *exploreState,\n")
 	g.w.writeIndent("member memo.RelExpr,\n")
 	g.w.writeIndent("ordinal int,\n")
-	g.w.writeIndent("required *physical.Required,\n")
 	g.w.unnest(") (_fullyExplored bool)")
 	g.w.nest(" {\n")
 	g.w.writeIndent("switch t := member.(type) {\n")
@@ -72,7 +70,7 @@ func (g *explorerGen) genDispatcher() {
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Explore")
 		if len(rules) > 0 {
 			opTyp := g.md.typeOf(define)
-			format := "case *%s: return _e.explore%s(state, t, ordinal, required)\n"
+			format := "case *%s: return _e.explore%s(state, t, ordinal)\n"
 			g.w.writeIndent(format, opTyp.name, define.Name)
 		}
 	}
@@ -90,7 +88,6 @@ func (g *explorerGen) genDispatcher() {
 //	  _rootState *exploreState,
 //	  _root *memo.ScanNode,
 //	  _rootOrd int,
-//	  _required *physical.Required,
 //	) (_fullyExplored bool) {
 //	  _fullyExplored = true
 //
@@ -111,7 +108,6 @@ func (g *explorerGen) genRuleFuncs() {
 		g.w.writeIndent("_rootState *exploreState,\n")
 		g.w.writeIndent("_root *%s,\n", opTyp.name)
 		g.w.writeIndent("_rootOrd int,\n")
-		g.w.writeIndent("_required *physical.Required,\n")
 		g.w.unnest(") (_fullyExplored bool)")
 		g.w.nest(" {\n")
 		g.w.writeIndent("opt.MaybeInjectOptimizerTestingPanic(_e.ctx, _e.evalCtx)\n")
