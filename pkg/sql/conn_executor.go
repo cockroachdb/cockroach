@@ -3477,6 +3477,12 @@ func isCommit(stmt tree.Statement) bool {
 	return ok
 }
 
+// isRollback returns true if stmt is a "ROLLBACK" statement.
+func isRollback(stmt tree.Statement) bool {
+	_, ok := stmt.(*tree.RollbackTransaction)
+	return ok
+}
+
 var retryableMinTimestampBoundUnsatisfiableError = errors.Newf(
 	"retryable MinTimestampBoundUnsatisfiableError",
 )

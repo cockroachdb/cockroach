@@ -27,75 +27,92 @@ func TestTxnRegistry_ShouldStartTxnDiagnostic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("request_found", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil)
-		requestId := RequestID(1)
-		expectedRequest := TxnRequest{
-			txnFingerprintId:    1111,
-			stmtFingerprintsId:  []uint64{1111, 2222, 3333},
-			redacted:            false,
-			username:            "",
-			expiresAt:           time.Time{},
-			minExecutionLatency: 0,
-			samplingProbability: 0,
-		}
-		registry.mu.requests[requestId] = expectedRequest
-		shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
-		require.Equal(t, expectedRequest, actual)
-		require.Equal(t, requestId, id)
-		require.True(t, shouldCollect)
-		require.Empty(t, registry.mu.requests)
-		require.Contains(t, registry.mu.unconditionalOngoingRequests, requestId)
-	})
+	baseRequest := TxnRequest{
+		txnFingerprintId:   1111,
+		stmtFingerprintIds: []uint64{1111, 2222, 3333},
+		redacted:           false,
+		username:           "",
+	}
 
-	t.Run("request_not_found", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil)
-		requestId := RequestID(1)
-		expectedRequest := TxnRequest{
-			txnFingerprintId:    1111,
-			stmtFingerprintsId:  []uint64{1111, 2222, 3333},
-			redacted:            false,
-			username:            "",
+	testCases := []struct {
+		name                string
+		expiresAt           time.Time
+		minExecutionLatency time.Duration
+		samplingProbability float64
+		queryFingerprintId  uint64
+		expectedShouldStart bool
+	}{
+		{
+			name:                "request_found",
 			expiresAt:           time.Time{},
-			minExecutionLatency: 0,
-			samplingProbability: 0,
-		}
-		registry.mu.requests[requestId] = expectedRequest
-		shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), 2222)
-		require.Equal(t, TxnRequest{}, actual)
-		require.Equal(t, RequestID(0), id)
-		require.False(t, shouldCollect)
-	})
-	t.Run("request_expired", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil)
-		requestId := RequestID(1)
-		expectedRequest := TxnRequest{
-			txnFingerprintId:    1111,
-			stmtFingerprintsId:  []uint64{1111, 2222, 3333},
-			redacted:            false,
-			username:            "",
+			queryFingerprintId:  1111,
+			expectedShouldStart: true,
+		},
+		{
+			name:                "request_not_found",
+			expiresAt:           time.Time{},
+			queryFingerprintId:  2222, // Different fingerprint
+			expectedShouldStart: false,
+		},
+		{
+			name:                "request_expired",
 			expiresAt:           timeutil.Now().Add(-time.Hour),
-			minExecutionLatency: 0,
-			samplingProbability: 0,
-		}
-		registry.mu.requests[requestId] = expectedRequest
-		shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
-		require.Equal(t, TxnRequest{}, actual)
-		require.Equal(t, RequestID(0), id)
-		require.False(t, shouldCollect)
-		require.Empty(t, registry.mu.requests)
-		require.Empty(t, registry.mu.unconditionalOngoingRequests)
-	})
+			queryFingerprintId:  1111,
+			expectedShouldStart: false,
+		},
+		{
+			name:                "request_conditional",
+			expiresAt:           time.Time{},
+			minExecutionLatency: time.Millisecond,
+			samplingProbability: 1.0,
+			queryFingerprintId:  1111,
+			expectedShouldStart: true,
+		},
+	}
 
-	t.Run("request_notCondition", func(t *testing.T) {
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := baseRequest
+			request.expiresAt = tc.expiresAt
+			request.minExecutionLatency = tc.minExecutionLatency
+			request.samplingProbability = tc.samplingProbability
+
+			registry := NewTxnRegistry(noopDb{}, nil, nil)
+			requestId := RequestID(1)
+			registry.mu.requests[requestId] = request
+
+			shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), tc.queryFingerprintId)
+
+			require.Equal(t, tc.expectedShouldStart, shouldCollect)
+			var expectedRequest TxnRequest
+			var expectedRequestId RequestID
+			if tc.expectedShouldStart {
+				expectedRequestId = requestId
+				expectedRequest = request
+				if actual.isConditional() {
+					requestInMap, ok := registry.mu.requests[requestId]
+					require.True(t, ok)
+					require.Equal(t, expectedRequest, requestInMap)
+					require.Empty(t, registry.mu.unconditionalOngoingRequests)
+				} else {
+					requestInOngoing, ok := registry.mu.unconditionalOngoingRequests[requestId]
+					require.True(t, ok)
+					require.Equal(t, expectedRequest, requestInOngoing)
+					require.Empty(t, registry.mu.requests)
+
+				}
+			}
+			require.Equal(t, expectedRequestId, id)
+			require.Equal(t, expectedRequest, actual)
+		})
+	}
+
+	t.Run("request_conditional_shouldnt_collect", func(t *testing.T) {
 		registry := NewTxnRegistry(noopDb{}, nil, nil)
 		requestId := RequestID(1)
 		expectedRequest := TxnRequest{
 			txnFingerprintId:    1111,
-			stmtFingerprintsId:  []uint64{1111, 2222, 3333},
-			redacted:            false,
-			username:            "",
-			expiresAt:           time.Time{},
+			stmtFingerprintIds:  []uint64{1111, 2222, 3333},
 			minExecutionLatency: 1,
 			samplingProbability: .01,
 		}
@@ -103,7 +120,6 @@ func TestTxnRegistry_ShouldStartTxnDiagnostic(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
 			if shouldCollect {
-				// Ensure that the registry still contains the request, even if we are collecting
 				require.Contains(t, registry.mu.requests, id)
 				return errors.New("waiting till we don't find")
 			}
@@ -168,8 +184,7 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 			time.Hour,
 			false,
 		)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "got non-zero sampling probability")
+		require.ErrorContains(t, err, "got non-zero sampling probability")
 	})
 
 }
@@ -187,7 +202,7 @@ func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
 		requestId := RequestID(1)
 		expectedRequest := TxnRequest{
 			txnFingerprintId:    1111,
-			stmtFingerprintsId:  []uint64{1111, 2222, 3333},
+			stmtFingerprintIds:  []uint64{1111, 2222, 3333},
 			redacted:            false,
 			username:            "",
 			expiresAt:           time.Time{},
@@ -214,7 +229,7 @@ func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
 		requestId := RequestID(1)
 		expectedRequest := TxnRequest{
 			txnFingerprintId:    1111,
-			stmtFingerprintsId:  []uint64{1111, 2222, 3333},
+			stmtFingerprintIds:  []uint64{1111, 2222, 3333},
 			redacted:            false,
 			username:            "",
 			expiresAt:           time.Time{},
@@ -253,7 +268,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 	requestID := RequestID(123)
 	request := TxnRequest{
 		txnFingerprintId:    1111,
-		stmtFingerprintsId:  []uint64{1111, 2222},
+		stmtFingerprintIds:  []uint64{1111, 2222},
 		redacted:            false,
 		username:            "testuser",
 		expiresAt:           time.Time{},
@@ -300,7 +315,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 		nil,
 	)
 
-	txnDiagnostic := NewTxnDiagnostic([]StmtDiagnostic{stmtDiag1, stmtDiag2})
+	txnDiagnostic := NewTxnDiagnostic([]StmtDiagnostic{stmtDiag1, stmtDiag2}, []byte("mock txn bundle"))
 
 	// Insert the transaction diagnostic
 	diagID, err := registry.InsertTxnDiagnostic(ctx, requestID, request, txnDiagnostic)
@@ -314,6 +329,10 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 	// Verify we have exactly 2 new statement diagnostic entries (one for each statement in the transaction)
 	require.Equal(t, initialCount+2, count, "should have added 2 statement diagnostic entries")
 
+	var bundleChunkCount int
+	// Verify that statement_bundle_chunks table now has entries
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_bundle_chunks WHERE description ='transaction diagnostics bundle'").Scan(&bundleChunkCount)
+	require.Equal(t, 1, bundleChunkCount, "should have added 1 transaction diagnostic bundle entry")
 	// TODO: Verify that data is in the txn_diagnostics table once it is created
 
 }

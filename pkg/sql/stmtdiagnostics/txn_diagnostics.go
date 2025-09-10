@@ -23,7 +23,7 @@ import (
 // bundle should be collected.
 type TxnRequest struct {
 	txnFingerprintId    uint64
-	stmtFingerprintsId  []uint64
+	stmtFingerprintIds  []uint64
 	redacted            bool
 	username            string
 	expiresAt           time.Time
@@ -31,8 +31,32 @@ type TxnRequest struct {
 	samplingProbability float64
 }
 
+func NewTxnRequest(
+	txnFingerprintId uint64,
+	stmtFingerprintIds []uint64,
+	redacted bool,
+	username string,
+	expiresAt time.Time,
+	minExecutionLatency time.Duration,
+	samplingProbability float64,
+) TxnRequest {
+	return TxnRequest{
+		txnFingerprintId:    txnFingerprintId,
+		stmtFingerprintIds:  stmtFingerprintIds,
+		redacted:            redacted,
+		username:            username,
+		expiresAt:           expiresAt,
+		minExecutionLatency: minExecutionLatency,
+		samplingProbability: samplingProbability,
+	}
+}
+
+func (t *TxnRequest) TxnFingerprintId() uint64 {
+	return t.txnFingerprintId
+}
+
 func (t *TxnRequest) StmtFingerprintIds() []uint64 {
-	return t.stmtFingerprintsId
+	return t.stmtFingerprintIds
 }
 
 func (t *TxnRequest) IsRedacted() bool {
@@ -56,10 +80,11 @@ func (t *TxnRequest) isConditional() bool {
 // as a transaction diagnostic bundle
 type TxnDiagnostic struct {
 	stmtDiagnostics []StmtDiagnostic
+	bundle          []byte
 }
 
-func NewTxnDiagnostic(stmtDiagnostics []StmtDiagnostic) TxnDiagnostic {
-	return TxnDiagnostic{stmtDiagnostics: stmtDiagnostics}
+func NewTxnDiagnostic(stmtDiagnostics []StmtDiagnostic, bundle []byte) TxnDiagnostic {
+	return TxnDiagnostic{stmtDiagnostics: stmtDiagnostics, bundle: bundle}
 }
 
 // TxnRegistry maintains a view on the transactions on which a diagnostic
@@ -118,7 +143,7 @@ func (r *TxnRegistry) ShouldStartTxnDiagnostic(
 	}
 
 	for id, f := range r.mu.requests {
-		if len(f.stmtFingerprintsId) > 0 && f.stmtFingerprintsId[0] == stmtFingerprintId {
+		if len(f.stmtFingerprintIds) > 0 && f.stmtFingerprintIds[0] == stmtFingerprintId {
 			if f.isExpired(timeutil.Now()) {
 				delete(r.mu.requests, id)
 				return false, 0, req
@@ -219,6 +244,13 @@ func (r *TxnRegistry) InsertTxnDiagnostic(
 	var txnDiagnosticId CollectedInstanceID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("txn-diag-insert-bundle")
+
+		_, err := r.StmtRegistry.insertBundleChunks(ctx, diagnostic.bundle, "transaction diagnostics bundle", txn)
+		// Insert the transaction diagnostic bundle
+		if err != nil {
+			return err
+		}
+		// Insert all the statement diagnostics
 		stmtDiagnostics := tree.NewDArray(types.Int)
 		for _, sd := range diagnostic.stmtDiagnostics {
 			id, err := r.StmtRegistry.innerInsertStatementDiagnostics(ctx, sd, txn)
@@ -261,7 +293,7 @@ func (r *TxnRegistry) addTxnRequestInternalLocked(
 	}
 	request := TxnRequest{
 		txnFingerprintId:    txnFingerprintId,
-		stmtFingerprintsId:  stmtFingerprintsId,
+		stmtFingerprintIds:  stmtFingerprintsId,
 		redacted:            redacted,
 		username:            username,
 		expiresAt:           expiresAt,
