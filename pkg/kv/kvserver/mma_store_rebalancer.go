@@ -81,7 +81,7 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
 			timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
-			if kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV) != kvserverbase.LBRebalancingMultiMetric {
+			if !kvserverbase.LoadBasedRebalancingModeIsMMA(&m.st.SV) {
 				continue
 			}
 

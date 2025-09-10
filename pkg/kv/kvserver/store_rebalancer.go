@@ -169,7 +169,7 @@ func NewStoreRebalancer(
 		},
 		disabled: func() bool {
 			mode := kvserverbase.LoadBasedRebalancingMode.Get(&st.SV)
-			return mode == kvserverbase.LBRebalancingOff || mode == kvserverbase.LBRebalancingMultiMetric ||
+			return mode == kvserverbase.LBRebalancingOff || kvserverbase.LoadBasedRebalancingModeIsMMA(&st.SV) ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}

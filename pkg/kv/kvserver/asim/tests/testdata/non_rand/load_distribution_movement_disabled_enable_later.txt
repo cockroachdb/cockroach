@@ -39,7 +39,7 @@ gen_load rate=10000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_k
 ----
 
 # Two minutes into the test, we'll enable the MMA.
-setting rebalance_mode=3 delay=2m
+setting rebalance_mode=4 delay=2m
 ----
 
 eval duration=7m samples=1 seed=42 cfgs=(sma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
