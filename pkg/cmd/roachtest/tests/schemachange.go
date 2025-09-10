@@ -41,6 +41,10 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
+			if _, err := db.Exec(`SET CLUSTER SETTING backup.index.read.enabled = false`); err != nil {
+				t.Fatal(err)
+			}
+
 			m := c.NewDeprecatedMonitor(ctx, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
