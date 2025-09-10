@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -309,6 +310,12 @@ func (l ImportDataLoader) InitialDataLoad(
 ) (int64, error) {
 	if l.FilesPerNode == 0 {
 		l.FilesPerNode = 1
+	}
+	mayContainDuplicates := slices.ContainsFunc(gen.Tables(), func(tbl workload.Table) bool {
+		return tbl.InitialRows.MayContainDuplicates
+	})
+	if mayContainDuplicates {
+		log.Dev.Warningf(ctx, "importing fixture using a key generator that may contain duplicates; IMPORT may abort with a key uniqueness violation at higher row counts")
 	}
 
 	log.Dev.Infof(ctx, "starting import of %d tables", len(gen.Tables()))

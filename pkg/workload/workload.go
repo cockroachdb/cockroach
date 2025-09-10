@@ -46,7 +46,7 @@ type Generator interface {
 func SupportsFixtures(gen Generator) bool {
 	tt := gen.Tables()
 	for _, t := range tt {
-		if t.InitialRows.FillBatch == nil || t.InitialRows.MayContainDuplicates {
+		if t.InitialRows.FillBatch == nil {
 			return false
 		}
 	}

@@ -389,6 +389,12 @@ func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
 	return k.getKey(splitPoint)
 }
 
+func insertCountKey(idx, count int64, kr keyRange) int64 {
+	stride := kr.max/(count+1) - kr.min/(count+1)
+	key := kr.min + (idx+1)*stride
+	return key
+}
+
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
 	// Tables should only run on initialized workload, safe to call create without
@@ -430,9 +436,6 @@ func (w *kv) Tables() []workload.Table {
 			// INSERT ... ON CONFLICT DO NOTHING statements.
 			MayContainDuplicates: !w.sequential,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-				// Grab a new state for each batch, under the assumption that
-				// FillBatch may be called concurrently.
-				ks := kg.newState()
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > w.insertCount {
 					rowEnd = w.insertCount
@@ -448,11 +451,11 @@ func (w *kv) Tables() []workload.Table {
 				{
 					seq := rowBegin
 					kg.transformer.fillColumnBatch(cb, a, func() (s int64, ok bool) {
-						if seq >= rowEnd {
-							return 0, false
+						if seq < rowEnd {
+							seq++
+							return insertCountKey(int64(seq-1), int64(w.insertCount), kg.kr), true
 						}
-						seq++
-						return ks.mapKey.mapKey(int64(seq)), true
+						return 0, false
 					})
 				}
 
