@@ -3951,7 +3951,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateRunning, jobs.Record{
 			Description:   "GC for TRUNCATE TABLE t.public.test",
-			Username:      username.RootUserName(),
+			Username:      username.NodeUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 		})
 	})
@@ -3961,127 +3961,138 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 func TestTruncateCompletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	const maxValue = 2000
+	for _, declarativeEnabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("declarative_schema_changer=%t", declarativeEnabled), func(t *testing.T) {
+			const maxValue = 2000
+			defer gcjob.SetSmallMaxGCIntervalForTest()()
 
-	defer gcjob.SetSmallMaxGCIntervalForTest()()
+			params, _ := createTestServerParamsAllowTenants()
+			// Decrease the adopt loop interval so that retries happen quickly.
+			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
-	params, _ := createTestServerParamsAllowTenants()
-	// Decrease the adopt loop interval so that retries happen quickly.
-	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+			s, sqlDB, kvDB := serverutils.StartServer(t, params)
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			codec := s.ApplicationLayer().Codec()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	codec := s.ApplicationLayer().Codec()
+			// Disable strict GC TTL enforcement because we're going to shove a zero-value
+			// TTL into the system with AddImmediateGCZoneConfig.
+			defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
-	// Disable strict GC TTL enforcement because we're going to shove a zero-value
-	// TTL into the system with AddImmediateGCZoneConfig.
-	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+			sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+			sqlRunner.Exec(t, `CREATE DATABASE t;`)
+			sqlRunner.Exec(t, `CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);`)
+			sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14')) WITH (schema_locked=false);`)
 
-	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-	sqlRunner.Exec(t, `CREATE DATABASE t;`)
-	sqlRunner.Exec(t, `CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);`)
-	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14')) WITH (schema_locked=false);`)
+			sqlRunner.Exec(t, `INSERT INTO t.pi VALUES (3.14)`)
 
-	sqlRunner.Exec(t, `INSERT INTO t.pi VALUES (3.14)`)
+			// Bulk insert.
+			if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
+				t.Fatal(err)
+			}
 
-	// Bulk insert.
-	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
-		t.Fatal(err)
-	}
+			if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
+				t.Fatal(err)
+			}
+			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+				t.Fatal(err)
+			}
 
-	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		t.Fatal(err)
-	}
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
+			// Add a zone config.
+			var cfg zonepb.ZoneConfig
+			cfg, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID())
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// Add a zone config.
-	var cfg zonepb.ZoneConfig
-	cfg, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID())
-	if err != nil {
-		t.Fatal(err)
-	}
+			if err := zoneExists(sqlDB, &cfg, tableDesc.GetID()); err != nil {
+				t.Fatal(err)
+			}
 
-	if err := zoneExists(sqlDB, &cfg, tableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
+			if !declarativeEnabled {
+				sqlRunner.Exec(t, "SET use_declarative_schema_changer='off'")
+			}
+			sqlRunner.Exec(t, "TRUNCATE TABLE t.test")
 
-	sqlRunner.Exec(t, "TRUNCATE TABLE t.test")
+			// Check that SQL thinks the table is empty.
+			row := sqlRunner.QueryRow(t, "SELECT count(*) FROM t.test")
+			var count int
+			row.Scan(&count)
+			require.Equal(t, 0, count)
 
-	// Check that SQL thinks the table is empty.
-	row := sqlRunner.QueryRow(t, "SELECT count(*) FROM t.test")
-	var count int
-	row.Scan(&count)
-	require.Equal(t, 0, count)
+			// Bulk insert.
+			if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
+				t.Fatal(err)
+			}
 
-	// Bulk insert.
-	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
-		t.Fatal(err)
-	}
+			row = sqlRunner.QueryRow(t, "SELECT count(*) FROM t.test")
+			row.Scan(&count)
+			require.Equal(t, maxValue+1, count)
 
-	row = sqlRunner.QueryRow(t, "SELECT count(*) FROM t.test")
-	row.Scan(&count)
-	require.Equal(t, maxValue+1, count)
+			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+				t.Fatal(err)
+			}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
-		t.Fatal(err)
-	}
+			// Ensure that the FK property still holds.
+			if _, err := sqlDB.Exec(
+				`INSERT INTO t.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
+			); !testutils.IsError(err, "foreign key violation|violates foreign key") {
+				t.Fatalf("err = %v", err)
+			}
 
-	// Ensure that the FK property still holds.
-	if _, err := sqlDB.Exec(
-		`INSERT INTO t.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
-	); !testutils.IsError(err, "foreign key violation|violates foreign key") {
-		t.Fatalf("err = %v", err)
-	}
+			// Get the table descriptor after the truncation.
+			newTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
+			if newTableDesc.Adding() {
+				t.Fatalf("bad state = %s", newTableDesc.GetState())
+			}
+			if err := zoneExists(sqlDB, &cfg, newTableDesc.GetID()); err != nil {
+				t.Fatal(err)
+			}
 
-	// Get the table descriptor after the truncation.
-	newTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
-	if newTableDesc.Adding() {
-		t.Fatalf("bad state = %s", newTableDesc.GetState())
-	}
-	if err := zoneExists(sqlDB, &cfg, newTableDesc.GetID()); err != nil {
-		t.Fatal(err)
-	}
+			// Ensure that the table data has been deleted.
+			tablePrefix := codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.GetPrimaryIndexID()))
+			tableEnd := tablePrefix.PrefixEnd()
+			testutils.SucceedsSoon(t, func() error {
+				if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+					t.Fatal(err)
+				} else if e := 0; len(kvs) != e {
+					return errors.Errorf("expected %d key value pairs, but got %d", e, len(kvs))
+				}
+				return nil
+			})
 
-	// Ensure that the table data has been deleted.
-	tablePrefix := codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.GetPrimaryIndexID()))
-	tableEnd := tablePrefix.PrefixEnd()
-	testutils.SucceedsSoon(t, func() error {
-		if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
-			t.Fatal(err)
-		} else if e := 0; len(kvs) != e {
-			return errors.Errorf("expected %d key value pairs, but got %d", e, len(kvs))
-		}
-		return nil
-	})
+			fkTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "pi")
+			tablePrefix = codec.TablePrefix(uint32(fkTableDesc.GetID()))
+			tableEnd = tablePrefix.PrefixEnd()
+			if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+				t.Fatal(err)
+			} else if e := 1; len(kvs) != e {
+				t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+			}
 
-	fkTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "pi")
-	tablePrefix = codec.TablePrefix(uint32(fkTableDesc.GetID()))
-	tableEnd = tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
-		t.Fatal(err)
-	} else if e := 1; len(kvs) != e {
-		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
-	}
+			// Ensure that the job is marked as succeeded.
+			sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
-	// Ensure that the job is marked as succeeded.
-	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-
-	// TODO (lucy): This test API should use an offset starting from the
-	// most recent job instead.
-	schemaChangeJobOffset := 0
-	if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset+2, jobspb.TypeSchemaChange, jobs.StateSucceeded, jobs.Record{
-		Username:    username.RootUserName(),
-		Description: "TRUNCATE TABLE t.public.test",
-		DescriptorIDs: descpb.IDs{
-			tableDesc.GetID(),
-		},
-	}); err != nil {
-		t.Fatal(err)
+			// TODO (lucy): This test API should use an offset starting from the
+			// most recent job instead.
+			schemaChangeJobOffset := 0
+			jobName := jobspb.TypeNewSchemaChange
+			if !declarativeEnabled {
+				jobName = jobspb.TypeSchemaChange
+				schemaChangeJobOffset = 2
+			}
+			if err := jobutils.VerifySystemJob(t, sqlRun, schemaChangeJobOffset, jobName, jobs.StateSucceeded, jobs.Record{
+				Username:    username.RootUserName(),
+				Description: "TRUNCATE TABLE t.public.test",
+				DescriptorIDs: descpb.IDs{
+					tableDesc.GetID(),
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
