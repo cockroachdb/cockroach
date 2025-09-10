@@ -429,6 +429,29 @@ func (s *azureStorage) Close() error {
 	return nil
 }
 
+// AzureURI constructs a well-formed Azure URI from the given parameters.
+func AzureURI(path string, conf *cloudpb.ExternalStorage_Azure) string {
+	uri := url.URL{
+		Scheme: "azure",
+		Host:   conf.Container,
+		Path:   path,
+	}
+	values := uri.Query()
+	addIfSet := func(key, val string) {
+		if key != "" && val != "" {
+			values.Add(key, val)
+		}
+	}
+	addIfSet(AzureAccountNameParam, conf.AccountName)
+	addIfSet(AzureAccountKeyParam, conf.AccountKey)
+	addIfSet(AzureEnvironmentKeyParam, conf.Environment)
+	addIfSet(AzureClientIDParam, conf.ClientID)
+	addIfSet(AzureClientSecretParam, conf.ClientSecret)
+	addIfSet(AzureTenantIDParam, conf.TenantID)
+	uri.RawQuery = values.Encode()
+	return uri.String()
+}
+
 type TestingKnobs struct {
 	MapFileCredentialToken func(azcore.AccessToken, error) (azcore.AccessToken, error)
 }

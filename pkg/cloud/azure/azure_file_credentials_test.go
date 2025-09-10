@@ -34,7 +34,7 @@ import (
 func TestAzureFileCredential(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	cfg, err := getAzureConfig()
+	cfg, err := GetAzureConfig()
 	if err != nil {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
