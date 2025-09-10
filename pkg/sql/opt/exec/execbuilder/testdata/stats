@@ -537,7 +537,6 @@ WHERE
   a = 'a' AND b = 'b' AND c = 'c'
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ estimated row count: 9
@@ -651,7 +650,6 @@ WHERE
   a = 'a' AND b = 'b' AND c = 'c'
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ estimated row count: 9
