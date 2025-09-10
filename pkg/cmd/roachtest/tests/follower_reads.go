@@ -43,6 +43,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func followerReadsVerboseRaftStartOpts() option.StartOpts {
+	opts := option.DefaultStartOpts()
+	// This verbose logging can help us reason about failures that seem related
+	// to an unusually long failover process, such as #153245.
+	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
+		"--vmodule=raft=2,support_manager=2,replica_range_lease=2,requester_state=3,supporter_state=3")
+}
+
 func registerFollowerReads(r registry.Registry) {
 	register := func(
 		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool,
@@ -67,7 +75,7 @@ func registerFollowerReads(r registry.Registry) {
 				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), followerReadsVerboseRaftStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
