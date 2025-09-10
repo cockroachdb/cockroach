@@ -889,7 +889,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddTxnInfo(iso, ih.txnPriority, qos, asOfSystemTime)
 	// Highlight that write buffering was enabled on the current txn, unless
 	// we're in "deterministic explain" mode.
-	if ih.txnBufferedWritesEnabled && !flags.Deflake.HasAny(explain.DeflakeAll) {
+	if flags.Verbose && ih.txnBufferedWritesEnabled && !flags.Deflake.HasAny(explain.DeflakeAll) {
 		// In order to not pollute the output, we don't include the write
 		// buffering info for read-only implicit txns. However, if we're in an
 		// explicit txn, even if the stmt is read-only, it might still be
