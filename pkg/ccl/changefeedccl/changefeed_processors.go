@@ -1827,7 +1827,13 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	updateHighWater :=
 		!inBackfill && (atBoundary || cf.js.canCheckpointHighWatermark(frontierChanged))
 
-	persistSpanFrontier := cf.js.canPersistFrontier()
+	var persistSpanFrontier bool
+	if cf.js.canPersistFrontier() {
+		var err error
+		if persistSpanFrontier, err = cf.checkpointSpanFrontier(ctx); err != nil {
+			return false, err
+		}
+	}
 
 	// During backfills or when some problematic spans stop advancing, the
 	// highwater mark remains fixed while other spans may significantly outpace
@@ -1842,12 +1848,13 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		checkpoint = cf.frontier.MakeCheckpoint(maxBytes, cf.sliMetrics.CheckpointMetrics)
 	}
 
-	if updateCheckpoint || updateHighWater || persistSpanFrontier {
+	// TODO maybe separate the PTS updates too
+	if updateCheckpoint || updateHighWater {
 		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint, persistSpanFrontier)
+		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint)
 		if err != nil {
 			return false, err
 		}
@@ -1861,10 +1868,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	ctx context.Context,
-	frontier hlc.Timestamp,
-	spanLevelCheckpoint *jobspb.TimestampSpansMap,
-	persistFrontier bool,
+	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
 ) (bool, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
@@ -1884,6 +1888,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
 		var ptsUpdated bool
+		// TODO maybe we pass it a txn
 		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -1900,14 +1905,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
-
-			if persistFrontier {
-				frontierPersistenceTimer := cf.sliMetrics.Timers.FrontierPersistence.Start()
-				if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
-					return err
-				}
-				frontierPersistenceTimer()
-			}
 
 			// TODO(#153299): Make sure we only updated per-table PTS if
 			// we persisted the span frontier.
@@ -1955,19 +1952,39 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return true, nil
 }
 
-func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.Txn) error {
-	for tableID, tableFrontier := range cf.frontier.Frontiers() {
-		name := func() string {
-			if tableID == 0 {
-				return "coordinator"
-			}
-			return fmt.Sprintf("table%d", tableID)
-		}()
-		if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, name, tableFrontier); err != nil {
-			return err
-		}
+const checkpointSpanFrontierName = "checkpoint_span_frontier"
+
+func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context) (bool, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_span_frontier")
+	defer sp.Finish()
+
+	if cf.js.job == nil {
+		return false, nil
 	}
-	return nil
+
+	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
+	// TODO maybe shouldn't even use job updater
+	if err := cf.js.job.DebugNameNoTxn(checkpointSpanFrontierName).Update(ctx,
+		func(txn isql.Txn, _ jobs.JobMetadata, _ *jobs.JobUpdater) error {
+			for tableID, tableFrontier := range cf.frontier.Frontiers() {
+				name := func() string {
+					if tableID == 0 {
+						return "coordinator"
+					}
+					return fmt.Sprintf("table%d", tableID)
+				}()
+				if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, name, tableFrontier); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	); err != nil {
+		return false, err
+	}
+	timer()
+
+	return true, nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
