@@ -517,11 +517,6 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if s.UsedFollowerRead {
 			e.ob.AddField("used follower read", "")
 		}
-		if s.RowCount.HasValue() {
-			actualRowCount = s.RowCount.Value()
-			hasActualRowCount = true
-			e.ob.AddField("actual row count", string(humanizeutil.Count(actualRowCount)))
-		}
 		// Omit vectorized batches in non-verbose mode.
 		if e.ob.flags.Verbose {
 			if s.VectorizedBatchCount.HasValue() {
@@ -538,7 +533,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
-		if s.KVPairsRead.HasValue() {
+		if e.ob.flags.Verbose && s.KVPairsRead.HasValue() {
 			pairs := s.KVPairsRead.Value()
 			rows := s.KVRowsRead.Value()
 			if pairs != rows || e.ob.flags.Verbose {
@@ -548,19 +543,19 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 				e.ob.AddField("KV pairs read", string(humanizeutil.Count(s.KVPairsRead.Value())))
 			}
 		}
-		if s.KVBytesRead.HasValue() {
+		if e.ob.flags.Verbose && s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
 		}
-		if s.KVBatchRequestsIssued.HasValue() {
+		if e.ob.flags.Verbose && s.KVBatchRequestsIssued.HasValue() {
 			e.ob.AddField("KV gRPC calls", string(humanizeutil.Count(s.KVBatchRequestsIssued.Value())))
 		}
 		if s.ExecTime.HasValue() {
 			e.ob.AddField("execution time", string(humanizeutil.Duration(s.ExecTime.Value())))
 		}
-		if s.MaxAllocatedMem.HasValue() {
+		if e.ob.flags.Verbose && s.MaxAllocatedMem.HasValue() {
 			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
 		}
-		if s.MaxAllocatedDisk.HasValue() {
+		if e.ob.flags.Verbose && s.MaxAllocatedDisk.HasValue() {
 			e.ob.AddField("estimated max sql temp disk usage", humanize.IBytes(s.MaxAllocatedDisk.Value()))
 		}
 		if s.SQLCPUTime.HasValue() {
@@ -577,6 +572,11 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 					humanizeutil.Count(s.SeekCount.Value()), humanizeutil.Count(s.InternalSeekCount.Value()),
 				))
 			}
+		}
+		if s.RowCount.HasValue() {
+			actualRowCount = s.RowCount.Value()
+			hasActualRowCount = true
+			e.ob.AddField("actual row count", string(humanizeutil.Count(actualRowCount)))
 		}
 	}
 

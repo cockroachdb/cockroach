@@ -38,7 +38,6 @@ LIMIT $4
 
 ---
 distribution: local
-vectorized: true
 
 • sort
 │ order: +"parentID",+"parentSchemaID",+name
