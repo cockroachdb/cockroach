@@ -320,6 +320,9 @@ func sendBepDataToBeaverHub(bepFilepath string) error {
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return errors.Newf("must provide some subcommand (`build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`)")
+	}
 	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != coverageSubcmd &&
 		args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
 		return errors.Newf("First argument must be `build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])

@@ -2022,14 +2022,19 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 	}
 
 	if len(tableIDsToRelease) > 0 {
-		if err := cf.releasePerTableProtectedTimestampRecords(ctx, txn, ptsEntries, tableIDsToRelease, pts); err != nil {
+		if err := cf.releasePerTableProtectedTimestampRecords(ctx, ptsEntries, tableIDsToRelease, pts); err != nil {
 			return hlc.Timestamp{}, false, err
 		}
-		updatedPerTablePTS = true
 	}
 
 	if len(tableIDsToCreate) > 0 {
-		if err := cf.createPerTableProtectedTimestampRecords(ctx, txn, ptsEntries, tableIDsToCreate, pts); err != nil {
+		if err := cf.createPerTableProtectedTimestampRecords(ctx, ptsEntries, tableIDsToCreate, pts); err != nil {
+			return hlc.Timestamp{}, false, err
+		}
+	}
+
+	if len(tableIDsToRelease) > 0 || len(tableIDsToCreate) > 0 {
+		if err := writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID); err != nil {
 			return hlc.Timestamp{}, false, err
 		}
 		updatedPerTablePTS = true
@@ -2040,7 +2045,6 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 
 func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 	ctx context.Context,
-	txn isql.Txn,
 	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
 	tableIDs []descpb.ID,
 	pts protectedts.Storage,
@@ -2051,7 +2055,7 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 		}
 		delete(ptsEntries.ProtectedTimestampRecords, tableID)
 	}
-	return writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID)
+	return nil
 }
 
 func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
@@ -2079,7 +2083,6 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 
 func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 	ctx context.Context,
-	txn isql.Txn,
 	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
 	tableIDsToCreate map[descpb.ID]hlc.Timestamp,
 	pts protectedts.Storage,
@@ -2088,7 +2091,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]*uuid.UUID)
 	}
 	for tableID, tableHighWater := range tableIDsToCreate {
-		targets, err := cf.createPerTablePTSTarget(tableID)
+		targets, err := cf.createPerTablePTSTargets(tableID)
 		if err != nil {
 			return err
 		}
@@ -2101,22 +2104,23 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 			return err
 		}
 	}
-	return writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID)
+	return nil
 }
 
-func (cf *changeFrontier) createPerTablePTSTarget(
+func (cf *changeFrontier) createPerTablePTSTargets(
 	tableID descpb.ID,
 ) (changefeedbase.Targets, error) {
 	targets := changefeedbase.Targets{}
-	if cf.targets.Size > 0 {
-		if found, err := cf.targets.EachHavingTableID(tableID, func(target changefeedbase.Target) error {
-			targets.Add(target)
-			return nil
-		}); err != nil {
-			return changefeedbase.Targets{}, err
-		} else if !found {
-			return changefeedbase.Targets{}, errors.AssertionFailedf("attempted to create a per-table PTS record for table %d, but no target was found", tableID)
-		}
+	if found, err := cf.targets.EachHavingTableID(tableID, func(target changefeedbase.Target) error {
+		targets.Add(target)
+		return nil
+	}); err != nil {
+		return changefeedbase.Targets{}, err
+	} else if !found {
+		return changefeedbase.Targets{}, errors.AssertionFailedf(
+			"attempted to create a per-table PTS record for table %d, but no target was found",
+			tableID,
+		)
 	}
 	if targets.Size != 1 {
 		return changefeedbase.Targets{}, errors.AssertionFailedf("expected 1 target, got %d", targets.Size)

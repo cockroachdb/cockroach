@@ -175,32 +175,32 @@ func TestPublish(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64-fips version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxs390xbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxs390xbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxs390xbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
 			},
 			expectedPuts: []string{
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
@@ -335,12 +335,12 @@ func TestPublish(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxbase",
 			},
 			expectedPuts: []string{
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
@@ -377,21 +377,21 @@ func TestPublish(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64-fips version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxarmbase",
 			},
 			expectedPuts: []string{
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
@@ -501,29 +501,29 @@ func TestRelease(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64-fips version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config" +
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config" +
 					"=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
 					"'--workspace_status_command=." +
 					"/build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
@@ -569,29 +569,29 @@ func TestRelease(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64-fips version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64-fips",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config" +
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config" +
 					"=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
 					"'--workspace_status_command=." +
 					"/build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
@@ -622,7 +622,7 @@ func TestRelease(t *testing.T) {
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
 				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
 				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
 				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
