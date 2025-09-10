@@ -59,7 +59,7 @@ func distImport(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	job *jobs.Job,
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	table *execinfrapb.ReadImportDataSpec_ImportTable,
 	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
@@ -92,7 +92,7 @@ func distImport(
 		})
 
 		inputSpecs := makeImportReaderSpecs(
-			job, tables, typeDescs, from, format, len(sqlInstanceIDs), /* numSQLInstances */
+			job, table, typeDescs, from, format, len(sqlInstanceIDs), /* numSQLInstances */
 			walltime, execCtx.User(), procsPerNode, initialSplitsPerProc,
 		)
 
@@ -214,7 +214,7 @@ func distImport(
 	})
 
 	if planCtx.ExtendedEvalCtx.Codec.ForSystemTenant() {
-		if err := presplitTableBoundaries(ctx, execCtx.ExecCfg(), tables); err != nil {
+		if err := presplitTableBoundaries(ctx, execCtx.ExecCfg(), table); err != nil {
 			return kvpb.BulkOpSummary{}, err
 		}
 	}
@@ -294,7 +294,7 @@ func getLastImportSummary(job *jobs.Job) kvpb.BulkOpSummary {
 
 func makeImportReaderSpecs(
 	job *jobs.Job,
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	table *execinfrapb.ReadImportDataSpec_ImportTable,
 	typeDescs []*descpb.TypeDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
@@ -315,7 +315,8 @@ func makeImportReaderSpecs(
 		if i < cap(inputSpecs) {
 			spec := &execinfrapb.ReadImportDataSpec{
 				JobID:  int64(job.ID()),
-				Tables: tables,
+				Table:  table,
+				Tables: map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"": table},
 				Types:  typeDescs,
 				Format: format,
 				Progress: execinfrapb.JobProgress{
@@ -347,21 +348,17 @@ func makeImportReaderSpecs(
 }
 
 func presplitTableBoundaries(
-	ctx context.Context,
-	cfg *sql.ExecutorConfig,
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	ctx context.Context, cfg *sql.ExecutorConfig, table *execinfrapb.ReadImportDataSpec_ImportTable,
 ) error {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "import-pre-splitting-table-boundaries")
 	defer span.Finish()
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	for _, tbl := range tables {
-		// TODO(ajwerner): Consider passing in the wrapped descriptors.
-		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
-		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
-				return err
-			}
+	// TODO(ajwerner): Consider passing in the wrapped descriptors.
+	tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
+	for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
+		if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+			return err
 		}
 	}
 	return nil
