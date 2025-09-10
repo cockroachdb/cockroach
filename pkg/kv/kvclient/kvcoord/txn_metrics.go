@@ -70,18 +70,21 @@ var (
 		Help:        "Number of aborted KV transactions",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaCommitsRates = metric.Metadata{
 		Name:        "txn.commits",
 		Help:        "Number of committed KV transactions (including 1PC)",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaCommits1PCRates = metric.Metadata{
 		Name:        "txn.commits1PC",
 		Help:        "Number of KV transaction one-phase commits",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaCommitsReadOnly = metric.Metadata{
 		Name:        "txn.commits_read_only",
@@ -165,6 +168,7 @@ var (
 		Help:        "KV transaction durations",
 		Measurement: "KV Txn Duration",
 		Unit:        metric.Unit_NANOSECONDS,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaTxnsWithCondensedIntentSpans = metric.Metadata{
 		Name: "txn.condensed_intent_spans",
@@ -215,6 +219,7 @@ var (
 		Help:        "Number of restarted KV transactions",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	// There are two ways we can get "write too old" restarts. In both cases, a
 	// WriteTooOldError is generated in the MVCC layer. This is intercepted on
@@ -231,6 +236,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaRestartsSerializable = metric.Metadata{
 		Name:        "txn.restarts.serializable",
@@ -240,6 +246,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaRestartsAsyncWriteFailure = metric.Metadata{
 		Name:        "txn.restarts.asyncwritefailure",

@@ -45,12 +45,14 @@ var (
 		Help:        "Number of invocations of the execution engine currently active (multiple of which may occur for a single SQL statement)",
 		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaQueriesTotal = metric.Metadata{
 		Name:        "sql.distsql.queries.total",
 		Help:        "Number of invocations of the execution engine executed (multiple of which may occur for a single SQL statement)",
 		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaDistributedCount = metric.Metadata{
 		Name:        "sql.distsql.distributed_exec.count",
@@ -66,6 +68,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaCumulativeContentionNanos = metric.Metadata{
 		Name:        "sql.distsql.cumulative_contention_nanos",
@@ -78,24 +81,28 @@ var (
 		Help:        "Number of distributed SQL flows currently active",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaFlowsTotal = metric.Metadata{
 		Name:        "sql.distsql.flows.total",
 		Help:        "Number of distributed SQL flows executed",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaMemMaxBytes = metric.Metadata{
 		Name:        "sql.mem.distsql.max",
 		Help:        "Memory usage per sql statement for distsql",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaMemCurBytes = metric.Metadata{
 		Name:        "sql.mem.distsql.current",
 		Help:        "Current sql statement memory usage for distsql",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaVecOpenFDs = metric.Metadata{
 		Name:        "sql.distsql.vec.openfds",

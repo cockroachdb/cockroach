@@ -48,6 +48,7 @@ type MetricInfo struct {
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
 	Essential    bool   `yaml:"essential,omitempty"`
+	Scope        string `yaml:"scope,omitempty"`
 }
 
 type Category struct {
@@ -477,6 +478,11 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 
 		for _, chart := range section.Charts {
 			// There are many charts, but only 1 metric per chart.
+			var scopeStr string
+			if chart.Metrics[0].Scope.String() != "SCOPE_UNSET" {
+				scopeStr = chart.Metrics[0].Scope.String()
+			}
+
 			metric := MetricInfo{
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
@@ -489,6 +495,7 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 				Derivative:   chart.Derivative.String(),
 				HowToUse:     chart.Metrics[0].HowToUse,
 				Essential:    chart.Metrics[0].Essential,
+				Scope:        scopeStr,
 			}
 			category.Metrics = append(category.Metrics, metric)
 		}

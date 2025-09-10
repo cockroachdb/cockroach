@@ -278,6 +278,7 @@ var (
 		Essential: true,
 		Category:  metric.Metadata_HARDWARE,
 		HowToUse:  `This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.`,
+		Scope:     metric.Metadata_SHARED,
 	}
 
 	// These disk and network stats are counters of the number of operations, packets, bytes, and

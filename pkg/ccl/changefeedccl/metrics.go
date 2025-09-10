@@ -726,6 +726,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks transient changefeed errors. Alert on "too many" errors, such as 50 retries in 15 minutes. For example, during a rolling upgrade this counter will increase because the changefeed jobs will restart following node restarts. There is an exponential backoff, up to 10 minutes. But if there is no rolling upgrade in process or other cluster maintenance, and the error rate is high, investigate the changefeed job.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaChangefeedFailures = metric.Metadata{
 		Name:        "changefeed.failures",
@@ -735,6 +736,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 
 	metaEventQueueTime = metric.Metadata{
@@ -816,6 +818,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
 		Name:        "changefeed.emitted_batch_sizes",
@@ -881,6 +884,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaAdmitLatency := metric.Metadata{
 		Name: "changefeed.admit_latency",
@@ -897,12 +901,14 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Number of changefeeds currently executing backfill",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaChangefeedBackfillPendingRanges := metric.Metadata{
 		Name:        "changefeed.backfill_pending_ranges",
 		Help:        "Number of ranges in an ongoing backfill that are yet to be fully emitted",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaChangefeedRunning := metric.Metadata{
 		Name:        "changefeed.running",
@@ -912,12 +918,14 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks the total number of all running changefeeds.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaMessageSize := metric.Metadata{
 		Name:        "changefeed.message_size_hist",
 		Help:        "Message size histogram",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaBatchReductionCount := metric.Metadata{
 		Name:        "changefeed.batch_reduction_count",
@@ -1034,6 +1042,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "The most any changefeed's persisted checkpoint is behind the present",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Scope:       metric.Metadata_SHARED,
 	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {

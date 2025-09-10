@@ -117,6 +117,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
@@ -126,6 +127,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaConnsWaitingToHash = metric.Metadata{
 		Name:        "sql.conns_waiting_to_hash",
@@ -138,12 +140,14 @@ var (
 		Help:        "Number of SQL bytes received",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaBytesOut = metric.Metadata{
 		Name:        "sql.bytesout",
 		Help:        "Number of SQL bytes sent",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaConnLatency = metric.Metadata{
 		Name:        "sql.conn.latency",
@@ -153,6 +157,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaConnFailures = metric.Metadata{
 		Name:        "sql.conn.failures",

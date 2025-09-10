@@ -13,6 +13,7 @@ layers:
       derivative: NONE
       how_to_use: This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.
       essential: true
+      scope: SHARED
     - name: changefeed.emitted_bytes
       exported_name: changefeed_emitted_bytes
       description: Bytes emitted by all feeds
@@ -33,6 +34,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.
       essential: true
+      scope: SHARED
     - name: changefeed.error_retries
       exported_name: changefeed_error_retries
       description: Total retryable errors encountered by all changefeeds
@@ -43,6 +45,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks transient changefeed errors. Alert on "too many" errors, such as 50 retries in 15 minutes. For example, during a rolling upgrade this counter will increase because the changefeed jobs will restart following node restarts. There is an exponential backoff, up to 10 minutes. But if there is no rolling upgrade in process or other cluster maintenance, and the error rate is high, investigate the changefeed job.
       essential: true
+      scope: SHARED
     - name: changefeed.failures
       exported_name: changefeed_failures
       description: Total number of changefeed jobs which have failed
@@ -53,6 +56,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.
       essential: true
+      scope: SHARED
     - name: changefeed.running
       exported_name: changefeed_running
       description: Number of currently running changefeeds, including sinkless
@@ -63,6 +67,7 @@ layers:
       derivative: NONE
       how_to_use: This metric tracks the total number of all running changefeeds.
       essential: true
+      scope: SHARED
     - name: jobs.changefeed.currently_paused
       exported_name: jobs_changefeed_currently_paused
       labeled_name: 'jobs{name: changefeed, status: currently_paused}'
@@ -119,6 +124,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Errors of this type are normal during elastic cluster topology changes when leaseholders are actively rebalancing. They are automatically retried. However they may create occasional response time spikes. In that case, this metric may provide the explanation of the cause.
       essential: true
+      scope: SHARED
     - name: distsender.rpc.sent.nextreplicaerror
       exported_name: distsender_rpc_sent_nextreplicaerror
       description: Number of replica-addressed RPCs sent due to per-replica errors
@@ -129,6 +135,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.
       essential: true
+      scope: SHARED
   - name: LOGICAL_DATA_REPLICATION
     metrics:
     - name: logical_replication.commit_latency
@@ -193,6 +200,7 @@ layers:
       derivative: NONE
       how_to_use: This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.
       essential: true
+      scope: SHARED
     - name: rpc.connection.avg_round_trip_latency
       exported_name: rpc_connection_avg_round_trip_latency
       description: |
@@ -440,6 +448,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Monitor this metric and investigate backup job failures.
       essential: true
+      scope: SHARED
     - name: schedules.BACKUP.last-completed-time
       exported_name: schedules_BACKUP_last_completed_time
       description: The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric
@@ -450,6 +459,7 @@ layers:
       derivative: NONE
       how_to_use: "Monitor this metric to ensure that backups are\n\t\t\t\t\t\tmeeting the recovery point objective (RPO). Each node\n\t\t\t\t\t\texports the time that it last completed a backup on behalf\n\t\t\t\t\t\tof the schedule. If a node is restarted, it will report 0\n\t\t\t\t\t\tuntil it completes a backup. If all nodes are restarted,\n\t\t\t\t\t\tmax() is 0 until a node completes a backup.\n\n\t\t\t\t\t\tTo make use of this metric, first, from each node, take the maximum\n\t\t\t\t\t\tover a rolling window equal to or greater than the backup frequency,\n\t\t\t\t\t\tand then take the maximum of those values across nodes. For example\n\t\t\t\t\t\twith a backup frequency of 60 minutes, monitor time() -\n\t\t\t\t\t\tmax_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,\n\t\t\t\t\t\t60min))."
       essential: true
+      scope: SHARED
     - name: sql.conn.failures
       exported_name: sql_conn_failures
       description: Number of SQL connection failures
@@ -470,6 +480,7 @@ layers:
       derivative: NONE
       how_to_use: These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.
       essential: true
+      scope: SHARED
     - name: sql.conns
       exported_name: sql_conns
       description: Number of open SQL connections
@@ -480,6 +491,7 @@ layers:
       derivative: NONE
       how_to_use: This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.
       essential: true
+      scope: SHARED
     - name: sql.ddl.count
       exported_name: sql_ddl_count
       description: Number of SQL DDL statements successfully executed
@@ -490,6 +502,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       essential: true
+      scope: SHARED
     - name: sql.ddl.count.internal
       exported_name: sql_ddl_count_internal
       description: Number of SQL DDL statements successfully executed (internal queries)
@@ -498,6 +511,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.delete.count
       exported_name: sql_delete_count
       labeled_name: 'sql.count{query_type: delete}'
@@ -509,6 +523,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       essential: true
+      scope: SHARED
     - name: sql.delete.count.internal
       exported_name: sql_delete_count_internal
       labeled_name: 'sql.count{query_type: delete, query_internal: true}'
@@ -518,6 +533,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.distsql.contended_queries.count
       exported_name: sql_distsql_contended_queries_count
       description: Number of SQL queries that experienced contention
@@ -528,6 +544,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.
       essential: true
+      scope: SHARED
     - name: sql.failure.count
       exported_name: sql_failure_count
       description: Number of statements resulting in a planning or runtime error
@@ -538,6 +555,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is a high-level indicator of workload and application degradation with query failures. Use the Insights page to find failed executions with their error code to troubleshoot or use application-level logs, if instrumented, to determine the cause of error.
       essential: true
+      scope: SHARED
     - name: sql.failure.count.internal
       exported_name: sql_failure_count_internal
       description: Number of statements resulting in a planning or runtime error (internal queries)
@@ -546,6 +564,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.full.scan.count
       exported_name: sql_full_scan_count
       description: Number of full table or index scans
@@ -556,6 +575,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is a high-level indicator of potentially suboptimal query plans in the workload that may require index tuning and maintenance. To identify the statements with a full table scan, use SHOW FULL TABLE SCAN or the SQL Activity Statements page with the corresponding metric time frame. The Statements page also includes explain plans and index recommendations. Not all full scans are necessarily bad especially over smaller tables.
       essential: true
+      scope: SHARED
     - name: sql.full.scan.count.internal
       exported_name: sql_full_scan_count_internal
       description: Number of full table or index scans (internal queries)
@@ -564,6 +584,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.insert.count
       exported_name: sql_insert_count
       labeled_name: 'sql.count{query_type: insert}'
@@ -575,6 +596,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       essential: true
+      scope: SHARED
     - name: sql.insert.count.internal
       exported_name: sql_insert_count_internal
       labeled_name: 'sql.count{query_type: insert, query_internal: true}'
@@ -584,6 +606,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.mem.root.current
       exported_name: sql_mem_root_current
       description: Current sql statement memory usage for root
@@ -594,6 +617,7 @@ layers:
       derivative: NONE
       how_to_use: This metric shows how memory set aside for temporary materializations, such as hash tables and intermediary result sets, is utilized. Use this metric to optimize memory allocations based on long term observations. The maximum amount is set with --max_sql_memory. If the utilization of sql memory is persistently low, perhaps some portion of this memory allocation can be shifted to --cache.
       essential: true
+      scope: SHARED
     - name: sql.new_conns
       exported_name: sql_new_conns
       description: Number of SQL connections created
@@ -604,6 +628,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.
       essential: true
+      scope: SHARED
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
       labeled_name: 'sql.count{query_type: routine-delete}'
@@ -771,6 +796,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       essential: true
+      scope: SHARED
     - name: sql.select.count.internal
       exported_name: sql_select_count_internal
       labeled_name: 'sql.count{query_type: select, query_internal: true}'
@@ -780,6 +806,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.service.latency
       exported_name: sql_service_latency
       description: Latency of SQL request execution
@@ -790,6 +817,7 @@ layers:
       derivative: NONE
       how_to_use: These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.
       essential: true
+      scope: SHARED
     - name: sql.service.latency.internal
       exported_name: sql_service_latency_internal
       description: Latency of SQL request execution (internal queries)
@@ -798,6 +826,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.statements.active
       exported_name: sql_statements_active
       description: Number of currently active user SQL statements
@@ -808,6 +837,7 @@ layers:
       derivative: NONE
       how_to_use: This high-level metric reflects workload volume.
       essential: true
+      scope: SHARED
     - name: sql.statements.active.internal
       exported_name: sql_statements_active_internal
       description: Number of currently active user SQL statements (internal queries)
@@ -816,6 +846,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.txn.abort.count
       exported_name: sql_txn_abort_count
       description: Number of SQL transaction abort errors
@@ -826,6 +857,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload performance. A persistently high number of SQL transaction abort errors may negatively impact the workload performance and needs to be investigated.
       essential: true
+      scope: SHARED
     - name: sql.txn.abort.count.internal
       exported_name: sql_txn_abort_count_internal
       description: Number of SQL transaction abort errors (internal queries)
@@ -834,6 +866,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.txn.begin.count
       exported_name: sql_txn_begin_count
       description: Number of SQL transaction BEGIN statements successfully executed
@@ -844,6 +877,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reflects workload volume by counting explicit transactions. Use this metric to determine whether explicit transactions can be refactored as implicit transactions (individual statements).
       essential: true
+      scope: SHARED
     - name: sql.txn.begin.count.internal
       exported_name: sql_txn_begin_count_internal
       description: Number of SQL transaction BEGIN statements successfully executed (internal queries)
@@ -852,6 +886,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.txn.commit.count
       exported_name: sql_txn_commit_count
       description: Number of SQL transaction COMMIT statements successfully executed
@@ -862,6 +897,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric shows the number of transactions that completed successfully. This metric can be used as a proxy to measure the number of successful explicit transactions.
       essential: true
+      scope: SHARED
     - name: sql.txn.commit.count.internal
       exported_name: sql_txn_commit_count_internal
       description: Number of SQL transaction COMMIT statements successfully executed (internal queries)
@@ -870,6 +906,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.txn.latency
       exported_name: sql_txn_latency
       description: Latency of SQL transactions
@@ -880,6 +917,7 @@ layers:
       derivative: NONE
       how_to_use: These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.
       essential: true
+      scope: SHARED
     - name: sql.txn.latency.internal
       exported_name: sql_txn_latency_internal
       description: Latency of SQL transactions (internal queries)
@@ -888,6 +926,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.txn.rollback.count
       exported_name: sql_txn_rollback_count
       description: Number of SQL transaction ROLLBACK statements successfully executed
@@ -898,6 +937,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric shows the number of orderly transaction rollbacks. A persistently high number of rollbacks may negatively impact the workload performance and needs to be investigated.
       essential: true
+      scope: SHARED
     - name: sql.txn.rollback.count.internal
       exported_name: sql_txn_rollback_count_internal
       description: Number of SQL transaction ROLLBACK statements successfully executed (internal queries)
@@ -906,6 +946,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.txns.open
       exported_name: sql_txns_open
       description: Number of currently open user SQL transactions
@@ -916,6 +957,7 @@ layers:
       derivative: NONE
       how_to_use: This metric should roughly correspond to the number of cores * 4. If this metric is consistently larger, scale out the cluster.
       essential: true
+      scope: SHARED
     - name: sql.txns.open.internal
       exported_name: sql_txns_open_internal
       description: Number of currently open user SQL transactions (internal queries)
@@ -924,6 +966,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.update.count
       exported_name: sql_update_count
       labeled_name: 'sql.count{query_type: update}'
@@ -935,6 +978,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       essential: true
+      scope: SHARED
     - name: sql.update.count.internal
       exported_name: sql_update_count_internal
       labeled_name: 'sql.count{query_type: update, query_internal: true}'
@@ -944,6 +988,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: txn.restarts.serializable
       exported_name: txn_restarts_serializable
       description: Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE
@@ -954,6 +999,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.
       essential: true
+      scope: SHARED
     - name: txn.restarts.txnaborted
       exported_name: txn_restarts_txnaborted
       description: Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)
@@ -994,6 +1040,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.
       essential: true
+      scope: SHARED
   - name: TTL
     metrics:
     - name: jobs.row_level_ttl.currently_paused
@@ -1221,6 +1268,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: changefeed.backfill_pending_ranges
       exported_name: changefeed_backfill_pending_ranges
       description: Number of ranges in an ongoing backfill that are yet to be fully emitted
@@ -1229,6 +1277,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: changefeed.batch_reduction_count
       exported_name: changefeed_batch_reduction_count
       description: Number of times a changefeed aggregator node attempted to reduce the size of message batches it emitted to the sink
@@ -1637,6 +1686,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: changefeed.message_size_hist
       exported_name: changefeed_message_size_hist
       description: Message size histogram
@@ -1645,6 +1695,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: changefeed.messages.messages_pushback_nanos
       exported_name: changefeed_messages_messages_pushback_nanos
       description: Total time spent throttled for messages quota
@@ -1949,6 +2000,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: cloud.conns_opened
       exported_name: cloud_conns_opened
       description: HTTP connections opened by cloud operations
@@ -2101,6 +2153,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: distsender.batches.async.in_progress
       exported_name: distsender_batches_async_in_progress
       description: Number of partial batches currently being executed asynchronously
@@ -2141,6 +2194,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: distsender.circuit_breaker.replicas.count
       exported_name: distsender_circuit_breaker_replicas_count
       description: Number of replicas currently tracked by DistSender circuit breakers
@@ -3673,6 +3727,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: distsender.rpc.sent.local
       exported_name: distsender_rpc_sent_local
       description: Number of replica-addressed RPCs sent through the local-server optimization
@@ -3681,6 +3736,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: distsender.rpc.subsume.sent
       exported_name: distsender_rpc_subsume_sent
       description: |-
@@ -4696,6 +4752,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: jobs.claimed_jobs
       exported_name: jobs_claimed_jobs
       description: number of jobs claimed in job-adopt iterations
@@ -7172,6 +7229,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: round-trip-default-class-latency
       exported_name: round_trip_default_class_latency
       description: |
@@ -7200,6 +7258,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: round-trip-raft-class-latency
       exported_name: round_trip_raft_class_latency
       description: |
@@ -7313,6 +7372,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: schedules.BACKUP.succeeded
       exported_name: schedules_BACKUP_succeeded
       labeled_name: 'schedules{name: BACKUP, status: succeeded}'
@@ -7322,6 +7382,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: schedules.CHANGEFEED.failed
       exported_name: schedules_CHANGEFEED_failed
       labeled_name: 'schedules{name: CHANGEFEED, status: failed}'
@@ -7477,6 +7538,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.bytesout
       exported_name: sql_bytesout
       description: Number of SQL bytes sent
@@ -7485,6 +7547,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.call_stored_proc.count
       exported_name: sql_call_stored_proc_count
       description: Number of successfully executed stored procedure calls
@@ -7765,6 +7828,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.distsql.exec.latency.internal
       exported_name: sql_distsql_exec_latency_internal
       description: Latency of DistSQL statement execution (internal queries)
@@ -7773,6 +7837,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.distsql.flows.active
       exported_name: sql_distsql_flows_active
       description: Number of distributed SQL flows currently active
@@ -7781,6 +7846,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.distsql.flows.total
       exported_name: sql_distsql_flows_total
       description: Number of distributed SQL flows executed
@@ -7789,6 +7855,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.distsql.queries.active
       exported_name: sql_distsql_queries_active
       description: Number of invocations of the execution engine currently active (multiple of which may occur for a single SQL statement)
@@ -7797,6 +7864,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.distsql.queries.spilled
       exported_name: sql_distsql_queries_spilled
       description: Number of queries that have spilled to disk
@@ -7813,6 +7881,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.distsql.select.count
       exported_name: sql_distsql_select_count
       description: Number of SELECT statements planned to be distributed
@@ -7821,6 +7890,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.distsql.select.count.internal
       exported_name: sql_distsql_select_count_internal
       description: Number of SELECT statements planned to be distributed (internal queries)
@@ -7829,6 +7899,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.distsql.select.distributed_exec.count
       exported_name: sql_distsql_select_distributed_exec_count
       description: Number of SELECT statements that were distributed
@@ -7853,6 +7924,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.distsql.service.latency.internal
       exported_name: sql_distsql_service_latency_internal
       description: Latency of DistSQL request execution (internal queries)
@@ -7861,6 +7933,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.distsql.vec.openfds
       exported_name: sql_distsql_vec_openfds
       description: Current number of open file descriptors used by vectorized external storage
@@ -7877,6 +7950,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.exec.latency.consistent
       exported_name: sql_exec_latency_consistent
       description: Latency of SQL statement execution of non-historical queries
@@ -7933,6 +8007,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.feature_flag_denial
       exported_name: sql_feature_flag_denial
       description: Counter of the number of statements denied by a feature flag
@@ -8253,6 +8328,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.mem.distsql.max
       exported_name: sql_mem_distsql_max
       description: Memory usage per sql statement for distsql
@@ -8261,6 +8337,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.mem.internal.current
       exported_name: sql_mem_internal_current
       description: Current sql statement memory usage for internal
@@ -8285,6 +8362,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.mem.internal.session.max
       exported_name: sql_mem_internal_session_max
       description: Memory usage per sql session for internal
@@ -8293,6 +8371,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.mem.internal.session.prepared.current
       exported_name: sql_mem_internal_session_prepared_current
       description: Current sql session memory usage by prepared statements for internal
@@ -8317,6 +8396,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.mem.internal.txn.max
       exported_name: sql_mem_internal_txn_max
       description: Memory usage per sql transaction for internal
@@ -8325,6 +8405,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: sql.mem.root.max
       exported_name: sql_mem_root_max
       description: Memory usage per sql statement for root
@@ -8405,6 +8486,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.misc.count.internal
       exported_name: sql_misc_count_internal
       description: Number of other SQL statements successfully executed (internal queries)
@@ -8413,6 +8495,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.misc.started.count
       exported_name: sql_misc_started_count
       description: Number of other SQL statements started
@@ -8549,6 +8632,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.query.count.internal
       exported_name: sql_query_count_internal
       description: Number of SQL operations started including queries, and transaction control statements (internal queries)
@@ -8557,6 +8641,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: sql.query.started.count
       exported_name: sql_query_started_count
       description: Number of SQL operations started including queries, and transaction control statements
@@ -9485,6 +9570,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: txn.commit_waits
       exported_name: txn_commit_waits
       description: Number of KV transactions that had to commit-wait on commit in order to ensure linearizability. This generally happens to transactions writing to global ranges.
@@ -9501,6 +9587,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: txn.commits1PC
       exported_name: txn_commits1PC
       description: Number of KV transaction one-phase commits
@@ -9509,6 +9596,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      scope: SHARED
     - name: txn.commits_read_only
       exported_name: txn_commits_read_only
       description: Number of read only KV transaction commits
@@ -9565,6 +9653,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: txn.inflight_locks_over_tracking_budget
       exported_name: txn_inflight_locks_over_tracking_budget
       description: KV transactions whose in-flight writes and locking reads have exceeded the intent tracking memory budget (kv.transaction.max_intents_bytes).
@@ -9653,6 +9742,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      scope: SHARED
     - name: txn.restarts.asyncwritefailure
       exported_name: txn_restarts_asyncwritefailure
       description: Number of restarts due to async consensus writes that failed to leave intents
@@ -9877,6 +9967,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.
       essential: true
+      scope: SHARED
   - name: NETWORKING
     metrics:
     - name: sys.host.net.send.tcp.fast_retrans_segs
