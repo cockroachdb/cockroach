@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/errors"
 )
 
 // explorer generates alternate expressions that are logically equivalent to
@@ -177,6 +178,12 @@ func (e *explorer) exploreGroup(grp memo.RelExpr, required *physical.Required) *
 			continue
 		}
 
+		if !required.Ordering.Any() {
+			panic(errors.AssertionFailedf("expected any required ordering"))
+		}
+		if !required.Distribution.Any() {
+			panic(errors.AssertionFailedf("expected any required distribution"))
+		}
 		if memberExplored := e.exploreGroupMember(state, member, i, required); memberExplored {
 			// No more rules can ever match this expression, so skip it in
 			// future passes.
