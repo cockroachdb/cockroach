@@ -144,7 +144,7 @@ SELECT n,a,b FROM a WHERE a = 5 AND b = 2
 5  5  2
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT n,a,b FROM a WHERE a = 5 AND b = 2] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT n,a,b FROM a WHERE a = 5 AND b = 2] OFFSET 1
 ----
 ·
 • zigzag join

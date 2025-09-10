@@ -2393,7 +2393,6 @@ LIMIT
     1]
 ----
 distribution: local
-vectorized: true
 ·
 • union all
 │ limit: 1
@@ -2926,7 +2925,6 @@ EXPLAIN INSERT INTO users (name, email)
 VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: users(id, name, email, crdb_region)
@@ -2984,7 +2982,6 @@ EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS us
   FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3020,7 +3017,6 @@ EXPLAIN SELECT users_dt.crdb_region AS user_region, user_settings.crdb_region AS
   users_dt.crdb_region = user_settings.crdb_region
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3063,7 +3059,6 @@ EXPLAIN SELECT users_dt.crdb_region AS user_region, user_settings.crdb_region AS
   FROM (SELECT crdb_region, * FROM users@id2_idx LIMIT 1) users_dt JOIN user_settings ON users_dt.id2+1 > user_settings.id2 AND users_dt.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882' and users_dt.crdb_region = user_settings.crdb_region
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3100,7 +3095,6 @@ EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS us
   FROM users JOIN user_settings ON users.crdb_region = user_settings.crdb_region AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3124,7 +3118,6 @@ query T
 EXPLAIN INSERT INTO user_settings (user_id, value) VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: user_settings(id, id2, user_id, value, crdb_region)
@@ -3136,7 +3129,6 @@ query T
 EXPLAIN INSERT INTO user_settings_cascades (user_id, value) VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: user_settings_cascades(id, user_id, value, crdb_region)
@@ -3148,7 +3140,6 @@ query T retry
 EXPLAIN DELETE FROM users WHERE id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3599,7 +3590,6 @@ WHERE
   AND xyz.crdb_region = 'ap-southeast-2';
 ----
 distribution: local
-vectorized: true
 ·
 • project
 │ columns: (str, id, id1, id2, created_at, updated_at)
@@ -3727,7 +3717,6 @@ EXPLAIN INSERT INTO users2 (crdb_region, name, email)
 VALUES ('ap-southeast-2', 'Craig Roacher', 'craig@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: users2(id, name, email, crdb_region)
@@ -3741,7 +3730,6 @@ EXPLAIN INSERT INTO users2 (name, email)
 VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3779,7 +3767,6 @@ query T nosort
 EXECUTE e1 ('Bill Roacher', 'bill@cockroachlabs.com', 'Jo Roacher', 'jo@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3832,7 +3819,6 @@ EXPLAIN INSERT INTO users3 (crdb_region, name, email)
 VALUES ('ap-southeast-2', 'craig@cockroachlabs.com', 'craig@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3867,7 +3853,6 @@ EXPLAIN INSERT INTO multi_region_test_db.regional_by_row_table (pk, pk2, a, b) V
 (1, 1, 1, -5)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
@@ -3891,7 +3876,6 @@ query T nosort
 EXECUTE s1 (1, 1, 1, -5)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
@@ -3914,7 +3898,6 @@ query T nosort
 EXECUTE s3 (7, 7, 7, 7, 6, 7, 8, -5)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3991,7 +3974,6 @@ query T
 EXPLAIN INSERT INTO user_settings2 (id2, user_id, value) VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: user_settings2(id, id2, user_id, value, crdb_region)
@@ -4009,7 +3991,6 @@ VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo'),
        (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo');
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -4075,7 +4056,6 @@ VALUES
   ('east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: hash_sharded_rbr_computed(region_id, my_uuid, my_uuid2, another_id, row_ts, crdb_region_col, crdb_internal_region_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
@@ -4112,7 +4092,6 @@ VALUES
   ('east1234', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: hash_sharded_rbr_computed_check(region_based_id, my_uuid, my_uuid2, another_id, row_ts, geo_zone, crdb_region_col, crdb_internal_region_based_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
@@ -4132,7 +4111,6 @@ VALUES
   ('east1235', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -4185,7 +4163,6 @@ query T
 EXPLAIN INSERT INTO user_settings3 (id2, user_id, value) VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │

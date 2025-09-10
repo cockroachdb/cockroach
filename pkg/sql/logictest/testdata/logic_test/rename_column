@@ -124,7 +124,6 @@ query T
 EXPLAIN ALTER TABLE users RENAME COLUMN title TO woo
 ----
 distribution: local
-vectorized: true
 ·
 • alter table
 
