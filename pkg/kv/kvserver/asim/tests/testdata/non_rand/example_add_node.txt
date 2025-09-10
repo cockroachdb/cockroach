@@ -36,9 +36,9 @@ replicas#1: last:  [s1=301, s2=271, s3=267] (stddev=15.17, mean=279.67, sum=839)
 artifacts[default]: 866426beb5ad043b
 failed assertion sample 1
   balance stat=replicas threshold=(<1.05) ticks=6
-	max/mean=1.08 tick=0
-	max/mean=1.08 tick=1
-	max/mean=1.08 tick=2
-	max/mean=1.08 tick=3
-	max/mean=1.08 tick=4
-	max/mean=1.08 tick=5
+	max/mean=301.00/279.67 1.08 tick=0
+	max/mean=301.00/279.67 1.08 tick=1
+	max/mean=301.00/279.67 1.08 tick=2
+	max/mean=301.00/279.67 1.08 tick=3
+	max/mean=301.00/279.67 1.08 tick=4
+	max/mean=301.00/279.67 1.08 tick=5
