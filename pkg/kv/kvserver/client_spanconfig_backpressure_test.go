@@ -8,7 +8,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	math "math"
+	"math"
 	"strings"
 	"testing"
 
@@ -30,15 +30,14 @@ import (
 )
 
 // TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges
-// verifies that spanconfig updates are blocked by backpressure when the
-// `system.span_configurations` table range becomes full, recreating the issue.
+// verifies that spanconfig updates bypass backpressure when the
+// `system.span_configurations` table range is full.
 //
 // Test strategy:
 //  1. Configure `system.span_configurations` table range to be a small size (8 KiB).
 //  2. Write many large spanconfig records (2 KiB each) to fill up the range.
-//  3. Verify spanconfig updates fail due to backpressure when the range is full,
-//  4. This test recreates the scenario where spanconfig updates are blocked by
-//     backpressure.
+//  3. Verify spanconfig updates bypass backpressure (due to allowlist).
+//  4. This test verifies that spanconfig updates bypass backpressure.
 func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -204,9 +203,9 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 		}
 	}
 
-	// Assert that the operation failed due to backpressure.
+	// Assert that the operation does not fail due to allowlist for spanconfig updates.
 	require.NoError(t, err,
-		"expected span config writes to succeed due to allowlist, but they failed")
+		"expected spanconfig updates to succeed due to allowlist, but they failed")
 
 	systemSpanConfigurationsTableSpanMVCCStats := roachpb.Span{
 		Key:    keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID),
