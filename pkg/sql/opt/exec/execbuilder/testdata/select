@@ -646,7 +646,6 @@ query T
 EXPLAIN SELECT a FROM t14601 ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -672,7 +671,6 @@ query T
 EXPLAIN SELECT a, b FROM t14601a ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -689,7 +687,6 @@ query T
 EXPLAIN SELECT a, b FROM t14601a ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1964,7 +1961,6 @@ query T
 EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
 ----
 distribution: local
-vectorized: true
 ·
 • top-k
 │ order: +z
