@@ -365,7 +365,7 @@ func (z *ZoneConfig) ValidateTandemFields() error {
 // minRangeMaxBytes is the minimum value for range max bytes.
 // The default, 64 MiB, is half of the default range_min_bytes
 var minRangeMaxBytes = envutil.EnvOrDefaultInt64("COCKROACH_MIN_RANGE_MAX_BYTES",
-	1<<20 /* 1 MiB */)
+	64<<20 /* 64 MiB */)
 
 // maxRangeMaxBytes is the maximum value for range max bytes. The default, 8
 // GiB, is sixteen times the default range_max_bytes. Also see
@@ -1320,7 +1320,7 @@ func (z *ZoneConfig) EnsureFullyHydrated() error {
 func (z ZoneConfig) AsSpanConfig() roachpb.SpanConfig {
 	spanConfig, err := z.toSpanConfig()
 	if err != nil {
-		log.Dev.Fatalf(context.Background(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return spanConfig
 }
