@@ -203,7 +203,6 @@ EXPLAIN
   ) FROM y
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -235,7 +234,6 @@ EXPLAIN
     LATERAL (WITH foo AS MATERIALIZED (SELECT a FROM y WHERE y.a <= x) SELECT * FROM foo)
 ----
 distribution: local
-vectorized: true
 ·
 • apply join
 │
@@ -263,7 +261,6 @@ EXPLAIN WITH RECURSIVE
  SELECT * FROM y
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -299,7 +296,6 @@ EXPLAIN WITH RECURSIVE
  SELECT * FROM y
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │

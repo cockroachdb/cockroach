@@ -48,7 +48,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 ----
 distribution: full
-vectorized: true
 ·
 • merge join (left outer)
 │ equality: (a) = (a)

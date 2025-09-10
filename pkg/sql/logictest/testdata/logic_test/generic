@@ -515,25 +515,16 @@ EXPLAIN ANALYZE EXECUTE p (33, 44)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
   kv nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   KV time: 0µs
   KV rows decoded: 0
-  KV bytes read: 0 B
-  KV gRPC calls: 0
-  estimated max memory allocated: 0 B
+  actual row count: 0
   missing stats
   table: t155159@t155159_a_b_idx
   spans: [/33/44 - /33]
@@ -575,32 +566,22 @@ EXPLAIN ANALYZE EXECUTE p (33, 44, 55, 66);
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • union
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 0
 │ execution time: 0µs
-│ estimated max memory allocated: 0 B
+│ actual row count: 0
 │
 ├── • scan
 │     sql nodes: <hidden>
 │     kv nodes: <hidden>
 │     regions: <hidden>
-│     actual row count: 0
 │     KV time: 0µs
 │     KV rows decoded: 0
-│     KV bytes read: 0 B
-│     KV gRPC calls: 0
-│     estimated max memory allocated: 0 B
+│     actual row count: 0
 │     missing stats
 │     table: t155159@t155159_a_b_idx
 │     spans: [/33/44 - /33]
@@ -610,12 +591,9 @@ quality of service: regular
       sql nodes: <hidden>
       kv nodes: <hidden>
       regions: <hidden>
-      actual row count: 0
       KV time: 0µs
       KV rows decoded: 0
-      KV bytes read: 0 B
-      KV gRPC calls: 0
-      estimated max memory allocated: 0 B
+      actual row count: 0
       missing stats
       table: t155159@t155159_a_b_idx
       spans: [/55/66 - /55]
@@ -649,20 +627,14 @@ EXPLAIN ANALYZE EXECUTE p158945a(NULL)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: generic, reused
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • norows
   sql nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   execution time: 0µs
+  actual row count: 0
 
 statement ok
 PREPARE p158945b AS SELECT k FROM t158945 WHERE a = $1
@@ -676,20 +648,14 @@ EXPLAIN ANALYZE EXECUTE p158945b(NULL)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: generic, reused
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • norows
   sql nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   execution time: 0µs
+  actual row count: 0
 
 # Regression test for #159124.
 statement ok

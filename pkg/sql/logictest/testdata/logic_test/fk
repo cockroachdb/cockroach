@@ -4491,8 +4491,11 @@ ALTER TABLE t65890_c ADD CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES t65890_p(a,
 # Ensure that a fast path on ba_idx is used.
 skipif config weak-iso-level-configs
 query T
-SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
+SELECT * FROM [
+  EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)
+] WHERE info !~ '(distribution|vectorized):.*'
 ----
+·
 • insert fast path
   into: t65890_c(k, b, a)
   auto commit
@@ -4501,8 +4504,11 @@ SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
 
 onlyif config weak-iso-level-configs
 query T
-SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
+SELECT * FROM [
+  EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)
+] WHERE info !~ '(distribution|vectorized):.*'
 ----
+·
 • insert fast path
   into: t65890_c(k, b, a)
   auto commit

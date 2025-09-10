@@ -195,7 +195,6 @@ query T
 EXPLAIN SELECT a FROM abc WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -233,7 +232,6 @@ query T
 EXPLAIN SELECT a FROM abc WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • filter
@@ -251,7 +249,6 @@ query T
 EXPLAIN SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: xy@xy_y_idx
@@ -293,7 +290,6 @@ query T
 EXPLAIN SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • hash join
@@ -343,7 +339,6 @@ query T
 EXPLAIN SELECT a FROM abc@abc_pkey WHERE b = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • scan
@@ -386,7 +381,6 @@ query T
 EXPLAIN SELECT a + 1 FROM abc WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • render
@@ -431,7 +425,6 @@ query T
 EXPLAIN SELECT c FROM xy JOIN abc ON c = y WHERE x = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • hash join
@@ -774,7 +767,6 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: xy@xy_pkey
@@ -800,7 +792,6 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • hash join
@@ -832,7 +823,6 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • lookup join
@@ -884,7 +874,6 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • lookup join
@@ -926,7 +915,6 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
 • merge join

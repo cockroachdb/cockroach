@@ -48,12 +48,11 @@ func TestQueryPlansDataDriven(t *testing.T) {
 		rows := runner.Query(t, fmt.Sprintf(`SELECT crdb_internal.execute_internally('EXPLAIN %s', '%s');`, query, overrides))
 		var sb strings.Builder
 		for i := 0; rows.Next(); i++ {
-			// Omit first three rows that are of the form:
+			// Omit first two rows that are of the form:
 			//  distribution: local
-			//  vectorized: true
 			//
-			if i >= 3 {
-				if i > 3 {
+			if i >= 2 {
+				if i > 2 {
 					sb.WriteString("\n")
 				}
 				var explainRow string

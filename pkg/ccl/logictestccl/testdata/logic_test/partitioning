@@ -1457,7 +1457,6 @@ WHERE
 ;
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
