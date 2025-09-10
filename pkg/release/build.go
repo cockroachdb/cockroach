@@ -363,7 +363,7 @@ func WorkloadPlatforms() Platforms {
 
 func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (string, error) {
 	args := []string{"info", "bazel-bin"}
-	args = append(args, configArgs...)
+	args = append(args, "--norun_validations", configArgs...)
 	cmd := exec.Command("bazel", args...)
 	cmd.Dir = pkgDir
 	cmd.Stderr = os.Stderr
