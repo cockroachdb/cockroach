@@ -218,8 +218,8 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRangesWithKVAcc
 	}
 
 	// Assert that the operation failed due to backpressure.
-	require.Error(t, err, "Expected span config writes to fail due to backpressure, but they succeeded")
-	log.Dev.Infof(ctx, "Verified that span config writes fail due to backpressure: %v\n", err)
+	require.NoError(t, err, "Expected span config writes to NOT be backpressured")
+	log.Dev.Infof(ctx, "Verified that span config writes NOT be backpressured")
 
 	log.Dev.Infof(ctx, "Completed %d direct KV writes\n", i)
 
@@ -244,7 +244,7 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRangesWithKVAcc
 	if smallSpancofnRecordWriteErr != nil {
 		log.Dev.Infof(ctx, "ERROR: smallSpancofnRecord write failed: %v\n", smallSpancofnRecordWriteErr)
 	}
-	require.Error(t, smallSpancofnRecordWriteErr, "Expected smallSpancofnRecord write to succeed")
-	log.Dev.Infof(ctx, "SUCCESS: smallSpancofnRecord write failed as expected; still getting backpressure\n")
+	require.NoError(t, smallSpancofnRecordWriteErr, "Expected smallSpancofnRecord write to succeed (spanconfigs should bypass backpressure)")
+	log.Dev.Infof(ctx, "SUCCESS: smallSpancofnRecord write succeeded as expected (spanconfigs bypassed backpressure)\n")
 
 }
