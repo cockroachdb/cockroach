@@ -90,7 +90,12 @@ var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
 	// Backpressure from the end of the system config forward instead of
 	// over all table data to avoid backpressuring unsplittable ranges.
-	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
+	// Note: The above comment is no longer true.
+	// Split the span to exclude the span_configurations table to avoid
+	// catch-22 situations where protected timestamp updates or garbage
+	// collection TTL updates are blocked by backpressure.
+	{Key: keys.SystemConfigTableDataMax, EndKey: keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID)},
+	{Key: keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID + 1), EndKey: keys.TableDataMax},
 }
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
