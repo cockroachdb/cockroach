@@ -1255,7 +1255,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.internalDB,
 		cfg.Settings,
 	)
+
+	txnDiagnosticsRegistry := stmtdiagnostics.NewTxnRegistry(cfg.internalDB,
+		cfg.Settings, stmtDiagnosticsRegistry, timeutil.DefaultTimeSource{})
+
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
+	execCfg.TxnDiagnosticsRecorder = txnDiagnosticsRegistry
 
 	var upgradeMgr *upgrademanager.Manager
 	{

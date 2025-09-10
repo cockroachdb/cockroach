@@ -1170,6 +1170,7 @@ func (s *Server) newConnExecutor(
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 			execType:                     executorType,
+			txnInstrumentationHelper:     txnInstrumentationHelper{TxnDiagnosticsRecorder: s.cfg.TxnDiagnosticsRecorder},
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
@@ -1194,6 +1195,7 @@ func (s *Server) newConnExecutor(
 		executorType:              executorType,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
+		txnDiagnosticsRecorder:    s.cfg.TxnDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
 		txnIDCacheWriter:          s.txnIDCache,
 		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
@@ -1870,6 +1872,7 @@ type connExecutor struct {
 	// stmtDiagnosticsRecorder is used to track which queries need to have
 	// information collected.
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
+	txnDiagnosticsRecorder  *stmtdiagnostics.TxnRegistry
 
 	// indexUsageStats is used to track index usage stats.
 	indexUsageStats *idxusage.LocalIndexUsageStats
@@ -3474,6 +3477,12 @@ func (ex *connExecutor) getRewindTxnCapability() (rewindCapability, bool) {
 // isCommit returns true if stmt is a "COMMIT" statement.
 func isCommit(stmt tree.Statement) bool {
 	_, ok := stmt.(*tree.CommitTransaction)
+	return ok
+}
+
+// isRollback returns true if stmt is a "ROLLBACK" statement.
+func isRollback(stmt tree.Statement) bool {
+	_, ok := stmt.(*tree.RollbackTransaction)
 	return ok
 }
 
