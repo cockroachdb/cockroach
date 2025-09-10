@@ -1577,16 +1577,13 @@ func TestVirtualPTSTableDeprecated(t *testing.T) {
 	ctx2 := context.Background()
 
 	var testServerArgs base.TestServerArgs
-	ptsKnobs := &protectedts.TestingKnobs{}
-	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-	testServerArgs.Knobs.ProtectedTS = ptsKnobs
 	srv, conn, _ := serverutils.StartServer(t, testServerArgs)
 	defer srv.Stopper().Stop(ctx2)
 	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	internalDB := s.InternalDB().(isql.DB)
-	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+	ptm := ptstorage.New(s.ClusterSettings(), nil)
 
 	t.Run("nil-targets", func(t *testing.T) {
 		rec := &ptpb.Record{
