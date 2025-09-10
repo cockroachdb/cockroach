@@ -6,7 +6,7 @@ gen_cluster nodes=6 node_cpu_rate_capacity=16000000000 stores_per_node=2 region=
 
 set_span_config
 [0,5000): constraints={'+region=a':3}
-[5000,10000): constraints={'+region=b':3}
+[5000,9999999999): constraints={'+region=b':3}
 ----
 
 # Writes will hit region a, reads will hit region b.
@@ -46,57 +46,37 @@ assertion type=balance stat=replicas upper_bound=1.05
 
 eval duration=60m cfgs=(sma-only,mma-only,both) metrics=(replicas,leases,cpu,write_bytes_per_second)
 ----
-cpu#1: last:  [s1=0, s2=49842784, s3=0, s4=100025792, s5=0, s6=0, s7=848530693, s8=799898604, s9=748728979, s10=905363412, s11=799763333, s12=748432561] (stddev=394605333.19, mean=416715513.17, sum=5000586158)
-leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=35, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.76, mean=16.75, sum=201)
-leases#1: last:  [s1=17, s2=18, s3=18, s4=17, s5=18, s6=15, s7=17, s8=16, s9=15, s10=18, s11=16, s12=16] (stddev=1.09, mean=16.75, sum=201)
-replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=101, s8=0, s9=101, s10=0, s11=101, s12=0] (stddev=50.25, mean=50.25, sum=603)
-replicas#1: last:  [s1=50, s2=51, s3=53, s4=51, s5=53, s6=51, s7=49, s8=50, s9=50, s10=47, s11=50, s12=48] (stddev=1.69, mean=50.25, sum=603)
-write_bytes_per_second#1: last:  [s1=512403, s2=511857, s3=542908, s4=481352, s5=543308, s6=480952, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=256688.89, mean=256065.00, sum=3072780)
-artifacts[sma-only]: 73b56064a121f5e4
-failed assertion sample 1
-  balance stat=replicas threshold=(<1.05) ticks=5
-	max/mean=53.00/50.25 1.05 tick=0
-	max/mean=53.00/50.25 1.05 tick=1
-	max/mean=53.00/50.25 1.05 tick=2
-	max/mean=53.00/50.25 1.05 tick=3
-	max/mean=53.00/50.25 1.05 tick=4
-cpu#1: last:  [s1=400741782, s2=400179815, s3=400148186, s4=398301389, s5=451111303, s6=400444630, s7=449986666, s8=349133233, s9=549200000, s10=299570983, s11=549846666, s12=352546026] (stddev=71519733.02, mean=416767556.58, sum=5001210679)
-leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=35, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.76, mean=16.75, sum=201)
-leases#1: last:  [s1=22, s2=28, s3=18, s4=31, s5=21, s6=29, s7=10, s8=7, s9=11, s10=6, s11=11, s12=7] (stddev=8.87, mean=16.75, sum=201)
-replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=101, s8=0, s9=101, s10=0, s11=101, s12=0] (stddev=50.25, mean=50.25, sum=603)
-replicas#1: last:  [s1=59, s2=57, s3=59, s4=57, s5=56, s6=61, s7=78, s8=7, s9=78, s10=6, s11=78, s12=7] (stddev=26.46, mean=50.25, sum=603)
-write_bytes_per_second#1: last:  [s1=522369, s2=501347, s3=522318, s4=501398, s5=480432, s6=543284, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=256321.87, mean=255929.00, sum=3071148)
-artifacts[mma-only]: 90a7a906074a6ced
+cpu#1: last:  [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=900112419, s8=798637394, s9=802686666, s10=901494842, s11=698413333, s12=899713801] (stddev=420126322.55, mean=416754871.25, sum=5001058455)
+leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=34, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.67, mean=16.67, sum=200)
+leases#1: last:  [s1=18, s2=16, s3=17, s4=17, s5=16, s6=16, s7=18, s8=16, s9=16, s10=18, s11=14, s12=18] (stddev=1.18, mean=16.67, sum=200)
+replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=100, s8=0, s9=100, s10=0, s11=100, s12=0] (stddev=50.00, mean=50.00, sum=600)
+replicas#1: last:  [s1=49, s2=51, s3=49, s4=51, s5=48, s6=52, s7=50, s8=50, s9=50, s10=50, s11=50, s12=50] (stddev=1.00, mean=50.00, sum=600)
+write_bytes_per_second#1: last:  [s1=501925, s2=522415, s3=501753, s4=522587, s5=492134, s6=532206, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=256285.02, mean=256085.00, sum=3073020)
+artifacts[sma-only]: ba48d00e3673279a
+cpu#1: last:  [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=948091627, s8=750168310, s9=900196666, s10=750176688, s11=900207821, s12=752348533] (stddev=420993561.04, mean=416765803.75, sum=5001189645)
+leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=34, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.67, mean=16.67, sum=200)
+leases#1: last:  [s1=16, s2=18, s3=12, s4=21, s5=9, s6=24, s7=19, s8=15, s9=18, s10=15, s11=18, s12=15] (stddev=3.79, mean=16.67, sum=200)
+replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=100, s8=0, s9=100, s10=0, s11=100, s12=0] (stddev=50.00, mean=50.00, sum=600)
+replicas#1: last:  [s1=50, s2=50, s3=51, s4=49, s5=51, s6=49, s7=85, s8=15, s9=85, s10=15, s11=85, s12=15] (stddev=24.76, mean=50.00, sum=600)
+write_bytes_per_second#1: last:  [s1=512279, s2=512140, s3=522707, s4=501711, s5=522632, s6=501786, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=256175.79, mean=256104.58, sum=3073255)
+artifacts[mma-only]: 71215e5d7d5db949
 failed assertion sample 1
   balance stat=leases threshold=(<1.32) ticks=5
-	max/mean=31.00/16.75 1.85 tick=0
-	max/mean=31.00/16.75 1.85 tick=1
-	max/mean=31.00/16.75 1.85 tick=2
-	max/mean=31.00/16.75 1.85 tick=3
-	max/mean=31.00/16.75 1.85 tick=4
+	max/mean=24.00/16.67 1.44 tick=0
+	max/mean=24.00/16.67 1.44 tick=1
+	max/mean=24.00/16.67 1.44 tick=2
+	max/mean=24.00/16.67 1.44 tick=3
+	max/mean=24.00/16.67 1.44 tick=4
   balance stat=replicas threshold=(<1.05) ticks=5
-	max/mean=78.00/50.25 1.55 tick=0
-	max/mean=78.00/50.25 1.55 tick=1
-	max/mean=78.00/50.25 1.55 tick=2
-	max/mean=78.00/50.25 1.55 tick=3
-	max/mean=78.00/50.25 1.55 tick=4
-cpu#1: last:  [s1=145218390, s2=148728751, s3=99519059, s4=50740740, s5=149768451, s6=202918698, s7=650593982, s8=650461688, s9=800679291, s10=697588256, s11=746660073, s12=647391775] (stddev=287919071.81, mean=415855762.83, sum=4990269154)
-leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=35, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.76, mean=16.75, sum=201)
-leases#1: last:  [s1=22, s2=16, s3=16, s4=22, s5=17, s6=23, s7=13, s8=14, s9=16, s10=14, s11=15, s12=13] (stddev=3.44, mean=16.75, sum=201)
-replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=101, s8=0, s9=101, s10=0, s11=101, s12=0] (stddev=50.25, mean=50.25, sum=603)
-replicas#1: last:  [s1=52, s2=54, s3=51, s4=53, s5=54, s6=53, s7=46, s8=48, s9=48, s10=48, s11=48, s12=48] (stddev=2.74, mean=50.25, sum=603)
-write_bytes_per_second#1: last:  [s1=502652, s2=521342, s3=501993, s4=522001, s5=521516, s6=502478, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=256088.99, mean=255998.50, sum=3071982)
-artifacts[both]: b01551399c6d8198
-failed assertion sample 1
-  balance stat=leases threshold=(<1.32) ticks=5
-	max/mean=23.00/16.75 1.37 tick=0
-	max/mean=23.00/16.75 1.37 tick=1
-	max/mean=23.00/16.75 1.37 tick=2
-	max/mean=23.00/16.75 1.37 tick=3
-	max/mean=23.00/16.75 1.37 tick=4
-  balance stat=replicas threshold=(<1.05) ticks=5
-	max/mean=54.00/50.25 1.07 tick=0
-	max/mean=54.00/50.25 1.07 tick=1
-	max/mean=54.00/50.25 1.07 tick=2
-	max/mean=54.00/50.25 1.07 tick=3
-	max/mean=54.00/50.25 1.07 tick=4
+	max/mean=85.00/50.00 1.70 tick=0
+	max/mean=85.00/50.00 1.70 tick=1
+	max/mean=85.00/50.00 1.70 tick=2
+	max/mean=85.00/50.00 1.70 tick=3
+	max/mean=85.00/50.00 1.70 tick=4
+cpu#1: last:  [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=851810000, s8=902101294, s9=799126666, s10=848956207, s11=798549999, s12=800981721] (stddev=417666714.11, mean=416793823.92, sum=5001525887)
+leases#1: first: [s1=34, s2=0, s3=33, s4=0, s5=33, s6=0, s7=34, s8=0, s9=33, s10=0, s11=33, s12=0] (stddev=16.67, mean=16.67, sum=200)
+leases#1: last:  [s1=14, s2=20, s3=12, s4=21, s5=19, s6=14, s7=17, s8=18, s9=16, s10=17, s11=16, s12=16] (stddev=2.49, mean=16.67, sum=200)
+replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=100, s8=0, s9=100, s10=0, s11=100, s12=0] (stddev=50.00, mean=50.00, sum=600)
+replicas#1: last:  [s1=49, s2=51, s3=49, s4=51, s5=49, s6=51, s7=48, s8=52, s9=49, s10=51, s11=51, s12=49] (stddev=1.22, mean=50.00, sum=600)
+write_bytes_per_second#1: last:  [s1=501192, s2=523142, s3=501541, s4=522794, s5=501194, s6=523141, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=256198.77, mean=256083.67, sum=3073004)
+artifacts[both]: 52b5f80ea071cd7f
