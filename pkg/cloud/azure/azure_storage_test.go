@@ -333,3 +333,22 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	info.URI = cfg.filePathImplicitAuth(testListPath)
 	cloudtestutils.CheckListFiles(t, info)
 }
+
+func TestAzureStorageWriteAndFullReadRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cfg, err := getAzureConfig()
+	if err != nil {
+		skip.IgnoreLint(t, err.Error())
+		return
+	}
+	prefix := fmt.Sprintf("%s-%d", t.Name(), cloudtestutils.NewTestID())
+	uri := cfg.filePathWithSchemeClientAuth("azure", prefix)
+	info := cloudtestutils.StoreInfo{
+		URI:  uri,
+		User: username.RootUserName(),
+	}
+
+	cloudtestutils.CheckWriteAndFullReadRoundtrip(t, info)
+}

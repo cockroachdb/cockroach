@@ -650,3 +650,53 @@ func RequireKMSInaccessibleErrorContaining(
 		t.Fatalf("expected error '%s', got: %s", errRE, err)
 	}
 }
+
+func CheckWriteAndFullReadRoundtrip(t *testing.T, info StoreInfo) {
+	// This test ensures that the read and write behavior of all external storage
+	// providers is consistent. In particular, we test that when reading from a
+	// file, we only get EOF once all bytes of the file have been read.
+	ioConf := base.ExternalIODirConfig{}
+	ctx := context.Background()
+	st := info.testSettings()
+
+	conf, err := cloud.ExternalStorageConfFromURI(info.URI, info.User)
+	require.NoError(t, err)
+
+	clientFactory := blobs.TestBlobServiceClient(info.ExternalIODir)
+	store, err := cloud.MakeExternalStorage(
+		ctx, conf, ioConf, st, clientFactory, info.DB, nil /* limiters */, cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	defer store.Close()
+
+	const filename = "testfile"
+	const size = 1 << 10 // 1 KB
+	data := make([]byte, size)
+	_, err = rand.Read(data)
+	require.NoError(t, err)
+
+	writer, err := store.Writer(ctx, filename)
+	require.NoError(t, err)
+
+	bytesWritten, err := writer.Write(data)
+	require.NoError(t, err)
+	require.Equal(t, size, bytesWritten)
+
+	// Make sure we close before reading to ensure file is flushed.
+	require.NoError(t, writer.Close())
+
+	reader, readSize, err := store.ReadFile(ctx, filename, cloud.ReadOptions{})
+	require.NoError(t, err)
+	defer reader.Close(ctx)
+	require.Equal(t, size, int(readSize))
+
+	readData := make([]byte, size)
+	bytesRead, err := reader.Read(ctx, readData)
+	require.NoError(t, err)
+	require.Equal(t, size, bytesRead)
+	require.Equal(t, data, readData)
+
+	subseqBytesRead, err := reader.Read(ctx, readData)
+	require.Equal(t, 0, subseqBytesRead)
+	require.ErrorIs(t, err, io.EOF)
+}

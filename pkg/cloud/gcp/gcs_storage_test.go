@@ -524,3 +524,26 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, int64(len(data)), rr.Size)
 }
+
+func TestGCSWriteAndFullReadRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	bucket := os.Getenv("GOOGLE_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
+	}
+
+	if !cloudtestutils.IsImplicitAuthConfigured() {
+		skip.IgnoreLint(t, "implicit auth is not configured")
+	}
+
+	prefix := fmt.Sprintf("%s-%d", t.Name(), cloudtestutils.NewTestID())
+	uri := fmt.Sprintf("gs://%s/%s?AUTH=implicit", bucket, prefix)
+	info := cloudtestutils.StoreInfo{
+		URI:  uri,
+		User: username.RootUserName(),
+	}
+
+	cloudtestutils.CheckWriteAndFullReadRoundtrip(t, info)
+}

@@ -38,5 +38,6 @@ go_test(
         "//pkg/security/username",
         "//pkg/testutils",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
     ],
 )

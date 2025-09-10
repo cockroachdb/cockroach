@@ -903,3 +903,32 @@ func TestAWSS3ImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
 	_, _, err := s3.newClient(context.Background())
 	require.NoError(t, err)
 }
+
+func TestS3WriteAndFullReadRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
+	}
+	baseBucket := os.Getenv("AWS_S3_BUCKET")
+	if baseBucket == "" {
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
+	}
+	prefix := fmt.Sprintf("%s-%d", t.Name(), cloudtestutils.NewTestID())
+	uri := S3URI(
+		baseBucket, prefix, &cloudpb.ExternalStorage_S3{
+			AccessKey: envConfig.Credentials.AccessKeyID,
+			Secret:    envConfig.Credentials.SecretAccessKey,
+			Region:    "us-east-1",
+		},
+	)
+	info := cloudtestutils.StoreInfo{
+		URI:  uri,
+		User: username.RootUserName(),
+	}
+
+	cloudtestutils.CheckWriteAndFullReadRoundtrip(t, info)
+}

@@ -320,6 +320,13 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 			read += n
 			r.Pos += int64(n)
 			if readErr == nil || readErr == io.EOF {
+				// The Go filesystem will only return EOF if no bytes were read due to
+				// EOF. Some Cloud providers (e.g. S3) may return EOF even if some bytes
+				// were read. To maintain consistency with the filesystem behavior, we
+				// enforce that an EOF is only returned if no bytes were read.
+				if n > 0 && readErr == io.EOF {
+					readErr = nil
+				}
 				return read, readErr
 			}
 			if r.Size > 0 && r.Pos == r.Size {
