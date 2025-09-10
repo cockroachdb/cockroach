@@ -31,7 +31,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM t@t_a_plus_b_idx WHERE a + b = 110
 ] OFFSET 2
 ----
-·
 • index join
 │ table: t@t_pkey
 │
@@ -45,7 +44,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM t@t_a_plus_b_idx WHERE (a + b) > 110
 ] OFFSET 2
 ----
-·
 • index join
 │ table: t@t_pkey
 │
@@ -59,7 +57,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM t@t_lower_c_idx WHERE lower(c) = 'foo'
 ] OFFSET 2
 ----
-·
 • index join
 │ table: t@t_pkey
 │
@@ -73,7 +70,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM t@t_lower_c_idx WHERE lower(c) LIKE 'foo%'
 ] OFFSET 2
 ----
-·
 • index join
 │ table: t@t_pkey
 │
@@ -87,7 +83,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM t@t_lower_c_a_plus_b_idx WHERE lower(c) = 'foo' AND a + b > 110
 ] OFFSET 2
 ----
-·
 • index join
 │ table: t@t_pkey
 │
@@ -104,7 +99,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM mn INNER LOOKUP JOIN t ON n = lower(c)
 ] OFFSET 2
 ----
-·
 • lookup join
 │ table: t@t_pkey
 │ equality: (k) = (k)
@@ -124,7 +118,6 @@ SELECT * FROM [
   EXPLAIN SELECT * FROM mn INNER LOOKUP JOIN t ON m = a + b AND n = lower(c)
 ] OFFSET 2
 ----
-·
 • lookup join
 │ table: t@t_pkey
 │ equality: (k) = (k)
