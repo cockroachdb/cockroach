@@ -753,10 +753,10 @@ orders      orders_pkey          PRIMARY KEY      PRIMARY KEY (id ASC, shipment 
 orders      orders_product_fkey  FOREIGN KEY      FOREIGN KEY (product) REFERENCES products(sku) ON DELETE RESTRICT ON UPDATE RESTRICT  true
 orders      valid_customer       FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
 
-statement error pq: index "products_upc_key" is in use as unique constraint
+statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key
 
-statement error pq: index "products_upc_key" is in use as unique constraint
+statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key RESTRICT
 
 statement error "products_upc_key" is referenced by foreign key from table "delivery"
