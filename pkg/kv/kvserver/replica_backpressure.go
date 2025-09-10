@@ -81,7 +81,7 @@ var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 	"defines the number of bytes above the product of "+
 		"backpressure_range_size_multiplier and the range_max_size at which "+
 		"backpressure will not apply",
-	64<<30 /* 64 GiB */)
+	32<<20 /* 32 MiB */)
 
 // backpressurableSpans contains spans of keys where write backpressuring
 // is permitted. Writes to any keys within these spans may cause a batch
@@ -98,7 +98,6 @@ var backpressurableSpans = []roachpb.Span{
 func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	// Don't backpressure splits themselves.
 	if ba.Txn != nil && ba.Txn.Name == splitTxnName {
-		log.Infof(context.Background(), "canBackPressureBatch - returning false: %+v\n", ba)
 		return false
 	}
 
@@ -107,18 +106,15 @@ func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		if !kvpb.CanBackpressure(req) {
-			log.Infof(context.Background(), "canBackpressureBatch - returning false (CanBackpressure == false): %+v\n", ba)
 			continue
 		}
 
 		for _, s := range backpressurableSpans {
 			if s.Contains(req.Header().Span()) {
-				log.Infof(context.Background(), "canBackpressureBatch - returning true: %+v\n", ba)
 				return true
 			}
 		}
 	}
-	log.Infof(context.Background(), "canBackPressureBatch - returning false: %+v\n", ba)
 	return false
 }
 
@@ -168,29 +164,23 @@ func (r *Replica) shouldBackpressureWrites() bool {
 	rangeSizeHardCap := backpressureRangeHardCap.Get(&r.store.cfg.Settings.SV)
 
 	if size >= rangeSizeHardCap {
-		log.Infof(context.Background(), "shouldBackpressureWrites - returning true (size >= ragneSizeHardCap)\n")
-		log.Infof(context.Background(), "size: %d, rangeSizeHardCap: %d", size, rangeSizeHardCap)
 		return true
 	}
 
 	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
 	if mult == 0 {
 		// Disabled.
-		log.Infof(context.Background(), "shouldBackpressureWrites - returning false (mult == 0)\n")
 		return false
 	}
 
 	exceeded, bytesOver := exceedsMultipleOfSplitSize(mult, rangeMaxBytes,
 		largestPreviousMaxRangeSize, size)
 	if !exceeded {
-		log.Infof(context.Background(), "shouldBackpressureWrites - returning false (exceeded == false)\n")
 		return false
 	}
 	if bytesOver > backpressureByteTolerance.Get(&r.store.cfg.Settings.SV) {
-		log.Infof(context.Background(), "shouldBackpressureWrites - returning false (bytesOver: %d > backpressureByteTolerance: %d)\n", bytesOver, backpressureByteTolerance.Get(&r.store.cfg.Settings.SV))
 		return false
 	}
-	log.Infof(context.Background(), "shouldBackpressureWrites - returning true (exceeded == true && bytesOver: %d <= backpressureByteTolerance: %d)\n", bytesOver, backpressureByteTolerance.Get(&r.store.cfg.Settings.SV))
 	return true
 }
 
@@ -198,7 +188,6 @@ func (r *Replica) shouldBackpressureWrites() bool {
 // that backpressure is necessary.
 func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequest) error {
 	if !canBackpressureBatch(ba) {
-		log.Infof(context.Background(), "returning nil (canBackpressureBatch == false)\n")
 		return nil
 	}
 
@@ -208,34 +197,23 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	// the quota pool), but it does create an effective soft upper bound.
 	for first := true; r.shouldBackpressureWrites(); first = false {
 		if first {
-			log.Infof(ctx, "maybeBackpressureBatch - shouldBackpressureWrites - true: %+v\n", ba)
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
 
 			if backpressureLogLimiter.ShouldLog() {
-				log.Dev.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
+				log.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
 			}
 		}
 
 		// Register a callback on an ongoing split for this range in the splitQueue.
 		splitC := make(chan error, 1)
-		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, processCallback{
-			onEnqueueResult: func(rank int, err error) {},
-			onProcessResult: func(err error) {
-				select {
-				case splitC <- err:
-				default:
-					// Drop the error if the channel is already full. This prevents
-					// blocking if the callback is invoked multiple times.
-					return
-				}
-			},
+		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, func(err error) {
+			splitC <- err
 		}) {
 			// No split ongoing. We may have raced with its completion. There's
 			// no good way to prevent this race, so we conservatively allow the
 			// request to proceed instead of throwing an error that would surface
 			// to the client.
-			log.Infof(context.Background(), "maybeBackpressureBatch - returning nil (no split ongoing)\n")
 			return nil
 		}
 
@@ -246,19 +224,16 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 		// Wait for the callback to be called.
 		select {
 		case <-ctx.Done():
-			log.Infof(context.Background(), "maybeBackpressureBatch - returning error (ctx done)\n")
 			return errors.WithHint(errors.Wrapf(
 				ctx.Err(), "aborted while applying backpressure to %s on range %s", ba, r.Desc(),
 			), errHint)
 		case err := <-splitC:
 			if err != nil {
-				log.Infof(context.Background(), "maybeBackpressureBatch - returning error (split failed)\n")
 				return errors.WithHint(errors.Wrapf(
 					err, "split failed while applying backpressure to %s on range %s", ba, r.Desc(),
 				), errHint)
 			}
 		}
 	}
-	log.Infof(context.Background(), "maybeBackpressureBatch - returning nil\n")
 	return nil
 }
