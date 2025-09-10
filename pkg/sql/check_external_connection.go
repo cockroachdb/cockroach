@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -26,6 +27,7 @@ func (p *planner) CheckExternalConnection(
 
 type checkExternalConnectionNode struct {
 	zeroInputPlanNode
+	execGrp ctxgroup.Group
 	node    *tree.CheckExternalConnection
 	loc     string
 	params  CloudCheckParams
@@ -101,7 +103,9 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return nil
 	})
 
-	go func() {
+	grp := ctxgroup.WithContext(ctx)
+	n.execGrp = grp
+	grp.GoCtx(func(ctx context.Context) error {
 		recv := MakeDistSQLReceiver(
 			ctx,
 			rowWriter,
@@ -116,7 +120,9 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 
 		evalCtxCopy := *evalCtx
 		dsp.Run(ctx, planCtx, nil, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
-	}()
+		return nil
+	})
+
 	return nil
 }
 
@@ -129,7 +135,6 @@ func (n *checkExternalConnectionNode) Next(params runParams) (bool, error) {
 		return false, params.ctx.Err()
 	case row, more := <-n.rows:
 		if !more {
-			n.rows = nil
 			return false, nil
 		}
 		n.row = row
@@ -142,10 +147,8 @@ func (n *checkExternalConnectionNode) Values() tree.Datums {
 }
 
 func (n *checkExternalConnectionNode) Close(_ context.Context) {
-	if n.rows != nil {
-		close(n.rows)
-		n.rows = nil
-	}
+	_ = n.execGrp.Wait()
+	n.rows = nil
 }
 
 func (n *checkExternalConnectionNode) parseParams(params runParams) error {
