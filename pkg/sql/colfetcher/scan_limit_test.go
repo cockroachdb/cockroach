@@ -22,7 +22,7 @@ import (
 // TestScanLimitKVPairsRead is a regression test for fetching an extra KV batch
 // beyond the limit when the index has more than one column family and doesn't
 // include the max column family. It verifies that the correct number of KV
-// pairs are read as reported in EXPLAIN ANALYZE output.
+// pairs are read as reported in EXPLAIN ANALYZE (VERBOSE) output.
 func TestScanLimitKVPairsRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -61,11 +61,11 @@ func TestScanLimitKVPairsRead(t *testing.T) {
 
 	// Case with no NULL values.
 	sqlDB.Exec(t, `INSERT INTO t_multi_cf (SELECT t, t%19, t*7, t//3 FROM generate_series(1, 100) g(t))`)
-	rows := sqlDB.QueryStr(t, `EXPLAIN ANALYZE SELECT a, b FROM t_multi_cf LIMIT 5`)
+	rows := sqlDB.QueryStr(t, `EXPLAIN ANALYZE (VERBOSE) SELECT a, b FROM t_multi_cf LIMIT 5`)
 	checkRows(rows)
 
 	// Case with some NULL values in the stored columns.
 	sqlDB.Exec(t, `UPDATE t_multi_cf SET a = NULL WHERE k % 10 = 0`)
-	rows = sqlDB.QueryStr(t, `EXPLAIN ANALYZE SELECT a, b FROM t_multi_cf LIMIT 5`)
+	rows = sqlDB.QueryStr(t, `EXPLAIN ANALYZE (VERBOSE) SELECT a, b FROM t_multi_cf LIMIT 5`)
 	checkRows(rows)
 }

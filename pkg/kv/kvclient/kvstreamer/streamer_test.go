@@ -625,7 +625,7 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 		for i := 0; i < 2; i++ {
 			gRPCCalls := -1
 			var err error
-			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE (VERBOSE) SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
 			for _, row := range rows {
 				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
 					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
@@ -693,7 +693,7 @@ ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
 			runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
 			gRPCCalls := -1
 			var err error
-			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT * FROM t@v_idx WHERE v > 0`)
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE (VERBOSE) SELECT * FROM t@v_idx WHERE v > 0`)
 			for _, row := range rows {
 				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
 					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))

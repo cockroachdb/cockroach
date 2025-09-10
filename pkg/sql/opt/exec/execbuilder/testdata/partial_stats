@@ -1401,7 +1401,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 4 (40% of the table; stats collected <hidden> ago)
@@ -1412,7 +1411,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -1426,7 +1424,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 5 (45% of the table; stats collected <hidden> ago)
@@ -1437,7 +1434,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (9.1% of the table; stats collected <hidden> ago)
@@ -1470,7 +1466,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats

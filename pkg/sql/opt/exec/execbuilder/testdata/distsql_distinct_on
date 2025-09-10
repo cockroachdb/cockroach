@@ -88,7 +88,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: x, y, z
@@ -127,7 +126,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +x
@@ -172,7 +170,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: y
@@ -205,7 +202,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
 distribution: full
-vectorized: true
 ·
 • scan
   missing stats
@@ -242,7 +238,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: a, b

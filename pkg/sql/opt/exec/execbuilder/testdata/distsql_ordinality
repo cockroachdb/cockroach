@@ -52,7 +52,6 @@ query T
 EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
 distribution: local
-vectorized: true
 ·
 • ordinality
 │

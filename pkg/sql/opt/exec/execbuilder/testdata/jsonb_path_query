@@ -34,7 +34,6 @@ query T
 EXPLAIN SELECT jsonb_path_query(b, '$.a.b') FROM json_tab WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +a
@@ -53,7 +52,6 @@ query T
 EXPLAIN SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +a
@@ -76,7 +74,6 @@ query T
 EXPLAIN SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b.c') ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +a
@@ -99,7 +96,6 @@ query T
 EXPLAIN SELECT a, jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +a
@@ -122,7 +118,6 @@ query T
 EXPLAIN SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a') ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +a

@@ -166,7 +166,6 @@ query T
 EXPLAIN TRUNCATE TABLE tt
 ----
 distribution: local
-vectorized: true
 ·
 • truncate
 

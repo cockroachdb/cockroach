@@ -505,7 +505,6 @@ query T
 EXPLAIN SELECT min(a), max(a) FROM abc
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -748,7 +747,6 @@ query T
 EXPLAIN SELECT min(x), max(z) FROM xyz
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -786,7 +784,6 @@ query T
 EXPLAIN SELECT min(x), max(z), sum(x) FROM xyz
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │
@@ -801,7 +798,6 @@ query T
 EXPLAIN SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │
@@ -814,7 +810,6 @@ query T
 EXPLAIN SELECT min(x), max(x) FROM xyz WHERE x = 1
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │
@@ -829,7 +824,6 @@ query T
 EXPLAIN SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -886,7 +880,6 @@ query T
 EXPLAIN SELECT min(z), max(y), count(x) FROM xyz WHERE z in (3.0, 6.0, 8.0)
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │
@@ -900,7 +893,6 @@ query T
 EXPLAIN SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -948,7 +940,6 @@ query T
 EXPLAIN SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -2136,7 +2127,6 @@ query T
 EXPLAIN SELECT a, sum_int(c) AS s FROM t124101 GROUP BY a, c ORDER BY a, a, s, c LIMIT 2;
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 2
