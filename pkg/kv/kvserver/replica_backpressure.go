@@ -90,7 +90,14 @@ var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
 	// Backpressure from the end of the system config forward instead of
 	// over all table data to avoid backpressuring unsplittable ranges.
+	// Note: The above comment is no longer true
 	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
+
+	// Split the span to exclude the span_configurations table to avoid
+	// catch-22 situations where protected timestamp updates or garbage
+	// collection TTL updates are blocked by backpressure.
+	// {Key: keys.SystemConfigTableDataMax, EndKey: keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID)},
+	// {Key: keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID + 1), EndKey: keys.TableDataMax},
 }
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
@@ -98,6 +105,13 @@ var backpressurableSpans = []roachpb.Span{
 func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	// Don't backpressure splits themselves.
 	if ba.Txn != nil && ba.Txn.Name == splitTxnName {
+		return false
+	}
+
+	// Don't backpressure PTS/GCTTL-only spanconfig updates to avoid catch-22 situations
+	// where protected timestamp updates or garbage collection TTL updates are blocked
+	// by backpressure, preventing garbage collection and range splitting.
+	if ba.Txn != nil && ba.Txn.Name == "spanconfig-background-update" {
 		return false
 	}
 
@@ -175,6 +189,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 
 	exceeded, bytesOver := exceedsMultipleOfSplitSize(mult, rangeMaxBytes,
 		largestPreviousMaxRangeSize, size)
+
 	if !exceeded {
 		return false
 	}
