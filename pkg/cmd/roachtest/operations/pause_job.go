@@ -54,6 +54,8 @@ func runPauseJob(
 			o.Fatal(err)
 		}
 
+		defer rows.Close()
+
 		var jobIds []string
 		for rows.Next() {
 			var jobId string
