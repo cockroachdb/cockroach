@@ -21,9 +21,6 @@ type TestingKnobs struct {
 	// records will be written, only if deprecated spans are supplied.
 	WriteDeprecatedPTSRecords bool
 
-	// UseMetaTable	forces PTS management to update the meta table whenever
-	// any record is updated.
-	UseMetaTable bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
