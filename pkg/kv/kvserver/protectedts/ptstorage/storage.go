@@ -62,14 +62,6 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 		meta = []byte{}
 	}
 
-	// The `target` column was added to `system.protected_ts_records` as part of
-	// the tenant migration `AlterSystemProtectedTimestampAddColumn`. Prior to the
-	// migration we should continue write records that protect `spans`.
-	//
-	// TODO(adityamaru): Delete in 22.2 once we exclusively protect `target`s.
-	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) || writeDeprecatedPTSRecord(p.knobs, r) {
-		return p.deprecatedProtect(ctx, r, meta)
-	}
 
 	// Clear the `DeprecatedSpans` field even if it has been set by the caller.
 	// Once the `AlterSystemProtectedTimestampAddColumn` migration has run, we
@@ -119,9 +111,6 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 }
 
 func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (*ptpb.Record, error) {
-	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
-		return p.deprecatedGetRecord(ctx, id)
-	}
 	row, err := p.txn.QueryRowEx(ctx, "protectedts-GetRecord", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		getRecordQuery, id.GetBytesMut())
@@ -199,9 +188,6 @@ func (p storage) GetState(ctx context.Context) (ptpb.State, error) {
 }
 
 func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
-	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
-		return p.deprecatedGetRecords(ctx)
-	}
 	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-GetRecords", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, getRecordsQuery)
 	if err != nil {
@@ -247,16 +233,6 @@ func (p *Manager) WithTxn(txn isql.Txn) protectedts.Storage {
 
 var _ protectedts.Manager = (*Manager)(nil)
 
-// TODO(adityamaru): Delete in 22.2.
-func useDeprecatedProtectedTSStorage(
-	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
-) bool {
-	return knobs.DisableProtectedTimestampForMultiTenant
-}
-
-func writeDeprecatedPTSRecord(knobs *protectedts.TestingKnobs, r *ptpb.Record) bool {
-	return knobs != nil && knobs.WriteDeprecatedPTSRecords && r.DeprecatedSpans != nil && len(r.DeprecatedSpans) > 0
-}
 
 
 // New creates a new Storage.
@@ -314,93 +290,6 @@ func rowToRecord(row tree.Datums, r *ptpb.Record, isDeprecatedRow bool) error {
 	return nil
 }
 
-func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []byte) error {
-	s := makeSettings(p.settings)
-	encodedSpans, err := protoutil.Marshal(&Spans{Spans: r.DeprecatedSpans})
-	if err != nil { // how can this possibly fail?
-		return errors.Wrap(err, "failed to marshal spans")
-	}
-	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-deprecated-protect", p.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		protectQueryWithoutTarget,
-		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
-		r.ID, r.Timestamp.AsOfSystemTime(),
-		r.MetaType, meta,
-		len(r.DeprecatedSpans), encodedSpans)
-	if err != nil {
-		return errors.Wrapf(err, "failed to write record %v", r.ID)
-	}
-	ok, err := it.Next(ctx)
-	if err != nil {
-		return errors.Wrapf(err, "failed to write record %v", r.ID)
-	}
-	if !ok {
-		return errors.Newf("failed to write record %v", r.ID)
-	}
-	row := it.Cur()
-	if err := it.Close(); err != nil {
-		log.Dev.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
-	}
-	if failed := *row[0].(*tree.DBool); failed {
-		curNumSpans := int64(*row[1].(*tree.DInt))
-		if s.maxSpans > 0 && curNumSpans+int64(len(r.DeprecatedSpans)) > s.maxSpans {
-			return errors.WithHint(
-				errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans", curNumSpans,
-					len(r.DeprecatedSpans), s.maxSpans),
-				"SET CLUSTER SETTING kv.protectedts.max_spans to a higher value")
-		}
-		curBytes := int64(*row[2].(*tree.DInt))
-		recordBytes := int64(len(encodedSpans) + len(r.Meta) + len(r.MetaType))
-		if s.maxBytes > 0 && curBytes+recordBytes > s.maxBytes {
-			return errors.WithHint(
-				errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
-					s.maxBytes),
-				"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
-		}
-		return protectedts.ErrExists
-	}
-	return nil
-}
-
-func (p *storage) deprecatedGetRecord(ctx context.Context, id uuid.UUID) (*ptpb.Record, error) {
-	row, err := p.txn.QueryRowEx(ctx, "protectedts-deprecated-GetRecord", p.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		getRecordWithoutTargetQuery, id.GetBytesMut())
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read record %v", id)
-	}
-	if len(row) == 0 {
-		return nil, protectedts.ErrNotExists
-	}
-	var r ptpb.Record
-	if err := rowToRecord(row, &r, true /* isDeprecatedRow */); err != nil {
-		return nil, err
-	}
-	return &r, nil
-}
-
-func (p *storage) deprecatedGetRecords(ctx context.Context) ([]ptpb.Record, error) {
-	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-deprecated-GetRecords", p.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		getRecordsWithoutTargetQuery)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read records")
-	}
-
-	var ok bool
-	var records []ptpb.Record
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		var record ptpb.Record
-		if err := rowToRecord(it.Cur(), &record, true /* isDeprecatedRow */); err != nil {
-			log.Dev.Errorf(ctx, "failed to parse row as record: %v", err)
-		}
-		records = append(records, record)
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read records")
-	}
-	return records, nil
-}
 
 type settings struct {
 	maxSpans int64
@@ -432,12 +321,8 @@ func validateRecordForProtect(
 	if r.ID.GetUUID() == uuid.Nil {
 		return errZeroID
 	}
-	useDeprecatedPTSStorage := useDeprecatedProtectedTSStorage(ctx, st, knobs)
-	if !useDeprecatedPTSStorage && r.Target == nil {
+	if r.Target == nil {
 		return errNilTarget
-	}
-	if useDeprecatedPTSStorage && len(r.DeprecatedSpans) == 0 {
-		return errEmptySpans
 	}
 	if len(r.Meta) > 0 && len(r.MetaType) == 0 {
 		return errInvalidMeta

@@ -10,16 +10,6 @@ import "github.com/cockroachdb/cockroach/pkg/base"
 // TestingKnobs provide fine-grained control over the various span config
 // components for testing.
 type TestingKnobs struct {
-	// DisableProtectedTimestampForMultiTenant when set to true, runs the
-	// deprecated protected timestamp subsystem that does not work in a
-	// multi-tenant environment.
-	//
-	// TODO(adityamaru): Delete in 22.2.
-	DisableProtectedTimestampForMultiTenant bool
-
-	// WriteDeprecatedPTSRecords When set to true, deprecated protected timestamp
-	// records will be written, only if deprecated spans are supplied.
-	WriteDeprecatedPTSRecords bool
 
 }
 

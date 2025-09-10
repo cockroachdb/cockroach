@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1568,47 +1567,6 @@ func scanRecord(
 	require.Equal(t, systemRowData.target, virtualRowData.target)
 
 	return systemRowData, virtualRowData
-}
-
-func TestVirtualPTSTableDeprecated(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx2 := context.Background()
-
-	var testServerArgs base.TestServerArgs
-	ptsKnobs := &protectedts.TestingKnobs{}
-	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-	testServerArgs.Knobs.ProtectedTS = ptsKnobs
-	srv, conn, _ := serverutils.StartServer(t, testServerArgs)
-	defer srv.Stopper().Stop(ctx2)
-	s := srv.ApplicationLayer()
-
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	internalDB := s.InternalDB().(isql.DB)
-	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
-
-	t.Run("nil-targets", func(t *testing.T) {
-		rec := &ptpb.Record{
-			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: s.Clock().Now(),
-			Mode:      ptpb.PROTECT_AFTER,
-			DeprecatedSpans: []roachpb.Span{
-				{
-					Key:    keys.SystemSQLCodec.TablePrefix(42),
-					EndKey: keys.SystemSQLCodec.TablePrefix(42).PrefixEnd(),
-				},
-			},
-			MetaType: "foo",
-		}
-
-		protect(t, ctx2, internalDB, ptm, rec)
-		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
-		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
-		require.Equal(t, []byte(nil), virtualRow.internalMeta)
-		require.Equal(t, []byte(nil), virtualRow.decodedTargets)
-		require.Equal(t, -1, virtualRow.numRanges)
-	})
 }
 
 // TestVirtualPTSTable asserts the behavior of

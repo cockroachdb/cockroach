@@ -50,15 +50,8 @@ import (
 
 func TestStorage(t *testing.T) {
 	skip.UnderRace(t, "very large test which is slow under race")
-	for _, withDeprecatedSpans := range []bool{true, false} {
-		for _, test := range testCases {
-			name := test.name
-			if withDeprecatedSpans {
-				name = fmt.Sprintf("%s_withDeprecatedSpans", name)
-				test.runWithDeprecatedSpans = true
-			}
-			t.Run(name, test.run)
-		}
+	for _, test := range testCases {
+		t.Run(test.name, test.run)
 	}
 }
 
@@ -161,29 +154,6 @@ var testCases = []testCase{
 		},
 	},
 	{
-		name: "Protect - unlimited spans",
-		ops: []op{
-			protectOp{spans: tableSpans(42)},
-			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				setMaxSpans(ctx, tCtx, 0)
-			}),
-			protectOp{
-				spans: func() []roachpb.Span {
-					const lotsOfSpans = 1 << 15
-					spans := make([]roachpb.Span, lotsOfSpans)
-					for i := 0; i < lotsOfSpans; i++ {
-						spans[i] = tableSpan(uint32(i))
-					}
-					return spans
-				}(),
-			},
-			protectOp{
-				spans: tableSpans(1, 2),
-			},
-		},
-		runWithDeprecatedSpans: true,
-	},
-	{
 		name: "GetRecord - does not exist",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
@@ -251,10 +221,6 @@ type testContext struct {
 	tc  *testcluster.TestCluster
 	db  isql.DB
 
-	// If set to false, the test will be run with
-	// `DisableProtectedTimestampForMultiTenant` set to true, thereby testing the
-	// "new" protected timestamp logic that runs on targets instead of spans.
-	runWithDeprecatedSpans bool
 
 	state ptpb.State
 }
@@ -294,14 +260,8 @@ func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tCtx.state.Version++
 		tCtx.state.NumRecords--
 		tCtx.state.NumSpans -= uint64(len(rec.DeprecatedSpans))
-		var encoded []byte
-		if tCtx.runWithDeprecatedSpans {
-			encoded, err = protoutil.Marshal(&ptstorage.Spans{Spans: rec.DeprecatedSpans})
-			require.NoError(t, err)
-		} else {
-			encoded, err = protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
-			require.NoError(t, err)
-		}
+		encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
+		require.NoError(t, err)
 		tCtx.state.TotalBytes -= uint64(len(encoded) + len(rec.Meta) + len(rec.MetaType))
 	}
 }
@@ -357,14 +317,8 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tCtx.state.Version++
 		tCtx.state.NumRecords++
 		tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
-		var encoded []byte
-		if tCtx.runWithDeprecatedSpans {
-			encoded, err = protoutil.Marshal(&ptstorage.Spans{Spans: rec.DeprecatedSpans})
-			require.NoError(t, err)
-		} else {
-			encoded, err = protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
-			require.NoError(t, err)
-		}
+		encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
+		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
 	}
 }
@@ -393,9 +347,8 @@ func (p updateTimestampOp) run(ctx context.Context, t *testing.T, tCtx *testCont
 }
 
 type testCase struct {
-	name                   string
-	ops                    []op
-	runWithDeprecatedSpans bool
+	name string
+	ops  []op
 }
 
 func (test testCase) run(t *testing.T) {
@@ -405,19 +358,15 @@ func (test testCase) run(t *testing.T) {
 
 	ptsKnobs := &protectedts.TestingKnobs{}
 	params.Knobs.ProtectedTS = ptsKnobs
-	if test.runWithDeprecatedSpans {
-		ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(ctx)
 
 	s := tc.Server(0).ApplicationLayer()
 	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
 	tCtx := testContext{
-		pts:                    ptm,
-		db:                     s.InternalDB().(isql.DB),
-		tc:                     tc,
-		runWithDeprecatedSpans: test.runWithDeprecatedSpans,
+		pts: ptm,
+		db:  s.InternalDB().(isql.DB),
+		tc:  tc,
 	}
 	pts := ptstorage.WithDatabase(ptm, s.InternalDB().(isql.DB))
 	verify := func(t *testing.T) {
@@ -500,11 +449,7 @@ func newRecord(
 	target *ptpb.Target,
 	spans ...roachpb.Span,
 ) ptpb.Record {
-	if tCtx.runWithDeprecatedSpans {
-		target = nil
-	} else {
-		spans = nil
-	}
+	spans = nil
 	return ptpb.Record{
 		ID:              uuid.MakeV4().GetBytes(),
 		Timestamp:       ts,
@@ -542,9 +487,6 @@ func TestCorruptData(t *testing.T) {
 
 		db := tc.Server(0).InternalDB().(isql.DB)
 		updateQuery := "UPDATE system.protected_ts_records SET target = $1 WHERE id = $2"
-		if tCtx.runWithDeprecatedSpans {
-			updateQuery = "UPDATE system.protected_ts_records SET spans = $1 WHERE id = $2"
-		}
 		affected, err := db.Executor().ExecEx(
 			ctx, "corrupt-data", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
@@ -584,7 +526,7 @@ func TestCorruptData(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					SpanConfig:  &spanconfig.TestingKnobs{ManagerDisableJobCreation: true},
-					ProtectedTS: &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true},
+					ProtectedTS: &protectedts.TestingKnobs{},
 				},
 			},
 		})
@@ -592,7 +534,7 @@ func TestCorruptData(t *testing.T) {
 
 		s := tc.Server(0)
 		ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		tCtx := &testContext{runWithDeprecatedSpans: true}
+		tCtx := &testContext{}
 		runCorruptDataTest(tCtx, s, tc, ptstorage.WithDatabase(
 			ptp, tc.Server(0).InternalDB().(isql.DB),
 		))
