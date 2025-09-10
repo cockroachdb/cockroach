@@ -168,7 +168,7 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	if !rp.knobs.DisableReplicaRebalancing {
 		scorerOptions := allocatorimpl.ScorerOptions(rp.allocator.ScorerOptions(ctx))
-		if rp.allocator.CountBasedRebalanceDisabled() {
+		if rp.allocator.CountBasedRebalancingDisabled() {
 			scorerOptions = rp.allocator.BaseScorerOptionsWithNoConvergence()
 		}
 		rangeUsageInfo := repl.RangeUsageInfo()
@@ -793,7 +793,7 @@ func (rp ReplicaPlanner) considerRebalance(
 	if scatter {
 		scorerOpts = rp.allocator.ScorerOptionsForScatter(ctx)
 	}
-	if rp.allocator.CountBasedRebalanceDisabled() {
+	if rp.allocator.CountBasedRebalancingDisabled() {
 		scorerOpts = rp.allocator.BaseScorerOptionsWithNoConvergence()
 	}
 	rangeUsageInfo := repl.RangeUsageInfo()

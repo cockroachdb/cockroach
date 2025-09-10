@@ -2744,12 +2744,12 @@ func (t TransferLeaseDecision) String() string {
 	}
 }
 
-// CountBasedRebalanceDisabled returns true if the count based rebalancing
-// should be disabled. Disabled DisableCountBasedRebalancingIfMMAEnabled is true
-// and mma is enabled (LBRebalancingMultiMetric).
-func (a *Allocator) CountBasedRebalanceDisabled() bool {
-	return kvserverbase.DisableCountBasedRebalancingIfMMAEnabled.Get(&a.st.SV) &&
-		kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetric
+// CountBasedRebalancingDisabled returns true if count-based rebalancing should
+// be disabled. Count-based rebalancing is disabled only when
+// LBRebalancingMultiMetricOnly mode is active. To enable both multi-metric and
+// count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
+func (a *Allocator) CountBasedRebalancingDisabled() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms
@@ -3052,7 +3052,7 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
 	// Return false early if count based rebalancing is disabled.
-	if a.CountBasedRebalanceDisabled() {
+	if a.CountBasedRebalancingDisabled() {
 		return false
 	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease
