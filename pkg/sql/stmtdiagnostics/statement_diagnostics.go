@@ -580,7 +580,7 @@ func (r *Registry) InsertStatementDiagnostics(
 	var diagID CollectedInstanceID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("stmt-diag-insert-bundle")
-		id, err := r.innerInsertStatementDiagnostics(ctx, NewStmtDiagnostic(requestID, req, stmtFingerprint, stmt, bundle, collectionErr), txn)
+		id, err := r.innerInsertStatementDiagnostics(ctx, NewStmtDiagnostic(requestID, req, stmtFingerprint, stmt, bundle, collectionErr), txn, CollectedInstanceID(0))
 		if err != nil {
 			return err
 		}
@@ -591,8 +591,43 @@ func (r *Registry) InsertStatementDiagnostics(
 	return diagID, err
 }
 
+func (r *Registry) insertBundleChunks(
+	ctx context.Context, bundle []byte, description string, txn isql.Txn,
+) (*tree.DArray, error) {
+	bundleChunksVal := tree.NewDArray(types.Int)
+	bundleToUpload := bundle
+	for len(bundleToUpload) > 0 {
+		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
+		chunk := bundleToUpload
+		if len(chunk) > chunkSize {
+			chunk = chunk[:chunkSize]
+		}
+		bundleToUpload = bundleToUpload[len(chunk):]
+
+		// Insert the chunk into system.statement_bundle_chunks.
+		row, err := txn.QueryRowEx(
+			ctx, "stmt-bundle-chunks-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
+			description,
+			tree.NewDBytes(tree.DBytes(chunk)),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			return nil, errors.New("failed to check statement bundle chunk")
+		}
+		chunkID := row[0].(*tree.DInt)
+		if err := bundleChunksVal.Append(chunkID); err != nil {
+			return nil, err
+		}
+	}
+	return bundleChunksVal, nil
+}
+
 func (r *Registry) innerInsertStatementDiagnostics(
-	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn,
+	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn, txnDiagnosticId CollectedInstanceID,
 ) (CollectedInstanceID, error) {
 	var diagID CollectedInstanceID
 	if diagnostic.requestID != 0 {
@@ -621,46 +656,29 @@ func (r *Registry) innerInsertStatementDiagnostics(
 		errorVal = tree.NewDString(diagnostic.collectionErr.Error())
 	}
 
-	bundleChunksVal := tree.NewDArray(types.Int)
-	bundleToUpload := diagnostic.bundle
-	for len(bundleToUpload) > 0 {
-		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
-		chunk := bundleToUpload
-		if len(chunk) > chunkSize {
-			chunk = chunk[:chunkSize]
-		}
-		bundleToUpload = bundleToUpload[len(chunk):]
-
-		// Insert the chunk into system.statement_bundle_chunks.
-		row, err := txn.QueryRowEx(
-			ctx, "stmt-bundle-chunks-insert", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
-			"statement diagnostics bundle",
-			tree.NewDBytes(tree.DBytes(chunk)),
-		)
-		if err != nil {
-			return diagID, err
-		}
-		if row == nil {
-			return diagID, errors.New("failed to check statement bundle chunk")
-		}
-		chunkID := row[0].(*tree.DInt)
-		if err := bundleChunksVal.Append(chunkID); err != nil {
-			return diagID, err
-		}
+	bundleChunksVal, err := r.insertBundleChunks(ctx, diagnostic.bundle, "statement diagnostics bundle", txn)
+	if err != nil {
+		return diagID, err
 	}
 
 	collectionTime := timeutil.Now()
 
+	insertCols := "statement_fingerprint, statement, collected_at, bundle_chunks, error"
+	insertVals := "$1, $2, $3, $4, $5"
+	vals := []interface{}{diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal}
+	if txnDiagnosticId != 0 {
+		insertCols += ", transaction_diagnostics_id"
+		insertVals += ", $6"
+		vals = append(vals, txnDiagnosticId)
+	}
 	// Insert the collection metadata into system.statement_diagnostics.
 	row, err := txn.QueryRowEx(
 		ctx, "stmt-diag-insert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		"INSERT INTO system.statement_diagnostics "+
-			"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
-			"VALUES ($1, $2, $3, $4, $5) RETURNING id",
-		diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal,
+			"("+insertCols+") "+
+			"VALUES ("+insertVals+") RETURNING id",
+		vals...,
 	)
 	if err != nil {
 		return diagID, err
