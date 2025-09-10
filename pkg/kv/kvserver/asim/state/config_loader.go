@@ -40,7 +40,7 @@ var SingleRegionConfig = ClusterInfo{
 }
 
 // SingleRegionMultiStoreConfig is a simple cluster config with a single region
-// and 3 zones, all zones have 1 node and 6 stores per node.
+// and 3 zones, all zones have 1 node and 5 stores per node.
 var SingleRegionMultiStoreConfig = ClusterInfo{
 	StoreDiskCapacityBytes: 1024 << 30, // 1024 GiB
 	Regions: []Region{
@@ -96,7 +96,7 @@ var ComplexConfig = ClusterInfo{
 				NewZoneWithSingleStore("US_East_1", 1),
 				NewZoneWithSingleStore("US_East_2", 2),
 				NewZoneWithSingleStore("US_East_3", 3),
-				NewZoneWithSingleStore("US_East_3", 10),
+				NewZoneWithSingleStore("US_East_4", 10),
 			},
 		},
 		{
