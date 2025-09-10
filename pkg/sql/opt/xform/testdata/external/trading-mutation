@@ -977,15 +977,15 @@ sort
       │    │    │    └── fd: ()-->(32)
       │    │    ├── inner-join (lookup transactiondetails)
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
-      │    │    │    ├── key columns: [60 61 15] = [1 2 3]
+      │    │    │    ├── key columns: [57 58 15] = [1 2 3]
       │    │    │    ├── stats: [rows=12345.7, distinct(3)=12345.7, null(3)=0, distinct(4)=11100.2, null(4)=0, distinct(15)=12345.7, null(15)=0]
       │    │    │    ├── key: (4,5,15)
       │    │    │    ├── fd: ()-->(1,2,13,14), (3-5)-->(6,7), (15)-->(16,17), (3)==(15), (15)==(3)
       │    │    │    ├── project
-      │    │    │    │    ├── columns: "lookup_join_const_col_@1":60!null "lookup_join_const_col_@2":61!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
-      │    │    │    │    ├── stats: [rows=12345.7, distinct(15)=12345.7, null(15)=0, distinct(60)=1, null(60)=0, distinct(61)=1, null(61)=0]
+      │    │    │    │    ├── columns: "lookup_join_const_col_@1":57!null "lookup_join_const_col_@2":58!null transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
+      │    │    │    │    ├── stats: [rows=12345.7, distinct(15)=12345.7, null(15)=0, distinct(57)=1, null(57)=0, distinct(58)=1, null(58)=0]
       │    │    │    │    ├── key: (15)
-      │    │    │    │    ├── fd: ()-->(13,14,60,61), (15)-->(16,17)
+      │    │    │    │    ├── fd: ()-->(13,14,57,58), (15)-->(16,17)
       │    │    │    │    ├── select
       │    │    │    │    │    ├── columns: transactions.dealerid:13!null transactions.isbuy:14!null date:15!null accountname:16!null customername:17!null
       │    │    │    │    │    ├── stats: [rows=12345.7, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=12345.7, null(15)=0, distinct(16)=12345.7, null(16)=0, distinct(17)=12345.7, null(17)=0, distinct(13,14)=1, null(13,14)=0, distinct(15-17)=12345.7, null(15-17)=0, distinct(13-17)=12345.7, null(13-17)=0]
@@ -1001,8 +1001,8 @@ sort
       │    │    │    │    │         ├── accountname:16 != 'someaccount' [outer=(16), constraints=(/16: (/NULL - /'someaccount') [/e'someaccount\x00' - ]; tight)]
       │    │    │    │    │         └── customername:17 != 'somecustomer' [outer=(17), constraints=(/17: (/NULL - /'somecustomer') [/e'somecustomer\x00' - ]; tight)]
       │    │    │    │    └── projections
-      │    │    │    │         ├── 1 [as="lookup_join_const_col_@1":60]
-      │    │    │    │         └── false [as="lookup_join_const_col_@2":61]
+      │    │    │    │         ├── 1 [as="lookup_join_const_col_@1":57]
+      │    │    │    │         └── false [as="lookup_join_const_col_@2":58]
       │    │    │    └── filters
       │    │    │         └── (transactiondate:3 >= '2020-02-23 00:00:00+00') AND (transactiondate:3 <= '2020-03-01 00:00:00+00') [outer=(3), constraints=(/3: [/'2020-02-23 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
       │    │    └── filters
