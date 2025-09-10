@@ -799,17 +799,17 @@ func (m *MockIndexSpanSplitter) EXPECT() *MockIndexSpanSplitterMockRecorder {
 }
 
 // MaybeSplitIndexSpans mocks base method.
-func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 catalog.TableDescriptor, arg2 catalog.Index) error {
+func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 catalog.TableDescriptor, arg2, arg3 catalog.Index) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MaybeSplitIndexSpans", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "MaybeSplitIndexSpans", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // MaybeSplitIndexSpans indicates an expected call of MaybeSplitIndexSpans.
-func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2, arg3)
 }
 
 // MaybeSplitIndexSpansForPartitioning mocks base method.

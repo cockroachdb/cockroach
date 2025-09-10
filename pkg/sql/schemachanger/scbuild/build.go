@@ -108,6 +108,14 @@ func Build(
 			// qualified.
 			an.ValidateAnnotations()
 		}
+		// Truncate does not use unresolved names, so resolved names have
+		// to be copied over for telemetry.
+		if tr, ok := n.(*tree.Truncate); ok {
+			resolvedTruncate := an.GetStatement().(*tree.Truncate)
+			for idx := range tr.Tables {
+				tr.Tables[idx].ObjectNamePrefix = resolvedTruncate.Tables[idx].ObjectNamePrefix
+			}
+		}
 		currentStatementID := uint32(len(els.statements) - 1)
 		els.statements[currentStatementID].RedactedStatement = dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation)
 	}
