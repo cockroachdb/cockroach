@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1947,6 +1948,10 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		require.NoError(t, b.RunPostDeserializationChanges())
 		return b.BuildImmutableTable()
 	}
+	mvccTimestampSysCol, err := catalog.MustFindColumnByID(makeTableDesc(), colinfo.MVCCTimestampColumnID)
+	require.NoError(t, err)
+	tableOidSysCol, err := catalog.MustFindColumnByID(makeTableDesc(), colinfo.TableOIDColumnID)
+	require.NoError(t, err)
 
 	scanToParallelize := &scanNode{parallelize: true}
 	for _, tc := range []struct {
@@ -2068,6 +2073,34 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			// windowNode is not fully supported by the vectorized.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &scanNode{
+				fetchPlanningInfo: fetchPlanningInfo{catalogCols: []catalog.Column{mvccTimestampSysCol}},
+			}}},
+			// Usage of crdb_internal_mvcc_timestamp prohibits parallelization
+			// since it forces usage of the LeafTxn, yet for buffered writes we
+			// might need to force usage of the RootTxn.
+			// TODO(#144166): relax this.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &scanNode{
+				fetchPlanningInfo: fetchPlanningInfo{catalogCols: []catalog.Column{tableOidSysCol}},
+			}}},
+			// Usage of tableoid system column doesn't force usage of the
+			// LeafTxn, so parallelization is ok.
+			prohibitParallelization: false,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{indexJoinPlanningInfo: indexJoinPlanningInfo{
+				fetch: fetchPlanningInfo{catalogCols: []catalog.Column{mvccTimestampSysCol}}},
+			}}},
+			// Usage of crdb_internal_mvcc_timestamp prohibits parallelization
+			// since it forces usage of the LeafTxn, yet for buffered writes we
+			// might need to force usage of the RootTxn.
+			// TODO(#144166): relax this.
 			prohibitParallelization: true,
 		},
 

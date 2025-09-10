@@ -315,10 +315,7 @@ func runPlanInsidePlan(
 		}
 	}
 
-	distributePlan, distSQLProhibitedErr := getPlanDistribution(
-		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
-		plannerCopy.SessionData(), plan.main, &plannerCopy.distSQLVisitor,
-	)
+	distributePlan, distSQLProhibitedErr := plannerCopy.getPlanDistribution(ctx, plan.main)
 	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distributeType = FullDistribution

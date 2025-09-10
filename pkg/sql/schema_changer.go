@@ -580,11 +580,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					}
 				}
 			}
-			planDistribution, _ := getPlanDistribution(
-				ctx, localPlanner.Descriptors().HasUncommittedTypes(),
-				localPlanner.extendedEvalCtx.SessionData(),
-				localPlanner.curPlan.main, &localPlanner.distSQLVisitor,
-			)
+			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main)
 			isLocal := !planDistribution.WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table.TableDesc(),
