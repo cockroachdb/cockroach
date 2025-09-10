@@ -298,7 +298,7 @@ func (h *Histogram) CanFilter(
 	ctx context.Context, c *constraint.Constraint,
 ) (colOffset, exactPrefix int, ok bool) {
 	exactPrefix = c.ExactPrefix(ctx, h.evalCtx)
-	constrainedCols := c.ConstrainedColumns(h.evalCtx)
+	constrainedCols := c.ConstrainedColumnCount()
 	for i := 0; i < constrainedCols && i <= exactPrefix; i++ {
 		if c.Columns.Get(i).ID() == h.col {
 			return i, exactPrefix, true
