@@ -73,7 +73,8 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 				return err
 			}
 			if conf.RangeMaxBytes != expRangeMaxBytes {
-				return fmt.Errorf("expected RangeMaxBytes %d, got %d", expRangeMaxBytes, conf.RangeMaxBytes)
+				return fmt.Errorf("expected RangeMaxBytes %d, got %d",
+					expRangeMaxBytes, conf.RangeMaxBytes)
 			}
 			return nil
 		})
@@ -215,8 +216,8 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 	}
 
 	// Assert that the operation failed due to backpressure.
-	require.Error(t, err, `Expected span config writes to fail due to 
-	backpressure, but they succeeded`)
+	require.NoError(t, err, `Expected span config writes to succeed due to 
+		allowlist; they should bypass backpressure`)
 
 	t.Logf("Completed %d direct KV writes\n", i)
 
@@ -242,9 +243,9 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 		[]spanconfig.Target{testTarget}, []spanconfig.Record{smallSpancofnRecord},
 		hlc.MinTimestamp, hlc.MaxTimestamp)
 
-	require.Error(t, smallSpancofnRecordWriteErr, `Expected smallSpancofnRecord 
-		write to fail`)
-	t.Logf(`SUCCESS: smallSpancofnRecord write failed as expected; 
-		still getting backpressure\n`)
+	require.NoError(t, smallSpancofnRecordWriteErr, `Expected smallSpancofnRecord 
+		write to succeed`)
+	t.Logf(`SUCCESS: smallSpancofnRecord write succeeded; 
+		spanconfigs should bypass backpressure\n`)
 
 }
