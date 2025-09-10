@@ -59,8 +59,7 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 // requests are successful with nominal latencies. See also:
 // https://github.com/cockroachdb/cockroach/issues/103654
 func registerFailover(r registry.Registry) {
-	leaseTypes := []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases, registry.LeaderLeases}
-	for _, leases := range leaseTypes {
+	for _, leases := range registry.LeaseTypes {
 		var leasesStr string
 		switch leases {
 		case registry.EpochLeases:
