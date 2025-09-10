@@ -1219,6 +1219,10 @@ func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
 }
 
 func (j *jobState) canPersistFrontier() bool {
+	if j.job == nil {
+		return false
+	}
+
 	interval := changefeedbase.FrontierPersistenceInterval.Get(&j.settings.SV)
 	if interval == 0 {
 		return false
@@ -1868,17 +1872,19 @@ func (cf *changeFrontier) maybeCheckpointJob(
 
 	// TODO(#153299): Make sure we only updated per-table PTS if
 	// we persisted the span frontier.
-	var ptsUpdated bool
-	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress)
-		return err
-	}); err != nil {
-		log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
-		return false, err
-	}
-	if ptsUpdated {
-		cf.lastProtectedTimestampUpdate = timeutil.Now()
+	if cf.spec.JobID != 0 {
+		var ptsUpdated bool
+		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			var err error
+			ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress)
+			return err
+		}); err != nil {
+			log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
+			return false, err
+		}
+		if ptsUpdated {
+			cf.lastProtectedTimestampUpdate = timeutil.Now()
+		}
 	}
 
 	return true, nil
