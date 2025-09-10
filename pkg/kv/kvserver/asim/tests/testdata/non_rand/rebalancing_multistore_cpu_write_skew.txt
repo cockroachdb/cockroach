@@ -5,8 +5,8 @@ gen_cluster nodes=6 node_cpu_rate_capacity=16000000000 stores_per_node=2 region=
 ----
 
 set_span_config
-[0,5000): num_replicas=3 num_voters=3 constraints={'+region=a':3}
-[5000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3}
+[0,5000): constraints={'+region=a':3}
+[5000,10000): constraints={'+region=b':3}
 ----
 
 # Writes will hit region a, reads will hit region b.
