@@ -34,7 +34,6 @@ query T
 EXPLAIN SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: true
 ·
 • top-k
 │ order: +column7
@@ -210,7 +209,6 @@ query T
 EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <=> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: true
 ·
 • top-k
 │ order: +column7
@@ -232,7 +230,6 @@ query T
 EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <#> '[1, 2, 3]' LIMIT 1;
 ----
 distribution: local
-vectorized: true
 ·
 • top-k
 │ order: +column7
@@ -257,7 +254,6 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, '[1, 2, 3]');
 ----
 distribution: local
-vectorized: true
 ·
 • insert
 │ into: t(k, v)

@@ -10,7 +10,6 @@ query T
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 distribution: local
-vectorized: true
 ·
 • union
 │
@@ -28,7 +27,6 @@ query T
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 distribution: local
-vectorized: true
 ·
 • union all
 │
@@ -47,7 +45,6 @@ query T
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
 distribution: local
-vectorized: true
 ·
 • union
 │

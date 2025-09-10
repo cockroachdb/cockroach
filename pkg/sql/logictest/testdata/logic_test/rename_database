@@ -190,7 +190,6 @@ query T
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
 distribution: local
-vectorized: true
 ·
 • alter database
 

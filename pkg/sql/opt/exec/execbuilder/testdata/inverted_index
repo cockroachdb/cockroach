@@ -141,7 +141,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: e@e_pkey
@@ -155,7 +154,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b = ARRAY[8]
@@ -172,7 +170,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: e@e_pkey
@@ -186,7 +183,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -782,7 +778,6 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: d@d_pkey
@@ -803,7 +798,6 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: d@d_pkey
@@ -2764,7 +2758,6 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ estimated row count: 1,247
@@ -2789,7 +2782,6 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ estimated row count: 1,247
@@ -2814,7 +2806,6 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[[1, 2]]' ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1,247

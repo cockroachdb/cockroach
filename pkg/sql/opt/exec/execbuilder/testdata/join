@@ -12,7 +12,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (x)
@@ -31,7 +30,6 @@ query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (y)
@@ -50,7 +48,6 @@ query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 distribution: local
-vectorized: true
 ·
 • cross join
 │
@@ -71,7 +68,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (y)
@@ -90,7 +86,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (y)
@@ -114,7 +109,6 @@ EXPLAIN SELECT * FROM
 LIMIT 1
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 1
@@ -539,7 +533,6 @@ query T
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -561,7 +554,6 @@ query T
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (b) = (n)
@@ -1708,7 +1700,6 @@ query T
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (a, b) = (a, b)
@@ -1954,7 +1945,6 @@ query T
 EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (a, c) = (a, c)
@@ -1987,7 +1977,6 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag@{NO_ZIGZAG_JOIN} WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: c = 6.0
@@ -2007,7 +1996,6 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: c = 6.0
@@ -2029,7 +2017,6 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • zigzag join
   pred: (b = 5) AND (c = 6.0)
@@ -2046,7 +2033,6 @@ query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2067,7 +2053,6 @@ query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2102,7 +2087,6 @@ query T
 EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: c IS NULL
@@ -2124,7 +2108,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2150,7 +2133,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2176,7 +2158,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2211,7 +2192,6 @@ query T
 EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │

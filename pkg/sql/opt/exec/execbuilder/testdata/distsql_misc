@@ -105,7 +105,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON a FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -138,7 +137,6 @@ query T retry
 EXPLAIN (DISTSQL, TYPES) SELECT * FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • scan
   columns: (a int, b int, c float, d decimal)
@@ -161,7 +159,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -181,7 +178,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON c, e, a FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -201,7 +197,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON e FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -224,7 +219,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON f, e, d FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -256,7 +250,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -280,7 +273,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -307,7 +299,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>
@@ -334,7 +325,6 @@ EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 FROM data
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 1,000 (7.8 KiB, 2,000 KVs, 1,000 gRPC calls)
 maximum memory usage: <hidden>

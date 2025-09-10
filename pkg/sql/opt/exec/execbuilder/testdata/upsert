@@ -1120,7 +1120,6 @@ query T
 EXPLAIN UPSERT INTO t121322_ab SELECT 1, (SELECT sum(c) FROM t121322_c)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1175,20 +1174,14 @@ EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: generic, re-optimized
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • upsert
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
 │ execution time: 0µs
+│ actual row count: 1
 │ into: t137352(k, a, b)
 │ auto commit
 │ arbiter indexes: t137352_pkey
@@ -1197,13 +1190,10 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ kv nodes: <hidden>
     │ regions: <hidden>
-    │ actual row count: 1
     │ KV time: 0µs
     │ KV rows decoded: 0
-    │ KV bytes read: 0 B
-    │ KV gRPC calls: 0
     │ execution time: 0µs
-    │ estimated max memory allocated: 0 B
+    │ actual row count: 1
     │ table: t137352@t137352_pkey
     │ equality: (column1) = (k)
     │ equality cols are key
@@ -1212,8 +1202,8 @@ quality of service: regular
     └── • values
           sql nodes: <hidden>
           regions: <hidden>
-          actual row count: 1
           execution time: 0µs
+          actual row count: 1
           size: 3 columns, 1 row
 
 # Only need to update 'b' - no need to modify the secondary index.
@@ -1247,20 +1237,14 @@ EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: generic, re-optimized
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • upsert
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
 │ execution time: 0µs
+│ actual row count: 1
 │ into: t137352(k, a, b)
 │ auto commit
 │ arbiter indexes: t137352_a_key
@@ -1270,13 +1254,10 @@ quality of service: regular
     └── • lookup join (left outer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 1
         │ KV time: 0µs
         │ KV rows decoded: 0
-        │ KV bytes read: 0 B
-        │ KV gRPC calls: 0
         │ execution time: 0µs
-        │ estimated max memory allocated: 0 B
+        │ actual row count: 1
         │ table: t137352@t137352_pkey
         │ equality: (k) = (k)
         │ equality cols are key
@@ -1286,13 +1267,10 @@ quality of service: regular
             │ sql nodes: <hidden>
             │ kv nodes: <hidden>
             │ regions: <hidden>
-            │ actual row count: 1
             │ KV time: 0µs
             │ KV rows decoded: 0
-            │ KV bytes read: 0 B
-            │ KV gRPC calls: 0
             │ execution time: 0µs
-            │ estimated max memory allocated: 0 B
+            │ actual row count: 1
             │ table: t137352@t137352_a_key
             │ equality: (column2) = (a)
             │ equality cols are key
@@ -1301,8 +1279,8 @@ quality of service: regular
             └── • values
                   sql nodes: <hidden>
                   regions: <hidden>
-                  actual row count: 1
                   execution time: 0µs
+                  actual row count: 1
                   size: 3 columns, 1 row
 
 # Conflict on 'a', so we're only updating the value of 'b'.
@@ -1337,7 +1315,6 @@ query T
 EXPLAIN UPSERT INTO t139105 VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
 ·
 • upsert
 │ into: t139105(k, v)
@@ -1378,7 +1355,6 @@ query T
 EXPLAIN UPSERT INTO t139160 VALUES (1, 2, 3, 4)
 ----
 distribution: local
-vectorized: true
 ·
 • upsert
 │ into: t139160(k, i, u, v)
@@ -1412,7 +1388,6 @@ query T
 EXPLAIN INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11, i = 12, v = 14;
 ----
 distribution: local
-vectorized: true
 ·
 • upsert
 │ into: t139160(k, i, u, v)

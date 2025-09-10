@@ -4,7 +4,6 @@ query T
 EXPLAIN SELECT schema_name, table_name, type, owner, estimated_row_count, locality FROM [SHOW TABLES]
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -57,7 +56,6 @@ query T
 EXPLAIN SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES]
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │

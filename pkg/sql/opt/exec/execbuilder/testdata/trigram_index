@@ -12,7 +12,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b LIKE '%foo%'
@@ -29,7 +28,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b ILIKE '%foo%'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b ILIKE '%foo%'
@@ -46,7 +44,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%' OR b ILIKE '%bar%'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: (b LIKE '%foo%') OR (b ILIKE '%bar%')
@@ -67,7 +64,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%' OR b ILIKE '%bar%'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: (b LIKE '%foo%') OR (b ILIKE '%bar%')
@@ -88,7 +84,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%zoo%'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b LIKE '%foo%zoo%'
@@ -110,7 +105,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b LIKE '%fo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b LIKE '%fo'
@@ -126,7 +120,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b LIKE b
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b LIKE b
@@ -141,7 +134,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b % 'foo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b % 'foo'
@@ -163,7 +155,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b % 'foob'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b % 'foob'
@@ -185,7 +176,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b % 'fo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b % 'fo'
@@ -206,7 +196,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE 'blah' % b
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: 'blah' % b
@@ -228,7 +217,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b % b
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b % b
@@ -244,7 +232,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b = 'foobar'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b = 'foobar'
@@ -265,7 +252,6 @@ query T
 EXPLAIN SELECT * FROM a WHERE b = 'foo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b = 'foo'
@@ -289,7 +275,6 @@ query T
 EXPLAIN SELECT * FROM b WHERE a % 'foob'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: a % 'foob'
