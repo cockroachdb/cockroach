@@ -55,6 +55,7 @@ func init() {
 		t opgen.Transition,
 		prePrevStatuses []scpb.Status,
 	) rel.Clauses {
+
 		descriptorData := MkNodeVars("descriptor-data")
 		var descID rel.Var = "descID"
 		clauses := rel.Clauses{
@@ -73,6 +74,31 @@ func init() {
 			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
 			descriptorData.DescIDEq(descID),
 			descriptorDataIsNotBeingAdded(descID),
+		}
+		// Indexes are allowed to skip the two version invariant if we can guarantee
+		// no backfill is required. For truncate both the source and temporary index
+		// IDs will be cleared to indicate this.
+		addIndexClause := false
+		switch el.(type) {
+		case *scpb.SecondaryIndex:
+			addIndexClause = true
+		case *scpb.PrimaryIndex:
+			addIndexClause = true
+		}
+		if addIndexClause && targetStatus == scpb.ToPublic {
+			clauses = append(clauses,
+				FilterElements("skip indexes that no require no backfill", from, to, func(from, to scpb.Element) bool {
+					if targetStatus == scpb.ToAbsent {
+						return true
+					}
+					switch elt := from.(type) {
+					case *scpb.PrimaryIndex:
+						return elt.TemporaryIndexID != 0 && elt.SourceIndexID != 0
+					case *scpb.SecondaryIndex:
+						return elt.TemporaryIndexID != 0 && elt.SourceIndexID != 0
+					}
+					return true
+				}))
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
