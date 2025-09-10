@@ -2151,6 +2151,28 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	scope := log.Scope(t)
 	defer scope.Close(t)
 
+	// Add some debugging helpful for #134383, where the zone config update that
+	// should lead to down-replication is simply "ignored" and it's unclear who
+	// is to blame.
+	// `store=2` unconditionally logs changed spanconfigs in
+	// `spanconfigstore/store.go` and `reconciler=3` logs incoming updates from
+	// the rangefeed on the zone configs table. You'll need to look at the
+	// complete logs (not just the default log) and search for "test setting ZONE
+	// survival configuration" to find the start of the interesting bit. In
+	// passing runs, this shows the AUTO SPAN RECONCILIATION job acting on a new
+	// SQL update, changing the span configs (which should register on all nodes),
+	// and subsequent replication changes. In failing runs, it will be interesting
+	// which prefix of events remains.
+	{
+		old := log.GetVModule()
+		changed := "store=2,reconciler=3"
+		if old != "" {
+			changed = old + "," + changed
+		}
+		require.NoError(t, log.SetVModule(changed))
+		defer func() { _ = log.SetVModule(old) }()
+	}
+
 	// This test is slow under stress/race and can time out when upreplicating /
 	// rebalancing to ensure all stores have the same range count initially, due
 	// to slow heartbeats.
