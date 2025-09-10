@@ -376,11 +376,9 @@ func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 
 	// This is to show that the metrics is globally aggregated across all calls of
 	// store procedures.
-	_, err = db.Exec(`
-			TRUNCATE tbl;
-			CALL inserttbl();
-	`)
-
+	_, err = db.Exec(`TRUNCATE tbl;`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CALL inserttbl();`)
 	require.NoError(t, err)
 
 	expectedStartedInsertCount += 5
