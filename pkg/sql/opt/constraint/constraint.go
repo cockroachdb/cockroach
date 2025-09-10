@@ -641,6 +641,19 @@ func (c *Constraint) ConstrainedColumnCount() int {
 	return count
 }
 
+// ConstrainedColumns returns the set of columns which are constrained by
+// the Constraint. For example, for the constraint:
+//
+//	/a/b/c: [/1/1 - /1] [/3 - /3]
+//
+// ConstrainedColumns would return (a,b).
+func (c *Constraint) ConstrainedColumns() (cols opt.ColSet) {
+	for i, n := 0, c.ConstrainedColumnCount(); i < n; i++ {
+		cols.Add(c.Columns.Get(i).ID())
+	}
+	return cols
+}
+
 // Prefix returns the length of the longest prefix of columns for which all the
 // spans have the same start and end values. For example:
 //
