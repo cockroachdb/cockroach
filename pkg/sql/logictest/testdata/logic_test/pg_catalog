@@ -3081,7 +3081,7 @@ optimizer_check_input_min_row_count                              1              
 optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  NULL      NULL        NULL        string
 optimizer_enable_lock_elision                                    on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL      NULL        NULL        string
-optimizer_ignore_wide_scans                                      off                 NULL      NULL        NULL        string
+optimizer_ignore_wide_scans                                      on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                                    on                  NULL      NULL        NULL        string
 optimizer_min_row_count                                          1                   NULL      NULL        NULL        string
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL      NULL        NULL        string
@@ -3327,7 +3327,7 @@ optimizer_check_input_min_row_count                              1              
 optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  NULL  user     NULL      on                  on
 optimizer_enable_lock_elision                                    on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL  user     NULL      on                  on
-optimizer_ignore_wide_scans                                      off                 NULL  user     NULL      off                 off
+optimizer_ignore_wide_scans                                      on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                                    on                  NULL  user     NULL      on                  on
 optimizer_min_row_count                                          1                   NULL  user     NULL      1                   1
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL  user     NULL      on                  on

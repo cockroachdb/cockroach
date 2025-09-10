@@ -4418,7 +4418,7 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerIgnoreWideScans,
 			), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 }
 

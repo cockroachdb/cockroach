@@ -18405,7 +18405,11 @@ vectorized: true
   table: t1401@t1401_c_idx
   spans: [/'2022-01-25 21:17:27.216095+00' - ]
 
-# Without forecasts, the bad plan uses t1401_c_idx.
+# Without forecasts (and with optimizer_ignore_wide_scans disabled) the bad plan
+# uses t1401_c_idx.
+
+statement ok
+SET optimizer_ignore_wide_scans=false
 
 query T
 EXPLAIN SELECT
@@ -18438,6 +18442,9 @@ vectorized: true
               estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
               table: t1401@t1401_c_idx
               spans: [/'2022-01-25 21:17:27.216095+00' - ]
+
+statement ok
+RESET optimizer_ignore_wide_scans
 
 statement ok
 RESET optimizer_use_forecasts
