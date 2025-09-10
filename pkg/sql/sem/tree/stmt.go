@@ -118,6 +118,7 @@ const (
 	ImportTag              = "IMPORT"
 	RestoreTag             = "RESTORE"
 	ConfigureZoneTag       = "CONFIGURE ZONE"
+	TruncateTag            = "TRUNCATE"
 )
 
 // Statements represent a list of statements.
@@ -2334,7 +2335,7 @@ func (*Truncate) StatementReturnType() StatementReturnType { return Ack }
 func (*Truncate) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Truncate) StatementTag() string { return "TRUNCATE" }
+func (*Truncate) StatementTag() string { return TruncateTag }
 
 // modifiesSchema implements the canModifySchema interface.
 func (*Truncate) modifiesSchema() bool { return true }

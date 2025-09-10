@@ -24,7 +24,7 @@ func init() {
 				}),
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
 					// Avoid adding splits for tables without any data (i.e. newly created ones).
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
 						return nil
 					}
 					return &scop.MaybeAddSplitForIndex{
@@ -37,7 +37,7 @@ func init() {
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.BackfillIndex {
 					// No need to backfill indexes for added descriptors, these will
 					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
 						return nil
 					}
 					return &scop.BackfillIndex{
@@ -67,7 +67,7 @@ func init() {
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MergeIndex {
 					// No need to merge indexes for added descriptors, these will
 					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
 						return nil
 					}
 					return &scop.MergeIndex{
@@ -95,7 +95,7 @@ func init() {
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.ValidateIndex {
 					// No need to backfill validate for added descriptors, these will
 					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
 						return nil
 					}
 					return &scop.ValidateIndex{
