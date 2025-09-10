@@ -1163,6 +1163,8 @@ type jobState struct {
 	progressUpdatesSkipped bool
 	// The last time we persisted the frontier.
 	lastFrontierPersistence time.Time
+	// How long frontier persistence (job info write) expected to take.
+	frontierPersistenceDuration time.Duration
 }
 
 func newJobState(
@@ -1219,7 +1221,12 @@ func (j *jobState) canPersistFrontier() bool {
 	if interval == 0 {
 		return false
 	}
-	return j.ts.Since(j.lastFrontierPersistence) >= interval
+
+	// Use the max of the configured interval and the actual time it takes to persist,
+	// similar to canCheckpointHighWatermark logic. This prevents back-to-back persistence
+	// operations if persistence takes longer than the configured interval.
+	minInterval := max(j.frontierPersistenceDuration, interval)
+	return j.ts.Since(j.lastFrontierPersistence) >= minInterval
 }
 
 // checkpointCompleted must be called when job checkpoint completes.
@@ -1248,6 +1255,8 @@ func (j *jobState) checkpointCompleted(
 	j.progressUpdatesSkipped = false
 	if frontierPersisted {
 		j.lastFrontierPersistence = now
+		j.frontierPersistenceDuration = time.Duration(
+			j.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean())
 	}
 }
 
@@ -1818,7 +1827,6 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	updateHighWater :=
 		!inBackfill && (atBoundary || cf.js.canCheckpointHighWatermark(frontierChanged))
 
-	// TODO rate-limit by average time to checkpoint
 	persistSpanFrontier := cf.js.canPersistFrontier()
 
 	// During backfills or when some problematic spans stop advancing, the
@@ -1894,9 +1902,11 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
 			if persistFrontier {
+				frontierPersistenceTimer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 				if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
 					return err
 				}
+				frontierPersistenceTimer()
 			}
 
 			// TODO(#153299): Make sure we only updated per-table PTS if
