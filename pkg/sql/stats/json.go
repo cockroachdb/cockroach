@@ -162,7 +162,8 @@ func (js *JSONStatistic) GetHistogram(
 	return h, nil
 }
 
-// IsPartial returns true if this statistic was collected with a where clause.
+// IsPartial returns true if this statistic was collected with USING EXTREMES
+// or with a WHERE clause.
 func (js *JSONStatistic) IsPartial() bool {
 	return js.PartialPredicate != ""
 }
@@ -180,5 +181,5 @@ func (js *JSONStatistic) IsForecast() bool {
 
 // IsAuto returns true if this statistic was collected automatically.
 func (js *JSONStatistic) IsAuto() bool {
-	return js.Name == jobspb.AutoStatsName
+	return js.Name == jobspb.AutoStatsName || js.Name == jobspb.AutoPartialStatsName
 }

@@ -8,6 +8,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -206,6 +207,367 @@ func TestMergeStatistics(t *testing.T) {
 	})
 }
 
+func TestMergeConstrainedStatistics(t *testing.T) {
+	testCases := []struct {
+		initial  *testStat
+		partial  *testStat
+		expected *testStat
+		err      bool
+	}{
+		// Partial stat fully contained within full stat, with aligned buckets.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 29, dist: 14, null: 0, size: 1,
+				hist: testHistogram{
+					{3, 0, 0, 20},
+					{2, 4, 3, 25},
+					{2, 5, 3, 30},
+					{3, 10, 4, 35},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 43, dist: 25, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{3, 9, 7, 20},
+					{2, 11, 7, 30},
+					{2, 15, 7, 40},
+				},
+			},
+		},
+		// Partial stat starts before full stat and ends within full stat, with
+		// aligned buckets.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 40, dist: 17, null: 0, size: 1,
+				hist: testHistogram{
+					{4, 0, 0, 5},
+					{2, 3, 2, 10},
+					{2, 10, 4, 15},
+					{5, 6, 4, 20},
+					{3, 5, 2, 25},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 51, dist: 25, null: 0, size: 1,
+				hist: testHistogram{
+					{4, 0, 0, 5},
+					{2, 3, 2, 10},
+					{5, 18, 9, 20},
+					{3, 10, 5, 30},
+					{2, 4, 4, 40},
+				},
+			},
+		},
+		// Partial stat starts before full stat and ends after full stat, with
+		// misaligned buckets.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 36, dist: 13, null: 0, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 5},
+					{2, 6, 2, 15},
+					{8, 4, 4, 25},
+					{6, 8, 3, 30},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 42, dist: 18, null: 0, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 5},
+					{0, 3, 1, 10},
+					{0, 7, 4, 20},
+					{6, 18, 6, 30},
+					{2, 4, 4, 40},
+				},
+			},
+		},
+		// Partial stat starts within full stat and ends after full stat, with
+		// misaligned buckets.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 36, dist: 13, null: 0, size: 1,
+				hist: testHistogram{
+					{3, 0, 0, 25},
+					{8, 6, 2, 35},
+					{6, 8, 6, 45},
+					{2, 3, 1, 55},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 50, dist: 24, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{0, 8, 4, 30},
+					{0, 15, 5, 40},
+					{6, 4, 3, 45},
+					{2, 3, 1, 55},
+				},
+			},
+		},
+		// Partial stat strictly before full stat.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 11, dist: 6, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 2},
+					{2, 3, 1, 5},
+					{3, 2, 2, 8},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 36, dist: 25, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 2},
+					{2, 3, 1, 5},
+					{3, 2, 2, 8},
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+		},
+		// Partial stat strictly after full stat.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 11, dist: 6, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 42},
+					{2, 3, 1, 45},
+					{3, 2, 2, 48},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 36, dist: 25, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+					{1, 0, 0, 42},
+					{2, 3, 1, 45},
+					{3, 2, 2, 48},
+				},
+			},
+		},
+		// Partial stat bucket overlapping multiple full stat buckets.
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 33, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{4, 4, 3, 15},
+					{2, 16, 8, 35},
+					{2, 4, 4, 40},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 33, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{0, 12, 6, 20},
+					{0, 8, 4, 30},
+					{2, 10, 7, 40},
+				},
+			},
+		},
+		// Edge cases
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 2, dist: 1, null: 0, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 10},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 26, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+		},
+		{
+			initial: &testStat{
+				at: 1, row: 25, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{2, 4, 4, 40},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 1, dist: 1, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 40},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 24, dist: 19, null: 0, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{2, 9, 7, 20},
+					{3, 4, 4, 30},
+					{1, 4, 4, 40},
+				},
+			},
+		},
+		// Full stat nulls are retained when partial stat has no nulls.
+		{
+			initial: &testStat{
+				at: 1, row: 7, dist: 4, null: 4, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{1, 1, 1, 20},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 6, dist: 4, null: 0, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 5},
+					{2, 2, 2, 10},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 12, dist: 7, null: 4, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 5},
+					{2, 2, 2, 10},
+					{1, 1, 1, 20},
+				},
+			},
+		},
+		// Full stat nulls are replaced when partial stat has nulls.
+		{
+			initial: &testStat{
+				at: 1, row: 7, dist: 4, null: 4, size: 1,
+				hist: testHistogram{
+					{1, 0, 0, 10},
+					{1, 1, 1, 20},
+				},
+			},
+			partial: &testStat{
+				at: 1, row: 14, dist: 5, null: 8, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 5},
+					{2, 2, 2, 10},
+				},
+			},
+			expected: &testStat{
+				at: 1, row: 16, dist: 7, null: 8, size: 1,
+				hist: testHistogram{
+					{2, 0, 0, 5},
+					{2, 2, 2, 10},
+					{1, 1, 1, 20},
+				},
+			},
+		},
+	}
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			initial := tc.initial.toTableStatistic(ctx, "stat", i, descpb.ColumnIDs{1}, 1 /* statID */, 0 /* fullStatID */, st)
+			partial := tc.partial.toTableStatistic(ctx, "stat", i, descpb.ColumnIDs{1}, 0 /* statID */, 1 /* fullStatID */, st)
+			expected := tc.expected.toTableStatistic(ctx, "__merged__", i, descpb.ColumnIDs{1}, 0 /* statID */, 0 /* fullStatID */, st)
+			merged, err := mergePartialStatistic(ctx, initial, partial, st)
+			if err != nil {
+				if !tc.err {
+					t.Errorf("test case %d unexpected mergeStatistics err: %v", i, err)
+				}
+				return
+			}
+			// Round distinct ranges for easier comparison.
+			merged.RoundDistinctRanges()
+			if tc.err {
+				t.Errorf("test case %d expected mergeStatistics err, was:\n%s", i, merged)
+				return
+			}
+			if !reflect.DeepEqual(merged, expected) {
+				t.Errorf("test case %d incorrect merge\n%s\nexpected\n%s", i, merged, expected)
+			}
+		})
+
+	}
+}
+
 // TestMergedStatistics tests MergedStatistics which
 // merges an array of full statistics with partial statistics.
 func TestMergedStatistics(t *testing.T) {
@@ -380,5 +742,15 @@ func TestMergedStatistics(t *testing.T) {
 				t.Errorf("test case %d incorrect, merged:\n%s\nexpected:\n%s", i, merged, expected)
 			}
 		})
+	}
+}
+
+func (tabStat *TableStatistic) RoundDistinctRanges() {
+	for i := range tabStat.Histogram {
+		tabStat.Histogram[i].DistinctRange = math.Round(tabStat.Histogram[i].DistinctRange)
+	}
+	for i := range tabStat.HistogramData.Buckets {
+		tabStat.HistogramData.Buckets[i].DistinctRange =
+			math.Round(tabStat.HistogramData.Buckets[i].DistinctRange)
 	}
 }
