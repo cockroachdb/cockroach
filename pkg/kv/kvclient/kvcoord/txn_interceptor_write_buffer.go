@@ -1816,8 +1816,8 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		flushBatch := ba.ShallowCopy()
 		clearBatchRequestOptions(flushBatch)
 		flushBatch.Requests = reqs
-		log.VEventf(ctx, 2, "flushing %d buffered requests via separate batch", len(reqs))
 
+		log.VEventf(ctx, 2, "flushing %d buffered requests in separate batch: %v", len(reqs), ba)
 		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
 		if pErr != nil {
 			pErr.Index = nil
@@ -1832,6 +1832,8 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	} else {
 		ba = ba.ShallowCopy()
 		ba.Requests = append(reqs, ba.Requests...)
+
+		log.VEventf(ctx, 2, "flushing %d buffered requests in batch: %v", len(reqs), ba)
 		br, pErr := twb.wrapped.SendLocked(ctx, ba)
 		if pErr != nil {
 			return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
