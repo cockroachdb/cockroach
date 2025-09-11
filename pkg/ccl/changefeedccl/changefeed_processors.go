@@ -1983,8 +1983,8 @@ func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context) (bool, err
 	}
 
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
-	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		for tableID, tableFrontier := range cf.frontier.Frontiers() {
+	for tableID, tableFrontier := range cf.frontier.Frontiers() {
+		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			name := func() string {
 				if tableID == 0 {
 					return "coordinator"
@@ -1994,10 +1994,10 @@ func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context) (bool, err
 			if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, name, tableFrontier); err != nil {
 				return err
 			}
+			return nil
+		}); err != nil {
+			return false, err
 		}
-		return nil
-	}); err != nil {
-		return false, err
 	}
 	timer()
 
