@@ -770,6 +770,7 @@ func importPlanHook(
 			Tables:                tableDetails,
 			Types:                 typeDetails,
 			DatabasePrimaryRegion: databasePrimaryRegion,
+			PreImportRowCount:     make(map[uint64]int64),
 		}
 
 		jr := jobs.Record{
