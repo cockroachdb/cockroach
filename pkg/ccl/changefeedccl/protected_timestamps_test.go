@@ -404,7 +404,29 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		perTablePTSEnabled :=
+			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
+				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+
+		if perTablePTSEnabled {
+			eFeed, ok := f2.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
+			hwm, err := eFeed.HighWaterMark()
+			require.NoError(t, err)
+			require.NoError(t, eFeed.WaitForHighWaterMark(hwm))
+
+			require.Equal(t, 2, getNumPTSRecords())
+			// testutils.SucceedsSoon(t, func() error {
+			// 	// Wait for the per-table PTS record to be created for the second table.
+			// 	// This happens the next time we advance the highwater.
+			// 	if getNumPTSRecords() != 2 {
+			// 		return errors.Newf("expected 2 PTS records, got %d", getNumPTSRecords())
+			// 	}
+			// 	return nil
+			// })
+		} else {
+			require.Equal(t, 1, getNumPTSRecords())
+		}
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
@@ -737,6 +759,8 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -853,6 +877,12 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+
+		// Since old style PTS records should not be created when per-table PTS records are enabled,
+		// we disable them for this test. Per-table PTS breaks assumptions about where we can find
+		// the PTS record uuids.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -1090,29 +1120,10 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO table2 VALUES (1)`)
 		sqlDB.Exec(t, `INSERT INTO table3 VALUES (1)`)
 
-		// Get table IDs for controlling lagging behavior
 		var table1ID, table2ID, table3ID descpb.ID
 		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table1' AND database_name = current_database()`).Scan(&table1ID)
 		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table2' AND database_name = current_database()`).Scan(&table2ID)
 		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table3' AND database_name = current_database()`).Scan(&table3ID)
-
-		knobs := s.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-
-		var table1Lagging, table2Lagging, table3Lagging atomic.Bool
-		knobs.IsTableLagging = func(tableID descpb.ID) bool {
-			switch tableID {
-			case table1ID:
-				return table1Lagging.Load()
-			case table2ID:
-				return table2Lagging.Load()
-			case table3ID:
-				return table3Lagging.Load()
-			default:
-				return false
-			}
-		}
 
 		createStmt := `CREATE CHANGEFEED FOR table1, table2, table3 WITH resolved='100ms'`
 		testFeed := feed(t, f, createStmt)
@@ -1129,80 +1140,81 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 
 		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
 
-		assertTablePTSRecords := func(expectedTables map[descpb.ID]struct{}) {
-			testutils.SucceedsSoon(t, func() error {
-				return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-					var ptsEntries cdcprogresspb.ProtectedTimestampRecords
-					if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
-						return err
-					}
+		// Assert that the feed-level PTS record does not exist because per-table
+		// protected timestamps are enabled.
+		progress, err := eFeed.Progress()
+		require.NoError(t, err)
+		require.Equal(t, progress.ProtectedTimestampRecord, uuid.UUID{})
 
-					if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
-						return errors.Newf("expected %d per-table PTS records, got %d", len(expectedTables), len(ptsEntries.ProtectedTimestampRecords))
-					}
-
-					for tableID := range expectedTables {
-						if ptsEntries.ProtectedTimestampRecords[tableID] == nil {
-							return errors.Newf("expected PTS record for table %d", tableID)
-						}
-					}
-					return nil
-				})
-			})
-		}
-
-		// Assert that the feed-level PTS record exists.
-		assertFeedLevelPTS := func() {
-			testutils.SucceedsSoon(t, func() error {
-				hwm, err := eFeed.HighWaterMark()
-				if err != nil {
-					return err
-				}
-				if hwm.IsEmpty() {
-					return errors.New("waiting for high watermark to be set")
-				}
-				return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-					progress, err := eFeed.Progress()
-					if err != nil {
-						return err
-					}
-					if progress.ProtectedTimestampRecord.Equal(uuid.UUID{}) {
-						return errors.New("expected feed-level PTS record to be set")
-					}
-					return nil
-				})
-			})
-		}
-
-		assertFeedLevelPTS()
-		// Since no tables are lagging, we should see 0 per-table records.
-		assertTablePTSRecords(map[descpb.ID]struct{}{})
-
-		// Make table1 start lagging. We should see 1 table-level record.
-		table1Lagging.Store(true)
-		assertTablePTSRecords(map[descpb.ID]struct{}{table1ID: {}})
-
-		// Make the rest of the tables lag. We should see 3 total table-level records.
-		table2Lagging.Store(true)
-		table3Lagging.Store(true)
-		assertTablePTSRecords(map[descpb.ID]struct{}{
+		tablePTS := make(map[descpb.ID]hlc.Timestamp)
+		expectedTables := map[descpb.ID]struct{}{
 			table1ID: {},
 			table2ID: {},
 			table3ID: {},
+		}
+		testutils.SucceedsSoon(t, func() error {
+			return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+				if err := readChangefeedJobInfo(
+					ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID(),
+				); err != nil {
+					return err
+				}
+
+				if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
+					return errors.Newf(
+						"expected %d per-table PTS records, got %d",
+						len(expectedTables), len(ptsEntries.ProtectedTimestampRecords),
+					)
+				}
+
+				for tableID := range expectedTables {
+					if ptsEntries.ProtectedTimestampRecords[tableID] == nil {
+						return errors.Newf("expected PTS record for table %d", tableID)
+					}
+					ptsQry := fmt.Sprintf(
+						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
+						ptsEntries.ProtectedTimestampRecords[tableID],
+					)
+					var tsStr string
+					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
+					ts, err := hlc.ParseHLC(tsStr)
+					require.NoError(t, err)
+					tablePTS[tableID] = ts
+				}
+				return nil
+			})
 		})
 
-		// Make table3 stop lagging. We should see only 2 table-level records.
-		table3Lagging.Store(false)
-		assertTablePTSRecords(map[descpb.ID]struct{}{
-			table1ID: {},
-			table2ID: {},
-		})
+		// Assert that each per table PTS record progresses as expected.
+		testutils.SucceedsSoon(t, func() error {
+			return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+				if err := readChangefeedJobInfo(
+					ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID(),
+				); err != nil {
+					return err
+				}
 
-		// Make the remaining tables stop lagging. We should see 0 table-level records.
-		table1Lagging.Store(false)
-		table2Lagging.Store(false)
-		assertTablePTSRecords(map[descpb.ID]struct{}{})
-		assertFeedLevelPTS()
+				for tableID := range expectedTables {
+					ptsQry := fmt.Sprintf(
+						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
+						ptsEntries.ProtectedTimestampRecords[tableID],
+					)
+					var tsStr string
+					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
+					ts, err := hlc.ParseHLC(tsStr)
+					require.NoError(t, err)
+					if !ts.After(tablePTS[tableID]) {
+						return errors.Newf(
+							"expected PTS record for table %d to progress since %s, got %s",
+							tableID, tablePTS[tableID], ts,
+						)
+					}
+				}
+				return nil
+			})
+		})
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
