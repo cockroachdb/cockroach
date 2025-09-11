@@ -74,7 +74,11 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	).Scan(&ok); err != nil || !ok {
 		return err
 	}
+
 	var versionStr string
+	if _, err := db.Exec(`SET allow_unsafe_internals=true`); err != nil {
+		return err
+	}
 	err := db.QueryRow(
 		`SELECT value FROM crdb_internal.node_build_info WHERE field = 'Version'`,
 	).Scan(&versionStr)

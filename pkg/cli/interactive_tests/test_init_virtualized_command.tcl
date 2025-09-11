@@ -21,6 +21,7 @@ system "$argv init --insecure --host=localhost --virtualized"
 # Start a shell and expect that we end up inside a secondary virtual
 # cluster.
 spawn $argv sql --no-line-editor
+send "set allow_unsafe_internals=true;\r"
 send "SELECT crdb_internal.pretty_key(crdb_internal.table_span(1)\[1\], 0);\r"
 eexpect "/3/Table/1"
 

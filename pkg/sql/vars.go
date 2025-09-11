@@ -64,6 +64,20 @@ const (
 	PgCompatLocale = "C.UTF-8"
 )
 
+// defaultAllowUnsafeInternals is the default value of the allow_unsafe_internals
+// session variable.
+var defaultAllowUnsafeInternals = false
+
+var defaultAllowUnsafeInternalsFn = func(*settings.Values) string {
+	return formatBoolAsPostgresSetting(defaultAllowUnsafeInternals)
+}
+
+// OverrideDefaultAllowUnsafeInternals is used in tests to change the default
+// value of the allow_unsafe_internals session variable.
+func OverrideDefaultAllowUnsafeInternals(d bool) {
+	defaultAllowUnsafeInternals = d
+}
+
 type getStringValFn = func(
 	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, kv *kv.Txn,
 ) (string, error)
@@ -4382,7 +4396,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
 		},
-		GlobalDefault: globalTrue,
+		GlobalDefault: defaultAllowUnsafeInternalsFn,
 	},
 
 	`optimizer_use_improved_hoist_join_project`: {
