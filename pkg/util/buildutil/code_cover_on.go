@@ -5,9 +5,9 @@
 
 //go:build bazel_code_cover
 
-// Package bazelcodecover allows instrumented binaries to output code coverage
+// Allows instrumented binaries to output code coverage
 // data.
-package bazelcodecover
+package buildutil
 
 import (
 	"fmt"
@@ -20,6 +20,9 @@ import (
 
 	"github.com/bazelbuild/rules_go/go/tools/coverdata"
 )
+
+// Indicates that the binary was instrumented with coverage.
+const CrdbCoverageBuild = true
 
 // MaybeInitCodeCoverage sets up dumping of coverage counters on exit.
 //
@@ -50,11 +53,32 @@ func MaybeInitCodeCoverage() {
 		fmt.Fprintln(os.Stderr, "warning: BAZEL_COVER_DIR not set, no coverage data emitted")
 		return
 	}
-	runtime_addExitHook(func() { emitCoverageCounters(dir) }, true /* runOnNonZeroExit */)
+	//runtime_addExitHook(func() { emitCoverageCounters(dir) }, true /* runOnNonZeroExit */)
+	RegisterExitHook(func() { emitCoverageCounters(dir) }, true /* runOnNonZeroExit */)
 }
 
-//go:linkname runtime_addExitHook runtime.addExitHook
-func runtime_addExitHook(f func(), runOnNonZeroExit bool)
+// N.B. Go 1.23 moved addExitHook to internal/runtime/exithook, so we can no longer link to it.
+// (See https://github.com/golang/go/commit/ff2070d9398aff1c44691a90761eb35ea3cd4601).
+// As a workaround, use internal/runtime/exithook.Add.
+
+// go:linkname runtime_addExitHook runtime.addExitHook
+//func runtime_addExitHook(f func(), runOnNonZeroExit bool)
+
+// hook mirrors internal/runtime/exithook.Hook exactly.
+type hook struct {
+	F            func()
+	RunOnFailure bool
+}
+
+//go:linkname add internal/runtime/exithook.Add
+func add(h hook) // implemented in the runtime; body is linked in
+
+// RegisterExitHook registers f to run when the process terminates.
+// If runOnFailure is false, the hook is skipped when the program
+// exits with a non‑zero status.
+func RegisterExitHook(f func(), runOnFailure bool) {
+	add(hook{F: f, RunOnFailure: runOnFailure})
+}
 
 // emitCoverageCounters emits the counters to a new .gocov file in the given
 // directory; any error is reported to stderr.
