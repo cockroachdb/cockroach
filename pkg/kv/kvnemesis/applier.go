@@ -605,6 +605,9 @@ func applyBatchOp(
 			panic(errors.AssertionFailedf(`Barrier cannot be used in batches`))
 		case *FlushLockTableOperation:
 			panic(errors.AssertionFailedf(`FlushLockOperation cannot be used in batches`))
+		case *MutateBatchHeaderOperation:
+			b.Header.MaxSpanRequestKeys = subO.MaxSpanRequestKeys
+			b.Header.TargetBytes = subO.TargetBytes
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -615,25 +618,34 @@ func applyBatchOp(
 	// to each result.
 	err = nil
 	o.Result.OptionalTimestamp = ts
+	resultIdx := 0
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
-			if b.Results[i].Err != nil {
-				subO.Result = resultInit(ctx, b.Results[i].Err)
+			res := b.Results[resultIdx]
+			if res.Err != nil {
+				subO.Result = resultInit(ctx, res.Err)
 			} else {
-				subO.Result.Type = ResultType_Value
-				result := b.Results[i].Rows[0]
-				if result.Value != nil {
-					subO.Result.Value = result.Value.RawBytes
+				if res.ResumeSpan != nil {
+					subO.Result.Type = ResultType_NoError
 				} else {
-					subO.Result.Value = nil
+					subO.Result.Type = ResultType_Value
+					result := res.Rows[0]
+					if result.Value != nil {
+						subO.Result.Value = result.Value.RawBytes
+					} else {
+						subO.Result.Value = nil
+					}
 				}
 			}
+			subO.Result.ResumeSpan = res.ResumeSpan
 		case *PutOperation:
-			err := b.Results[i].Err
+			err := b.Results[resultIdx].Err
 			subO.Result = resultInit(ctx, err)
+			subO.Result.ResumeSpan = b.Results[resultIdx].ResumeSpan
 		case *ScanOperation:
-			kvs, err := b.Results[i].Rows, b.Results[i].Err
+			res := b.Results[resultIdx]
+			kvs, err := res.Rows, res.Err
 			if err != nil {
 				subO.Result = resultInit(ctx, err)
 			} else {
@@ -646,11 +658,14 @@ func applyBatchOp(
 					}
 				}
 			}
+			subO.Result.ResumeSpan = res.ResumeSpan
 		case *DeleteOperation:
-			err := b.Results[i].Err
+			err := b.Results[resultIdx].Err
 			subO.Result = resultInit(ctx, err)
+			subO.Result.ResumeSpan = b.Results[resultIdx].ResumeSpan
 		case *DeleteRangeOperation:
-			keys, err := b.Results[i].Keys, b.Results[i].Err
+			res := b.Results[resultIdx]
+			keys, err := res.Keys, res.Err
 			if err != nil {
 				subO.Result = resultInit(ctx, err)
 			} else {
@@ -660,12 +675,19 @@ func applyBatchOp(
 					subO.Result.Keys[j] = key
 				}
 			}
+			subO.Result.ResumeSpan = res.ResumeSpan
 		case *DeleteRangeUsingTombstoneOperation:
 			subO.Result = resultInit(ctx, err)
+			subO.Result.ResumeSpan = b.Results[resultIdx].ResumeSpan
+		case *MutateBatchHeaderOperation:
+			subO.Result = resultInit(ctx, nil)
 		case *AddSSTableOperation:
 			panic(errors.AssertionFailedf(`AddSSTable cannot be used in batches`))
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
+		}
+		if o.Ops[i].OperationHasResultInBatch() {
+			resultIdx++
 		}
 	}
 }
