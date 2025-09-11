@@ -302,6 +302,7 @@ go_test(
         "client_replica_test.go",
         "client_spanconfigs_test.go",
         "client_split_burst_test.go",
+        "client_split_intent_resolution_test.go",
         "client_split_test.go",
         "client_store_test.go",
         "client_tenant_test.go",
