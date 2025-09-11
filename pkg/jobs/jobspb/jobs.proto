@@ -714,9 +714,11 @@ message ImportDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
+  map<uint64, int64> pre_import_row_count = 28;
+
   reserved 4, 7, 8, 9, 10, 11, 14, 22, 23, 24, 25;
 
-  // next val: 28
+  // next val: 29
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
