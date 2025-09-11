@@ -45,6 +45,20 @@ func writeChangefeedJobInfo(
 	return jobs.WriteChunkedFileToJobInfo(ctx, filename, data, txn, jobID)
 }
 
+// deleteChangefeedJobInfo deletes a changefeed job info protobuf from the
+// job_info table. A changefeed-specific filename is required.
+func deleteChangefeedJobInfo(
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
+) error {
+	if !strings.HasPrefix(filename, jobInfoFilenamePrefix) {
+		return errors.AssertionFailedf("filename %q must start with prefix %q", filename, jobInfoFilenamePrefix)
+	}
+	if !strings.HasSuffix(filename, jobInfoFilenameExtension) {
+		return errors.AssertionFailedf("filename %q must end with extension %q", filename, jobInfoFilenameExtension)
+	}
+	return jobs.WriteChunkedFileToJobInfo(ctx, filename, nil, txn, jobID)
+}
+
 // readChangefeedJobInfo reads a changefeed job info protobuf from the
 // job_info table. A changefeed-specific filename is required.
 func readChangefeedJobInfo(
