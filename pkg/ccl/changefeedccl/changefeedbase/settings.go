@@ -207,16 +207,6 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 	settings.WithPublic)
 
-// ProtectTimestampBucketingInterval controls the amount a table is allowed to lag behind the
-// most advanced table before a per-table protected timestamp record is created
-var ProtectTimestampBucketingInterval = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"changefeed.protect_timestamp_bucketing_interval",
-	"controls the amount a table is allowed to lag behind the most advanced table before a per-table protected timestamp record is created; "+
-		"only used when changefeed.protect_timestamp.per_table.enabled is true",
-	2*time.Minute,
-	settings.PositiveDuration)
-
 // ProtectTimestampLag controls how much the protected timestamp record should lag behind the high watermark
 var ProtectTimestampLag = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
