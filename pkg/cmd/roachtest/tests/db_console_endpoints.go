@@ -112,6 +112,8 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 		c.CRDBNodes(),
 		// In 24.3 new endpoints were added to /api/v2 server.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		// Panics are problematic for the /logs endpoints, see https://github.com/cockroachdb/cockroach/issues/151493.
+		mixedversion.DisableMutators(mixedversion.PanicNode),
 	)
 
 	mvt.InMixedVersion("test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
