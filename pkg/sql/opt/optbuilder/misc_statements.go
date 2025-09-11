@@ -323,5 +323,11 @@ func (b *Builder) buildWhereForStatistics(
 			"predicate is a contradiction"))
 	}
 
+	if cons.Spans.Count() > 1 {
+		panic(pgerror.New(
+			pgcode.FeatureNotSupported,
+			"cannot create statistics with a WHERE clause that produces multiple spans"))
+	}
+
 	return indexOrd, &cons
 }
