@@ -804,7 +804,8 @@ func (tabStat *TableStatistic) String() string {
 	)
 }
 
-// IsPartial returns true if this statistic was collected with a where clause.
+// IsPartial returns true if this statistic was collected with USING EXTREMES
+// or with a WHERE clause.
 func (tsp *TableStatisticProto) IsPartial() bool {
 	return tsp.PartialPredicate != ""
 }
@@ -822,7 +823,7 @@ func (tsp *TableStatisticProto) IsForecast() bool {
 
 // IsAuto returns true if this statistic was collected automatically.
 func (tsp *TableStatisticProto) IsAuto() bool {
-	return tsp.Name == jobspb.AutoStatsName
+	return tsp.Name == jobspb.AutoStatsName || tsp.Name == jobspb.AutoPartialStatsName
 }
 
 // TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
