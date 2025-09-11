@@ -19,7 +19,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import isUndefined from "lodash/isUndefined";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
@@ -51,13 +51,6 @@ import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.s
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;
 
-interface StatementDiagnosticsHistoryViewState {
-  sortSetting: {
-    columnTitle?: string;
-    ascending: boolean;
-  };
-}
-
 class StatementDiagnosticsHistoryTable extends SortedTable<clusterUiApi.StatementDiagnosticsReport> {}
 
 const StatementColumn: React.FC<{ fingerprint: string }> = ({
@@ -85,11 +78,28 @@ const StatementColumn: React.FC<{ fingerprint: string }> = ({
   return <Text textType={TextTypes.Code}>{shortenedStatement}</Text>;
 };
 
-class StatementDiagnosticsHistoryView extends React.Component<
-  StatementDiagnosticsHistoryViewProps,
-  StatementDiagnosticsHistoryViewState
-> {
-  columns: ColumnDescriptor<clusterUiApi.StatementDiagnosticsReport>[] = [
+const StatementDiagnosticsHistoryView: React.FC<
+  StatementDiagnosticsHistoryViewProps
+> = ({
+  diagnosticsReports,
+  loading,
+  getStatementByFingerprint,
+  onDiagnosticCancelRequest,
+  refresh,
+}) => {
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    columnTitle: "activated_on",
+    ascending: false,
+  });
+
+  const downloadRef = useRef<DownloadFileRef>();
+  const tablePageSize = 16;
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const columns: ColumnDescriptor<clusterUiApi.StatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
       name: "activated_on",
@@ -104,7 +114,6 @@ class StatementDiagnosticsHistoryView extends React.Component<
       title: "Statement",
       name: "statement",
       cell: record => {
-        const { getStatementByFingerprint } = this.props;
         const fingerprint = record.statement_fingerprint;
         const statement = getStatementByFingerprint(fingerprint);
         const { implicit_txn: implicitTxn = "true", query } =
@@ -175,7 +184,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
               size="small"
               type="secondary"
               onClick={() => {
-                this.props.onDiagnosticCancelRequest(record);
+                onDiagnosticCancelRequest(record);
               }}
             >
               Cancel request
@@ -186,26 +195,10 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
   ];
 
-  tablePageSize = 16;
-
-  downloadRef = React.createRef<DownloadFileRef>();
-
-  constructor(props: StatementDiagnosticsHistoryViewProps) {
-    super(props);
-    (this.state = {
-      sortSetting: {
-        columnTitle: "activated_on",
-        ascending: false,
-      },
-    }),
-      props.refresh();
-  }
-
-  renderTableTitle = () => {
-    const { diagnosticsReports } = this.props;
+  const renderTableTitle = () => {
     const totalCount = diagnosticsReports.length;
 
-    if (totalCount <= this.tablePageSize) {
+    if (totalCount <= tablePageSize) {
       return (
         <div className="diagnostics-history-view__table-header">
           <Text>{`${totalCount} diagnostics bundles`}</Text>
@@ -215,65 +208,60 @@ class StatementDiagnosticsHistoryView extends React.Component<
 
     return (
       <div className="diagnostics-history-view__table-header">
-        <Text>{`${this.tablePageSize} of ${totalCount} diagnostics bundles`}</Text>
+        <Text>{`${tablePageSize} of ${totalCount} diagnostics bundles`}</Text>
       </div>
     );
   };
 
-  changeSortSetting = (ss: SortSetting) => {
-    this.setState({
-      sortSetting: ss,
-    });
+  const changeSortSetting = (ss: SortSetting) => {
+    setSortSetting(ss);
   };
 
-  render() {
-    const { diagnosticsReports, loading } = this.props;
-    const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
-      ...diagnosticsReport,
-      key: idx,
-    }));
+  const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
+    ...diagnosticsReport,
+    key: idx,
+  }));
 
-    return (
-      <section className="section">
-        <Helmet title="Statement diagnostics history | Debug" />
-        <HeaderSection
-          title="Statement diagnostics history"
-          navigationBackConfig={{
-            text: "Advanced Debug",
-            path: "/debug",
-          }}
-        />
-        {this.renderTableTitle()}
-        <StatementDiagnosticsHistoryTable
-          className="statements-table"
-          tableWrapperClassName="sorted-table"
-          data={dataSource}
-          columns={this.columns}
-          loading={loading}
-          renderNoResult={
-            <EmptyTable
-              title="No statement diagnostics to show"
-              icon={EmptyTableIcon}
-              message={
-                "Statement diagnostics  can help when troubleshooting issues with specific queries. " +
-                "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
-                " plans, table statistics, and traces."
-              }
-              footer={
-                <Anchor href={statementDiagnostics} target="_blank">
-                  Learn more about statement diagnostics
-                </Anchor>
-              }
-            />
-          }
-          sortSetting={this.state.sortSetting}
-          onChangeSortSetting={this.changeSortSetting}
-        />
-        <DownloadFile ref={this.downloadRef} />
-      </section>
-    );
-  }
-}
+  return (
+    <section className="section">
+      <Helmet title="Statement diagnostics history | Debug" />
+      <HeaderSection
+        title="Statement diagnostics history"
+        navigationBackConfig={{
+          text: "Advanced Debug",
+          path: "/debug",
+        }}
+      />
+      {renderTableTitle()}
+      <StatementDiagnosticsHistoryTable
+        className="statements-table"
+        tableWrapperClassName="sorted-table"
+        data={dataSource}
+        columns={columns}
+        loading={loading}
+        renderNoResult={
+          <EmptyTable
+            title="No statement diagnostics to show"
+            icon={EmptyTableIcon}
+            message={
+              "Statement diagnostics  can help when troubleshooting issues with specific queries. " +
+              "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
+              " plans, table statistics, and traces."
+            }
+            footer={
+              <Anchor href={statementDiagnostics} target="_blank">
+                Learn more about statement diagnostics
+              </Anchor>
+            }
+          />
+        }
+        sortSetting={sortSetting}
+        onChangeSortSetting={changeSortSetting}
+      />
+      <DownloadFile ref={downloadRef} />
+    </section>
+  );
+};
 
 interface MapStateToProps {
   loading: boolean;
