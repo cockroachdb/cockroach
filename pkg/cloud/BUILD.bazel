@@ -6,6 +6,7 @@ go_library(
         "cloud_io.go",
         "cloud_logging_transport.go",
         "external_storage.go",
+        "flush_writer.go",
         "impl_registry.go",
         "kms.go",
         "kms_test_utils.go",
