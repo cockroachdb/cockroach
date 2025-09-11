@@ -78,6 +78,7 @@ go_test(
         "histogram_test.go",
         "main_test.go",
         "merge_test.go",
+        "new_merge_test.go",
         "quantile_test.go",
         "row_sampling_test.go",
         "simple_linear_regression_test.go",

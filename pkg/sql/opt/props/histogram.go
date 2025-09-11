@@ -15,6 +15,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -660,7 +662,7 @@ func (hi *histogramIter) setIdx(i int) {
 	hi.next()
 }
 
-// next sets the histogramIter to point to the next bucket. If hi.desc is true
+// Next sets the histogramIter to point to the Next bucket. If hi.desc is true
 // the "next" bucket is actually the previous bucket in the histogram. Returns
 // false if there are no more buckets.
 func (hi *histogramIter) next() (ok bool) {
@@ -1265,4 +1267,206 @@ func (w *histogramWriter) write(out io.Writer) {
 	for i := range w.cells[boundaries] {
 		fmt.Fprintf(out, "%s", tablewriter.Pad(w.cells[boundaries][i], "-", w.colWidths[i]))
 	}
+}
+
+func init() {
+	// Inject the MergeHistograms function into the stats package to avoid an
+	// import cycle.
+	stats.MergeHistograms = MergeHistograms
+}
+
+// MergeHistograms merges the histograms from a full statistic and a more recent
+// partial statistic, returning a new histogram that combines the information
+// from both. It does this by updating counts in the full histogram's buckets
+// based on overlapping buckets in the partial histogram, and creating new
+// buckets outside the full histogram's range. This function requires that the
+// partial histogram is a single continuous histogram without gaps, and neither
+// histogram has a NULL bucket.
+//
+// The approach is similar to a merge join, where we iterate over both
+// sorted histograms. We start by creating new buckets for each partial bucket
+// that comes before the first full bucket. Next, we append each full bucket
+// after overwriting parts that overlap with partial buckets, assuming that
+// values are uniformly distributed across both buckets. Finally, we create new
+// buckets for each partial stat bucket that comes after the last full bucket.
+//
+// This example illustrates the merging process for overlapping buckets, where
+// the histogram format is {NumEq, NumRange, DistinctRange, UpperBound}:
+//
+// Full histogram:    [{1, 0, 0, 10},                {1, 4, 2, 20}]
+// Partial histogram: [{2, 0, 0, 10}, {1, 3, 3, 15}]
+// Merged histogram:  [{2, 0, 0, 10},                {1, 6, 5, 20}]
+//
+// The first partial bucket completely overlaps with the first full bucket, so
+// we produce a bucket with the partial bucket's counts. The second partial. The
+// second partial bucket overlaps with half of the second full bucket's range,
+// so we assume that values are uniformly distribution within buckets and
+// produce a merged bucket that combines half of the full bucket's NumRange
+// and DistinctRange with those of the partial bucket. The full bucket's NumEq
+// is unchanged since the partial bucket does not overlap with its upper bound.
+func MergeHistograms(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	fullHistogram, partialHistogram []cat.HistogramBucket,
+	columnID descpb.ColumnID,
+) ([]cat.HistogramBucket, error) {
+	mergedHistogram := make([]cat.HistogramBucket, 0, len(fullHistogram)+len(partialHistogram))
+
+	colID := opt.ColumnID(columnID)
+	var pHist, fHist Histogram
+	pHist.Init(evalCtx, colID, partialHistogram)
+	fHist.Init(evalCtx, colID, fullHistogram)
+
+	var pIter, fIter histogramIter
+	pIter.init(&pHist, false)
+	fIter.init(&fHist, false)
+
+	var cols constraint.Columns
+	cols.InitSingle(opt.MakeOrderingColumn(colID, false))
+	keyCtx := constraint.MakeKeyContext(ctx, &cols, evalCtx)
+
+	var fullSb, partialSb, overlappingSb spanBuilder
+	var prefix []tree.Datum
+	fullSb.init(prefix)
+	partialSb.init(prefix)
+	overlappingSb.init(prefix)
+
+	fullStatMin := fullHistogram[0].UpperBound
+	fullStatMax := fullHistogram[len(fullHistogram)-1].UpperBound
+
+	// Step 1: Emit partial stat buckets before the first full stat bucket.
+	// Example:
+	//   Full:                |-------|--...
+	//   Partial:  |--|---|-------|------...
+	//             ^^^^^^^^^^^^
+	var beforeFullSpan constraint.Span
+	beforeFullSpan.Init(
+		constraint.EmptyKey, constraint.IncludeBoundary,
+		constraint.MakeKey(fullStatMin), constraint.IncludeBoundary,
+	)
+	for ; pIter.idx < len(partialHistogram); pIter.next() {
+		pBucketSpan := partialSb.makeSpanFromBucket(ctx, &pIter)
+
+		overlappingSpan := beforeFullSpan
+		if overlaps := overlappingSpan.TryIntersectWith(&keyCtx, &pBucketSpan); !overlaps {
+			break
+		}
+		overlappingSpan.PreferInclusive(&keyCtx)
+		filteredPartialBucket := filterPartialBucket(&pIter, &keyCtx, &overlappingSpan, 0)
+		mergedHistogram = append(mergedHistogram, filteredPartialBucket)
+
+		// The first full stat bucket will have 0 numRange and distinctRange, so we
+		// advance the full stat iterator after overwriting this bucket above.
+		if cmp := overlappingSpan.CompareEnds(&keyCtx, &beforeFullSpan); cmp == 0 {
+			fIter.next()
+		}
+
+		// Break to avoid advancing the pIter if the partial bucket ends after the
+		// beginning of the full stat since we haven't exhausted the current partial
+		// bucket.
+		if cmp := pBucketSpan.CompareEnds(&keyCtx, &beforeFullSpan); cmp > 0 {
+			break
+		}
+	}
+
+	// Step 2: Emit merged buckets within the range of the full stat buckets.
+	// Example:
+	//   Full:          |-------|----|--|----|
+	//   Partial:  ...------|------|------|----|--...
+	//                   ^^^^^^^^^^^^^^^^^^^^^
+	for ; fIter.idx < len(fullHistogram); fIter.next() {
+		fBucketSpan := fullSb.makeSpanFromBucket(ctx, &fIter)
+
+		// Start with the full bucket's counts, but we'll overwrite the parts that
+		// overlap with partial buckets.
+		mergedBucket := cat.HistogramBucket{
+			UpperBound:    fIter.b.UpperBound,
+			NumEq:         fIter.b.NumEq,
+			NumRange:      fIter.b.NumRange,
+			DistinctRange: fIter.b.DistinctRange,
+		}
+
+		for pIter.idx < len(partialHistogram) {
+			pBucketSpan := partialSb.makeSpanFromBucket(ctx, &pIter)
+
+			overlappingSpan := overlappingSb.makeSpanFromBucket(ctx, &pIter)
+			if overlaps := overlappingSpan.TryIntersectWith(&keyCtx, &fBucketSpan); !overlaps {
+				// No overlap, continue to next full bucket.
+				break
+			}
+
+			overlappingSpan.PreferInclusive(&keyCtx)
+			filteredPartialBucket := filterPartialBucket(&pIter, &keyCtx, &overlappingSpan, 0)
+			filteredFullBucket := getFilteredBucket(&fIter, &keyCtx, &overlappingSpan, 0)
+
+			// Advance the partial stat iterator if the current one is fully consumed.
+			if cmp := overlappingSpan.CompareEnds(&keyCtx, &pBucketSpan); cmp == 0 {
+				pIter.next()
+			}
+
+			// Merge the filtered partial bucket into the merged bucket by overwriting
+			// the overlapping counts.
+			mergedBucket.NumRange =
+				mergedBucket.NumRange - filteredFullBucket.NumRange + filteredPartialBucket.NumRange
+			mergedBucket.DistinctRange =
+				mergedBucket.DistinctRange - filteredFullBucket.DistinctRange + filteredPartialBucket.DistinctRange
+			if cmp := overlappingSpan.CompareEnds(&keyCtx, &fBucketSpan); cmp == 0 {
+				// Use the partial bucket's NumEq if it overlaps with the full bucket's
+				// upper bound.
+				mergedBucket.NumEq = filteredPartialBucket.NumEq
+				// We've fully consumed the full bucket.
+				break
+			} else {
+				if filteredPartialBucket.NumEq != 0 {
+					// The partial bucket ends before the full bucket, so we need to
+					// account for the partial bucket's upper bound value.
+					mergedBucket.DistinctRange += 1
+					mergedBucket.NumRange += filteredPartialBucket.NumEq
+				}
+			}
+		}
+
+		mergedHistogram = append(mergedHistogram, mergedBucket)
+	}
+
+	// Step 3: Emit partial stat buckets after the last full stat bucket.
+	// Example:
+	//   Full:     ...--|
+	//   Partial:  ...----|--|---|
+	//                   ^^^^^^^^^
+	var afterFullSpan constraint.Span
+	afterFullSpan.Init(
+		constraint.MakeKey(fullStatMax), constraint.ExcludeBoundary,
+		constraint.EmptyKey, constraint.IncludeBoundary,
+	)
+	for ; pIter.idx < len(partialHistogram); pIter.next() {
+		pBucketSpan := partialSb.makeSpanFromBucket(ctx, &pIter)
+
+		overlappingSpan := afterFullSpan
+		if overlaps := overlappingSpan.TryIntersectWith(&keyCtx, &pBucketSpan); !overlaps {
+			return nil, errors.AssertionFailedf(
+				"expected overlap between %s and %s", pBucketSpan, overlappingSpan)
+		}
+		overlappingSpan.PreferInclusive(&keyCtx)
+		filteredPartialBucket := filterPartialBucket(&pIter, &keyCtx, &overlappingSpan, 0)
+		mergedHistogram = append(mergedHistogram, filteredPartialBucket)
+	}
+
+	return mergedHistogram, nil
+}
+
+func filterPartialBucket(
+	iter *histogramIter, keyCtx *constraint.KeyContext, filteredSpan *constraint.Span, colOffset int,
+) cat.HistogramBucket {
+	// We don't want to filter the first bucket of a partial histogram since it
+	// could have non-zero NumRange and DistinctRange that we want to retain.
+	if iter.idx == 0 {
+		return cat.HistogramBucket{
+			UpperBound:    iter.b.UpperBound,
+			NumEq:         iter.b.NumEq,
+			NumRange:      iter.b.NumRange,
+			DistinctRange: iter.b.DistinctRange,
+		}
+	}
+	return getFilteredBucket(iter, keyCtx, filteredSpan, colOffset)
 }
