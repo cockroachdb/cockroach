@@ -22,8 +22,8 @@ go_library(
 go_test(
     name = "partition_test",
     srcs = ["locality_test.go"],
-    embed = [":partition"],
     deps = [
+        ":partition",
         "//pkg/settings/cluster",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/sem/eval",
