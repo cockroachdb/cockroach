@@ -305,7 +305,7 @@ func TestAlterChangefeedAddTargetAfterInitialScan(t *testing.T) {
 				t.Fatalf("unknown initial scan type %q", initialScan)
 			}
 
-			sqlDB.QueryRow(t, `INSERT INTO foo VALUES(2)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES(2)`)
 			assertPayloads(t, testFeed, []string{
 				`foo: [2]->{"after": {"a": 2}}`,
 			})
@@ -1915,7 +1915,7 @@ func TestAlterChangefeedAddDropSameTarget(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar DROP bar`, feed.JobID()))
 		require.NoError(t, feed.Resume())
 		var tsStr string
-		sqlDB.QueryRow(t, `INSERT INTO bar VALUES(1)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES(1)`)
 		sqlDB.QueryRow(t, `INSERT INTO foo VALUES(2) RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
 		ts := parseTimeToHLC(t, tsStr)
 		require.NoError(t, feed.WaitForHighWaterMark(ts))
