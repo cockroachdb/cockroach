@@ -625,6 +625,18 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// preferable, all else being equal.
 	cost.C += cpuCostFactor
 
+	// Within a locality optimized search, distribution costs are added to the
+	// remote branch, but not the local branch. Scale the remote branch costs by
+	// a factor reflecting the likelihood of executing that branch. Right now
+	// this probability is not estimated, so just use a default probability of
+	// 1/10.
+	// TODO(msirek): Add an estimation of the probability of executing the
+	// remote branch, e.g., compare the size of the limit hint with the expected
+	// row count of the local branch. Is there a better approach?
+	if required.RemoteBranch {
+		cost.C /= 10
+	}
+
 	// Add a one-time cost for any operator with unbounded cardinality. This
 	// ensures we prefer plans that push limits as far down the tree as possible,
 	// all else being equal.
