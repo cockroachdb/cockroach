@@ -101,6 +101,10 @@ type Conn interface {
 	// the fields may be empty if there were errors while retrieving
 	// them when the connection was established.
 	GetServerInfo() ServerInfo
+
+	// AllowUnsafeInternals allows for an override to the connection for
+	// accessing unsafe internals in the system.
+	AllowUnsafeInternals(context.Context) func()
 }
 
 // ServerInfo describes the remote server.
