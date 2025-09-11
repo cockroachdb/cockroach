@@ -246,7 +246,7 @@ func distImport(
 		for {
 			select {
 			case <-stopProgress:
-				return nil
+				return updateJobProgress()
 			case <-done:
 				return ctx.Err()
 			case <-tick.C:

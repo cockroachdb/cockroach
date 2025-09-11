@@ -565,6 +565,7 @@ type cancellableImportResumer struct {
 	ctx              context.Context
 	jobIDCh          chan jobspb.JobID
 	jobID            jobspb.JobID
+	onFailureCh      chan error
 	onSuccessBarrier syncBarrier
 	wrapped          *importResumer
 }
@@ -573,7 +574,13 @@ func (r *cancellableImportResumer) Resume(ctx context.Context, execCtx interface
 	r.jobID = r.wrapped.job.ID()
 	r.jobIDCh <- r.jobID
 	if err := r.wrapped.Resume(r.ctx, execCtx); err != nil {
+		if r.onFailureCh != nil {
+			r.onFailureCh <- err
+		}
 		return err
+	}
+	if r.onFailureCh != nil {
+		close(r.onFailureCh)
 	}
 	if r.onSuccessBarrier != nil {
 		defer r.onSuccessBarrier.Enter()()
@@ -815,6 +822,8 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	var jobID jobspb.JobID = -1
 	var importSummary roachpb.RowCount
 
+	resumeErrChan := make(chan error, 1)
+
 	registry.TestingWrapResumerConstructor(jobspb.TypeImport,
 		// Arrange for our special job resumer to be
 		// returned the very first time we start the import.
@@ -829,6 +838,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 				return &cancellableImportResumer{
 					ctx:              ctx,
 					jobIDCh:          jobIDCh,
+					onFailureCh:      resumeErrChan,
 					onSuccessBarrier: importBarrier,
 					wrapped:          resumer,
 				}
@@ -853,6 +863,10 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// Wait for the job to start running
 	jobID = <-jobIDCh
+
+	if err := <-resumeErrChan; err != nil {
+		t.Fatal(err)
+	}
 
 	// Tell importer that it can continue with it's onSuccess
 	proceedImport := controllerBarrier.Enter()

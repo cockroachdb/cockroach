@@ -279,6 +279,29 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
+	importProg := r.job.Progress().Details.(*jobspb.Progress_Import)
+	var expectedCounts map[uint64]int64
+	if importProg != nil {
+		expectedCounts = importProg.Import.Summary.EntryCounts
+	}
+
+	tblDesc := details.Tables[0].Desc
+	actualRowCounts, err := postImportRowCounts(ctx, p.ExecCfg(), tblDesc, hlc.Timestamp{WallTime: details.Walltime})
+	if err != nil {
+		return err
+	}
+
+	if err := validateCounts(
+		actualRowCounts,
+		expectedCounts,
+		bulkOpSummaryIndexIDToNameMap(
+			uint64(tblDesc.ID),
+			tabledesc.NewBuilder(tblDesc).BuildImmutableTable().AllIndexes(),
+		),
+	); err != nil {
+		return errors.Wrapf(err, "imported row count validation failed")
+	}
+
 	if err := r.publishTables(ctx, p.ExecCfg(), res); err != nil {
 		return err
 	}
@@ -306,6 +329,129 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), true, nil, r.res.Rows)
 
 	return nil
+}
+
+func postImportRowCounts(
+	ctx context.Context,
+	cfg *sql.ExecutorConfig,
+	tblDescriptor *descpb.TableDescriptor,
+	importStartTime hlc.Timestamp,
+) (map[uint64]int64, error) {
+	tblDesc := tabledesc.NewBuilder(tblDescriptor).BuildImmutableTable()
+	tblSpan := tblDesc.TableSpan(cfg.Codec)
+
+	sender := cfg.DB.NonTransactionalSender()
+	request := &kvpb.BatchRequest{
+		Header: kvpb.Header{
+			Timestamp: cfg.Clock.Now(),
+		},
+	}
+
+	request.Add(&kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    tblSpan.Key,
+			EndKey: tblSpan.EndKey,
+		},
+		StartTime: importStartTime,
+	})
+
+	kvDBRes, kvErr := sender.Send(ctx, request)
+	if kvErr != nil {
+		return nil, kvErr.GoError()
+	}
+
+	if kvDBRes == nil {
+		return nil, errors.AssertionFailedf("unexpected nil response for post import row count request")
+	}
+
+	if len(kvDBRes.Responses) != 1 {
+		return nil, errors.AssertionFailedf("expected 1 response, got %d", len(kvDBRes.Responses))
+	}
+
+	exportRes, ok := kvDBRes.Responses[0].GetInner().(*kvpb.ExportResponse)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected ExportResponse, got %T", kvDBRes.Responses[0].GetInner())
+	}
+
+	res := make(map[uint64]int64)
+	// tblID := uint64(tblDesc.GetID())
+
+	// allIndexes := tblDesc.AllIndexes()
+	// idxToName := bulkOpSummaryIndexIDToNameMap(tblID, allIndexes)
+
+	for _, f := range exportRes.Files {
+		for idxID, count := range f.Exported.EntryCounts {
+			//if _, ok := res[idxID]; ok {
+			//	// TODO(janexing): better organization of error messages.
+			//	if indexName, ok := idxToName[idxID]; ok {
+			//		for fileIdx, exportedFile := range exportRes.Files {
+			//			fmt.Printf("exported file: %d, entry counts: %+v\n", fileIdx, exportedFile.Exported.EntryCounts)
+			//		}
+			//		return nil, errors.AssertionFailedf("duplicate index %s in export response", indexName)
+			//	} else {
+			//		return nil, errors.Wrapf(errors.AssertionFailedf("duplicate index %d in export response", idxID), "index name unknown")
+			//	}
+			//}
+			if _, ok := res[idxID]; !ok {
+				res[idxID] = count
+			} else {
+				res[idxID] += count
+			}
+		}
+	}
+
+	return res, nil
+}
+
+func bulkOpSummaryIndexIDToNameMap(tblID uint64, indexes []catalog.Index) map[uint64]string {
+	res := make(map[uint64]string)
+	for _, idx := range indexes {
+		bulkOpSummaryIndexID := kvpb.BulkOpSummaryID(tblID, uint64(idx.GetID()))
+		res[bulkOpSummaryIndexID] = idx.GetName()
+	}
+	return res
+}
+
+// validateCounts compares actualRowCounts and expectedCounts and returns nil
+// only if they are identical. Otherwise it returns a joined error describing
+// all mismatches found.
+func validateCounts(
+	actualRowCounts map[uint64]int64,
+	expectedCounts map[uint64]int64,
+	indexIDToName map[uint64]string,
+) error {
+	var errs []error
+	addErr := func(indexID uint64, err error) {
+		if indexName, ok := indexIDToName[indexID]; ok {
+			errs = append(errs, errors.Wrapf(err, "index name %s", indexName))
+		} else {
+			errs = append(errs, errors.Wrapf(err, "index id %d with unknown name", indexID))
+		}
+	}
+
+	// For entries present in actual but not in expected, or with mismatched counts.
+	for indexID, actual := range actualRowCounts {
+		expected, ok := expectedCounts[indexID]
+		if !ok {
+			addErr(indexID, errors.AssertionFailedf("unexpected count"))
+			continue
+		}
+		if expected != actual {
+			addErr(indexID, errors.AssertionFailedf("expected %d, got %d", expected, actual))
+		}
+	}
+
+	// For entries present in expected but missing from actual.
+	for indexID := range expectedCounts {
+		if _, ok := actualRowCounts[indexID]; !ok {
+			addErr(indexID, errors.AssertionFailedf("expected but unseen count"))
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Join(errs...)
 }
 
 // prepareTablesForIngestion prepares table descriptors for the ingestion

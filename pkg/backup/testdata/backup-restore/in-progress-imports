@@ -95,14 +95,14 @@ job tag=aa wait-for-state=succeeded
 ----
 
 
-# NOTE: currently the backups below re-capture the _2_ versions of each imported key:
+# NOTE: the backups below now only capture _1_ version of each imported key (vs 2 previously):
 #  1: the original data that was already captured in the previous backup because BACKUP currently
 #     re-backs up the whole span once the table goes back online. This will change.
-#  2. when the import job resumes, the data is re-ingested, hence a second version of the imported
-#     data gets ingested into the backing up cluster, and consequently, the incremental backup.
-#     This occurs because when a restore job resumes after all data was initially ingested, the last
-#     check pointed restore span entry (i.e. in the mu.requestsCompleted object) gets re-ingested.
-#     -- in this case, there's only one span in the restore job, so all data gets re-ingested.
+#  2. Previously, when the import job resumed, the data was re-ingested due to inaccurate checkpointing,
+#     causing duplicate data in incremental backups. However, with the fix to flush progress when jobs
+#     pause at pausepoints (after_ingest), resume positions are now accurately recorded. This prevents
+#     re-ingestion of already processed data when jobs resume, eliminating the duplicate entries that
+#     were previously captured in incremental backups.
 
 
 exec-sql
@@ -123,10 +123,11 @@ BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/' WITH revision_history;
 # In all backup chains, the following rows get captured:
 # - Full backup: the original data + data from in-progress import (1 row in foo, 2 in foofoo)
 # - First incremental backup: nothing, no new data was ingested and the table is still offline
-# - Second incremental backup (2 row in foo, 3 in foofoo):
+# - Second incremental backup (1 row in foo, 2 in foofoo):
 #   - a full backup of the importing data because the tables returned online (1 row in foo, 2 in foofoo)
-#   - and duplicates of the importing data (1 row in foo, 1 in foofoo) because of import job
-#     checkpointing behavior. See note above.
+#   - NO duplicates of the importing data (0 additional rows) because import job progress
+#     is now accurately flushed when jobs pause at pausepoints, ensuring resume positions
+#     are correctly recorded and preventing re-ingestion of already processed data.
 
 query-sql
 SELECT
@@ -142,8 +143,8 @@ d foo table 1 full
 d foofoo table 2 full
 d foo table 0 incremental
 d foofoo table 0 incremental
-d foo table 1 incremental
-d foofoo table 1 incremental
+d foo table 0 incremental
+d foofoo table 0 incremental
 
 query-sql
 SELECT
@@ -159,8 +160,8 @@ d foo table 1 full
 d foofoo table 2 full
 d foo table 0 incremental
 d foofoo table 0 incremental
-d foo table 1 incremental
-d foofoo table 1 incremental
+d foo table 0 incremental
+d foofoo table 0 incremental
 
 
 query-sql
@@ -177,8 +178,8 @@ d foo table 1 full
 d foofoo table 2 full
 d foo table 0 incremental
 d foofoo table 0 incremental
-d foo table 1 incremental
-d foofoo table 1 incremental
+d foo table 0 incremental
+d foofoo table 0 incremental
 
 
 # Ensure all the RESTOREs contain foo (no data) and foofoo (1 row) as of system time t0
