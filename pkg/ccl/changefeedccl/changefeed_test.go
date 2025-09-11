@@ -6423,6 +6423,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 		})
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c <= 0 {
+				// f8a09a5c1dbcbfcb537ba4050c6061ef6d917687
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			return nil
