@@ -31,6 +31,8 @@ sinks:
       channels:
         INFO: [DEV, OPS]
         WARNING: all except [DEV, OPS]
+    changefeed:
+      channels: [CHANGEFEED]
     health:
       channels: [HEALTH]
     kv-distribution:
