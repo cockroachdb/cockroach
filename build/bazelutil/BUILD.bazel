@@ -11,11 +11,3 @@ genrule(
         "//conditions:default": "touch $@",
     }),
 )
-
-# This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
-# We use it in //pkg/kv/kvclient/{kvcoord,rangefeed}.
-go_library(
-    name = "noop",
-    importpath = "noop",
-    visibility = ["//pkg:__subpackages__"],
-)
