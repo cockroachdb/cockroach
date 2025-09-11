@@ -169,7 +169,10 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":kvcoord"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        # 'enormous' is used here only because of a few long-running tests
+        # in this package that, if in one shard together, exceed the five minute interval
+        # that (at the time of writing) results from a value of 'large'.
+        "//build/toolchains:is_heavy": {"test.Pool": "enormous"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     shard_count = 16,
