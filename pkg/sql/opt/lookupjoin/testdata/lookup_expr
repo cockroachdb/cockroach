@@ -489,3 +489,24 @@ optional: y IN (10, 20, 30)
 ----
 lookup expression:
   ((y IN (10, 20, 30)) AND (z > b)) AND (a = x)
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int) index=(x, y)
+x = a AND x = b
+----
+key cols:
+  x = a
+remaining filters:
+  x = b
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int) index=(x, y)
+x = a AND y > b AND y < c
+----
+lookup expression:
+  ((y > b) AND (y < c)) AND (a = x)
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int) index=(x, y)
+y > b AND y < c
+optional: x IN (10, 20, 30)
+----
+lookup expression:
+  ((x IN (10, 20, 30)) AND (y > b)) AND (y < c)
