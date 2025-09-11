@@ -2411,8 +2411,8 @@ func fillSkippedResponses(
 func maybeSetResumeSpan(
 	req kvpb.Request, hdr *kvpb.ResponseHeader, nextKey roachpb.RKey, isReverse bool,
 ) {
-	if _, ok := req.(*kvpb.GetRequest); ok {
-		// This is a Get request. There are three possibilities:
+	if !kvpb.IsRange(req) {
+		// This is a point request. There are three possibilities:
 		//
 		//  1. The request was completed. In this case we don't want a ResumeSpan.
 		//
@@ -2440,10 +2440,6 @@ func maybeSetResumeSpan(
 				hdr.ResumeSpan = &roachpb.Span{Key: key}
 			}
 		}
-		return
-	}
-
-	if !kvpb.IsRange(req) {
 		return
 	}
 
