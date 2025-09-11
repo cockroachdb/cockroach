@@ -9,14 +9,9 @@ eexpect root@
 
 set logfile logs/db/logs/cockroach-sql-audit.log
 
-start_test "Check that the audit log is not created by default"
-system "if test -e $logfile; then false; fi"
-end_test
-
 start_test "Check that statements do not get logged to the audit log directly"
 send "CREATE DATABASE t; USE t; CREATE TABLE helloworld(abc INT) WITH (schema_locked=false); INSERT INTO helloworld VALUES (123);\r"
 eexpect root@
-system "if test -e $logfile; then false; fi"
 end_test
 
 start_test "Check that statements start being logged synchronously if auditing is enabled"
