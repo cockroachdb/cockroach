@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
@@ -65,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -12050,6 +12052,9 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
 
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
@@ -12117,6 +12122,124 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 
 		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
 		require.NoError(t, err)
+		require.Less(t, ts, ts2)
+
+		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.GreaterOrEqual(t, managePTSCount, int64(2))
+		require.Equal(t, int64(0), managePTSErrorCount)
+	}
+
+	withTxnRetries := withArgsFn(func(args *base.TestServerArgs) {
+		requestFilter, vf := testutils.TestingRequestFilterRetryTxnWithPrefix(t, changefeedJobProgressTxnName, 1)
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		}
+		verifyFunc = vf
+	})
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+}
+
+func TestChangefeedProtectedTimestampUpdateWithPerTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	verifyFunc := func() {}
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer verifyFunc()
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// Checkpoint and trigger potential protected timestamp updates frequently.
+		// Make the protected timestamp lag long enough that it shouldn't be
+		// immediately updated after a restart.
+		changefeedbase.SpanCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
+
+		changefeedbase.TrackPerTableProgress.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		createPTSCount, _ := metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePTSCount, _ := metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ := metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.Equal(t, int64(0), createPTSCount)
+		require.Equal(t, int64(0), managePTSCount)
+		require.Equal(t, int64(0), managePTSErrorCount)
+
+		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		createPTSCount, _ = metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		require.Equal(t, int64(1), createPTSCount)
+		require.Equal(t, int64(0), managePTSCount)
+
+		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		// Wait for the changefeed to checkpoint and update PTS at least once.
+		var lastHWM hlc.Timestamp
+		checkHWM := func() error {
+			hwm, err := eFeed.HighWaterMark()
+			if err == nil && !hwm.IsEmpty() && lastHWM.Less(hwm) {
+				lastHWM = hwm
+				return nil
+			}
+			return errors.New("waiting for high watermark to advance")
+		}
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Get the PTS of this feed.
+
+		var tableID descpb.ID
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'foo' AND database_name = 'd'`).Scan(&tableID)
+
+		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+		getPTSEntries := func() cdcprogresspb.ProtectedTimestampRecords {
+			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+			require.NoError(t, execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				return readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID())
+			}))
+			return ptsEntries
+		}
+
+		ptsEntries := getPTSEntries()
+		require.Equal(t, 1, len(ptsEntries.ProtectedTimestampRecords))
+		ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, ptsEntries.ProtectedTimestampRecords[tableID])
+		var ts, ts2 string
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts)
+
+		// Force the changefeed to restart.
+		require.NoError(t, eFeed.Pause())
+		require.NoError(t, eFeed.Resume())
+
+		// Wait for a new checkpoint.
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Check that the PTS was not updated after the resume.
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
+		require.Equal(t, ts, ts2)
+
+		// Lower the PTS lag and check that it has been updated.
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		// Ensure that the resolved timestamp advances at least once
+		// since the PTS lag override.
+		testutils.SucceedsSoon(t, checkHWM)
+		testutils.SucceedsSoon(t, checkHWM)
+
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
 		require.Less(t, ts, ts2)
 
 		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
