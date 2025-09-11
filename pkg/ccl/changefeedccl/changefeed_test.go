@@ -12050,6 +12050,9 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
 
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
+
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
