@@ -1379,6 +1379,12 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return nextState
 	}
 
+	// allow access to unsafe internals while handling cli commands.
+	c.runWithInterruptableCtx(func(ctx context.Context) error {
+		defer c.conn.AllowUnsafeInternals(ctx)()
+		return nil
+	})
+
 	errState := loopState
 	if c.iCtx.errExit {
 		// If exiterr is set, an error in a client-side command also
