@@ -463,14 +463,15 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 const predefinedLogFiles = `
 sinks:
  file-groups:
-  kv-distribution:        { channels: KV_DISTRIBUTION }
   default:
     channels:
       INFO: [DEV, OPS]
       WARNING: all except [DEV, OPS]
-  health:                 { channels: HEALTH  }
+  changefeed:             { channels: CHANGEFEED }
+  health:                 { channels: HEALTH }
+  kv-distribution:        { channels: KV_DISTRIBUTION }
   pebble:                 { channels: STORAGE }
-  security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
+  security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true }
   sql-auth:               { channels: SESSIONS, auditable: true }
   sql-audit:              { channels: SENSITIVE_ACCESS, auditable: true }
   sql-exec:               { channels: SQL_EXEC }
