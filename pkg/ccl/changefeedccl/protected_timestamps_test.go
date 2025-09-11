@@ -404,7 +404,29 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		perTablePTSEnabled :=
+			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
+				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+
+		if perTablePTSEnabled {
+			eFeed, ok := f2.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
+			hwm, err := eFeed.HighWaterMark()
+			require.NoError(t, err)
+			require.NoError(t, eFeed.WaitForHighWaterMark(hwm))
+
+			require.Equal(t, 2, getNumPTSRecords())
+			// testutils.SucceedsSoon(t, func() error {
+			// 	// Wait for the per-table PTS record to be created for the second table.
+			// 	// This happens the next time we advance the highwater.
+			// 	if getNumPTSRecords() != 2 {
+			// 		return errors.Newf("expected 2 PTS records, got %d", getNumPTSRecords())
+			// 	}
+			// 	return nil
+			// })
+		} else {
+			require.Equal(t, 1, getNumPTSRecords())
+		}
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
