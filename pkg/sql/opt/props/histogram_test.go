@@ -430,14 +430,14 @@ func TestFilterBucket(t *testing.T) {
 		}()
 
 		keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, desc))
-		var iter histogramIter
-		iter.init(h, desc)
+		var iter HistogramIter
+		iter.Init(h, desc)
 
 		// All test cases have two buckets. The first bucket is empty and used to
 		// mark the lower bound of the second bucket. Set the iterator to point to
 		// the second bucket.
-		iter.setIdx(1)
-		b := getFilteredBucket(&iter, &keyCtx, span, colOffset)
+		iter.SetIdx(1)
+		b := GetFilteredBucket(&iter, &keyCtx, span, colOffset)
 		roundBucket(&b)
 		return &b, nil
 	}
