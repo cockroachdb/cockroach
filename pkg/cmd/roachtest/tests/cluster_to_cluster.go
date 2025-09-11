@@ -603,7 +603,7 @@ func (rd *replicationDriver) setupC2C(
 	destSQL := sqlutils.MakeSQLRunner(destDB)
 
 	srcClusterSettings(t, srcSQL)
-	destClusterSettings(t, destSQL, rd.rs.additionalDuration)
+	destClusterSettings(t, destSQL, rd.rng, rd.rs.additionalDuration)
 
 	overrideSrcAndDestTenantTTL(t, srcSQL, destSQL, rd.rs.overrideTenantTTL)
 
@@ -1982,7 +1982,9 @@ func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	)
 }
 
-func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
+func destClusterSettings(
+	t test.Test, db *sqlutils.SQLRunner, rng *rand.Rand, additionalDuration time.Duration,
+) {
 	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
 		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`,
@@ -1994,6 +1996,10 @@ func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration
 		replanFrequency := additionalDuration / 2
 		db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING stream_replication.replan_flow_frequency = '%s'`,
 			replanFrequency))
+	}
+
+	if rng.Intn(2) == 0 {
+		db.Exec(t, `SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = 100000`)
 	}
 }
 
