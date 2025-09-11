@@ -758,7 +758,7 @@ func makeVisitAvailableNodesInParallel(
 
 func visitNodeWithRetry(
 	ctx context.Context,
-	nd rpcbase.NodeDialerNoBreaker,
+	nd *nodedialer.Dialer,
 	retryOpts retry.Options,
 	visitor visitNodeAdminFn,
 	node roachpb.NodeDescriptor,
@@ -807,7 +807,7 @@ func visitNodeWithRetry(
 //
 // For latter, errors marked with errMarkRetry marker are retried. It is up
 // to the visitor to mark appropriate errors are retryable.
-func makeVisitNode(nd rpcbase.NodeDialerNoBreaker) visitNodeStatusFn {
+func makeVisitNode(nd *nodedialer.Dialer) visitNodeStatusFn {
 	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
 		visitor func(client serverpb.RPCStatusClient) error,
 	) error {
