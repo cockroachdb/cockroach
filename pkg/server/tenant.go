@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -824,7 +825,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 
 	var apiInternalServer http.Handler
-	if rpc.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
+	if rpcbase.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer, roachpb.NodeID(s.sqlServer.SQLInstanceID()))

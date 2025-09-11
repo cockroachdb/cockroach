@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
@@ -2128,7 +2129,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		}
 	}
 	var apiInternalServer http.Handler
-	if rpc.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
+	if rpcbase.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
 		// Pass our own node ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(
 			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get())
