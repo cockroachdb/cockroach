@@ -1,0 +1,104 @@
+==================== Test output for //pkg/ccl/changefeedccl:changefeedccl_test:
+metamorphic: use COCKROACH_RANDOM_SEED=6264143881357415873 for reproduction
+initialized metamorphic constant "max-batch-size" with value 5038
+initialized metamorphic constant "max-batch-byte-size" with value 18185702
+initialized metamorphic constant "parse-json-impl" with value 0
+initialized metamorphic constant "coldata-batch-size" with value 282
+initialized metamorphic constant "span-reuse-rate" with value 2
+initialized metamorphic constant "log.channel_compatibility_mode.enabled" with value false
+initialized metamorphic constant "default-batch-bytes-limit" with value 21276
+initialized metamorphic constant "logical_replication.consumer.immediate_mode_writer" with value legacy-kv
+initialized metamorphic constant "kvadmission.flow_control.mode" with value apply_to_all
+initialized metamorphic constant "distsender-leaseholder-first" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.enabled" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.transformations.get.enabled" with value false
+initialized metamorphic constant "kv.transaction.write_buffering.max_buffer_size" with value 8802
+initialized metamorphic constant "spilling-queue-initial-len" with value 9
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 7
+initialized metamorphic constant "lock-table-iters-before-seek" with value 2
+initialized metamorphic constant "storage.ingest_split.enabled" with value false
+initialized metamorphic constant "storage.delete_compaction_excise.enabled" with value false
+initialized metamorphic constant "storage.value_separation.minimum_size" with value 285982
+initialized metamorphic constant "storage.value_separation.max_reference_depth" with value 4
+initialized metamorphic constant "storage.value_separation.compaction_garbage_threshold" with value 57
+initialized metamorphic constant "mvcc-max-iters-before-seek" with value 0
+initialized metamorphic constant "disable-checksstconflicts-range-key-masking" with value true
+initialized metamorphic constant "storage.ingestion.value_blocks.enabled" with value false
+initialized metamorphic constant "computeStatsDiffInStreamBatcher" with value true
+initialized metamorphic constant "kv.lock_table.unreplicated_lock_reliability.split.enabled" with value false
+initialized metamorphic constant "kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled" with value false
+initialized metamorphic constant "kv.lock_table.unreplicated_lock_reliability.merge.enabled" with value false
+initialized metamorphic constant "addsst-rewrite-concurrency" with value 2
+initialized metamorphic constant "kv.split.mvcc_stats_recomputation.enabled" with value false
+initialized metamorphic constant "kv.snapshot.ingest_as_write_threshold" with value 0
+initialized metamorphic constant "rangefeed-bulk_delivery" with value 3323524
+initialized metamorphic constant "kv.raft.leader_fortification.fraction_enabled" with value 1
+initialized metamorphic constant "kv.snapshot_rebalance.max_sst_size" with value 68467608
+initialized metamorphic constant "jobs.avoid_full_scans_in_find_running_jobs" with value false
+initialized metamorphic constant "changefeed.event_consumer_worker_queue_size" with value 0
+initialized metamorphic constant "row-delete-range-chunk-size" with value 25
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 3557006
+initialized metamorphic constant "ColIndexJoin-using-streamer-batch-size" with value 7468718
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "copy-batch-size" with value 30764
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 8
+initialized metamorphic constant "use-index-lookup-for-descriptors-in-database" with value false
+initialized metamorphic constant "tail-call-optimization-enabled" with value false
+initialized metamorphic constant "multiple_active_portals_enabled" with value true
+initialized metamorphic constant "backup.write_metadata_with_external_ssts.enabled" with value false
+initialized metamorphic constant "backup.index.read.enabled" with value true
+initialized metamorphic constant "backup-presplit-spans" with value false
+initialized metamorphic constant "export_request_verbose_tracing" with value true
+initialized metamorphic constant "restore-worker-concurrency" with value 4
+initialized metamorphic constant "logical_replication.consumer.try_optimistic_insert.enabled" with value false
+initialized metamorphic constant "default_range_distribution_strategy" with value balanced_simple
+initialized metamorphic constant "changefeed.parallel_io.request_quota" with value 64
+initialized metamorphic constant "changefeed.new_kafka_sink.enabled" with value false
+initialized metamorphic constant "changefeed-force-enriched-envelope" with value true
+I250911 17:22:53.159022 1 (gostd) rand.go:268  [-] 1  random seed: 6264143881357415873
+=== RUN   TestChangefeedPerTableProtectedTimestampProgression
+    test_log_scope.go:171: test logs captured to: /tmp/cockroach/_tmp/f5cb02fa45891c8256821a187ced6fe9/logTestChangefeedPerTableProtectedTimestampProgression3213164082
+    test_log_scope.go:82: use -show-logs to present logs inline
+=== RUN   TestChangefeedPerTableProtectedTimestampProgression/kafka
+    helpers_test.go:1394: making server as system tenant
+    helpers_test.go:1470: making kafka feed factory
+creating changefeed
+    helpers_test.go:1256: forcing enriched envelope for *changefeedccl.kafkaFeedFactory - EXPERIMENTAL CHANGEFEED FOR TABLE table1, TABLE table2, TABLE table3 WITH OPTIONS (resolved = '100ms', envelope = 'enriched', enriched_properties = 'source')
+    testfeed_test.go:341: creating external connection
+    testfeed_test.go:344: ran create external connection
+writing multiple PTS
+writing per-table PTS for table 106
+successfully added target to ptsTargets
+successfully created ptsRecord
+successfully got uuid for ptsRecord it is df0c81c0-bd62-4cda-91e6-58fe8880fdb9
+writing per-table PTS for table 107
+successfully added target to ptsTargets
+successfully created ptsRecord
+successfully got uuid for ptsRecord it is 44feca09-c4eb-43c8-abc9-acc793c10239
+writing per-table PTS for table 108
+successfully added target to ptsTargets
+successfully created ptsRecord
+successfully got uuid for ptsRecord it is 06e3951a-6b93-4c4f-9d50-f15224d5c3fa
+successfully added ptsRecord to ptrs
+successfully created jobInfoPTRs
+successfully created ptr section thing
+successfully created jr.Progress
+creating startable job with txn
+protecting multiple PTS 2
+done, going to recordPTSMetricsTime
+successfully recorded PTSMetricsTime
+successfully created testFeed
+    protected_timestamps_test.go:1158: condition failed to evaluate within 45s: from protected_timestamps_test.go:1172: expected feed-level PTS record to be set
+=== NAME  TestChangefeedPerTableProtectedTimestampProgression
+    protected_timestamps_test.go:1211: -- test log scope end --
+test logs left over in: /tmp/cockroach/_tmp/f5cb02fa45891c8256821a187ced6fe9/logTestChangefeedPerTableProtectedTimestampProgression3213164082
+--- FAIL: TestChangefeedPerTableProtectedTimestampProgression (45.77s)
+    --- FAIL: TestChangefeedPerTableProtectedTimestampProgression/kafka (45.77s)
+FAIL
+I250911 17:23:38.943607 1 (gostd) testmain.go:727  [-] 1  Test //pkg/ccl/changefeedccl:changefeedccl_test exited with error code 1
+================================================================================
+//pkg/ccl/changefeedccl:changefeedccl_test                               FAILED in 47.3s
+  /private/var/tmp/_bazel_aerinfreilich/4207c3db381e6f2bff5c8330bf8e6f76/execroot/com_github_cockroachdb_cockroach/bazel-out/darwin_arm64-fastbuild/testlogs/pkg/ccl/changefeedccl/changefeedccl_test/test.log
+
+Executed 1 out of 1 test: 1 fails locally.
