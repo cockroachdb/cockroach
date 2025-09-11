@@ -304,6 +304,10 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "multi-column partial statistics are not currently supported")
 	}
 
+	if !reqStat.histogram {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "partial statistics without histograms are not supported")
+	}
+
 	var typeResolver *descs.DistSQLTypeResolver
 	if p := planCtx.planner; p != nil {
 		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
@@ -377,6 +381,13 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 			pgcode.ObjectNotInPrerequisiteState,
 			"column %s does not have a prior statistic",
 			column.GetName())
+	}
+	if len(stat.Histogram) == 1 && stat.Histogram[0].UpperBound == tree.DNull {
+		return nil, pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"the latest full statistic histogram for column %s has only NULL values",
+			column.GetName(),
+		)
 	}
 
 	var predicate string
