@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "asimview_lib",
+    srcs = [
+        "main.go",
+        "sha_compare.go",
+    ],
+    embedsrcs = [
+        "sha_compare.html",
+        "viewer.html",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests/cmd/asimview",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "asimview",
+    embed = [":asimview_lib"],
+    visibility = ["//visibility:public"],
+)
