@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
@@ -65,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -12084,15 +12086,47 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 			return errors.New("waiting for high watermark to advance")
 		}
 		testutils.SucceedsSoon(t, checkHWM)
+		var tableID int
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'foo' AND database_name = 'd'`).Scan(&tableID)
+		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
 
-		// Get the PTS of this feed.
-		p, err := eFeed.Progress()
-		require.NoError(t, err)
+		getTimestampFromPTSRecord := func(ptsRecordID uuid.UUID) hlc.Timestamp {
+			ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, ptsRecordID)
+			var tsStr string
+			sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
+			ts, err := hlc.ParseHLC(tsStr)
+			require.NoError(t, err)
+			return ts
+		}
+		getPerTablePTS := func() hlc.Timestamp {
+			var ts hlc.Timestamp
+			err := execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+				if err := readChangefeedJobInfo(
+					ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID(),
+				); err != nil {
+					return err
+				}
+				ptsRecordID := ptsEntries.ProtectedTimestampRecords[descpb.ID(tableID)]
+				ts = getTimestampFromPTSRecord(*ptsRecordID)
+				return nil
+			})
+			require.NoError(t, err)
+			return ts
+		}
+		perTablePTSEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV)
+		perTableProgressEnabled := changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+		getPTS := func() hlc.Timestamp {
+			if perTablePTSEnabled && perTableProgressEnabled {
+				return getPerTablePTS()
+			}
 
-		ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, p.ProtectedTimestampRecord)
-		var ts, ts2 string
-		sqlDB.QueryRow(t, ptsQry).Scan(&ts)
-		require.NoError(t, err)
+			p, err := eFeed.Progress()
+			require.NoError(t, err)
+			return getTimestampFromPTSRecord(p.ProtectedTimestampRecord)
+		}
+
+		ts := getPTS()
 
 		// Force the changefeed to restart.
 		require.NoError(t, eFeed.Pause())
@@ -12102,8 +12136,7 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		testutils.SucceedsSoon(t, checkHWM)
 
 		// Check that the PTS was not updated after the resume.
-		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
-		require.NoError(t, err)
+		ts2 := getPTS()
 		require.Equal(t, ts, ts2)
 
 		// Lower the PTS lag and check that it has been updated.
@@ -12115,9 +12148,8 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		testutils.SucceedsSoon(t, checkHWM)
 		testutils.SucceedsSoon(t, checkHWM)
 
-		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
-		require.NoError(t, err)
-		require.Less(t, ts, ts2)
+		ts2 = getPTS()
+		require.True(t, ts.Less(ts2))
 
 		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
 		managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
