@@ -60,7 +60,7 @@ generating settings configurations using static option
 sample1: start running
 configurations generated using seed 608747136543856411
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+ 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
 		region:US_West [zone=US_West_1(nodes=2,stores=1)]
 		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
@@ -82,7 +82,9 @@ US_East
   US_East_2
   │ └── [2 3]
   US_East_3
-  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+  │ └── [4 5 6]
+  US_East_4
+  │ └── [7 8 9 10 11 12 13 14 15 16]
 US_West
   US_West_1
     └── [17 18]
@@ -128,7 +130,7 @@ sample2: pass
 sample3: start running
 configurations generated using seed 3534334367214237261
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+ 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
 		region:US_West [zone=US_West_1(nodes=2,stores=1)]
 		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
@@ -150,7 +152,9 @@ US_East
   US_East_2
   │ └── [2 3]
   US_East_3
-  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+  │ └── [4 5 6]
+  US_East_4
+  │ └── [7 8 9 10 11 12 13 14 15 16]
 US_West
   US_West_1
     └── [17 18]
@@ -188,7 +192,7 @@ sample2: pass
 sample3: start running
 configurations generated using seed 3534334367214237261
 	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+ 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
 		region:US_West [zone=US_West_1(nodes=2,stores=1)]
 		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0

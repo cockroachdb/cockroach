@@ -252,6 +252,9 @@ type internedLeasePreference struct {
 func makeNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
+	if conf.NumVoters == 0 {
+		conf.NumVoters = conf.NumReplicas
+	}
 	var normalizedConstraints, normalizedVoterConstraints []internedConstraintsConjunction
 	var err error
 	if conf.VoterConstraints != nil {

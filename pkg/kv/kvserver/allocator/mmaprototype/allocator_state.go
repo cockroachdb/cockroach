@@ -673,6 +673,12 @@ func (a *allocatorState) rebalanceStores(
 			// Also exclude all stores on nodes that have existing replicas.
 			for _, replica := range rstate.replicas {
 				storeID := replica.StoreID
+				if storeID == store.StoreID {
+					// We don't exclude other stores on this node, since we are allowed to
+					// transfer the range to them. If the node is overloaded or not fdOK,
+					// we have already excluded those stores above.
+					continue
+				}
 				nodeID := a.cs.stores[storeID].NodeID
 				for _, storeID := range a.cs.nodes[nodeID].stores {
 					storesToExcludeForRange.insert(storeID)
