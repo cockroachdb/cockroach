@@ -1835,6 +1835,10 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// Check whether we should persist the entire frontier again.
 	persistFrontier := cf.js.canPersistFrontier()
 
+	log.Changefeed.Infof(ctx,
+		"ANDY DEBUG: updateHighwater: %t, updateCheckpoint: %t, persistFrontier: %t",
+		updateHighWater, updateCheckpoint, persistFrontier)
+
 	if !updateHighWater && !updateCheckpoint && !persistFrontier {
 		return false, nil
 	}
@@ -1862,12 +1866,14 @@ func (cf *changeFrontier) maybeCheckpointJob(
 
 	// TODO could share a txn
 	if persistFrontier {
+		log.Changefeed.Infof(ctx, "ANDY DEBUG: about to persist frontier")
 		if _, err := cf.checkpointSpanFrontier(ctx); err != nil {
 			return false, err
 		}
 		cf.js.lastFrontierPersistence = timeutil.Now()
 		cf.js.frontierPersistenceDuration = time.Duration(
 			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean())
+		log.Changefeed.Infof(ctx, "ANDY DEBUG: persisted frontier, avg duration: %v", cf.js.frontierPersistenceDuration)
 	}
 
 	// TODO(#153299): Make sure we only updated per-table PTS if
@@ -1967,6 +1973,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return changefeedProgress, nil
 }
 
+// TODO rename to persist span frontier
 func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context) (bool, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_span_frontier")
 	defer sp.Finish()
@@ -1994,6 +2001,7 @@ func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context) (bool, err
 	}
 	timer()
 
+	log.Changefeed.Infof(ctx, "ANDY DEBUG: persisted span frontier")
 	return true, nil
 }
 
