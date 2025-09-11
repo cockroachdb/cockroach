@@ -134,10 +134,14 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 				totalMeanCount++
 			}
 
+			var value roachtestutil.MetricPoint
+			if totalMeanCount > 0 {
+				value = roachtestutil.MetricPoint(totalMeanSum / totalMeanCount)
+			}
 			aggregatedMetrics := roachtestutil.AggregatedPerfMetrics{
 				{
 					Name:           test + "_mean_latency",
-					Value:          roachtestutil.MetricPoint(totalMeanSum / totalMeanCount),
+					Value:          value,
 					Unit:           "ms",
 					IsHigherBetter: false,
 				},
