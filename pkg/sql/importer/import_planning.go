@@ -626,7 +626,7 @@ func importPlanHook(
 			}
 		}
 
-		var tableDetails []jobspb.ImportDetails_Table
+		var tableDetails jobspb.ImportDetails_Table
 		var typeDetails []jobspb.ImportDetails_Type
 		jobDesc, err := importJobDescription(ctx, p, importStmt, filenamePatterns, opts)
 		if err != nil {
@@ -711,13 +711,13 @@ func importPlanHook(
 			}
 			if len(typeDescs) > 0 {
 				typeDetails = make([]jobspb.ImportDetails_Type, 0, len(typeDescs))
-			}
-			for _, typeDesc := range typeDescs {
-				typeDetails = append(typeDetails, jobspb.ImportDetails_Type{Desc: typeDesc.TypeDesc()})
+				for _, typeDesc := range typeDescs {
+					typeDetails = append(typeDetails, jobspb.ImportDetails_Type{Desc: typeDesc.TypeDesc()})
+				}
 			}
 		}
 
-		tableDetails = []jobspb.ImportDetails_Table{{Desc: &found.TableDescriptor, TargetCols: intoCols}}
+		tableDetails = jobspb.ImportDetails_Table{Desc: &found.TableDescriptor, TargetCols: intoCols}
 
 		// Store the primary region of the database being imported into. This is
 		// used during job execution to evaluate certain default expressions and
@@ -767,7 +767,8 @@ func importPlanHook(
 			URIs:                  files,
 			Format:                format,
 			ParentID:              db.GetID(),
-			Tables:                tableDetails,
+			Table:                 tableDetails,
+			Tables:                []jobspb.ImportDetails_Table{tableDetails},
 			Types:                 typeDetails,
 			DatabasePrimaryRegion: databasePrimaryRegion,
 		}
