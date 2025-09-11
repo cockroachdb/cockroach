@@ -557,6 +557,9 @@ func init() {
 		// Node cert distinguished name
 		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertDN, cliflags.NodeCertDistinguishedName)
 
+		// Disallow root login
+		cliflagcfg.BoolFlag(f, &startCtx.disallowRootLogin, cliflags.DisallowRootLogin)
+
 		// TLS Cipher Suites configured
 		cliflagcfg.StringSliceFlag(f, &startCtx.serverTLSCipherSuites, cliflags.TLSCipherSuites)
 
@@ -1146,6 +1149,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	if err := security.SetNodeSubject(startCtx.serverNodeCertDN); err != nil {
 		return err
 	}
+	security.EnableDisallowRootLogin(startCtx.disallowRootLogin)
 	// Currently we don't handle the case where we are setting the --insecure flag
 	// as well as providing the --tls-cipher-suites, we should probably error out
 	// if both are set, issue: #144935.
@@ -1155,6 +1159,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.User = username.NodeUserName()
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
+	serverCfg.DisallowRootLogin = startCtx.disallowRootLogin
 
 	fs := cliflagcfg.FlagSetForCmd(cmd)
 
