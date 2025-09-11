@@ -433,6 +433,9 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
+		if t.Result.ResumeSpan != nil {
+			break
+		}
 		read := &observedRead{
 			Key:        t.Key,
 			SkipLocked: t.SkipLocked,
@@ -464,6 +467,9 @@ func (v *validator) processOp(op Operation) {
 		if v.checkNonAmbError(op, t.Result) {
 			break
 		}
+		if t.Result.ResumeSpan != nil {
+			break
+		}
 		// Accumulate all the writes for this transaction.
 		write := &observedWrite{
 			Key:   t.Key,
@@ -480,6 +486,9 @@ func (v *validator) processOp(op Operation) {
 		}
 	case *DeleteOperation:
 		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
+		if t.Result.ResumeSpan != nil {
 			break
 		}
 		sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
@@ -532,10 +541,14 @@ func (v *validator) processOp(op Operation) {
 		// not prevent new keys from being inserted in the deletion span between the
 		// transaction's read and write timestamps.
 		if v.observationFilter != observeLocking {
+			endKey := t.EndKey
+			if t.Result.ResumeSpan != nil {
+				endKey = t.Result.ResumeSpan.Key
+			}
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
-					EndKey: t.EndKey,
+					EndKey: endKey,
 				},
 				IsDeleteRange: true, // just for printing
 				KVs:           nil,
@@ -747,13 +760,24 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
+		readSpan := roachpb.Span{Key: t.Key, EndKey: t.EndKey}
+		// If the ResumeSpan equals the original request span, the scan wasn't
+		// processed at all.
+		if t.Result.ResumeSpan != nil && t.Result.ResumeSpan.Equal(readSpan) {
+			break
+		}
+
 		switch v.observationFilter {
 		case observeAll:
+			if t.Result.ResumeSpan != nil {
+				if op.Scan.Reverse {
+					readSpan.Key = t.Result.ResumeSpan.EndKey
+				} else {
+					readSpan.EndKey = t.Result.ResumeSpan.Key
+				}
+			}
 			scan := &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
+				Span:       readSpan,
 				Reverse:    t.Reverse,
 				SkipLocked: t.SkipLocked,
 				KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
@@ -925,6 +949,9 @@ func (v *validator) processOp(op Operation) {
 		v.curObservations = append(v.curObservations, sp)
 		// Don't fail on all errors because savepoints can be labeled with
 		// errOmitted if a previous op in the txn failed.
+		v.checkError(op, t.Result)
+	case *MutateBatchHeaderOperation:
+		execTimestampStrictlyOptional = true
 		v.checkError(op, t.Result)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))

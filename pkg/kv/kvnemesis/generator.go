@@ -283,6 +283,10 @@ type ClientOperationConfig struct {
 	// FlushLockTable is an operation that moves unreplicated locks in the
 	// in-memory lock table into the
 	FlushLockTable int
+
+	// MutateBatchHeader mutates elements of the batch Header that may influence
+	// batch evaluation. Only relevant for BatchOperations.
+	MutateBatchHeader int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -433,6 +437,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		AddSSTable:                                         1,
 		Barrier:                                            1,
 		FlushLockTable:                                     1,
+		MutateBatchHeader:                                  1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -498,6 +503,14 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
+
+	// MutateBatchHeader is only valid in batches.
+	config.Ops.DB.MutateBatchHeader = 0
+	config.Ops.ClosureTxn.TxnClientOps.MutateBatchHeader = 0
+
+	// TODO(#153446): Header mutations with EndTransaction are not currently safe.
+	config.Ops.ClosureTxn.CommitBatchOps.MutateBatchHeader = 0
+
 	// DeleteRangeUsingTombstone does not support transactions.
 	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
@@ -876,6 +889,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
 	addOpGen(allowed, randBarrier, c.Barrier)
 	addOpGen(allowed, randFlushLockTable, c.FlushLockTable)
+	addOpGen(allowed, randBatchMutation, c.MutateBatchHeader)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -1452,6 +1466,19 @@ func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
 	return merge(key)
 }
 
+func randBatchMutation(g *generator, rng *rand.Rand) Operation {
+	op := &MutateBatchHeaderOperation{}
+	// We currently only support two header option mutations, both of which can
+	// lead to early termination. Half the time we choose a value very likely to
+	// lead to early termination.
+	if rng.Float64() > 0.5 {
+		op.MaxSpanRequestKeys = randItem(rng, []int64{1, 100})
+	} else {
+		op.TargetBytes = randItem(rng, []int64{1, 1 << 20 /* 1MiB */})
+	}
+	return Operation{MutateBatchHeader: op}
+}
+
 func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget, voter bool) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var changeType roachpb.ReplicaChangeType
@@ -1565,6 +1592,13 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
 		var addedForwardScan, addedReverseScan bool
+
+		// TODO(ssd): MutateBatchHeader is disallowed with Puts because of
+		// validation in the txnWriteBuffer that disallows such requests. We could
+		// relax this restriction for many batches if we had information about the
+		// enclosing transaction here.
+		var addedPutOrCPut, addedBatchHeaderMutation bool
+
 		for i := 0; i < numOps; i++ {
 			ops[i] = g.selectOp(rng, allowed)
 			if ops[i].Scan != nil {
@@ -1585,6 +1619,20 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 					}
 					addedReverseScan = true
 				}
+			} else if ops[i].Put != nil {
+				if addedBatchHeaderMutation {
+					i--
+					continue
+				}
+				addedPutOrCPut = true
+			} else if ops[i].MutateBatchHeader != nil {
+				// In addition to avoiding batch mutations when we have Puts or CPuts,
+				// we also skip adding mutations if one is already added.
+				if addedPutOrCPut || addedBatchHeaderMutation {
+					i--
+					continue
+				}
+				addedBatchHeaderMutation = true
 			}
 		}
 		return batch(ops...)
@@ -1801,6 +1849,10 @@ func keysBetween(keys map[string]struct{}, start, end string) []string {
 		}
 	}
 	return between
+}
+
+func randItem[T any](rng *rand.Rand, l []T) T {
+	return l[rng.Intn(len(l))]
 }
 
 func randKey(rng *rand.Rand) string {

@@ -62,6 +62,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *SavepointRollbackOperation:
 		return &o.Result
+	case *MutateBatchHeaderOperation:
+		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
 	}
@@ -112,6 +114,14 @@ func formatOps(w *strings.Builder, fctx formatCtx, ops []Operation) {
 		w.WriteString("\n")
 		w.WriteString(fctx.indent)
 		op.format(w, fctx)
+	}
+}
+
+func (op Operation) OperationHasResultInBatch() bool {
+	if op.MutateBatchHeader != nil {
+		return false
+	} else {
+		return true
 	}
 }
 
@@ -221,6 +231,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *SavepointReleaseOperation:
 		o.format(w, fctx)
 	case *SavepointRollbackOperation:
+		o.format(w, fctx)
+	case *MutateBatchHeaderOperation:
 		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
@@ -451,6 +463,15 @@ func (op SavepointReleaseOperation) format(w *strings.Builder, fctx formatCtx) {
 func (op SavepointRollbackOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.RollbackSavepoint(ctx, %d)`, fctx.receiver, int(op.ID))
 	op.Result.format(w)
+}
+
+func (op MutateBatchHeaderOperation) format(w *strings.Builder, fctx formatCtx) {
+	if op.TargetBytes > 0 {
+		fmt.Fprintf(w, `%s.Header.TargetBytes = %d // MutateBatchHeaderOperation`, fctx.receiver, op.TargetBytes)
+	}
+	if op.MaxSpanRequestKeys > 0 {
+		fmt.Fprintf(w, `%s.Header.MaxSpanRequestKeys = %d // MutateBatchHeaderOperation`, fctx.receiver, op.MaxSpanRequestKeys)
+	}
 }
 
 func (r Result) format(w *strings.Builder) {

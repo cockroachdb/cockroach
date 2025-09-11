@@ -266,6 +266,8 @@ func TestRandStep(t *testing.T) {
 				client.Barrier++
 			case *FlushLockTableOperation:
 				client.FlushLockTable++
+			case *MutateBatchHeaderOperation:
+				client.MutateBatchHeader++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -303,7 +305,8 @@ func TestRandStep(t *testing.T) {
 			*DeleteRangeUsingTombstoneOperation,
 			*AddSSTableOperation,
 			*BarrierOperation,
-			*FlushLockTableOperation:
+			*FlushLockTableOperation,
+			*MutateBatchHeaderOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
