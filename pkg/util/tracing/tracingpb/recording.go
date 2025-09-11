@@ -266,7 +266,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	for _, tg := range sp.TagGroups {
 		var prefix redact.RedactableString
 		if tg.Name != AnonymousTagGroupName {
-			prefix = redact.Sprint("%s-", redact.SafeString(tg.Name))
+			prefix = redact.Sprintf("%s-", redact.SafeString(tg.Name))
 		}
 		for _, tag := range tg.Tags {
 			sb.Printf(" %s%s:%s", prefix, redact.SafeString(tag.Key), tag.Value)
