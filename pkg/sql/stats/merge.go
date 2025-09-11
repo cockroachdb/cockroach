@@ -7,23 +7,35 @@ package stats
 
 import (
 	"context"
+	"math"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
-// MergedStatistics returns an array of table statistics that
-// are the merged combinations of the latest full statistic and the latest partial
-// statistic for a specific column set. If merging a partial stat with the full
-// stat is not possible, we don't include that statistic as part of the resulting array.
+// MergeHistograms is the same as opt/props.MergeHistograms but is injected in order
+// to avoid an import cycle.
+var MergeHistograms = func(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	fullHistogram, partialHistogram []cat.HistogramBucket,
+	columnID descpb.ColumnID,
+) ([]cat.HistogramBucket, error) {
+	return nil, errors.New("MergeHistograms is not injected")
+}
+
+// MergedStatistics returns merged stats per single-column full stat by merging
+// them with all newer partial stats for that column in chronological order.
+// Partial statistics that cannot be merged with the full statistic are skipped,
+// and if no partials can be merged with a full, we don't include that statistic
+// in the result.
 func MergedStatistics(
 	ctx context.Context, stats []*TableStatistic, st *cluster.Settings,
 ) []*TableStatistic {
@@ -32,37 +44,52 @@ func MergedStatistics(
 	// It relies on the fact that the first full statistic
 	// is the latest.
 	fullStatsMap := make(map[descpb.ColumnID]*TableStatistic)
-	for _, stat := range stats {
-		if stat.IsPartial() || len(stat.ColumnIDs) != 1 {
+	for _, fullStat := range stats {
+		if fullStat.IsPartial() || len(fullStat.ColumnIDs) != 1 {
 			continue
 		}
-		col := stat.ColumnIDs[0]
+		col := fullStat.ColumnIDs[0]
 		_, ok := fullStatsMap[col]
 		if !ok {
-			fullStatsMap[col] = stat
+			fullStatsMap[col] = fullStat
 		}
 	}
 
-	mergedStats := make([]*TableStatistic, 0, len(fullStatsMap))
-	var seenCols intsets.Fast
-	for _, partialStat := range stats {
+	mergedStatsMap := make(map[descpb.ColumnID]*TableStatistic)
+	// Iterate over the stats in reverse order so that we merge the latest partial
+	// statistics last.
+	for i := len(stats) - 1; i >= 0; i-- {
+		partialStat := stats[i]
 		if !partialStat.IsPartial() || len(partialStat.ColumnIDs) != 1 {
 			continue
 		}
 		col := partialStat.ColumnIDs[0]
-		if !seenCols.Contains(int(col)) {
-			seenCols.Add(int(col))
-			var merged *TableStatistic
-			var err error
-			if fullStat, ok := fullStatsMap[col]; ok && partialStat.CreatedAt.After(fullStat.CreatedAt) {
-				merged, err = mergeExtremesStatistic(ctx, fullStat, partialStat, st)
-				if err != nil {
-					log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v", fullStat.TableID, redact.Safe(col), err)
-					continue
-				}
-				mergedStats = append(mergedStats, merged)
+		if fullStat, ok := fullStatsMap[col]; ok && partialStat.CreatedAt.After(fullStat.CreatedAt) {
+			baseStat := fullStat
+			if mStat, ok := mergedStatsMap[col]; ok {
+				baseStat = mStat
 			}
+
+			atExtremes := partialStat.FullStatisticID != 0
+			merged, err := mergePartialStatistic(ctx, baseStat, partialStat, st, atExtremes)
+			if err != nil {
+				log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v",
+					fullStat.TableID, redact.Safe(col), err)
+				continue
+			}
+			mergedStatsMap[col] = merged
 		}
+	}
+
+	colIDs := make([]descpb.ColumnID, 0, len(mergedStatsMap))
+	for colID := range mergedStatsMap {
+		colIDs = append(colIDs, colID)
+	}
+	sort.Slice(colIDs, func(i, j int) bool { return colIDs[i] < colIDs[j] })
+
+	mergedStats := make([]*TableStatistic, 0, len(colIDs))
+	for _, c := range colIDs {
+		mergedStats = append(mergedStats, mergedStatsMap[c])
 	}
 	return mergedStats
 }
@@ -90,51 +117,23 @@ func stripOuterBuckets(
 	return histogram[startIdx:endIdx]
 }
 
-// mergeExtremesStatistic merges a full table statistic with a partial table
-// statistic and returns a new full table statistic. It does this by prepending
-// the partial histogram buckets with UpperBound less than the first bucket of
-// the full histogram and appending the partial histogram buckets with
-// UpperBounds that are greater than the last full histogram bucket to the end
-// of the full histogram. It then recalculates the counts for the new merged
-// statistic, using the new combined histogram. The createdAt time is set to
-// that of the latest partial statistic, and the statistic is named the string
-// assigned to jobspb.MergedStatsName.
-//
-// For example, consider this case:
-// Full Statistic: {row: 7, dist: 4, null: 4, size: 1}
-// CreatedAt: 2022-01-02
-// Histogram (format is: {NumEq, NumRange, DistinctRange, UpperBound}):
-// [{1, 0, 0, 2}, {1, 0, 0, 3}, {1, 0, 0, 4}]
-//
-// Partial Statistic: {row: 8, dist: 4, null: 0, size: 1}
-// CreatedAt: 2022-01-03
-// Histogram: [{2, 0, 0, 0}, {2, 0, 0, 1}, {2, 0, 0, 5}, {2, 0, 0, 6}]
-//
-// Merged Statistic: {row: 15, dist: 7, null: 4, size: 1}
-// CreatedAt: 2022-01-03
-// Histogram: [{2, 0, 0, 0}, {2, 0, 0, 1}, {1, 0, 0, 2}, {1, 0, 0, 3},
-// {1, 0, 0, 4}, {2, 0, 0, 5}, {2, 0, 0, 6}]
-//
-// Alternatively, consider this case where the new values are added at
-// the upper extreme of the index:
-// Full Statistic: {row: 12, dist: 6, null: 0, size: 3}
-// CreatedAt: 2021-02-01
-// Histogram: [{3, 3, 2, 8}, {3, 3, 2, 15}]
-//
-// Partial Statistic: {row: 18, dist: 11, null: 0, size: 8}
-// CreatedAt: 2022-02-02
-// Histogram: [{4, 4, 4, 19}, {5, 5, 5, 21}]
-//
-// Merged Statistic: {row: 30, dist: 17, null: 0, size: 4}
-// CreatedAt: 2022-02-03
-// Histogram: [{3, 3, 2, 8}, {3, 3, 2, 15}, {4, 4, 4, 19}, {5, 5, 5, 21}]
+// mergePartialStatistic merges a full statistic with a more recent partial
+// statistic, and returns a new merged statistic. It does this by merging their
+// histograms (see props.MergeHistograms), and then recalculating the counts for
+// the new merged statistic, using the new combined histogram. The createdAt
+// time is set to that of the partial statistic, and the statistic is named the
+// string assigned to jobspb.MergedStatsName.
 //
 // In the case where there is no partial histogram, the full statistic
 // is returned but with the created_at time of the partial statistic,
 // with the statistic renamed to the string assigned to.
 // jobspb.MergedStatsName.
-func mergeExtremesStatistic(
-	ctx context.Context, fullStat *TableStatistic, partialStat *TableStatistic, st *cluster.Settings,
+func mergePartialStatistic(
+	ctx context.Context,
+	fullStat *TableStatistic,
+	partialStat *TableStatistic,
+	st *cluster.Settings,
+	atExtremes bool,
 ) (*TableStatistic, error) {
 	fullStatColKey := MakeSortedColStatKey(fullStat.ColumnIDs)
 	partialStatColKey := MakeSortedColStatKey(partialStat.ColumnIDs)
@@ -142,24 +141,17 @@ func mergeExtremesStatistic(
 		return fullStat, errors.AssertionFailedf("column sets for full table statistics and partial table statistics column sets do not match")
 	}
 
-	// Merge the histograms
-	// Currently, since we don't merge multi-column statistics, each
-	// statistic passed through should have a histogram.
-	// TODO (faizaanmadhani): Add support for multi-column partial statistics.
 	fullHistogram := fullStat.Histogram
 	partialHistogram := partialStat.Histogram
 
 	if len(fullHistogram) == 0 {
-		return fullStat, errors.New("the full statistic histogram does not exist")
+		return nil, errors.New("the full statistic histogram does not exist")
 	}
 
-	if partialStat.FullStatisticID != fullStat.StatisticID {
-		return nil, errors.New("partial statistic not derived from latest full statistic")
-	}
-
-	// If the partial histogram was empty this means that there
-	// were no new values at the extremes. We update the
-	// createdAt time and rename it.
+	// An empty partial histogram means that there were no values in the scanned
+	// spans. We can do better here by subtracting from the full histogram based
+	// on the stat predicate, but return the full statistic for simplicity since
+	// overestimates are generally safe.
 	if len(partialHistogram) == 0 {
 		mergedStat := *fullStat
 		mergedStat.Name = jobspb.MergedStatsName
@@ -167,80 +159,93 @@ func mergeExtremesStatistic(
 		return &mergedStat, nil
 	}
 
-	mergedHistogram := make([]cat.HistogramBucket, 0, len(fullHistogram)+len(partialHistogram))
-
-	// Remove the NULL bucket from the front
-	// of both histograms if it exists.
-	if fullHistogram[0].UpperBound == tree.DNull {
-		fullHistogram = fullHistogram[1:]
-	}
-	if partialHistogram[0].UpperBound == tree.DNull {
-		partialHistogram = partialHistogram[1:]
-	}
+	fullHistogram = fullStat.nonNullHistogram().buckets
+	partialHistogram = partialStat.nonNullHistogram().buckets
 
 	var cmpCtx *eval.Context
 
-	// Remove the outer buckets from the ends of the histograms if they exist.
-	// This is done to avoid overlapping buckets when merging the histograms.
 	fullHistogram = stripOuterBuckets(ctx, cmpCtx, fullHistogram)
 	partialHistogram = stripOuterBuckets(ctx, cmpCtx, partialHistogram)
 
-	i := 0
-	// Merge partial stats to prior full statistics.
-	for i < len(partialHistogram) {
-		if val, err := partialHistogram[i].UpperBound.Compare(ctx, cmpCtx, fullHistogram[0].UpperBound); err == nil {
-			if val == 0 {
-				return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
-			}
-			if val == -1 {
-				mergedHistogram = append(mergedHistogram, partialHistogram[i])
-				i++
-			} else {
-				break
-			}
-		} else {
-			return nil, err
-		}
-	}
-
-	// Iterate through the rest of the full histogram and append it.
-	for _, fullHistBucket := range fullHistogram {
-		if i < len(partialHistogram) {
-			if val, err := partialHistogram[i].UpperBound.Compare(ctx, cmpCtx, fullHistBucket.UpperBound); err == nil {
-				if val <= 0 {
-					return nil, errors.New("the upperbound of the full statistic histogram overlaps with the partial statistic histogram")
+	mergedHistogram := fullHistogram
+	if atExtremes {
+		var lowerExtremeBuckets, upperExtremeBuckets []cat.HistogramBucket
+		i := 0
+		// Get the lower extreme buckets from the partial histogram.
+		for i < len(partialHistogram) {
+			if val, err := partialHistogram[i].UpperBound.Compare(ctx, cmpCtx, fullHistogram[0].UpperBound); err == nil {
+				if val == 0 {
+					return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
+				}
+				if val == -1 {
+					lowerExtremeBuckets = append(lowerExtremeBuckets, partialHistogram[i])
+					i++
+				} else {
+					break
 				}
 			} else {
 				return nil, err
 			}
 		}
-		mergedHistogram = append(mergedHistogram, fullHistBucket)
+
+		// Get the upper extreme buckets from the partial histogram.
+		for i < len(partialHistogram) {
+			upperExtremeBuckets = append(upperExtremeBuckets, partialHistogram[i])
+			i++
+		}
+
+		var err error
+		if len(lowerExtremeBuckets) > 0 {
+			mergedHistogram, err = MergeHistograms(ctx, cmpCtx, mergedHistogram, lowerExtremeBuckets, fullStat.ColumnIDs[0])
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(upperExtremeBuckets) > 0 {
+			mergedHistogram, err = MergeHistograms(ctx, cmpCtx, mergedHistogram, upperExtremeBuckets, fullStat.ColumnIDs[0])
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		var err error
+		mergedHistogram, err = MergeHistograms(ctx, cmpCtx, mergedHistogram, partialHistogram, fullStat.ColumnIDs[0])
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// iterate through the remaining partial histogram and append it.
-	for i < len(partialHistogram) {
-		mergedHistogram = append(mergedHistogram, partialHistogram[i])
-		i++
+	var mergedNonNullRowCount, mergedNonNullDistinctCount float64
+	for _, bucket := range mergedHistogram {
+		mergedNonNullRowCount += bucket.NumEq + bucket.NumRange
+		mergedNonNullDistinctCount += bucket.DistinctRange
+		if bucket.NumEq > 0 {
+			mergedNonNullDistinctCount += 1
+		}
 	}
 
-	// Since partial statistics at the extremes will always scan over
-	// the NULL rows at the lowerbound, we don't include the NULL count
-	// of the full statistic.
-	mergedRowCount := (fullStat.RowCount - fullStat.NullCount) + (partialStat.RowCount)
-	mergedDistinctCount := fullStat.DistinctCount + partialStat.DistinctCount
-	// Avoid double counting the NULL distinct value.
-	if fullStat.NullCount > 0 {
-		mergedDistinctCount -= 1
+	// A zero null count in non-extreme partial statistics could either mean that
+	// the filter excluded nulls or that the filter included nulls, but there were
+	// no nulls found. We make a best effort to determine if the filter included
+	// nulls by only overwriting the null count of the full statistic if the
+	// partial statistic has a non-zero null count. Partial statistics at extremes
+	// always include nulls, so we always overwrite the null count in that case.
+	mergedNullCount := fullStat.NullCount
+	if partialStat.NullCount > 0 || atExtremes {
+		mergedNullCount = partialStat.NullCount
 	}
-	mergedNullCount := partialStat.NullCount
 
-	mergedNonNullRowCount := mergedRowCount - mergedNullCount
-	mergedNonNullDistinctCount := mergedDistinctCount
+	mergedRowCount := uint64(math.Round(mergedNonNullRowCount)) + mergedNullCount
+	mergedDistinctCount := uint64(math.Round(mergedNonNullDistinctCount))
 	if mergedNullCount > 0 {
-		mergedNonNullDistinctCount--
+		mergedDistinctCount += 1
 	}
 
-	mergedAvgSize := (partialStat.AvgSize*partialStat.RowCount + fullStat.AvgSize*fullStat.RowCount) / mergedRowCount
+	mergedAvgSize := fullStat.AvgSize
+	if mergedRowCount > 0 {
+		mergedAvgSize = (fullStat.AvgSize*(mergedRowCount-partialStat.RowCount) +
+			partialStat.AvgSize*partialStat.RowCount) / mergedRowCount
+	}
 
 	mergedTableStatistic := &TableStatistic{
 		TableStatisticProto: TableStatisticProto{
@@ -260,7 +265,7 @@ func mergeExtremesStatistic(
 	hist := histogram{
 		buckets: mergedHistogram,
 	}
-	hist.adjustCounts(ctx, cmpCtx, fullStat.HistogramData.ColumnType, float64(mergedNonNullRowCount), float64(mergedNonNullDistinctCount))
+	hist.adjustCounts(ctx, cmpCtx, fullStat.HistogramData.ColumnType, mergedNonNullRowCount, mergedNonNullDistinctCount)
 	histData, err := hist.toHistogramData(ctx, fullStat.HistogramData.ColumnType, st)
 	if err != nil {
 		return nil, err
