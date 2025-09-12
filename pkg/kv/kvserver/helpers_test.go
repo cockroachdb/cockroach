@@ -167,6 +167,8 @@ func (s *Store) SplitQueuePurgatoryLength() int {
 // LeaseQueuePurgatory returns a map of RangeIDs representing the purgatory.
 func (s *Store) LeaseQueuePurgatory() map[roachpb.RangeID]struct{} {
 	defer s.leaseQueue.baseQueue.lockProcessing()()
+	s.leaseQueue.baseQueue.mu.Lock()
+	defer s.leaseQueue.baseQueue.mu.Unlock()
 	m := make(map[roachpb.RangeID]struct{}, len(s.leaseQueue.baseQueue.mu.purgatory))
 	for k := range s.leaseQueue.baseQueue.mu.purgatory {
 		m[k] = struct{}{}
