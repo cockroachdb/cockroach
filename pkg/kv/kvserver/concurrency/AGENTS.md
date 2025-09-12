@@ -1,7 +1,3 @@
-## Purpose
-
-- High-signal reference for KV concurrency control on a single range: latches, lock table, wait-queues, and txn wait queue. Prioritizes invariants, boundaries, mixed-version caveats, and triage playbooks.
-
 ## At a glance
 
 - Components and key entry points (paths are relative):
@@ -17,6 +13,7 @@
   - `pkg/kv/kvserver/batcheval/cmd_flush_lock_table.go`: manual flush of unreplicated locks to replicated locks.
   - Protos: `pkg/kv/kvpb/api.proto` (Batch header hints), `pkg/roachpb/data.proto` (`LockAcquisition`, `LockUpdate`, `LockStateInfo`).
 - Owners: KV (concurrency)
+- See also: `pkg/kv/kvserver/AGENTS.md`, `pkg/kv/kvclient/kvcoord/AGENTS.md`
 - Control flow (range-local):
 
   ```text
@@ -93,11 +90,9 @@
   - Aborts/read-your-own-writes: if server aborted due to AbortSpan, ensure the client uses write buffering so `HasBufferedAllPrecedingWrites` is set where appropriate.
 
 6) Interoperability seams
-- KV client/txn coordination: `pkg/kv/kvclient/kvcoord/AGENTS_INTERCEPTORS.md`:
-  - Write buffering and locking read transformations; sets `BatchRequest.HasBufferedAllPrecedingWrites` when all prior writes are client-buffered, allowing the server to skip AbortSpan checks (`replica_evaluate.go`).
-  - Converts high-level `SELECT FOR UPDATE/SKIP LOCKED` into KV batches with lock strength/durability/wait policy.
-- Txn wait queue (`pkg/kv/kvserver/txnwait/`): used by waiter to push holders; deadlock detection stitched across ranges via remote pushes and `QueryTxn`.
-- Lock updates and intent resolution (`pkg/kv/kvserver/intentresolver`): used by waiter to resolve intents after pushes and by evaluation paths.
+- KV client/txn coordination: cooperates with client-side buffering and locking semantics; server may skip AbortSpan checks when clients attest to buffered writes.
+- Txn wait queue: coordinates cross-range pushes and deadlock detection using per-transaction queues.
+- Intent resolution: integrates with intent resolution services post-push and during evaluation.
 
 7) Mixed-version / upgrades
 - Request/response fields: `has_buffered_all_preceding_writes` is ignored by older servers and must be set compatibly by clients.
@@ -116,24 +111,21 @@
 - `kv.lock_table.unreplicated_lock_reliability.max_flush_size` (bytes): guardrail for durability upgrades.
 - `kv.lock.exclusive_locks_block_non_locking_reads.enabled` (bool): whether non-locking reads block on Exclusive locks at serializable.
 
-9) Background jobs & schedules
-- N/A. The concurrency manager is live in the replica’s request path; no long-running background jobs.
-
-10) Edge cases & gotchas
+9) Edge cases & gotchas
 - `SkipLocked` range reads: scan skips locked keys; validation and optimistic-conflict checking is restricted to returned point keys (`replica_read.go:collectSpansRead`).
 - Non-existent keys: locking GET/DEL may still acquire a lock on a missing key to protect gaps (`LockNonExistentKeys = true`).
 - Memory pressure: lock table may shed queue/lock state. Requests in `waitElsewhere` should push and/or rely on latches to preserve safety; fairness may degrade transiently.
 - Savepoints/rollbacks: sequence numbers (and ignored ranges) on `LockAcquisition`/`LockUpdate` determine lock promotion/rollback across unreplicated→replicated transitions.
 - Missing best-effort locks: `OnLockMissing` prevents later durability upgrade of locks that were reported missing by `QueryIntent` during read evaluation.
 
-11) Tiny worked examples
+10) Tiny worked examples
 - Locking read (point): txn T scans lock table under latches; no conflict → evaluate READ; returns `AcquiredLocks` (unreplicated Exclusive). Replica calls `OnLockAcquired`. Later write W conflicts: on sequencing, W enters wait-queue, pushes T after delay or immediately if `Error`/priority.
 - Skip locked scan: range SCAN with `SkipLocked` skips locked keys at evaluation; on re-sequencing, latches cover only the concrete keys returned; no waiting occurs for skipped keys.
 
-12) References
+11) References
  - See also: `pkg/kv/kvclient/kvcoord/AGENTS_INTERCEPTORS.md`
 
-13) Glossary
+12) Glossary
 - Latch: in-memory per-range span lock; serializes evaluation of conflicting in-flight requests.
 - Lock table: in-memory per-range structure tracking per-key locks, queues, and fairness sequencing.
 - Lock (unreplicated): in-memory key lock (typically Exclusive) acquired by locking reads; best-effort durability.
@@ -145,5 +137,7 @@
 - AbortSpan: per-range structure used to quickly detect aborted txns; bypassed when `HasBufferedAllPrecedingWrites` is set.
 - Reliability upgrade: converting unreplicated locks to replicated locks during lease transfer/merge/explicit flush.
 
-14) Search keys & synonyms
+13) Search keys & synonyms
+ 
+Omitted sections: Background jobs & schedules
 - search: "lock table", "unreplicated locks", "SkipLocked", "nowait", "WaitPolicy_Error", "deadlock detection", "txnWaitQueue", "OnLockAcquired", "HandleLockConflictError", "QueryLocks", "FlushLockTable", "ExclusiveLocksBlockNonLockingReads", "maximum_lock_wait_queue_length".

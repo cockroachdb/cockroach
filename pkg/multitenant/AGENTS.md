@@ -1,6 +1,3 @@
-# Purpose
-A compact, high-signal reference for CockroachDB multi-tenancy: how tenant isolation is enforced, how tenant SQL servers route to KV, capability gating, cost control/admission, and upgrade/migration flows. Emphasis on security/resource invariants, mixed-version constraints, and failure isolation/triage.
-
 ## At a glance
 - **Component index**
   - `pkg/multitenant/` — Tenant metadata, capabilities, cost-control interfaces; helper packages `mtinfo/`, `mtinfopb/`, `tenantcapabilities*`, `tenantcostmodel/`.
@@ -17,6 +14,7 @@ A compact, high-signal reference for CockroachDB multi-tenancy: how tenant isola
   - `pkg/server/tenant_auto_upgrade.go` — Auto-upgrade loop and rules.
   - `pkg/server/settingswatcher/settings_watcher.go` — Settings/cluster-version propagation to tenants, storage cluster version cache.
   - `pkg/rpc/auth_tenant.go` — Tenant RPC authn/z, keyspace bounds checks, capability checks.
+- **See also**: `pkg/kv/kvserver/AGENTS.md`, `pkg/kv/kvclient/kvcoord/AGENTS.md`, `pkg/settings/AGENTS.md`, `pkg/sql/AGENTS.md`, `pkg/upgrade/AGENTS.md`
 - **Critical invariants**
   - Keyspace isolation: all tenant requests must be contained within that tenant’s keyspace; enforced at RPC authz (`Range`, `RangeLookup`, `Batch`, span stats) and by connector-mediated access paths.
   - Privileged ops gated by capabilities; absence denies by default.
@@ -102,10 +100,10 @@ Tenant auto-upgrade loop:
   - Upgrade stuck: inspect `tenant_auto_upgrade` logs, settings watcher’s cached storage version, `cluster.preserve_downgrade_option`, and binary versions of all tenant instances.
 
 ### 6) Interoperability
-- KV client/coordinator: `pkg/kv/kvclient/kvcoord/AGENTS.md` — DistSender, txn coord, interceptors.
-- KV server & auth: `pkg/kv/kvserver/AGENTS.md`; RPC authz in `pkg/rpc/auth_tenant.go`.
-- Security: TLS and authn/z in `pkg/security/` (certs, users); connector relies on tenant TLS to authenticate to KV.
-- Settings propagation and defaults: `pkg/settings/AGENTS.md`
+- KV client/coordinator: uses DistSender/txn coordination via restricted connector interfaces.
+- KV server & auth: relies on RPC authorization and key-bounds enforcement at the server boundary.
+- Security: authenticates via tenant TLS; capability authorizer gates privileged operations.
+- Settings propagation and defaults: observes system→tenant overrides and alternate defaults for compatibility.
 
 ### 7) Mixed-version and upgrade flows
 - Storage cluster version is propagated to tenants via settings overrides (`settingswatcher.SettingsWatcher` caches as “storage cluster active version”).
@@ -153,4 +151,4 @@ Tenant auto-upgrade loop:
 ### 13) Search keys & synonyms
 - kvtenant connector; tenant capabilities; token bucket; RU; span config bounds; tenant auto-upgrade; MigrationServer; settings watcher; rpc/auth_tenant; cross-tenant reads; virtual cluster.
 
-_Note: Omitted intentionally: Background jobs & schedules_
+Omitted sections: Background jobs & schedules

@@ -1,9 +1,3 @@
-# Declarative Schema Changer — Domain Context
-
-Anchors:
-- pkg/sql/schemachanger/
-- Cross-links: pkg/jobs/, pkg/kv/, pkg/kv/kvserver/protectedts/
-
 ## At a glance
 
 - **Component index**
@@ -20,6 +14,7 @@ Anchors:
   - Owns: generation of targets, planning into phases/stages, execution of metadata changes, backfills, and validations.
   - Uses: `pkg/jobs/` for background execution, `pkg/kv/` for transactions, `pkg/kv/kvserver/protectedts/` for GC protection.
   - Avoids: direct storage/raft coupling; interacts via descriptors, jobs, and KV transactions.
+- **See also**: `pkg/sql/AGENTS.md`, `pkg/kv/kvserver/AGENTS.md`, `pkg/upgrade/AGENTS.md`
 
 - **Key entry points & types**
   - `scbuild/build.go`: Build targets/elements from DDL.
@@ -104,9 +99,9 @@ DDL stmt -> scbuild (targets) -> scplan (StatementPhase stages)
   5. If retrying frequently, look for descriptor lease contention or mixed-version gates; verify cluster version.
 
 6) Interoperability
-- Jobs (`pkg/jobs/`): job lifecycle, payload/progress, pausepoints, execution details.
-- KV (`pkg/kv/`): per-stage transactions, retries, and contention behavior.
-- Protected timestamps (`pkg/kv/kvserver/protectedts/`): GC safety for long-running historical reads and post-drop retention; accessed via `scexec.ProtectedTimestampManager`.
+- Jobs: integrates with the job registry for post-commit execution and progress/checkpoint reporting.
+- KV: executes each stage within KV transactions with standard retry/contend semantics.
+- Protected timestamps: coordinates protections to prevent GC of data required during long-running changes.
 
 7) Mixed-version / upgrades
 - Planning/rollback respect the active cluster version; `scrun.makeState` migrates persisted state (`scpb.MigrateDescriptorState`) to the active version before planning.

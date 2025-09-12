@@ -1,7 +1,3 @@
-# KV Coordinator and DistSender
-
-Purpose: high-signal domain context for `pkg/kv/kvclient/kvcoord` (Txn coordinator, sender stack, and range routing) so changes don’t violate invariants around retries, uncertainty, and commit protocols.
-
 ## At a glance
 - **Component index**
   - Txn coordination: `TxnCoordSender` and interceptor stack (`txn_coord_sender.go` and `txn_interceptor_*.go`)
@@ -13,6 +9,7 @@ Purpose: high-signal domain context for `pkg/kv/kvclient/kvcoord` (Txn coordinat
   - kvcoord owns client-side txn lifecycle, retries/refresh, pipelining, parallel commits, routing, observability
   - kvcoord must not embed storage/server semantics; it speaks via `kvpb` RPCs and consumes `roachpb` types
   - Closed timestamp evaluation, latches/locks, and uncertainty computation live in `kvserver`
+- **See also**: `pkg/kv/kvserver/AGENTS.md`, `pkg/kv/kvserver/concurrency/AGENTS.md`, `pkg/sql/AGENTS.md`
 - **Key entry points & types**
   - `txn_coord_sender.go` (`TxnCoordSender`, `DeferCommitWait`, `maybeCommitWait`)
   - `txn_interceptor_heartbeater.go` (txn record heartbeat lifecycle)
@@ -55,6 +52,7 @@ SQL → TxnCoordSender → Heartbeater → SeqNum → WriteBuffer → Pipeliner 
 - `roachpb.Transaction`: IDs, epochs, read/write timestamps, observed timestamps, status (PENDING/STAGING/PREPARED/COMMITTED/ABORTED)
 - `kvpb.Error` detail types drive retry logic (e.g., `TransactionRetryWithProtoRefreshError`, `ReadWithinUncertaintyIntervalError`, `WriteTooOldError`, `AmbiguousResultError`).
 - Range metadata and closed-timestamp policy: `roachpb.RangeDescriptor`, `roachpb.RangeClosedTimestampPolicy`, `kvpb.ClientRangeInfo`.
+  - Uncertainty intervals: server computes global/local limits per request; on uncertainty, retries step just above the value ts within limits.
 
 3) Concurrency & resource controls
 - Gatekeeper ensures synchronous client protocol for roots (no concurrent requests except permitted cases), avoiding races in commit/abort.
@@ -78,30 +76,28 @@ SQL → TxnCoordSender → Heartbeater → SeqNum → WriteBuffer → Pipeliner 
 - Ambiguity near commit: propagate `AmbiguousResultError` and rely on higher layers (SQL StatementCompletionUnknown) rather than client-side status resolution.
 - See also: `pkg/kv/kvclient/kvcoord/AGENTS_INTERCEPTORS.md` for detailed interceptor metrics and tracing hints.
 
-6) Uncertainty intervals
-- Server computes interval per request (`kvserver/uncertainty`): global limit = txn.ReadTimestamp + max clock offset; local limit from observed leaseholder’s clock, adjusted for lease changes.
-- On `ReadWithinUncertaintyIntervalError`, the retry ts is at least just above `ValueTimestamp`, forwarded to local limit when present. Txn coord may then refresh/step read ts.
-- Commit-wait: after COMMIT/PREPARE, `maybeCommitWait` sleeps until commit ts (or +max_offset for linearizable writes) is below local clock to enforce real-time ordering and monotonic reads across gateways.
+6) Interoperability
+- Client/SQL: executes under `kv.Txn`; higher layers map ambiguous commit errors to SQL StatementCompletionUnknown semantics.
+- KV server: correctness relies on server-side latches/locks, closed timestamps, and uncertainty evaluation; client must not assume server semantics beyond `kvpb`/`roachpb` contracts.
+- Settings and feature gates flow from `pkg/settings` and `pkg/clusterversion`; unknown client hints must be safely ignored by servers.
 
-7) Closed timestamps consumption (follower reads)
-- DistSender may route consistent historical reads to followers if `CanSendToFollower(...)` says the batch is eligible and required frontier ≤ expected closed ts given policy (e.g., LAG_BY_CLUSTER_SETTING or LEAD_FOR_GLOBAL_READS). Server validates using actual closed ts; otherwise it redirects/denies.
-
-8) Mixed-version / upgrades
+7) Mixed-version / upgrades
 - Parallel-commit participation, write-buffer hints, or follower-read routing must remain safe when some nodes don’t recognize newest flags: defaults and server-side guards ensure safety (e.g., EndTxn falls back to explicit commit; unknown client hints are ignored). Don’t assume cluster-wide feature presence unless gated by a cluster setting/version.
 
-9) Configuration & feature gates
+8) Configuration & feature gates
 - `kv.transaction.parallel_commits.enabled` (default true)
 - Follower reads enablement and enterprise gating live in CCL; DistSender uses injected `CanSendToFollower`.
 - Refresh footprint budget: `kv.transaction.max_refresh_spans_bytes`
 - Commit-wait linearizability (per-Txn option) and `DeferCommitWait` callback for external waiting.
 
-10) Edge cases & gotchas
+9) Edge cases & gotchas
+- Follower reads: historical reads may route to followers when eligible; server validates against closed timestamps.
 - EndTxn must be terminal in batch; leaf txns cannot issue locking requests.
 - After an ambiguity during commit, kvcoord must not “helpfully” resolve status; instead propagate ambiguity and rely on higher layers.
 - On retries, split EndTxn from writes and disable parallel commit to avoid reordering relative to prior partial successes.
 - Refresh spans may be condensed or invalidated on budget overflow; once invalidated, only epoch restart can proceed.
 
-11) Examples
+10) Examples
 - Retry/refresh loop (simplified):
 ```
 send batch → pErr?
@@ -112,18 +108,19 @@ send batch → pErr?
          else: return error
 ```
 
-12) References
+11) References
 - See also: `pkg/kv/kvserver/AGENTS.md`
 
-13) Glossary
+12) Glossary
 - In-flight write: pipelined write not yet proven durable; tracked by `InFlightWrites` on EndTxn
 - Implicit commit: STAGING + all in-flight writes at/below staging ts
 - Refresh: revalidation of read spans to bump read ts safely
 - Uncertainty interval: [read ts, (local|global) limit]; defines safe read window
 - Commit-wait: client sleep to enforce real-time/monotonic reads guarantees
 - Ambiguous result: success unknown; treat commit as possibly applied
+- Parallel commit: protocol issuing EndTxn with in-flight writes for implicit commit
+- Follower read: serving consistent historical reads from non-leaseholders subject to closed timestamps
 
-14) Search keys & synonyms
+13) Search keys & synonyms
 - TxnCoordSender, DistSender, RangeDescriptorCache, parallel commits, pipeliner, span refresher, ReadWithinUncertaintyInterval, ambiguous, commit-wait, follower reads, closed timestamps
-
-_Note: Omitted intentionally: Background jobs & schedules_
+Omitted sections: Background jobs & schedules

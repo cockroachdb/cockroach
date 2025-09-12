@@ -1,6 +1,3 @@
-# Purpose
-High-signal reference for the storage layer (`pkg/storage/`): engine API over Pebble, MVCC encoding/iteration, EAR registries, snapshots/SST ingestion, and I/O categorization.
-
 ## At a glance
 
 - **Responsibilities**: Engine-agnostic storage API over Pebble; MVCC encoding, iteration and range tombstones; intent interleaving; snapshots/SST ingestion; encryption-at-rest (EAR) registries; I/O categorization and disk health/metrics.
@@ -14,6 +11,7 @@ High-signal reference for the storage layer (`pkg/storage/`): engine API over Pe
   - `sst_writer.go` — SST writer used by export/ingest/snapshots.
 - **Boundaries**: Provides durable KV over Pebble to `pkg/kv/kvserver` (Raft, replication) and `pkg/kv/kvclient` (reads/writes). EAR integrates with CCL code.
 - **Owners**: Storage
+- **See also**: `pkg/kv/kvserver/AGENTS.md`, `pkg/kv/kvclient/kvcoord/AGENTS.md`
 - **Critical invariants**:
   - MVCC point keys sort by user key and descending timestamp; intents (ts=0) encode at the user key prefix; range tombstones mask points below their timestamp.
   - MVCC iterators never enter the lock-table keyspace; intent interleaving merges lock-table (separated intents) with MVCC values consistently.
@@ -38,6 +36,7 @@ Read: Reader.NewMVCCIterator(opts)
   ↳ time-bound filters and range-key masking (when enabled)
 ```
 
+## Deep dive
 1) Architecture & control flow
 
 - **Engine API (`engine.go`)**: `Engine` combines `Reader` + `Writer` plus engine ops (capacity, compaction, ingestion, snapshots). `Reader.NewMVCCIterator` and `NewEngineIterator` produce iterators scoped by `IterOptions` (bounds, key types, time hints, masking, read category). `Writer` covers MVCC/engine clears, puts, merges, range keys, and batch semantics.
@@ -72,7 +71,7 @@ Read: Reader.NewMVCCIterator(opts)
 
 6) Interoperability
 
-- Reads/writes originate in `pkg/kv/kvserver` evaluation; range snapshots call `RangeSnapshotReadCategory`. Consensus/snapshots rely on SST export/ingest (`sst_writer.go`, `Engine.Ingest*`). See `pkg/kv/kvserver/AGENTS.md`.
+- Reads/writes originate in KV evaluation; replication and snapshots rely on export/ingest and snapshot primitives provided by the engine API.
 
 7) Mixed-version / upgrades
 
@@ -116,4 +115,4 @@ Read: Reader.NewMVCCIterator(opts)
 
 - Engine API, Pebble iterator stats, intentInterleavingIter, MVCCIncrementalIterator, ReadAsOfIterator, RangeKeyMaskingBelow, EncodeMVCCTimestampSuffix, EngineKey sentinel, RegisterOnDiskSlow, FileRegistry, IngestLocalFiles, PreIngestDelay.
 
-_Note: Omitted intentionally: Background jobs & schedules_
+Omitted sections: Background jobs & schedules

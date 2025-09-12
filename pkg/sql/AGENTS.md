@@ -1,6 +1,3 @@
-# Purpose
-Compact, high-signal context for the end-to-end SQL engine in CockroachDB. Prioritize invariants, boundaries, and triage playbooks over narrative. Scope covers: parsing; optimizer/planning surface; DistSQL flow setup; execution (row + vectorized); session state; privilege enforcement; jobs integration; SQL→KV boundaries.
-
 ## At a glance
 - **Component index**
   - pgwire (wire protocol) → `pkg/sql/pgwire/` → parses protocol, fills `StmtBuf`, streams results.
@@ -21,6 +18,7 @@ Compact, high-signal context for the end-to-end SQL engine in CockroachDB. Prior
   - Allowed: planning uses catalog/authorization via `planner`/`optCatalog`; KV access only through execution.
   - Allowed: execution uses `execinfra.Flow` APIs; KV reads/writes happen only inside processors/operators via fetchers under a `kv.Txn` from the executor.
   - Forbidden: bypassing privilege checks; issuing KV ops from `pgwire`/optimizer layers; leaking flows/monitors.
+- **See also**: `pkg/kv/kvclient/kvcoord/AGENTS.md`, `pkg/kv/kvserver/AGENTS.md`, `pkg/sql/schemachanger/AGENTS.md`
 
 - **Key entry points & types (anchors)**
   - `pkg/sql/pgwire/conn.go` → `conn.serve` feeds a `sql.StmtBuf` to executor; implements `sql.ClientComm`.
@@ -95,12 +93,12 @@ client → pgwire/conn → StmtBuf → connExecutor.run/execCmd
   5. For KV stalls, inspect contention and `kv` traces (look for `DistSender`/`TxnCoordSender`).
 
 6) Interoperability
-- Optimizer surface: `pkg/sql/opt/` (memo, rules, execbuilder) feeds `plan_opt.go`.
-- Flow/execution: `pkg/sql/execinfra/`, `pkg/sql/flowinfra/` define flow/processor lifecycles.
-- Vectorized: `pkg/sql/colflow/`, `pkg/sql/colexec/` implement columnar operators.
-- pgwire: `pkg/sql/pgwire/` owns network protocol and buffering; only speaks to executor via `StmtBuf`/`ClientComm`.
-- Jobs: `pkg/jobs/` manages resumers and job lifecycle; created within SQL txns.
-- KV boundary: `pkg/kv/kvclient/kvcoord/AGENTS.md` (`DistSender`) accessed via `kv.Txn` from fetchers.
+- Optimizer → execution: optimizer feeds executable plan components to the exec builder surface.
+- Flow/execution: distributed flow and processor lifecycles coordinate setup, execution, and cleanup across nodes.
+- Vectorized vs row engines: interchangeable semantics; selection controlled by settings and operator support.
+- pgwire: network protocol and buffering speak only to the executor via `StmtBuf`/`ClientComm` abstractions.
+- Jobs: job registry runs resumers for long-running or side-effecting work created within SQL transactions.
+- KV boundary: all KV interaction happens inside processors/operators via fetchers under a `kv.Txn`.
 
 7) Mixed-version / upgrades
 - Flow versioning: `distsql/server.go` rejects unsupported `execversion`; flows run at negotiated version.
@@ -125,7 +123,6 @@ client → pgwire/conn → StmtBuf → connExecutor.run/execCmd
 
 12) References
 - `docs/tech-notes/life_of_a_query.md` (high-level narrative)
-- Related packages: `pkg/sql/opt/`, `pkg/sql/execinfra/`, `pkg/sql/colflow/`, `pkg/sql/pgwire/`, `pkg/jobs/`, `pkg/sql/schemachanger/AGENTS.md`, `pkg/kv/kvclient/kvcoord/AGENTS.md`
 
 13) Glossary
 - connExecutor: per-connection state machine executing statements in a session.
