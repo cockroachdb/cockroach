@@ -47,6 +47,11 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 		}
 
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			if isMeta1LH, err := s.sqlServer.isMeta1Leaseholder(ctx, s.clock.NowAsClockTimestamp()); err != nil || !isMeta1LH {
+				log.VInfof(ctx, 2, "not upgrading from this node since we not the meta1 leaseholder; err=%v", err)
+				continue
+			}
+
 			clusterVersion, err := s.clusterVersion(ctx)
 			if err != nil {
 				log.Dev.Errorf(ctx, "unable to retrieve cluster version: %v", err)
