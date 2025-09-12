@@ -1982,20 +1982,20 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 		return updatedMainPTS || updatedPerTablePTS, nil
 	}
-	if len(ptsEntries.LaggingTablesRecords) > 0 {
+	if len(ptsEntries.ProtectedTimestampRecords) > 0 {
 		// In this case, we should have tried to revert the per-table protected timestamp records,
 		// but we didn't because there were still lagging tables.
 		// We now try to advance the protected timestamp for the lagging tables unless
 		// there are no lagging tables and all can be protected with the primary PTS record.
 		updatedPerTablePTS, err :=
-			cf.advanceLaggingPerTableProtectedTimestamps(ctx, txn, &ptsEntries, highwater)
+			cf.advanceLaggingPerTableProtectedTimestamps(ctx, txn, progress, &ptsEntries, highwater)
 		if err != nil {
 			return false, err
 		}
 
 		// Check if the call to advanceLaggingPerTableProtectedTimestamps resulted in
 		// all lagging tables catching up.
-		if len(ptsEntries.LaggingTablesRecords) == 0 {
+		if len(ptsEntries.ProtectedTimestampRecords) == 0 {
 			// If no tables are lagging, we can revert the new per-table style PTS records.
 			if err := cf.revertPerTableProtectedTimestampRecords(ctx, txn, progress); err != nil {
 				return false, err
@@ -2010,14 +2010,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 			return true, err
 		}
 
-		// We always advance the system tables PTS record to the highwater.
-		updatedSystemTablesPTS, err :=
-			cf.advanceSystemTablesProtectedTimestamp(ctx, &ptsEntries, highwater, pts, updatedPerTablePTS)
-		if err != nil {
-			return false, err
-		}
-
-		return updatedPerTablePTS || updatedSystemTablesPTS, nil
+		return updatedPerTablePTS, nil
 	}
 
 	return cf.advanceProtectedTimestamp(ctx, progress, pts, highwater)
@@ -2111,12 +2104,13 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 func (cf *changeFrontier) advanceLaggingPerTableProtectedTimestamps(
 	ctx context.Context,
 	txn isql.Txn,
+	progress *jobspb.ChangefeedProgress,
 	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
 	highwater hlc.Timestamp,
 ) (updatedPerTablePTS bool, err error) {
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 
-	primaryPTS, err := pts.GetRecord(ctx, ptsEntries.PrimaryRecord)
+	primaryPTS, err := pts.GetRecord(ctx, progress.ProtectedTimestampRecord)
 	if err != nil {
 		return false, err
 	}
@@ -2131,20 +2125,20 @@ func (cf *changeFrontier) advanceLaggingPerTableProtectedTimestamps(
 	// advance them with the highwater.
 	if !isLagging {
 		allLaggingTableIDs := make([]descpb.ID, 0)
-		for tableID := range ptsEntries.LaggingTablesRecords {
+		for tableID := range ptsEntries.ProtectedTimestampRecords {
 			allLaggingTableIDs = append(allLaggingTableIDs, tableID)
 		}
-		if err := cf.releasePerTableProtectedTimestampRecords(ctx, txn, ptsEntries, allLaggingTableIDs, pts); err != nil {
+		if err := cf.releasePerTableProtectedTimestampRecords(ctx, ptsEntries, allLaggingTableIDs, pts); err != nil {
 			return false, err
 		}
-		ptsEntries.LaggingTablesRecords = nil
+		ptsEntries.ProtectedTimestampRecords = nil
 		if err := writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID); err != nil {
 			return false, err
 		}
 		return true, nil
 	}
 
-	for tableID := range ptsEntries.LaggingTablesRecords {
+	for tableID := range ptsEntries.ProtectedTimestampRecords {
 		if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, highwater, pts); err != nil {
 			return false, err
 		} else if updated {
@@ -2158,44 +2152,16 @@ func (cf *changeFrontier) advanceLaggingPerTableProtectedTimestamps(
 func (cf *changeFrontier) revertPerTableProtectedTimestampRecords(
 	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
 ) error {
-	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
-
 	var ptsEntries cdcprogresspb.ProtectedTimestampRecords
 	if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, cf.spec.JobID); err != nil {
 		return err
 	}
-
-	if len(ptsEntries.LaggingTablesRecords) > 0 {
+	if len(ptsEntries.ProtectedTimestampRecords) > 0 {
 		// If there are any lagging tables records, we don't revert until these
 		// lagging tables have caught up to the highwater.
 		return nil
 	}
-	ptsEntries.LaggingTablesRecords = nil
-
-	if progress.ProtectedTimestampRecord == uuid.Nil {
-		ptr := createProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, cf.highWaterAtStart, true, /* includeSystemTables */
-		)
-		if err := pts.Protect(ctx, ptr); err != nil {
-			return err
-		}
-		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
-	}
-
-	if ptsEntries.SystemTablesRecord != uuid.Nil {
-		if err := pts.Release(ctx, ptsEntries.SystemTablesRecord); err != nil {
-			return err
-		}
-		ptsEntries.SystemTablesRecord = uuid.Nil
-	}
-
-	if ptsEntries.PrimaryRecord != uuid.Nil {
-		if err := pts.Release(ctx, ptsEntries.PrimaryRecord); err != nil {
-			return err
-		}
-		ptsEntries.PrimaryRecord = uuid.Nil
-	}
-
+	ptsEntries.ProtectedTimestampRecords = nil
 	if err := writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, cf.spec.JobID); err != nil {
 		return err
 	}
