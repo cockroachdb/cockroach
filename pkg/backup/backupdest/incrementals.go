@@ -120,7 +120,7 @@ func FindAllIncrementalPaths(
 
 	if includeManifest {
 		paths = util.Map(paths, func(p string) string {
-			return path.Join(p, backupbase.BackupManifestName)
+			return path.Join(p, backupbase.DeprecatedBackupManifestName)
 		})
 	}
 	return paths, nil
@@ -141,11 +141,11 @@ func LegacyFindPriorBackups(
 
 	var prev []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p)
+		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.DeprecatedBackupManifestName, p)
 		if err != nil {
 			return err
 		} else if !matchesGlob {
-			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.BackupManifestName, p)
+			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.DeprecatedBackupManifestName, p)
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func LegacyFindPriorBackups(
 
 		if matchesGlob {
 			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupbase.BackupManifestName)
+				p = strings.TrimSuffix(p, "/"+backupbase.DeprecatedBackupManifestName)
 			}
 			prev = append(prev, p)
 			return nil

@@ -156,7 +156,7 @@ func ReadBackupManifestFromStore(
 		// pre-23.1 node.
 		log.Dev.VInfof(ctx, 2, "could not find BACKUP_METADATA, falling back to BACKUP_MANIFEST")
 		backupManifest, backupManifestMemSize, backupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
-			backupbase.BackupManifestName, encryption, kmsEnv)
+			backupbase.DeprecatedBackupManifestName, encryption, kmsEnv)
 		if backupManifestErr != nil {
 			return backuppb.BackupManifest{}, 0, backupManifestErr
 		}
@@ -1305,18 +1305,18 @@ func CheckForPreviousBackup(
 	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, _, err := defaultStore.ReadFile(ctx, backupbase.BackupManifestName, cloud.ReadOptions{NoFileSize: true})
+	r, _, err := defaultStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			redactedURI, backupbase.BackupManifestName)
+			redactedURI, backupbase.DeprecatedBackupManifestName)
 	}
 
 	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			redactedURI, backupbase.BackupManifestName)
+			redactedURI, backupbase.DeprecatedBackupManifestName)
 	}
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from

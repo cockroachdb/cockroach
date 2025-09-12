@@ -476,7 +476,7 @@ func checkBackupFiles(
 		// Check metadata files. Note: we do not check locality aware backup
 		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
 		// they're validated in resolveBackupManifests.
-		metaFile := backupbase.BackupManifestName + backupinfo.BackupManifestChecksumSuffix
+		metaFile := backupbase.DeprecatedBackupManifestName + backupinfo.BackupManifestChecksumSuffix
 		if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 			return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 				info.defaultURIs[layer], metaFile)

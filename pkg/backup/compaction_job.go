@@ -793,7 +793,7 @@ func concludeBackupCompaction(
 	backupID := uuid.MakeV4()
 	backupManifest.ID = backupID
 
-	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.BackupManifestName,
+	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.DeprecatedBackupManifestName,
 		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
 		return err
 	}
