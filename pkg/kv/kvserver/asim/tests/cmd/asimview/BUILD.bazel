@@ -7,6 +7,7 @@ go_library(
         "sha_compare.go",
     ],
     embedsrcs = [
+        "mma.png",
         "sha_compare.html",
         "viewer.html",
     ],

@@ -20,6 +20,9 @@ var viewerHTML string
 //go:embed sha_compare.html
 var shaCompareHTML string
 
+//go:embed mma.png
+var faviconPNG []byte
+
 type FileInfo struct {
 	Path     string `json:"path"`
 	Name     string `json:"name"`
@@ -74,6 +77,7 @@ func main() {
 		fmt.Printf("Viewer available at: http://localhost:%d\n", port)
 
 		http.HandleFunc("/", serveViewer)
+		http.HandleFunc("/favicon.ico", serveFavicon)
 		http.HandleFunc("/api/files", makeFileListHandler(absDir))
 		http.HandleFunc("/api/file/", makeFileHandler(absDir))
 	}
@@ -84,6 +88,11 @@ func main() {
 func serveViewer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(viewerHTML))
+}
+
+func serveFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Write(faviconPNG)
 }
 
 func makeFileListHandler(baseDir string) http.HandlerFunc {
@@ -171,6 +180,7 @@ func setupShaComparisonRoutes() {
 	}
 
 	http.HandleFunc("/", serveShaCompareViewer)
+	http.HandleFunc("/favicon.ico", serveFavicon)
 	http.HandleFunc("/api/sha-comparisons", getShaComparisons)
 	http.HandleFunc("/api/recent-commits", getRecentCommits)
 	http.HandleFunc("/api/generate-comparison", generateComparison)
