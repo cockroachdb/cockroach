@@ -158,15 +158,6 @@ func LegacyFindPriorBackups(
 			prev = append(prev, p)
 			return nil
 		}
-
-		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupOldManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupbase.BackupOldManifestName)
-			}
-			prev = append(prev, p)
-		}
 		return nil
 	}); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")

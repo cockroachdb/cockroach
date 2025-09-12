@@ -35,13 +35,6 @@ const (
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 
-	// BackupOldManifestName is an old name for the serialized BackupManifest
-	// proto. It is used by 20.1 nodes and earlier.
-	//
-	// TODO(adityamaru): Remove this in 22.2 as part of disallowing backups
-	// from >1 major version in the past.
-	BackupOldManifestName = "BACKUP"
-
 	// BackupManifestName is the file name used for serialized BackupManifest
 	// protos.
 	//
