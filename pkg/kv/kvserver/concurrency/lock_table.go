@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -289,17 +290,31 @@ type lockTableImpl struct {
 
 	// settings provides a handle to cluster settings.
 	settings *cluster.Settings
+
+	// The number of locks that are shed due to the lock table running into memory
+	// limits.
+	locksShedDueToMemoryLimit *metric.Counter
+	// The number of times the lock table ran into memory limits and shed locks as
+	// a result.
+	numLockShedDueToMemoryLimitEvents *metric.Counter
 }
 
 var _ lockTable = &lockTableImpl{}
 
 func newLockTable(
-	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+	maxLocks int64,
+	rangeID roachpb.RangeID,
+	clock *hlc.Clock,
+	settings *cluster.Settings,
+	locksShedDueToMemoryLimit *metric.Counter,
+	numLockShedDueToMemoryLimitEvents *metric.Counter,
 ) *lockTableImpl {
 	lt := &lockTableImpl{
-		rID:      rangeID,
-		clock:    clock,
-		settings: settings,
+		rID:                               rangeID,
+		clock:                             clock,
+		settings:                          settings,
+		locksShedDueToMemoryLimit:         locksShedDueToMemoryLimit,
+		numLockShedDueToMemoryLimitEvents: numLockShedDueToMemoryLimitEvents,
 	}
 	lt.setMaxKeysLocked(maxLocks)
 	return lt
@@ -4494,7 +4509,12 @@ func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
 	totalLocks := t.locks.numKeysLocked.Load()
 	if totalLocks > t.maxKeysLocked {
 		numToClear := totalLocks - t.minKeysLocked
-		t.tryClearLocks(false /* force */, int(numToClear))
+		numCleared := t.tryClearLocks(false /* force */, int(numToClear))
+		// Update metrics if we successfully cleared any number of locks.
+		if numCleared != 0 {
+			t.locksShedDueToMemoryLimit.Inc(numCleared)
+			t.numLockShedDueToMemoryLimitEvents.Inc(1)
+		}
 	}
 }
 
@@ -4509,9 +4529,10 @@ func (t *lockTableImpl) lockCountForTesting() int64 {
 //
 // Waiters of removed locks are told to wait elsewhere or that they are done
 // waiting.
-func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
-	clearCount := 0
+func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) int64 {
+	var clearCount int64
 	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 	var locksToClear []*keyLocks
 	iter := t.locks.MakeIter()
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -4519,13 +4540,13 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 		if l.tryClearLock(force) {
 			locksToClear = append(locksToClear, l)
 			clearCount++
-			if !force && clearCount >= numToClear {
+			if !force && clearCount >= int64(numToClear) {
 				break
 			}
 		}
 	}
 	t.clearLocksMuLocked(locksToClear)
-	t.locks.mu.Unlock()
+	return clearCount
 }
 
 // tryClearLockGE attempts to clear all locks greater or equal to given key.
