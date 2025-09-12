@@ -611,7 +611,7 @@ func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("LATERAL ")
 	}
 	ctx.FormatNode(node.Expr)
-	if node.IndexFlags != nil {
+	if node.IndexFlags != nil && !ctx.HasFlags(FmtHideHints) {
 		ctx.FormatNode(node.IndexFlags)
 	}
 	if node.Ordinality {
@@ -681,7 +681,7 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		if node.JoinType != "" {
 			ctx.WriteString(node.JoinType)
 			ctx.WriteByte(' ')
-			if node.Hint != "" {
+			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
 			}
@@ -693,7 +693,7 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		if node.JoinType != "" {
 			ctx.WriteString(node.JoinType)
 			ctx.WriteByte(' ')
-			if node.Hint != "" {
+			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
 			}
