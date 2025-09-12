@@ -1526,6 +1526,12 @@ func rankedCandidateListForRebalancing(
 				continue
 			}
 			valid, necessary := removalConstraintsChecker(store)
+			if ctx.Value("magic") != nil && (store.StoreID == 6 || store.StoreID == 7) && !valid &&
+				len(existingReplicasForType) == 5 {
+				// NB: this is left-over from when I didn't sleep enough in the test
+				// and the old constraints would kick in.
+				valid, necessary = removalConstraintsChecker(store) // TODO(tbg): investigate using breakpoint here
+			}
 			fullDisk := !options.getDiskOptions().maxCapacityCheck(store)
 
 			if !valid {
