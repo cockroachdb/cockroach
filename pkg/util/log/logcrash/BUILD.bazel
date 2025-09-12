@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     x_defs = {
         "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv": "{STABLE_CRASH_REPORT_ENV}",
+        "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportingDisabledString": "{STABLE_TELEMETRY_DISABLED}",
     },
     deps = [
         "//pkg/build",
