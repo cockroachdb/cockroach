@@ -3016,6 +3016,8 @@ func registerCDC(r registry.Registry) {
 
 				// Wait for workload to complete
 				ct.waitForWorkload()
+
+				t.Fatalf("collect artifacts")
 			},
 		})
 	}

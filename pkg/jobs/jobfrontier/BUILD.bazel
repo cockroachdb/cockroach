@@ -9,6 +9,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/sql/isql",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/span",
         "@com_github_cockroachdb_errors//:errors",
