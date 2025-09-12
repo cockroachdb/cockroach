@@ -501,11 +501,6 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 		var actualStatements []string
 		for _, respStatement := range actual.Statements {
-			if respStatement.Stats.FailureCount > 0 {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
 				// We ignore internal queries, these are not relevant for the
 				// validity of this test.

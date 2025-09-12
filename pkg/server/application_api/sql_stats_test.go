@@ -446,11 +446,6 @@ func TestStatusAPIStatements(t *testing.T) {
 		// See if the statements returned are what we executed.
 		var statementsInResponse []string
 		for _, respStatement := range resp.Statements {
-			if respStatement.Stats.FailureCount > 0 {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
 				// We ignore internal queries, these are not relevant for the
 				// validity of this test.
@@ -787,14 +782,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		// statement statistics received from the server response.
 		actualResponseStatsMap := make(map[string]serverpb.StatementsResponse_CollectedStatementStatistics)
 		for _, respStatement := range resp.Statements {
-			// Skip failed statements: The test app may encounter transient 40001
-			// errors that are automatically retried. Thus, we only consider
-			// statements that were that were successfully executed by the test app
-			// to avoid counting such failures. If a statement that we expect to be
-			// successful is not found in the response, the test will fail later.
-			if respStatement.Key.KeyData.App == testAppName && respStatement.Stats.FailureCount == 0 {
-				actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
-			}
+			actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
 		}
 
 		for respQuery, expectedData := range expectedStatementStatsMap {
@@ -904,11 +892,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		var statementsInResponse []string
 		expectedTxnFingerprints := map[appstatspb.TransactionFingerprintID]struct{}{}
 		for _, respStatement := range resp.Statements {
-			if respStatement.Stats.FailureCount > 0 {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
 				// CombinedStatementStats should filter out internal queries.
 				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
