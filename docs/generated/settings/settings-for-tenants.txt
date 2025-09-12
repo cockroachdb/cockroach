@@ -22,6 +22,7 @@ changefeed.kafka_v2_error_details.enabled	boolean	true	if enabled, Kafka v2 sink
 changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	application
 changefeed.resolved_timestamp.min_update_interval (alias: changefeed.min_highwater_advance)	duration	0s	minimum amount of time that must have elapsed since the last time a changefeed's resolved timestamp was updated before it is eligible to be updated again; default of 0 means no minimum interval is enforced but updating will still be limited by the average time it takes to checkpoint progress	application
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	application
+changefeed.progress.frontier_persistence.interval	duration	30s	minimum amount of time that must elapse before a changefeed will persist its entire span frontier again	application
 changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
 changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
