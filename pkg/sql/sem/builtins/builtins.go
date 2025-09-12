@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen/randgencfg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
@@ -9683,6 +9684,24 @@ WHERE object_id = table_descriptor_id
 				}
 				return tree.NewDLTree(lca), nil
 			},
+		},
+	),
+
+	"crdb_internal.gen_plan_hint_fingerprint_hash": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryIDGeneration,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "fingerprint", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				fingerprint := tree.MustBeDString(args[0])
+				return tree.NewDInt(tree.DInt(hints.FingerprintHashForPlanHints(string(fingerprint)))), nil
+			},
+			Info:              "Used to compute a hash for a query fingerprint in the system.plan_hints table",
+			Volatility:        volatility.Leakproof,
+			CalledOnNullInput: false,
 		},
 	),
 }

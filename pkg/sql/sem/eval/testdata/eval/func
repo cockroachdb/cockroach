@@ -109,3 +109,38 @@ eval
 crdb_internal.round_decimal_values(ARRAY[1.2::decimal, 5::decimal, NULL], 1)
 ----
 ARRAY[1.2,5,NULL]
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT _')
+----
+-8642182963016577630
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT * FROM t')
+----
+-3631372714796389459
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT * FROM t WHERE x = _')
+----
+6457443302007961978
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT * FROM b WHERE x = _')
+----
+-9009602304376423284
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT * FROM t WHERE x IN (_)')
+----
+-4843920244147039351
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT * FROM t WHERE x IN (_) OR y > 10')
+----
+-2753610227525029958
+
+eval
+crdb_internal.gen_plan_hint_fingerprint_hash('SELECT * FROM xy INNER JOIN ab ON x = a WHERE x > _')
+----
+-4157081909081784486
