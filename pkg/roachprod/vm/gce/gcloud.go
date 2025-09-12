@@ -2323,13 +2323,16 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 		spinner := ui.NewDefaultCountingSpinner(l, "adding backends to load balancer", len(groups))
 		defer spinner.Start()()
 		for n, group := range groups {
+			// We use balancing mode CONNECTION and set an "unlimited" number of max
+			// connections per group to force the load-balancer to run in round-robin
+			// mode.
 			args = []string{"compute", "backend-services", "add-backend", loadBalancerName,
 				"--project", project,
 				"--global",
 				"--instance-group", group.Name,
 				"--instance-group-zone", group.Zone,
-				"--balancing-mode", "UTILIZATION",
-				"--max-utilization", "0.8",
+				"--balancing-mode", "CONNECTION",
+				"--max-connections", "9999999",
 			}
 			cmd := exec.Command("gcloud", args...)
 			output, err = cmd.CombinedOutput()
