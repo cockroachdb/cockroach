@@ -1738,18 +1738,7 @@ func doRestorePlan(
 	}
 	defer func() {
 		if err := cleanupFn(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
-		}
-	}()
-
-	incStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
-		fullyResolvedIncrementalsDirectory)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := cleanupFn(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
+			log.Dev.Warningf(ctx, "failed to close base store: %+v", err)
 		}
 	}()
 
@@ -1805,7 +1794,7 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, p.ExecCfg(), &mem, defaultCollectionURI, from, baseStores, incStores, mkStore,
+		ctx, p.ExecCfg(), &mem, defaultCollectionURI, from, mkStore,
 		fullyResolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory, endTime,
 		encryption, &kmsEnv, p.User(), false, includeCompacted, len(incFrom) > 0,
 	)
