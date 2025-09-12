@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +25,9 @@ var cleanupFuncs = make([]func(), 0)
 func Test_processYaml(t *testing.T) {
 	// DD_API_KEY can impact the tests. So, it is unset
 	_ = os.Unsetenv("DD_API_KEY")
+	_ = os.Unsetenv(envSlackToken)
+	_ = os.Unsetenv(envSlackChannel)
+
 	t.Cleanup(func() {
 		// cleanup all once the tests are complete
 		for _, f := range cleanupFuncs {
@@ -38,22 +42,22 @@ func Test_processYaml(t *testing.T) {
 	roachprodPut = nil
 	drtprodLocation = ""
 	t.Run("expect unmarshall to fail", func(t *testing.T) {
-		err := processYaml(ctx, "", []byte("invalid"), nil, false, nil)
+		err := processYaml(ctx, &executeCmdOptions{}, []byte("invalid"), nil, newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "cannot unmarshal")
 	})
 	t.Run("expect failure due to unwanted field", func(t *testing.T) {
-		err := processYaml(ctx, "", []byte(`
+		err := processYaml(ctx, &executeCmdOptions{}, []byte(`
 unwanted: value
 environment:
   NAME_1: name_value1
   NAME_2: name_value2
-`), nil, false, nil)
+`), nil, newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "field unwanted not found in type commands.yamlConfig")
 	})
 	t.Run("expect no command execution on display-only=true", func(t *testing.T) {
-		require.Nil(t, processYaml(ctx, "", getTestYaml(), nil, true, nil))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{displayOnly: true}, getTestYaml(), nil, newMockNotifier(nil, nil)))
 	})
 	t.Run("expect dependent file check to fail", func(t *testing.T) {
 		existingFile, err := os.CreateTemp("", "drtprod")
@@ -64,7 +68,7 @@ environment:
   - %[1]s
   - another/missing/file
 `, existingFile.Name()), getTestYaml()))
-		err = processYaml(ctx, "", yamlContent, nil, false, nil)
+		err = processYaml(ctx, &executeCmdOptions{}, yamlContent, nil, newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Equal(t, "dependent files are missing for the YAML: file_not_present, another/missing/file", err.Error())
 	})
@@ -77,7 +81,7 @@ environment:
   - %[1]s
   - another/missing/file
 `, existingFile.Name()), getTestYaml()))
-		require.Nil(t, processYaml(ctx, "", yamlContent, nil, true, nil))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{displayOnly: true}, yamlContent, nil, newMockNotifier(nil, nil)))
 	})
 	t.Run("expect dependent file to pass", func(t *testing.T) {
 		commandExecutor = func(ctx context.Context, logPrefix string, cmd string, args ...string) error {
@@ -89,7 +93,7 @@ environment:
 			fmt.Sprintf(`dependent_file_locations:
   - %[1]s
 `, existingFile.Name()), getTestYaml()))
-		require.Nil(t, processYaml(ctx, "", yamlContent, nil, false, nil))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{}, yamlContent, nil, newMockNotifier(nil, nil)))
 	})
 	t.Run("expect partial failure and rollback", func(t *testing.T) {
 		name1Commands := make([]string, 0)
@@ -125,7 +129,8 @@ environment:
 			}
 			return nil
 		}
-		err := processYaml(ctx, "", getTestYaml(), nil, false, nil)
+		notifier := newMockNotifier(nil, nil)
+		err := processYaml(ctx, &executeCmdOptions{}, getTestYaml(), nil, notifier)
 		require.NotNil(t, err)
 		require.Equal(t, 8, len(name1Commands))
 		require.Equal(t, 0, len(depN1Commands))
@@ -149,6 +154,16 @@ environment:
 		require.Equal(t, []string{
 			"drtprod dummy2 name_value2 arg12", "drtprod put name_value2 path/to/file",
 		}, name2Commands)
+		// the notifier should have been invoked for each command execution
+		require.Equal(t, 4, len(notifier.targetMessages))
+		require.Equal(t, []string{"Failed Target *dependent_target_n1*."}, notifier.targetMessages["dependent_target_n1"])
+		require.Equal(t, []string{
+			"Starting Target *name_value1*.",
+			"Starting Command: `dummy_script1`",
+			"Failed Command: `dummy_script1`",
+			"Starting Command: `drtprod dummy2`",
+			"Completed Command: `drtprod dummy2`",
+			"Failed Target *name_value1*."}, notifier.targetMessages["name_value1"])
 	})
 	t.Run("expect no failure", func(t *testing.T) {
 		name1Commands := make([]string, 0)
@@ -181,7 +196,8 @@ environment:
 			}
 			return nil
 		}
-		require.Nil(t, processYaml(ctx, "", getTestYaml(), nil, false, nil))
+		notifier := newMockNotifier(errors.New("ignored"), errors.New("ignored"))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{}, getTestYaml(), nil, notifier))
 		require.Equal(t, 6, len(name1Commands))
 		require.Equal(t, 2, len(name2Commands))
 		require.Equal(t, 1, len(depN1Commands))
@@ -198,17 +214,33 @@ environment:
 		require.Equal(t, []string{
 			"drtprod dummy2 name_value2 arg12", "drtprod put name_value2 path/to/file",
 		}, name2Commands)
+		// the notifier should have been invoked for each command execution
+		require.Equal(t, 3, len(notifier.targetMessages))
+		require.Equal(t, []string{
+			"Starting Target *dependent_target_n1*.",
+			"Starting Command: `drtprod dummy2 name_value2 arg12`",
+			"Completed Command: `drtprod dummy2 name_value2 arg12`",
+			"Completed Target *dependent_target_n1*."}, notifier.targetMessages["dependent_target_n1"])
+		require.Equal(t, []string{
+			"Starting Target *name_value1*.",
+			"Starting Command: `dummy_script1`",
+			"Completed Command: `dummy_script1`",
+			"Starting Command: `drtprod dummy2`",
+			"Completed Command: `drtprod dummy2`",
+			"Completed Target *name_value1*."}, notifier.targetMessages["name_value1"])
 	})
 	t.Run("run command remotely with missing invalid deployment YAML", func(t *testing.T) {
 		commandExecutor = nil
-		err := processYaml(ctx, "location/to/test.yaml", getTestYaml(), []byte("invalid content"), false, nil)
+		err := processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"}, getTestYaml(),
+			[]byte("invalid content"), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "cannot unmarshal")
 	})
 	t.Run("run command remotely with drtprod that does not exist", func(t *testing.T) {
 		commandExecutor = nil
 		drtprodLocation = "missing_drtprod"
-		err := processYaml(ctx, "location/to/test.yaml", getTestYaml(), getRemoteConfigYaml(), false, nil)
+		err := processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"}, getTestYaml(),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Equal(t, "missing_drtprod must be available for executing remotely: stat missing_drtprod: no such file or directory",
 			err.Error())
@@ -218,7 +250,8 @@ environment:
 		f, err := os.CreateTemp("", "drtprod")
 		require.Nil(t, err)
 		drtprodLocation = f.Name()
-		err = processYaml(ctx, "location/to/test.yaml", getTestYaml(), getRemoteConfigYaml(), true, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml", displayOnly: true},
+			getTestYaml(), getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Equal(t, "display option is not valid for remote execution",
 			err.Error())
@@ -234,8 +267,8 @@ environment:
 			executedCmds = append(executedCmds, (&command{name: cmd, args: args}).String())
 			return fmt.Errorf("failure in execution")
 		}
-		err = processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir), getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		// for create error is ignored, so, there are 2 commands.
 		require.Equal(t, 1, len(executedCmds))
@@ -266,8 +299,9 @@ environment:
 			require.Equal(t, "test-monitor", clusterName)
 			return nil
 		}
-		err = processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "Error while creating directory for file")
 		require.Equal(t, 2, len(executedCmds))
@@ -293,8 +327,9 @@ environment:
 			require.Equal(t, "test-monitor", clusterName)
 			return fmt.Errorf("failed to put the file")
 		}
-		err = processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Contains(t, err.Error(), "Error while putting file")
 		require.Equal(t, 2, len(executedCmds))
@@ -322,8 +357,9 @@ environment:
 			require.Equal(t, "test-monitor", clusterName)
 			return nil
 		}
-		err = processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Equal(t, "move command failed", err.Error())
 		require.Equal(t, 2, len(executedCmds))
@@ -356,12 +392,12 @@ environment:
 			require.Equal(t, "test-monitor", clusterName)
 			return nil
 		}
-		err = processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Equal(t, "systemd-run command failed", err.Error())
 		require.Equal(t, 2, len(executedCmds))
-		t.Log(runCmds)
 	})
 	t.Run("run command remotely with failure in systemd-run", func(t *testing.T) {
 		f, err := os.CreateTemp("", "drtprod")
@@ -387,8 +423,9 @@ environment:
 			require.Equal(t, "test-monitor", clusterName)
 			return nil
 		}
-		err = processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil)
+		err = processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil))
 		require.NotNil(t, err)
 		require.Equal(t, "systemd-run command failed", err.Error())
 		require.Equal(t, 2, len(executedCmds))
@@ -448,25 +485,29 @@ environment:
 			}
 			return nil
 		}
-		require.Nil(t, processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil)))
 		require.Equal(t, 2, len(executedCmds))
 		require.Equal(t, 4, len(putCmds))
 		for _, v := range putCmds {
 			require.Equal(t, 1, v)
 		}
-		t.Log(runCmds)
 		require.Equal(t, 3, len(runCmds))
 		require.Equal(t, 4, len(runCmds["mkdir"]))
 		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
-		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./location/to/test.yaml",
+		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g)  drtprod execute ./location/to/test.yaml",
 			runCmds["systemd"][0])
 	})
-	t.Run("run command remotely with no failure and DD_API_KEY set", func(t *testing.T) {
+	t.Run("run command remotely with no failure and env set", func(t *testing.T) {
 		_ = os.Setenv("DD_API_KEY", `the"test'secret`)
+		_ = os.Setenv(envSlackToken, `the_demo_token`)
+		_ = os.Setenv(envSlackChannel, `the_demo_channel`)
 		defer func() {
 			_ = os.Unsetenv("DD_API_KEY")
+			_ = os.Unsetenv(envSlackToken)
+			_ = os.Unsetenv(envSlackChannel)
 		}()
 		f, err := os.CreateTemp("", "drtprod")
 		require.Nil(t, err)
@@ -522,8 +563,9 @@ environment:
 			}
 			return nil
 		}
-		require.Nil(t, processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, nil))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{yamlFileLocation: "location/to/test.yaml"},
+			addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil)))
 		require.Equal(t, 2, len(executedCmds))
 		require.Equal(t, 4, len(putCmds))
 		for _, v := range putCmds {
@@ -533,9 +575,8 @@ environment:
 		require.Equal(t, 4, len(runCmds["mkdir"]))
 		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
-		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) --setenv=DD_API_KEY='the\"test'\"'\"'secret' drtprod execute ./location/to/test.yaml",
+		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) --setenv=DD_API_KEY='the\"test'\"'\"'secret' --setenv=SLACK_BOT_TOKEN=the_demo_token --setenv=SLACK_CHANNEL=the_demo_channel drtprod execute ./location/to/test.yaml",
 			runCmds["systemd"][0])
-		t.Log(runCmds["systemd"][0])
 	})
 	t.Run("run command remotely with no failure and targets specified", func(t *testing.T) {
 		f, err := os.CreateTemp("", "drtprod")
@@ -592,19 +633,21 @@ environment:
 			}
 			return nil
 		}
-		require.Nil(t, processYaml(ctx, "location/to/test.yaml", addRemoteConfig(t, getTestYaml(), scriptsDir),
-			getRemoteConfigYaml(), false, []string{"target1"}))
+		require.Nil(t, processYaml(ctx, &executeCmdOptions{
+			yamlFileLocation:        "location/to/test.yaml",
+			userProvidedTargetNames: []string{"target1"},
+		}, addRemoteConfig(t, getTestYaml(), scriptsDir),
+			getRemoteConfigYaml(), newMockNotifier(nil, nil)))
 		require.Equal(t, 2, len(executedCmds))
 		require.Equal(t, 4, len(putCmds))
 		for _, v := range putCmds {
 			require.Equal(t, 1, v)
 		}
-		t.Log(runCmds)
 		require.Equal(t, 3, len(runCmds))
 		require.Equal(t, 4, len(runCmds["mkdir"]))
 		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
-		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./location/to/test.yaml -t target1",
+		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g)  drtprod execute ./location/to/test.yaml -t target1",
 			runCmds["systemd"][0])
 	})
 
@@ -618,8 +661,10 @@ environment:
 
 targets:
   - target_name: $NAME_1
+    notify_progress: true
     steps:
     - command: dummy1
+      skip_notification: true
       args:
         - $NAME_1
         - arg11
@@ -631,6 +676,7 @@ targets:
     - script: "dummy_script1"
       continue_on_failure: True
     - script: "dummy_script2"
+      skip_notification: true
       args:
       - arg11
     - command: dummy2
@@ -646,9 +692,11 @@ targets:
         flags:
           f1: \"v1 v2\"
     - script: "path/to/script33"
+      skip_notification: true
       on_rollback:
       - command: script33_rb
     - script: "last_script"
+      skip_notification: true
       on_rollback:
       - command: rb_last
   - target_name: $NAME_2
@@ -662,6 +710,7 @@ targets:
         - $NAME_2
         - path/to/file
   - target_name: dependent_target_n1
+    notify_progress: true
     dependent_targets:
       - $NAME_1
     steps:
@@ -670,6 +719,7 @@ targets:
         - $NAME_2
         - arg12
   - target_name: dependent_target_n2_n1
+    notify_progress: true
     dependent_targets:
       - $NAME_2
       - name_value1
@@ -749,4 +799,29 @@ targets:
         flags:
           clouds: gce
 `)
+}
+
+type mockNotifier struct {
+	targetError    error
+	stepError      error
+	targetMessages map[string][]string
+	targetLock     syncutil.Mutex
+}
+
+func newMockNotifier(targetError, stepError error) *mockNotifier {
+	return &mockNotifier{
+		targetError:    targetError,
+		stepError:      stepError,
+		targetMessages: make(map[string][]string),
+	}
+}
+
+func (mn *mockNotifier) SendNotification(targetName string, message string) error {
+	mn.targetLock.Lock()
+	defer mn.targetLock.Unlock()
+	if _, ok := mn.targetMessages[targetName]; !ok {
+		mn.targetMessages[targetName] = make([]string, 0)
+	}
+	mn.targetMessages[targetName] = append(mn.targetMessages[targetName], message)
+	return mn.targetError
 }
