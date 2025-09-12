@@ -2489,3 +2489,151 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return nil
 	})
 }
+
+func TestReplicateQueueDiversify(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	m := map[int]base.TestServerArgs{}
+	for i := 0; i < 7; i++ {
+		// Two nodes in the first region, but the last region has three nodes and
+		// the last two nodes share a rack.
+		rack := min(1+i, 6)
+		region := min(1+i/2, 3)
+
+		m[i] = base.TestServerArgs{Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{{
+				Key: "region", Value: "reg" + strconv.Itoa(region),
+			}, {
+				Key: "datacenter", Value: "dc" + strconv.Itoa(region), // one DC per region
+			}, {
+				Key: "rack", Value: "rack" + strconv.Itoa(rack),
+			}},
+		}}
+	}
+	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
+		ServerArgsPerNode: m,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	defer db.Close()
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	runner.Exec(t, `CREATE TABLE dbltest (id INT PRIMARY KEY, data STRING)`)
+	// Set a zone config that forces the table onto n1-n5 (n6 and n7 are on rack6,
+	// so in region 3 the only valid target is n5).
+	// Also prefer the lease on n1, so we can predictably swap out other replicas
+	// later in the test.
+	runner.Exec(t, `ALTER TABLE dbltest CONFIGURE ZONE USING
+num_replicas=5,
+num_voters=5, 
+voter_constraints='{"+region=reg1": 2, "+region=reg2": 2, "+region=reg3,+datacenter=dc3,+rack=rack5": 1}',
+lease_preferences = '[["+region=reg1","+datacenter=dc1","+rack=rack1"]]';
+`)
+
+	checkTable := func(t *testing.T, runner *sqlutils.SQLRunner) (rangeID roachpb.RangeID, votingRepls, locs string,
+		numVoters int, containsFive,
+		containsSix, containsSeven bool) {
+		const q = `
+SELECT
+			range_id,
+			voting_replicas,
+			replica_localities,
+			array_length(voting_replicas, 1) AS num_voters,
+			5 = ANY(voting_replicas) AS contains_five,
+			6 = ANY(voting_replicas) AS contains_six,
+			7 = ANY(voting_replicas) AS contains_seven
+FROM [show ranges from table dbltest] order by range_id asc LIMIT 1;`
+
+		runner.QueryRow(t, q).Scan(&rangeID, &votingRepls, &locs, &numVoters, &containsFive, &containsSix, &containsSeven)
+		return
+	}
+
+	var rangeID roachpb.RangeID
+	testutils.SucceedsSoon(t, func() error {
+		ridInner, votingRepls, locs, numVoters, _, containsSix, containsSeven := checkTable(t, runner)
+
+		if numVoters != 5 || containsSix || containsSeven {
+			return errors.Errorf("waiting for zone config, voters: %s @ %s", votingRepls, locs)
+		}
+		rangeID = ridInner
+		t.Logf("initial constraint on r%d satisfied: %s @ %s", rangeID, votingRepls, locs)
+		return nil
+	})
+
+	var startKey roachpb.RKey
+	for i := 0; i < tc.NumServers(); i++ {
+		require.NoError(t, tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			s.TestingSetReplicateQueueActive(false)
+			if startKey == nil {
+				if r, err := s.GetReplica(rangeID); err == nil {
+					startKey = r.Desc().StartKey
+				}
+			}
+			return nil
+		}))
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		lh, err := tc.FindRangeLeaseHolder(tc.LookupRangeOrFatal(t, roachpb.Key(startKey)), nil)
+		if err != nil {
+			return err
+		}
+		if lh.StoreID != 1 {
+			return errors.Errorf("waiting for n1 to be leaseholder, got %d", lh.StoreID)
+		}
+		return nil
+	})
+
+	require.NotEmpty(t, startKey)
+	// Move a voter from n2 to n6, and another one from n5 to n7. This means that
+	// the range now has one voter in region 1, two in region 2, and two on the
+	// same rack in region 3.
+	//
+	// We rely here on n1 "probably" being the leaseholder. The test will fail if
+	// this is not the case (not ideal).
+	tc.AddVotersOrFatal(t, startKey.AsRawKey(), tc.Target(5), tc.Target(6))
+	tc.RemoveVotersOrFatal(t, startKey.AsRawKey(), tc.Target(1), tc.Target(4))
+
+	runner.Exec(t, `ALTER TABLE dbltest CONFIGURE ZONE USING voter_constraints='{}'`)
+	t.Log(runner.QueryStr(t, `show zone configuration from table dbltest;`))
+
+	// Long sleep is needed to propagate the zone config. Otherwise, allocator
+	// will remove the double replica because of the old zone config, not because
+	// of duplicate rack.
+	// NB: 10s reliably wasn't enough (lol). If the rangelog shows s6/s7 removed
+	// with a detail of 'constraint check fail', then the constraints were still
+	// kicking around and the test result is not meaningful.
+	time.Sleep(20 * time.Second)
+	begin := timeutil.Now()
+
+	log.Infof(ctx, "re-enabling replicate queue")
+	t.Logf("re-enabling replicate queue")
+
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			require.NoError(t, tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				s.TestingSetReplicateQueueActive(true)
+				return s.ForceReplicationScanAndProcessCtx(context.WithValue(ctx, "magic", "foo"))
+			}))
+		}
+		_, votingRepls, locs, numVoters, _, containsSix, containsSeven := checkTable(t, runner)
+		if numVoters != 5 || (containsSix && containsSeven) {
+			t.Logf("waiting for double-rack to clear out: %s @ %s", votingRepls, locs)
+			return errors.Errorf("waiting for double-rack to clear out: %s @ %s", votingRepls, locs)
+		}
+		t.Logf("double-rack cleared out: %s @ %s", votingRepls, locs)
+		return nil
+	})
+
+	rows := runner.Query(t, `select * from system.rangelog where info::JSONB->'UpdatedDesc'->'range_id' = $1
+and timestamp > $2 order by timestamp desc`, rangeID.String(), begin)
+	output, err := sqlutils.RowsToDataDrivenOutput(rows)
+	require.NoError(t, err)
+	t.Log(output)
+	t.Fatalf("boom")
+}
