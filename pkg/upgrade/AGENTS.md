@@ -1,6 +1,6 @@
 ## Upgrade subsystem — version gates, migrations, mixed-version semantics
 
-At a glance
+## At a glance
 
 - **Component index**:
   - Responsibilities: orchestrate cluster upgrades; execute idempotent migrations; enforce version-gate invariants; coordinate KV vs tenant upgrade sequencing.
@@ -11,6 +11,7 @@ At a glance
 - **Ownership & boundaries**:
   - Allowed: upgrade manager → server migration RPCs; jobs; SQL internal executor; tenant instance discovery.
   - Forbidden: feature logic must not assume peers have already flipped gates; inbound request handling must remain backward compatible until the gate activates cluster-wide.
+  - See also: `pkg/settings/AGENTS.md`, `pkg/multitenant/AGENTS.md`
 
 - **Key entry points & types**:
   - `pkg/upgrade/upgrademanager/manager.go`: `Manager.Migrate`, `runMigration`, interlock/fencing.
@@ -85,10 +86,10 @@ Deep dive
 
 6) Interoperability seams
 
-- Version gates: `pkg/clusterversion/` — define keys and check via `Handle.IsActive`.
-- Server RPCs: `pkg/server/migration.go` — validation and bump; engine persistence.
-- Jobs & SQL: `pkg/upgrade/upgradejob/` — internal executor, job registry, marking completion.
-- Tenants: `pkg/upgrade/upgradecluster/` — enumerates SQL instances, coordinates per-tenant bumps.
+- Version gates: components coordinate activation via version-gate checks and cluster-wide persistence.
+- Server RPCs: nodes validate targets and durably bump the cluster version in a coordinated sequence.
+- Jobs & SQL: upgrades run under the jobs framework using the internal executor; completion is recorded cluster-wide.
+- Tenants: per-tenant bumps are coordinated for virtual clusters while respecting storage cluster constraints.
 
 7) Mixed-version / upgrades — pitfalls
 
@@ -129,11 +130,7 @@ Deep dive
 
 12) References
 
-- Code: `pkg/upgrade/`, `pkg/upgrade/upgrademanager/manager.go`, `pkg/upgrade/upgradejob/upgrade_job.go`, `pkg/upgrade/upgrades/`, `pkg/upgrade/migrationstable/`.
-- Versioning: `pkg/clusterversion/` (`clusterversion.go`, `setting.go`, `cockroach_versions.go`).
-- Server RPCs and auto-upgrade: `pkg/server/migration.go`, `pkg/server/auto_upgrade.go`.
 - Background: `docs/tech-notes/version_upgrades.md`, `docs/RFCS/20170815_version_migration.md`.
-- See also: `pkg/settings/AGENTS.md`
 
 13) Glossary
 

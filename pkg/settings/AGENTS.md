@@ -1,6 +1,3 @@
-# Purpose
-High-signal reference for the cluster settings system (`pkg/settings/`): typed settings, defaults and overrides, watchers/updaters, tenant scoping, and the `VersionSetting` gate.
-
 ## At a glance
 
 - **Package**: `pkg/settings/` — cluster settings definitions, registration, values container, and update plumbing.
@@ -19,6 +16,7 @@ High-signal reference for the cluster settings system (`pkg/settings/`): typed s
   - `SetOnChange` callbacks run on the single settings update goroutine — must be non-blocking and idempotent.
   - Tenant scoping is enforced in `settings.Values`: SystemOnly settings are inaccessible in virtual clusters.
   - Cluster version is not applied via the generic watcher path; it is coordinated by `clusterversion`.
+ - **See also**: `pkg/upgrade/AGENTS.md`, `pkg/multitenant/AGENTS.md`, `pkg/sql/AGENTS.md`, `pkg/kv/kvserver/AGENTS.md`
 - **Flow (read + change)**
 ```
 system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  settings.Values  ->  SetOnChange callbacks
@@ -36,7 +34,7 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
 - Updates: `settingswatcher.SettingsWatcher` streams changes from the `system.settings` table via rangefeed and calls `Updater.SetFromStorage`. External overrides (e.g., host→tenant) are provided by an `OverridesMonitor` and applied with origin `ExternallySet`.
 - Notification: when a setting’s value changes in `Values`, the package invokes all registered `SetOnChange` callbacks for that setting.
 
-2) Defaults and overrides
+2) Data model & protos
 - Defaults are declared in registration and surfaced via `DefaultString()` and `EncodedDefault()`.
 - Value origins:
   - `OriginDefault` — built-in default (possibly with a default override).
@@ -47,7 +45,7 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
 - Validation: per-type `WithValidate*` options enforce constraints (e.g., non-negative, max, custom string/proto/enum validators). Invalid updates are rejected and the previous value is kept.
 - Safety valve: env `COCKROACH_IGNORE_CLUSTER_SETTINGS=true` makes `Updater` a no-op, keeping values at defaults/overrides for safe bring-up or emergency operation.
 
-3) Watchers and change listeners
+3) Concurrency & resource controls
 - The `settingswatcher` rangefeed maintains an in-RAM cache of `system.settings`, persists a snapshot for restart, and applies updates through `Updater` in timestamp order (avoids regressions on watcher restarts).
 - For SystemVisible settings, the system tenant also sends “alternate defaults” to tenants via `tenantsettingswatcher`, ensuring tenant processes align with the system tenant’s default even if binaries differ.
 - `SetOnChange` is invoked synchronously on the watcher’s update goroutine. Guidance:
@@ -56,13 +54,13 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
   - Re-read the setting inside the callback to obtain the final, de-duplicated value.
   - Tolerate missed intermediate values; only the last applied value matters for many knobs.
 
-4) Mixed-version gates
+4) Mixed-version / upgrades
 - The cluster version is modeled by `VersionSetting` but is not applied via the generic settings path; `pkg/clusterversion` coordinates validation, RPC propagation, and activation.
 - Feature/behavior checks should use `st.Version.IsActive(ctx, clusterversion.XYZ)` before enabling behaviors; avoid coupling feature toggles to generic settings during upgrades.
 - `SET CLUSTER SETTING version = crdb_internal.node_executable_version()` is guarded: resets are disallowed; upgrades validate min/max and perform migrations.
 - During mixed-version operation, SystemVisible defaults from the system tenant keep tenant default behavior compatible until all nodes upgrade.
 
-5) Tenant scoping and visibility
+5) Configuration & feature gates
 - Class determines who can read/write and where the value is needed:
   - `SystemOnly` — storage/KV-only; not visible or accessible from SQL pods; shared across all tenants; cannot be set from virtual clusters.
   - `SystemVisible` — storage/KV-controlled but visible to SQL; read-only in tenants; propagated as alternate defaults from the system tenant.
@@ -70,9 +68,11 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
 - `Values.SpecializeForVirtualCluster()` marks SystemOnly settings forbidden; test builds panic on misuse to catch leaks across layers.
 - Operators can force read-only behavior for an ApplicationLevel setting inside a tenant by setting a system override (so the tenant observes an external origin value).
 
-6) Feature flags
-- Prefer `pkg/featureflag/` for simple enable/disable of user-visible features: define a `BoolSetting` and gate with `featureflag.CheckEnabled(ctx, cfg, setting, name)`. This increments telemetry and returns a user-facing error if disabled.
-- Keep feature flags ApplicationLevel unless KV/storage depends on them; avoid SystemOnly for SQL-layer UX gates.
+- Feature flags: prefer `pkg/featureflag/` for simple user-visible gates; keep flags ApplicationLevel unless KV/storage depends on them.
+
+6) Interoperability
+- Settings are consumed across SQL, KV, and storage layers; the system tenant propagates defaults/overrides to virtual clusters.
+- Version gates are checked via `clusterversion` across components; avoid gating inbound behavior on version.
 
 7) Failure modes & recovery
 - If the watcher is not yet initialized, subsystems should behave as if defaults are in effect; avoid assuming values are present at process start.
@@ -89,14 +89,20 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
 - For SystemVisible settings, tenants receive alternate defaults; if a tenant has an explicit ApplicationLevel value, that value wins over the default.
 - Unsafe settings (`WithUnsafe`) require explicit interlocks and must not be `Public`.
 
-10) References
+10) Examples
+- Tiny example — register and observe changes:
+```
+var MySetting = settings.RegisterBoolSetting(settings.ApplicationLevel, "my.bool", "desc", false)
+MySetting.SetOnChange(&sv.Settings, func(ctx context.Context) { _ = MySetting.Get(&sv) })
+```
+11) References
 - `pkg/server/settingswatcher/` — storage-backed watcher.
 - `pkg/server/tenantsettingswatcher/` — multi-tenant override/default propagation.
 - `pkg/clusterversion/` — version keys and gates used throughout the codebase.
 - `pkg/featureflag/` — standardized UX gate on top of settings.
 - `pkg/upgrade/AGENTS.md` — cluster version bumps and migrations.
 
-11) Glossary
+12) Glossary
 - SystemOnly: storage/KV-only setting; invisible to tenants; cannot be set from virtual clusters.
 - SystemVisible: storage/KV-controlled but visible to SQL; read-only in tenants; defaults propagated.
 - ApplicationLevel: per-tenant setting; readable/settable in tenants; never used by KV/storage.
@@ -108,7 +114,7 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
 - OverridesMonitor: source of external overrides (e.g., system→tenant defaults/overrides).
 - SettingsWatcher/TenantSettingsWatcher: watchers that stream changes to `Updater`.
 
-12) Search keys & synonyms
+13) Search keys & synonyms
 - VersionSetting, clusterversion
 - settingswatcher, tenantsettingswatcher
 - settings.Values, settings.Updater
@@ -116,5 +122,5 @@ system.settings + overrides  ->  settingswatcher  ->  settings.Updater  ->  sett
 - Setting.SetOnChange
 - ValueOrigin
 - SystemOnly, SystemVisible, ApplicationLevel
+Omitted sections: Background jobs & schedules
 
-_Note: Omitted intentionally: Background jobs & schedules_
