@@ -68,8 +68,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 				panic(
 					errors.WithHint(
 						recErr,
-						"There is probably a typo in function name. Or the intention was to use a user-defined "+
-							"function in the view query, which is currently not supported.",
+						"There is probably a typo in function name.",
 					),
 				)
 			}
