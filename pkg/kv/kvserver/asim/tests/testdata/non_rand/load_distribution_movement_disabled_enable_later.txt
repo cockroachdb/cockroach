@@ -42,7 +42,7 @@ gen_load rate=10000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_k
 setting rebalance_mode=4 delay=2m
 ----
 
-eval duration=7m samples=1 seed=42 cfgs=(sma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
+eval duration=7m samples=1 seed=42 cfgs=(sma-only,mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=451007155, s2=424066775, s3=481923720, s4=487552810, s5=432089126, s6=536127090, s7=582915883, s8=497226435, s9=545078443, s10=559276708] (stddev=51954473.68, mean=499726414.50, sum=4997264145)
 leases#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6] (stddev=0.00, mean=6.00, sum=60)
@@ -51,3 +51,10 @@ replicas#1: first: [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=1
 replicas#1: last:  [s1=175, s2=172, s3=179, s4=173, s5=173, s6=174, s7=167, s8=169, s9=169, s10=162] (stddev=4.50, mean=171.30, sum=1713)
 write_bytes_per_second#1: last:  [s1=2994621, s2=2991747, s3=3008247, s4=2988902, s5=3006699, s6=2993336, s7=2993993, s8=3002728, s9=2996629, s10=2997216] (stddev=6108.70, mean=2997411.80, sum=29974118)
 artifacts[sma-only]: 70a15957c8cfc487
+cpu#1: last:  [s1=600445405, s2=592943260, s3=580471143, s4=597362693, s5=631775892, s6=311026006, s7=401609794, s8=463836789, s9=409393538, s10=376668995] (stddev=110475593.82, mean=496553351.50, sum=4965533515)
+leases#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6] (stddev=0.00, mean=6.00, sum=60)
+leases#1: last:  [s1=69, s2=73, s3=66, s4=70, s5=74, s6=38, s7=47, s8=50, s9=48, s10=38] (stddev=13.75, mean=57.30, sum=573)
+replicas#1: first: [s1=18, s2=18, s3=18, s4=18, s5=18, s6=18, s7=18, s8=18, s9=18, s10=18] (stddev=0.00, mean=18.00, sum=180)
+replicas#1: last:  [s1=191, s2=191, s3=189, s4=190, s5=186, s6=155, s7=156, s8=153, s9=156, s10=152] (stddev=17.59, mean=171.90, sum=1719)
+write_bytes_per_second#1: last:  [s1=3332586, s2=2331378, s3=2994011, s4=3339418, s5=2987144, s6=2987192, s7=3316621, s8=2985890, s9=2663373, s10=2997842] (stddev=297757.00, mean=2993545.50, sum=29935455)
+artifacts[mma-only]: 16ef0ba41186d38d
