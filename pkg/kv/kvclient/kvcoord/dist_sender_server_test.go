@@ -4535,3 +4535,79 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 	close(blockCh)
 	wg.Wait()
 }
+
+// TestUnprocessedWritesHaveResumeSpanSet tests that writes that weren't
+// processed because proceeding requests exhausted a TargetBytes or
+// MaxSpanRequestKeys limit have an appropriate ResumeSpan set.
+func TestUnprocessedWritesHaveResumeSpanSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		existingKey = "a"
+		splitPoint  = "b"
+		putKey      = "c"
+	)
+
+	// Set up a split so that our read and write below are in different ranges.
+	_, _, err := s.SplitRange(roachpb.Key(splitPoint))
+	require.NoError(t, err)
+	require.NoError(t, db.Put(ctx, existingKey, "existing-value"))
+
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := txn.NewBatch()
+		b.Header.MaxSpanRequestKeys = 1
+		// We use a ScanForUpdate here rather than Scan to ensure that the
+		// quota-consuming request is also a write (see #153397)
+		b.ScanForUpdate(existingKey, splitPoint, kvpb.GuaranteedDurability)
+		b.Del(putKey)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		require.Len(t, b.Results, 2)
+		putResult := b.Results[1]
+		require.NotNil(t, putResult.ResumeSpan, "Put response should have a non-nil ResumeSpan")
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+// TestMaxSpanRequestKeysWithMixedReadWriteBatches tests whether
+// MaxSpanRequestKeys is respected for certain read-write batches. This test
+// currently asserts that it _isn't_ respected, demonstrating a bug discovered
+// when writing TestUnprocessedWritesHaveResumeSpanSet and filed as #153397.
+func TestMaxSpanRequestKeysWithMixedReadWriteBatches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		startKey = "a"
+		endKey   = "b"
+	)
+
+	require.NoError(t, db.Put(ctx, startKey, "existing-value"))
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := txn.NewBatch()
+		b.Header.MaxSpanRequestKeys = 1
+		b.Scan(startKey, endKey)
+		b.ScanForUpdate(startKey, endKey, kvpb.GuaranteedDurability)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		require.Len(t, b.Results, 2)
+		require.Nil(t, b.Results[0].ResumeSpan, "first scan should be fully processed")
+		// TODO(#153397): The second scan here should not have been fully processed.
+		require.Nil(t, b.Results[1].ResumeSpan, "second scan should not be fully processed")
+		return nil
+	})
+	require.NoError(t, err)
+}
