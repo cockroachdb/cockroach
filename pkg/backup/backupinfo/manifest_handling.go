@@ -171,36 +171,10 @@ func ReadBackupManifestFromStore(
 		backupManifest, backupManifestMemSize, backupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
 			backupbase.BackupManifestName, encryption, kmsEnv)
 		if backupManifestErr != nil {
-			if !errors.Is(backupManifestErr, cloud.ErrFileDoesNotExist) {
-				return backuppb.BackupManifest{}, 0, backupManifestErr
-			}
-
-			// If we did not find a `BACKUP_MANIFEST` we look for a `BACKUP` file as
-			// it is possible the backup was created by a pre-20.1 node.
-			//
-			// TODO(adityamaru): Remove this logic once we disallow restores beyond
-			// the binary upgrade compatibility window.
-			log.Dev.VInfof(ctx, 2, "could not find BACKUP_MANIFEST, falling back to BACKUP")
-			oldBackupManifest, oldBackupManifestMemSize, oldBackupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
-				backupbase.BackupOldManifestName, encryption, kmsEnv)
-			if oldBackupManifestErr != nil {
-				if errors.Is(oldBackupManifestErr, cloud.ErrFileDoesNotExist) {
-					log.Dev.VInfof(ctx, 2, "could not find any of the supported backup metadata files")
-					return backuppb.BackupManifest{}, 0,
-						errors.Wrapf(oldBackupManifestErr, "could not find BACKUP manifest file in any of the known locations: %s, %s, %s",
-							backupbase.BackupMetadataName, backupbase.BackupManifestName, backupbase.BackupOldManifestName)
-				}
-				return backuppb.BackupManifest{}, 0, oldBackupManifestErr
-			} else {
-				// We found a `BACKUP` manifest file.
-				manifest = oldBackupManifest
-				memSize = oldBackupManifestMemSize
-			}
-		} else {
-			// We found a `BACKUP_MANIFEST` file.
-			manifest = backupManifest
-			memSize = backupManifestMemSize
+			return backuppb.BackupManifest{}, 0, backupManifestErr
 		}
+		manifest = backupManifest
+		memSize = backupManifestMemSize
 	}
 	manifest.Dir = exportStore.Conf()
 	manifest.Dir.URI = storeURI
