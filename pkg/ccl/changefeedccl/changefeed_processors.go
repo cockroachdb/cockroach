@@ -1921,13 +1921,11 @@ func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.T
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_span_frontier")
 	defer sp.Finish()
 
-	now := timeutil.Now()
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 	if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier); err != nil {
 		return err
 	}
 	timer()
-	log.Changefeed.Infof(ctx, "ANDY DEBUG: persisting span frontier took %s", timeutil.Since(now))
 	return nil
 }
 
