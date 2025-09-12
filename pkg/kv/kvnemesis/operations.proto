@@ -165,6 +165,13 @@ message SavepointRollbackOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message MutateBatchHeaderOperation {
+  int64 max_span_request_keys = 1;
+  int64 target_bytes = 2;
+
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -195,6 +202,7 @@ message Operation {
   SavepointRollbackOperation savepoint_rollback = 22;
   BarrierOperation barrier = 23;
   FlushLockTableOperation flush_lock_table = 24;
+  MutateBatchHeaderOperation mutate_batch_header = 25;
 }
 
 enum ResultType {
@@ -223,6 +231,7 @@ message Result {
   // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
   repeated KeyValue values = 5 [(gogoproto.nullable) = false];
   util.hlc.Timestamp optional_timestamp = 6 [(gogoproto.nullable) = false];
+  roachpb.Span resume_span = 7;
 }
 
 message Step {
