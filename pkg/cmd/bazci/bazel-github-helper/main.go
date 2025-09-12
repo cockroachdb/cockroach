@@ -33,7 +33,7 @@ import (
 
 var (
 	eventStreamFile = flag.String("eventsfile", "", "eventstream file produced by bazel build --build_event_binary_file")
-	serverName      = flag.String("servername", "mesolite", "name of the EngFlow cluster (mesolite, tanzanite)")
+	serverName      = flag.String("servername", "mesolite", "name of the EngFlow cluster (mesolite)")
 	tlsClientCert   = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
 	tlsClientKey    = flag.String("key", "", "TLS client key for accessing EngFlow")
 	jsonOutFile     = flag.String("jsonout", "", "output JSON file")
