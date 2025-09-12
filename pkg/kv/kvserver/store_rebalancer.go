@@ -319,9 +319,11 @@ func (sr *StoreRebalancer) scorerOptions(
 	ctx context.Context, lbDimension load.Dimension,
 ) *allocatorimpl.LoadScorerOptions {
 	return &allocatorimpl.LoadScorerOptions{
-		IOOverloadOptions:            sr.allocator.IOOverloadOptions(),
-		DiskOptions:                  sr.allocator.DiskOptions(),
-		Deterministic:                sr.storePool.IsDeterministic(),
+		BaseScorerOptions: allocatorimpl.BaseScorerOptions{
+			IOOverload:    sr.allocator.IOOverloadOptions(),
+			DiskCapacity:  sr.allocator.DiskOptions(),
+			Deterministic: sr.storePool.IsDeterministic(),
+		},
 		LoadDims:                     []load.Dimension{lbDimension},
 		LoadThreshold:                allocatorimpl.LoadThresholds(&sr.st.SV, lbDimension),
 		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(lbDimension),
