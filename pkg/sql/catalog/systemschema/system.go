@@ -702,7 +702,7 @@ CREATE TABLE system.statement_statistics (
 			total_estimated_execution_time,
 			p99_latency
 		)
-)
+) WITH (sql_stats_automatic_collection_fraction_stale_rows = 4, sql_stats_automatic_partial_collection_fraction_stale_rows = 1);
 `
 
 	TransactionStatisticsTableSchema = `
@@ -751,7 +751,7 @@ CREATE TABLE system.transaction_statistics (
 			total_estimated_execution_time,
 			p99_latency
 		)
-);
+) WITH (sql_stats_automatic_collection_fraction_stale_rows = 4, sql_stats_automatic_partial_collection_fraction_stale_rows = 1);
 `
 
 	StatementActivityTableSchema = `
@@ -1421,7 +1421,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_TransactionDiagnosticsSupport.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_SystemStatsTablesAutostatsFraction.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -3380,6 +3380,10 @@ var (
 				ConstraintID:          tbl.NextConstraintID,
 			}}
 			tbl.NextConstraintID++
+			tbl.AutoStatsSettings = &catpb.AutoStatsSettings{
+				FractionStaleRows:        &[]float64{4.0}[0],
+				PartialFractionStaleRows: &[]float64{1.0}[0],
+			}
 		},
 	)
 
@@ -3604,6 +3608,10 @@ var (
 				ConstraintID:          tbl.NextConstraintID,
 			}}
 			tbl.NextConstraintID++
+			tbl.AutoStatsSettings = &catpb.AutoStatsSettings{
+				FractionStaleRows:        &[]float64{4.0}[0],
+				PartialFractionStaleRows: &[]float64{1.0}[0],
+			}
 		},
 	)
 
