@@ -197,6 +197,9 @@ const (
 	// FmtSkipAsOfSystemTimeClauses prevents the formatter from printing AS OF
 	// SYSTEM TIME clauses.
 	FmtSkipAsOfSystemTimeClauses
+
+	// FmtHideHints skips over any hints.
+	FmtHideHints
 )
 
 const genericArityIndicator = "__more__"
