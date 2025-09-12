@@ -427,24 +427,16 @@ func backup(
 		}
 	}
 
-	// Write a `BACKUP_MANIFEST` file to support backups in mixed-version clusters
-	// with 22.2 nodes.
-	//
-	// TODO(adityamaru): We can stop writing `BACKUP_MANIFEST` in 23.2
-	// because a mixed-version cluster with 23.1 nodes will read the
-	// `BACKUP_METADATA` instead.
+	// TODO(msbutler): version gate writing the old manifest once we can guarantee
+	// a cluster version that will not read the old manifest.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, 0, err
 	}
 
-	// Write a `BACKUP_METADATA` file along with SSTs for all the alloc heavy
-	// fields elided from the `BACKUP_MANIFEST`.
-	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&settings.SV) {
-		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
-			&kmsEnv, backupManifest); err != nil {
-			return roachpb.RowCount{}, 0, err
-		}
+	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
+		&kmsEnv, backupManifest); err != nil {
+		return roachpb.RowCount{}, 0, err
 	}
 
 	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
