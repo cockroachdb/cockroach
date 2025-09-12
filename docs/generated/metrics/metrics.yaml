@@ -12428,6 +12428,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: kv.concurrency.locks_shed_due_to_memory_limit
+      exported_name: kv_concurrency_locks_shed_due_to_memory_limit
+      description: The number of locks that were shed because the lock table ran into memory limits
+      y_axis_label: Locks
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.concurrency.locks_with_wait_queues
       exported_name: kv_concurrency_locks_with_wait_queues
       description: Number of active locks held in lock tables with active wait-queues
@@ -12460,6 +12468,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: kv.concurrency.num_lock_shed_due_to_memory_limit_events
+      exported_name: kv_concurrency_num_lock_shed_due_to_memory_limit_events
+      description: The number of times locks that were shed by the lock table because it ran into memory limits
+      y_axis_label: Lock Shed Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.loadsplitter.cleardirection
       exported_name: kv_loadsplitter_cleardirection
       description: Load-based splitter observed an access direction greater than 80% left or right in the samples.
