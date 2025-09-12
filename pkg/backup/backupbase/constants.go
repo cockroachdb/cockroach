@@ -38,8 +38,8 @@ const (
 	// BackupManifestName is the file name used for serialized BackupManifest
 	// protos.
 	//
-	// TODO(adityamaru): Remove in 23.2 since at that point all nodes will be
-	// writing a SlimBackupManifest instead.
+	// TODO(msbutler): Remove 26.3 when we're guaranteed that no backup wrote
+	// exclusively the backup_manifest, and not the slim manifest.
 	BackupManifestName = "BACKUP_MANIFEST"
 
 	// BackupMetadataName is the file name used for serialized BackupManifest

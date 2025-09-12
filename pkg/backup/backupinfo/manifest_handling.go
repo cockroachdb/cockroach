@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -48,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -84,17 +82,6 @@ const (
 	// CHECKPOINT files will be stored as we no longer want to overwrite
 	// them.
 	BackupProgressDirectory = "progress"
-)
-
-// WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
-// file along with external SSTs containing lists of `BackupManifest_Files` and
-// descriptors. This new format of metadata is written in addition to the
-// `BACKUP_MANIFEST` file, and is expected to be its replacement in the future.
-var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"backup.write_metadata_with_external_ssts.enabled",
-	"write BACKUP metadata along with supporting SST files",
-	metamorphic.ConstantWithTestBool("backup.write_metadata_with_external_ssts.enabled", true),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check
