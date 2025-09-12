@@ -1557,7 +1557,9 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := &RangeCountScorerOptions{
-		DiskCapacityOptions: defaultDiskCapacityOptions(),
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity: defaultDiskCapacityOptions(),
+		},
 	}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
@@ -2008,7 +2010,9 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := RangeCountScorerOptions{
-		DiskCapacityOptions:     defaultDiskCapacityOptions(),
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity: defaultDiskCapacityOptions(),
+		},
 		rangeRebalanceThreshold: 0.1,
 	}
 	storeList := storepool.StoreList{
@@ -2094,7 +2098,9 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	}
 
 	options := RangeCountScorerOptions{
-		DiskCapacityOptions: defaultDiskCapacityOptions(),
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity: defaultDiskCapacityOptions(),
+		},
 	}
 	eqClass := equivalenceClass{
 		candidateSL: storeList,
