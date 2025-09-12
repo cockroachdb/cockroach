@@ -1,12 +1,10 @@
-# Purpose
-A compact, high-signal reference for CockroachDB's KV server (`pkg/kv/kvserver/`): ranges, replicas, leases, Raft integration, snapshots, split/merge, GC, background queues, allocator/rebalancing, admission/flow control, protected timestamps, and liveness. Emphasis on safety invariants, operator triage, data movement, and recovery.
-
 ## At a glance (keep ~200–300 words)
 - **Component index**
   - Path: `pkg/kv/kvserver/`
-  - Core entry points/types: `store.go`, `replica.go`, `raft.go`, `replica_raft.go`, `replica_write.go`, `replica_read.go`, `replica_range_lease.go`, `store_raft.go`, `store_snapshot.go`, `snapshot_apply_prepare.go`, `raft_log_truncator.go`, `replicate_queue.go`, `split_queue.go`, `merge_queue.go`, `mvcc_gc_queue.go`, `lease_queue.go`, `raft_snapshot_queue.go`, `allocator/`, `leases/`, `gc/`, `split/`, `kvflowcontrol/`, `kvadmission/`, `closedts/`, `protectedts/`, `storeliveness/`.
+  - Core entry points/types: `store.go`, `replica.go`, `replica_write.go`, `replica_read.go`, `raft.go`, `replicate_queue.go`, `split_queue.go`, `merge_queue.go`, `mvcc_gc_queue.go`, `lease_queue.go`, `raft_snapshot_queue.go`
   - Ownership: KV (range/replication subsystem). Boundaries: talks to `pkg/raft/` (consensus), `pkg/storage/` (Pebble/MVCC), upper KV APIs (`pkg/kv/`), and node liveness.
   - Owners: KV (kvserver)
+  - See also: `pkg/kv/kvclient/kvcoord/AGENTS.md`, `pkg/kv/kvserver/concurrency/AGENTS.md`, `pkg/storage/AGENTS.md`, `pkg/settings/AGENTS.md`, `pkg/upgrade/AGENTS.md`
 - **Responsibilities**
   - Manage per-range Raft state machines and leases. Apply replicated commands to MVCC storage. Move data via snapshots and replica changes. Maintain health via background queues (split/merge/GC/raft-log). Enforce flow control and admission.
 - **Critical invariants**
@@ -65,10 +63,10 @@ replica → apply snapshot → joint consensus (if needed) → commit membership
    - Debugging: inspect problematic ranges via range log, metrics, and per-range tracing (`replica_*_test.go` show patterns). Typical recipe: identify hot range → check leaseholder location → examine replicate/raft_log queues and allocator decisions → confirm snapshots progressing, not stuck.
 
 6) **Interoperability**
-   - Consensus: `pkg/raft/` (Raft core, storage interfaces). KVServer implements the Raft application, storage, and transport glue.
-   - Storage: `pkg/storage/` (Pebble/MVCC). All state machine application uses this layer; no direct Pebble calls outside storage interfaces.
-   - Closed timestamps: `closedts/` integrates with the cluster-wide closed timestamp subsystem to enable follower reads.
-   - Protected timestamps: `protectedts/` prevents GC of versions needed by BACKUP/CDC/etc.
+   - Consensus: integrates with the Raft subsystem for replication, log application, and membership changes.
+   - Storage: uses the storage engine API (Pebble-backed) exclusively for MVCC reads/writes and snapshots.
+   - Closed timestamps: collaborates with the cluster closed-timestamp service to validate follower reads.
+   - Protected timestamps: consumes the protection service to prevent GC of required historical data.
 
 7) **Mixed-version / upgrades**
    - Feature gates in `pkg/clusterversion/` guard behaviors (e.g., membership change styles, snapshot formats) and are checked before enabling new paths. Replica changes prefer compatibility-safe sequences during upgrades.
@@ -95,7 +93,8 @@ replica → apply snapshot → joint consensus (if needed) → commit membership
    - Recover a stale follower: `raft_snapshot_queue.go` enqueues it; leader sends snapshot; follower applies and catches up; truncator later compacts the log.
 
 12) **References**
-   - See also: `pkg/kv/kvclient/kvcoord/AGENTS.md`, `pkg/kv/kvserver/concurrency/AGENTS.md`, `pkg/storage/AGENTS.md`
+   - docs: `docs/tech-notes/`
+   - RFCs: `docs/RFCS/`
 
 13) **Glossary**
    - Range: contiguous keyspan replicated via Raft.

@@ -129,7 +129,17 @@ Always run `./dev generate` after modifying `.proto` files, SQL grammar, or opti
 - **Design Documents**: `/docs/design.md` and `/docs/tech-notes/`
 
 ## Domain Context Files
-Use these high‑signal docs before editing, reviewing, or triaging code in the listed package (and subpackages). If you change an invariant/gate/major flow, update the DCF in the same PR.
+Domain Context Files (DCF) are the canonical, high‑signal references for each domain.
+You **MUST** load and consult **only** the DCF(s) for packages directly involved in your task before code exploration or edits, tests, reviews, or triage. Specifically:
+- The package you’ll read/edit
+- Directly impacted subpackages
+- Imported packages whose behavior you intend to change (even indirectly)
+
+Do not load unrelated DCFs. If additional impact becomes apparent during work, load those DCFs then.
+
+For PRs making major changes to a domain with a DCF, update the DCF in the same PR (reference `docs/agents/CONTEXT_TEMPLATE.md`).
+
+### Index
 - `pkg/kv/kvclient/kvcoord/AGENTS_INTERCEPTORS.md` — Client-side txn interceptor stack: layering, buffering/pipelining/refresh, commits, settings, and triage.
 - `pkg/kv/kvclient/kvcoord/AGENTS.md` — Transaction coordinator and DistSender: lifecycle, routing, retries/refreshes, uncertainty, closed timestamps.
 - `pkg/kv/kvserver/concurrency/AGENTS.md` — KV concurrency control: latches, lock table, waits, reliability, triage.
