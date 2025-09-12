@@ -6,12 +6,12 @@ gen_cluster nodes=2
 gen_ranges ranges=100 repl_factor=1 placement_type=skewed
 ----
 
-eval duration=20m seed=42 metrics=(replicas,leases)
+eval duration=20m seed=42 metrics=(replicas,leases) cfgs=(mma-only)
 ----
 leases#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
-leases#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+leases#1: last:  [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 leases#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
 replicas#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
-replicas#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+replicas#1: last:  [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 replicas#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
-artifacts[default]: db55b6d407888d3c
+artifacts[mma-only]: 3a17f6ce4f0d4f02
