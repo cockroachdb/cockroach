@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -30,7 +31,7 @@ import (
 )
 
 // Default upper bound on the number of locks in a lockTable.
-const defaultLockTableSize = 10000
+var defaultLockTableSize = envutil.EnvOrDefaultInt64("COCKROACH_DEFAULT_LOCK_TABLE_SIZE", 10000)
 
 // The kind of waiting that the request is subject to.
 type waitKind int

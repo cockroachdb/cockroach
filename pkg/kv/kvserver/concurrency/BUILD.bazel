@@ -36,6 +36,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/container/list",
         "//pkg/util/debugutil",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
