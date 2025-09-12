@@ -16,6 +16,7 @@ import (
 
 type Timers struct {
 	CheckpointJobProgress     *aggmetric.AggHistogram
+	FrontierPersistence       *aggmetric.AggHistogram
 	Encode                    *aggmetric.AggHistogram
 	EmitRow                   *aggmetric.AggHistogram
 	DownstreamClientSend      *aggmetric.AggHistogram
@@ -50,6 +51,7 @@ func New(histogramWindow time.Duration) *Timers {
 	b := aggmetric.MakeBuilder("scope")
 	return &Timers{
 		CheckpointJobProgress:     b.Histogram(histogramOptsFor("changefeed.stage.checkpoint_job_progress.latency", "Latency of the changefeed stage: checkpointing job progress")),
+		FrontierPersistence:       b.Histogram(histogramOptsFor("changefeed.stage.frontier_persistence.latency", "Latency of the changefeed stage: persisting frontier to job info")),
 		Encode:                    b.Histogram(histogramOptsFor("changefeed.stage.encode.latency", "Latency of the changefeed stage: encoding data")),
 		EmitRow:                   b.Histogram(histogramOptsFor("changefeed.stage.emit_row.latency", "Latency of the changefeed stage: emitting row to sink")),
 		DownstreamClientSend:      b.Histogram(histogramOptsFor("changefeed.stage.downstream_client_send.latency", "Latency of the changefeed stage: flushing messages from the sink's client to its downstream. This includes sends that failed for most but not all sinks.")),
@@ -66,6 +68,7 @@ func New(histogramWindow time.Duration) *Timers {
 func (ts *Timers) GetOrCreateScopedTimers(scope string) *ScopedTimers {
 	return &ScopedTimers{
 		CheckpointJobProgress:     &timer{ts.CheckpointJobProgress.AddChild(scope)},
+		FrontierPersistence:       &timer{ts.FrontierPersistence.AddChild(scope)},
 		Encode:                    &timer{ts.Encode.AddChild(scope)},
 		EmitRow:                   &timer{ts.EmitRow.AddChild(scope)},
 		DownstreamClientSend:      &timer{ts.DownstreamClientSend.AddChild(scope)},
@@ -81,6 +84,7 @@ func (ts *Timers) GetOrCreateScopedTimers(scope string) *ScopedTimers {
 
 type ScopedTimers struct {
 	CheckpointJobProgress     *timer
+	FrontierPersistence       *timer
 	Encode                    *timer
 	EmitRow                   *timer
 	DownstreamClientSend      *timer

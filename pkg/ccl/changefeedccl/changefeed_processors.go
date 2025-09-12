@@ -1908,6 +1908,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 }
 
 func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.Txn) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_span_frontier")
+	defer sp.Finish()
+
+	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 	for tableID, tableFrontier := range cf.frontier.Frontiers() {
 		name := func() string {
 			if tableID == 0 {
@@ -1919,6 +1923,7 @@ func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.T
 			return err
 		}
 	}
+	timer()
 	return nil
 }
 
