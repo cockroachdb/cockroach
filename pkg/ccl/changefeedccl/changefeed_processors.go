@@ -1808,6 +1808,15 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, err
 		}
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
+		// TODO move this out of this if statement
+		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return false, err
+		}
 		return updated, nil
 	}
 
@@ -1853,10 +1862,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
-
-			if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
-				return err
-			}
 
 			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
 				log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
