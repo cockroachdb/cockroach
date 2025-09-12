@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvadmission",
@@ -23,5 +23,19 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
+    ],
+)
+
+go_test(
+    name = "kvadmission_test",
+    srcs = ["kvadmission_test.go"],
+    embed = [":kvadmission"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
+        "@com_github_stretchr_testify//require",
     ],
 )
