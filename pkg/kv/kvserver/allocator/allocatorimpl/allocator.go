@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2663,6 +2664,8 @@ const (
 	// because there is a more preferred leaseholder according the applied range
 	// lease preferences.
 	TransferLeaseForPreferences
+
+	DontTransferLeaseCountBalanceDisabled
 )
 
 // ShouldTransfer returns true when the lease should be transferred, false
@@ -2673,7 +2676,7 @@ func (t TransferLeaseDecision) ShouldTransfer() bool {
 		TransferLeaseForIOOverload, TransferLeaseForPreferences:
 		return true
 	case DontTransferLeaseBalanced, DontTransferLeaseNoValidTargets,
-		DontTransferLeaseNoStoreDescriptor:
+		DontTransferLeaseNoStoreDescriptor, DontTransferLeaseCountBalanceDisabled:
 		return false
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
@@ -2694,7 +2697,7 @@ func (t TransferLeaseDecision) Priority() float64 {
 	case TransferLeaseForCountBalance:
 		return 0
 	case DontTransferLeaseBalanced, DontTransferLeaseNoValidTargets,
-		DontTransferLeaseNoStoreDescriptor:
+		DontTransferLeaseNoStoreDescriptor, DontTransferLeaseCountBalanceDisabled:
 		return 0
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
@@ -2720,9 +2723,16 @@ func (t TransferLeaseDecision) String() string {
 		return "no-transfer(missing store descriptor)"
 	case DontTransferLeaseNoValidTargets:
 		return "no-transfer(no valid targets)"
+	case DontTransferLeaseCountBalanceDisabled:
+		return "no-transfer(count balance disabled)"
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
 	}
+}
+
+func (a *Allocator) CountBasedRebalanceDisabled() bool {
+	return kvserverbase.DisableReplicaLeaseCountRebalancingIfMMAEnabled.Get(&a.st.SV) &&
+		kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetric
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms
@@ -2792,7 +2802,10 @@ func (a *Allocator) ShouldTransferLease(
 	case shouldTransfer:
 		result = TransferLeaseForAccessLocality
 	case decideWithoutStats:
-		if a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
+		// It is a little unfortunate we are checking on the decision.
+		if a.CountBasedRebalanceDisabled() {
+			result = DontTransferLeaseCountBalanceDisabled
+		} else if a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
 			result = TransferLeaseForCountBalance
 		} else {
 			result = DontTransferLeaseBalanced
