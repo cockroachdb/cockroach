@@ -23,11 +23,13 @@ func InitRoachprod() {
 
 // RoachprodRun runs a command on a roachprod cluster with the given cluster name and logger.
 // It takes a list of command arguments and passes them to the roachprod command execution.
-func RoachprodRun(clusterName string, l *logger.Logger, cmdArray []string) error {
+func RoachprodRun(
+	clusterName string, l *logger.Logger, cmdArray []string, runOptions install.RunOptions,
+) error {
 	// Execute the roachprod command with the provided context, logger, cluster name, and options.
 	return roachprod.Run(
 		context.Background(), l, clusterName, "", "", install.SimpleSecureOption(false),
-		os.Stdout, os.Stderr, cmdArray, install.DefaultRunOptions(),
+		os.Stdout, os.Stderr, cmdArray, runOptions,
 	)
 }
 
