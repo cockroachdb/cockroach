@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
@@ -182,7 +181,6 @@ func storeChunked(
 			return err
 		}
 	}
-	log.Changefeed.Infof(ctx, "ANDY DEBUG: storeChunked stored %d chunks for job ID %d name %s", chunk, jobID, name)
 	return nil
 }
 
