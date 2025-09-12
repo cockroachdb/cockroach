@@ -110,6 +110,7 @@ const (
 	TableMetadata                           SystemTableName = "table_metadata"
 	PreparedTransactionsTableName           SystemTableName = "prepared_transactions"
 	InspectErrorsTableName                  SystemTableName = "inspect_errors"
+	PlanHintsTableName                      SystemTableName = "plan_hints"
 )
 
 // Oid for virtual database and table.

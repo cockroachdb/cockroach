@@ -222,6 +222,11 @@ const (
 	// system.statement_diagnostics to support transaction-level diagnostic bundle collection.
 	V25_4_TransactionDiagnosticsSupport
 
+	// V25_4_AddSystemPlanHintsTable adds the system.plan_hints table. The table
+	// is used to contain "external" plan hints, i.e. hints that are associated
+	// with a query without modifying the query or application itself.
+	V25_4_AddSystemPlanHintsTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -280,6 +285,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_4_InspectErrorsTable: {Major: 25, Minor: 3, Internal: 8},
 
 	V25_4_TransactionDiagnosticsSupport: {Major: 25, Minor: 3, Internal: 10},
+
+	V25_4_AddSystemPlanHintsTable: {Major: 25, Minor: 3, Internal: 12},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

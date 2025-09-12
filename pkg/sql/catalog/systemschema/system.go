@@ -1377,6 +1377,27 @@ CREATE TABLE public.inspect_errors (
     INDEX object_idx (id ASC),
 	FAMILY "primary" (error_id, job_id, error_type, aost, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '90 days');`
+
+	// PlanHintsTableSchema defines the schema for the system.plan_hints table,
+	// which associates custom external plan hints with queries that match a
+	// specified fingerprint.
+	// * query_hash: a 64-bit hash of the query fingerprint, used as the leading
+	//   primary key column. This is a stored computed column.
+	// * row_id: a unique ID used to differentiate hints for the same fingerprint
+	//   and/or colliding fingerprints.
+	// * fingerprint: the query fingerprint.
+	// * plan_hint: an external hint for the query, serialized into bytes.
+	// * created_at: the timestamp when the hint was created.
+	PlanHintsTableSchema = `
+  CREATE TABLE system.plan_hints (
+    "query_hash"  INT8 NOT VISIBLE NOT NULL AS (crdb_internal.gen_query_fingerprint_hash(fingerprint)) STORED,
+    "row_id"      INT8 DEFAULT unique_rowid() NOT NULL,
+    "fingerprint" STRING NOT NULL,
+    "plan_hint"   BYTES NOT NULL,
+    "created_at"  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT "primary" PRIMARY KEY ("query_hash", "row_id"),
+    FAMILY "primary" ("query_hash", "row_id", "fingerprint", "plan_hint", "created_at")
+  );`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1421,7 +1442,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_TransactionDiagnosticsSupport.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4_AddSystemPlanHintsTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1621,6 +1642,7 @@ func MakeSystemTables() []SystemTable {
 		InspectErrorsTable,
 		TransactionDiagnosticsRequestsTable,
 		TransactionDiagnosticsTable,
+		PlanHintsTable,
 	}
 }
 
@@ -5402,6 +5424,42 @@ var (
 			tbl.RowLevelTTL = &catpb.RowLevelTTL{
 				DurationExpr: catpb.Expression("'90 days':::INTERVAL")}
 		},
+	)
+
+	planHintFingerprintHashComputeExpr = `crdb_internal.gen_plan_hint_fingerprint_hash(fingerprint)`
+
+	PlanHintsTable = makeSystemTable(
+		PlanHintsTableSchema,
+		systemTable(
+			catconstants.PlanHintsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "query_hash", ID: 1, Type: types.Int, Hidden: true, ComputeExpr: &planHintFingerprintHashComputeExpr},
+				{Name: "row_id", ID: 2, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "fingerprint", ID: 3, Type: types.String},
+				{Name: "plan_hint", ID: 4, Type: types.Bytes},
+				{Name: "created_at", ID: 5, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"query_hash", "row_id", "fingerprint", "plan_hint", "created_at"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"query_hash", "row_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+			},
+		),
 	)
 )
 

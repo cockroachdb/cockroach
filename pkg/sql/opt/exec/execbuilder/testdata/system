@@ -1,0 +1,125 @@
+# LogicTest: local
+
+# ------------------------------------------------------------------------------
+# Tests for system.plan_hints.
+# ------------------------------------------------------------------------------
+
+# Query by fingerprint.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM system.plan_hints WHERE fingerprint = 'SELECT * FROM t WHERE x = _'
+----
+select
+ ├── columns: row_id:2 fingerprint:3 plan_hint:4 created_at:5
+ ├── stats: [rows=10, distinct(3)=1, null(3)=0]
+ ├── cost: 29.9500001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (2)
+ ├── fd: ()-->(3), (2)-->(4,5)
+ ├── distribution: test
+ ├── prune: (2,4,5)
+ ├── scan plan_hints
+ │    ├── columns: row_id:2 fingerprint:3 plan_hint:4 created_at:5
+ │    ├── constraint: /1/2: [/6457443302007961978 - /6457443302007961978]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+ │    ├── cost: 29.8200001
+ │    ├── cost-flags: unbounded-cardinality
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(3-5)
+ │    └── distribution: test
+ └── filters
+      └── fingerprint:3 = 'SELECT * FROM t WHERE x = _' [outer=(3), constraints=(/3: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(3)]
+
+# Query by hash.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM system.plan_hints WHERE query_hash = 123
+----
+project
+ ├── columns: row_id:2 fingerprint:3 plan_hint:4 created_at:5
+ ├── stats: [rows=10]
+ ├── cost: 30.1400001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (2)
+ ├── fd: (2)-->(3-5)
+ ├── distribution: test
+ ├── prune: (2-5)
+ └── scan plan_hints
+      ├── columns: query_hash:1 row_id:2 fingerprint:3 plan_hint:4 created_at:5
+      ├── constraint: /1/2: [/123 - /123]
+      ├── stats: [rows=10, distinct(1)=1, null(1)=0]
+      ├── cost: 30.0200001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (2)
+      ├── fd: ()-->(1), (2)-->(3-5)
+      └── distribution: test
+
+# Query by hash range.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM system.plan_hints WHERE query_hash >= 100 AND query_hash < 200
+----
+project
+ ├── columns: row_id:2 fingerprint:3 plan_hint:4 created_at:5
+ ├── stats: [rows=1000]
+ ├── cost: 1228.04
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4,5)
+ ├── distribution: test
+ ├── prune: (2-5)
+ └── scan plan_hints
+      ├── columns: query_hash:1 row_id:2 fingerprint:3 plan_hint:4 created_at:5
+      ├── constraint: /1/2: [/100 - /199]
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=0]
+      ├── cost: 1218.02
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1,2)
+      ├── fd: (1,2)-->(3-5), (3)-->(1)
+      └── distribution: test
+
+# Select hidden hash column.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT query_hash FROM system.plan_hints
+----
+scan plan_hints
+ ├── columns: query_hash:1
+ ├── computed column expressions
+ │    └── query_hash:1
+ │         └── crdb_internal.gen_plan_hint_fingerprint_hash(fingerprint:3)
+ ├── stats: [rows=1000]
+ ├── cost: 1149.22
+ ├── cost-flags: unbounded-cardinality
+ ├── distribution: test
+ └── prune: (1)
+
+# Delete by fingerprint and row ID.
+query T
+EXPLAIN (OPT, VERBOSE) DELETE FROM system.plan_hints WHERE fingerprint = 'SELECT * FROM t WHERE x = _' AND row_id = 1
+----
+delete plan_hints
+ ├── columns: <none>
+ ├── fetch columns: query_hash:10 row_id:11
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 9.21
+ ├── distribution: test
+ └── select
+      ├── columns: query_hash:10 row_id:11 fingerprint:12
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(11,12)=1, null(11,12)=0]
+      ├── cost: 9.2
+      ├── key: ()
+      ├── fd: ()-->(10-12)
+      ├── distribution: test
+      ├── prune: (10)
+      ├── scan plan_hints
+      │    ├── columns: query_hash:10 row_id:11 fingerprint:12
+      │    ├── constraint: /10/11: [/6457443302007961978/1 - /6457443302007961978/1]
+      │    ├── flags: avoid-full-scan
+      │    ├── cardinality: [0 - 1]
+      │    ├── stats: [rows=1, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(10,11)=1, null(10,11)=0]
+      │    ├── cost: 9.17
+      │    ├── key: ()
+      │    ├── fd: ()-->(10-12)
+      │    └── distribution: test
+      └── filters
+           └── fingerprint:12 = 'SELECT * FROM t WHERE x = _' [outer=(12), constraints=(/12: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(12)]
