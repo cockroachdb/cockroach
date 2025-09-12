@@ -126,10 +126,11 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"whether to rebalance based on the distribution of load across stores",
 	"leases and replicas",
 	map[LBRebalancingMode]string{
-		LBRebalancingOff:               "off",
-		LBRebalancingLeasesOnly:        "leases",
-		LBRebalancingLeasesAndReplicas: "leases and replicas",
-		LBRebalancingMultiMetric:       "multi-metric",
+		LBRebalancingOff:                 "off",
+		LBRebalancingLeasesOnly:          "leases",
+		LBRebalancingLeasesAndReplicas:   "leases and replicas",
+		LBRebalancingMultiMetricOnly:     "multi-metric",
+		LBRebalancingMultiMetricAndCount: "multi-metric and count",
 	},
 	settings.WithPublic,
 	settings.WithValidateEnum(func(enumStr string) error {
@@ -140,6 +141,13 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 			103320, "multi-metric rebalancing not supported for production use")
 	}),
 )
+
+// LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
+// uses the multi-metric store rebalancer.
+var LoadBasedRebalancingModeIsMMA = func(sv *settings.Values) bool {
+	mode := LoadBasedRebalancingMode.Get(sv)
+	return mode == LBRebalancingMultiMetricOnly || mode == LBRebalancingMultiMetricAndCount
+}
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
@@ -155,10 +163,17 @@ const (
 	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
 	// replicas based on store-level load imbalances.
 	LBRebalancingLeasesAndReplicas
-	// LBRebalancingMultiMetric means that the store rebalancer yields to the
+	// LBRebalancingMultiMetricOnly means that the store rebalancer yields to the
 	// multi-metric store rebalancer, balancing both leases and replicas based on
-	// store-level load imbalances.
-	LBRebalancingMultiMetric
+	// store-level load imbalances. Note that this disables replica-count and
+	// lease-count based rebalancing.
+	LBRebalancingMultiMetricOnly
+	// LBRebalancingMultiMetricAndCount means that both multi-metric store
+	// rebalancer and count based rebalancing via lease queue and replicate queue
+	// are enabled, balancing lease count, replica count, and store-level load
+	// across stores. Note that this might cause more thrashing since lease and
+	// replica counts goal may be in conflict with the store-level load goal.
+	LBRebalancingMultiMetricAndCount
 )
 
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles

@@ -1183,7 +1183,8 @@ type StoreConfig struct {
 	StoreLiveness     *storeliveness.NodeContainer
 	StorePool         *storepool.StorePool
 	// One MMAllocator per node which guides mma store rebalancer to make
-	// allocation changes when LBRebalancingMultiMetric is enabled.
+	// allocation changes when
+	// LBRebalancingMultiMetricOnly/LBRebalancingMultiMetricAndCount is enabled.
 	MMAllocator          mmaprototype.Allocator
 	AllocatorSync        *mmaintegration.AllocatorSync
 	Transport            *RaftTransport

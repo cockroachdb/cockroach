@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2055,10 +2056,24 @@ func (a Allocator) RebalanceNonVoter(
 // machinery to achieve range count convergence.
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
-		IOOverloadOptions:       a.IOOverloadOptions(),
-		DiskCapacityOptions:     a.DiskOptions(),
-		deterministic:           a.deterministic,
+		BaseScorerOptions: BaseScorerOptions{
+			IOOverload:    a.IOOverloadOptions(),
+			DiskCapacity:  a.DiskOptions(),
+			Deterministic: a.deterministic,
+		},
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
+	}
+}
+
+// BaseScorerOptionsWithNoConvergence returns the base scorer options with no
+// convergence heuristics.
+func (a *Allocator) BaseScorerOptionsWithNoConvergence() BaseScorerOptionsNoConvergence {
+	return BaseScorerOptionsNoConvergence{
+		BaseScorerOptions: BaseScorerOptions{
+			IOOverload:    a.IOOverloadOptions(),
+			DiskCapacity:  a.DiskOptions(),
+			Deterministic: a.deterministic,
+		},
 	}
 }
 
@@ -2066,9 +2081,11 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerOptions {
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
-			IOOverloadOptions:       a.IOOverloadOptions(),
-			DiskCapacityOptions:     a.DiskOptions(),
-			deterministic:           a.deterministic,
+			BaseScorerOptions: BaseScorerOptions{
+				IOOverload:    a.IOOverloadOptions(),
+				DiskCapacity:  a.DiskOptions(),
+				Deterministic: a.deterministic,
+			},
 			rangeRebalanceThreshold: 0,
 		},
 		// We set jitter to be equal to the padding around replica-count rebalancing
@@ -2517,9 +2534,11 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&LoadScorerOptions{
-				IOOverloadOptions:            a.IOOverloadOptions(),
-				DiskOptions:                  a.DiskOptions(),
-				Deterministic:                a.deterministic,
+				BaseScorerOptions: BaseScorerOptions{
+					IOOverload:    a.IOOverloadOptions(),
+					DiskCapacity:  a.DiskOptions(),
+					Deterministic: a.deterministic,
+				},
 				LoadDims:                     opts.LoadDimensions,
 				LoadThreshold:                LoadThresholds(&a.st.SV, opts.LoadDimensions...),
 				MinLoadThreshold:             LoadMinThresholds(opts.LoadDimensions...),
@@ -2723,6 +2742,14 @@ func (t TransferLeaseDecision) String() string {
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
 	}
+}
+
+// CountBasedRebalancingDisabled returns true if count-based rebalancing should
+// be disabled. Count-based rebalancing is disabled only when
+// LBRebalancingMultiMetricOnly mode is active. To enable both multi-metric and
+// count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
+func (a *Allocator) CountBasedRebalancingDisabled() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms
@@ -3024,6 +3051,10 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
+	// Return false early if count based rebalancing is disabled.
+	if a.CountBasedRebalancingDisabled() {
+		return false
+	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease
 	// rebalancing is enabled? In happy cases it's nice to keep this working
 	// to even out the number of leases in addition to the number of replicas,

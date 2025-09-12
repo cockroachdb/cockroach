@@ -932,7 +932,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(rebalanceThreshold)
 
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(ctx, rctx)
@@ -1273,7 +1273,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, kvserverbase.LBRebalancingLeasesAndReplicas)
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdBlockTransfers,
 				UseIOThresholdMax:       true,
 			}
@@ -1363,7 +1363,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options := sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+		rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 			ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
@@ -1530,7 +1530,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(tc.rebalanceThreshold)
 
@@ -1637,7 +1637,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		hottestRanges = sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options = sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx = sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+		rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 			ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 		rctx.options.Deterministic = true
@@ -1799,7 +1799,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			require.Greater(t, len(rctx.hottestRanges), 0)
 
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: test.enforcement, ReplicaIOOverloadThreshold: allocatorimpl.DefaultReplicaIOOverloadThreshold}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 

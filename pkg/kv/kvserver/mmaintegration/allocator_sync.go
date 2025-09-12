@@ -133,7 +133,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	transferFrom, transferTo roachpb.ReplicationTarget,
 ) SyncChangeID {
 	var changeIDs []mmaprototype.ChangeID
-	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
 		changeIDs = as.mmaAllocator.RegisterExternalChanges(convertLeaseTransferToMMA(desc, usage, transferFrom, transferTo))
 	}
 	trackedChange := trackedAllocatorChange{
@@ -158,7 +158,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	leaseholderStoreID roachpb.StoreID,
 ) SyncChangeID {
 	var changeIDs []mmaprototype.ChangeID
-	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
 		changeIDs = as.mmaAllocator.RegisterExternalChanges(convertReplicaChangeToMMA(desc, usage, changes, leaseholderStoreID))
 	}
 	trackedChange := trackedAllocatorChange{
