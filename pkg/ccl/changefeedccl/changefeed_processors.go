@@ -1923,16 +1923,8 @@ func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.T
 
 	now := timeutil.Now()
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
-	for tableID, tableFrontier := range cf.frontier.Frontiers() {
-		name := func() string {
-			if tableID == 0 {
-				return "coordinator"
-			}
-			return fmt.Sprintf("table%d", tableID)
-		}()
-		if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, name, tableFrontier); err != nil {
-			return err
-		}
+	if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier); err != nil {
+		return err
 	}
 	timer()
 	log.Changefeed.Infof(ctx, "ANDY DEBUG: persisting span frontier took %s", timeutil.Since(now))
