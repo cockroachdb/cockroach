@@ -1825,7 +1825,7 @@ func runCDCMultiTablePTSBenchmark(
 		}
 	}
 
-	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --num-tables=%d {pgurl%s}",
+	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
 		params.numRows, numRanges, params.numTables, ct.crdbNodes.RandNode())
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 		t.Fatalf("failed to initialize bank tables: %v", err)
@@ -1834,7 +1834,7 @@ func runCDCMultiTablePTSBenchmark(
 	ct.workloadWg.Add(1)
 	ct.mon.Go(func(ctx context.Context) error {
 		defer ct.workloadWg.Done()
-		workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --num-tables=%d {pgurl%s}",
+		workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --tables=%d {pgurl%s}",
 			params.numRows, params.duration, params.numTables, ct.crdbNodes)
 		return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
 	})
