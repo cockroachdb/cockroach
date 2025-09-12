@@ -489,13 +489,11 @@ func TestDataDriven(t *testing.T) {
 							})
 					},
 					"mma-only": func(eg *gen.StaticEvents) {
-						settingsGen.Settings.ReplicateQueueEnabled = false
-						settingsGen.Settings.LeaseQueueEnabled = false
 						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,
 								Key:              "LBRebalancingMode",
-								Value:            int64(kvserverbase.LBRebalancingMultiMetricAndCount),
+								Value:            int64(kvserverbase.LBRebalancingMultiMetricOnly),
 							})
 					},
 					// Both the replicate/lease queues and the MMA are enabled.
