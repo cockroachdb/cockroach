@@ -7,6 +7,7 @@ package kvnemesis
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -105,6 +106,21 @@ func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
 }
 
+func exceptReplicaUnavailable(err error) bool {
+	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil))
+}
+
+func exceptContextCanceled(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func exceptSQLCanceled(err error) bool {
+	// Also check for SQL-layer ambiguous errors that come through as pq errors.
+	errStr := err.Error()
+	return strings.Contains(errStr, "result is ambiguous") ||
+		strings.Contains(errStr, "query execution canceled")
+}
+
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
@@ -145,6 +161,12 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		o.Result = resultInit(ctx, err)
 	case *FlushLockTableOperation:
 		o.Result = resultInit(ctx, db.FlushLockTable(ctx, o.Key, o.EndKey))
+	case *AddNetworkPartitionOperation:
+		err := env.Partitioner.AddPartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
+	case *RemoveNetworkPartitionOperation:
+		err := env.Partitioner.RemovePartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
@@ -686,7 +708,12 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 	var opts = retry.Options{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
 		sender := dbs[dbIdx].NonTransactionalSender()
-		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.CONSISTENT, 0, false)
+		// Use kvpb.READ_UNCOMMITTED because kv.CONSISTENT requires a transactional
+		// sender. In the generator, range lookups are usually used for finding
+		// replica/lease change targets, so it's ok if these are not consistent.
+		// Using kv.CONSISTENT with a non-transactional sender and in the presence
+		// of network partitions can lead to infinitely stuck lookups.
+		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.READ_UNCOMMITTED, 0, false)
 		if err != nil {
 			log.Dev.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
 			continue
@@ -697,12 +724,11 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 		}
 		return descs[0]
 	}
-	panic(`unreachable`)
+	return roachpb.RangeDescriptor{}
 }
 
 func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
-	ctx := context.Background()
-	return func(key roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
+	return func(ctx context.Context, key roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
 		desc := getRangeDesc(ctx, key, dbs...)
 		replicas := desc.Replicas().Descriptors()
 		var voters []roachpb.ReplicationTarget
