@@ -216,23 +216,24 @@ func MakeBackupDestinationStores(
 	mkStore cloud.ExternalStorageFromURIFactory,
 	destinationDirs []string,
 ) ([]cloud.ExternalStorage, func() error, error) {
-	incStores := make([]cloud.ExternalStorage, len(destinationDirs))
+	stores := make([]cloud.ExternalStorage, len(destinationDirs))
 	for i := range destinationDirs {
 		store, err := mkStore(ctx, destinationDirs[i], user)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "failed to open backup storage location")
 		}
-		incStores[i] = store
+		stores[i] = store
 	}
 
-	return incStores, func() error {
-		// Close all the incremental stores in the returned cleanup function.
-		for _, store := range incStores {
+	return stores, func() error {
+		// Close all the stores in the returned cleanup function.
+		var combinedErr error
+		for _, store := range stores {
 			if err := store.Close(); err != nil {
-				return err
+				combinedErr = errors.CombineErrors(combinedErr, err)
 			}
 		}
-		return nil
+		return combinedErr
 	}, nil
 }
 
