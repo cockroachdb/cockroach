@@ -23,10 +23,11 @@ import (
 // InitialValuesOpts is used to get initial values for system/secondary tenants
 // and allows overriding initial values with ones from previous releases.
 type InitialValuesOpts struct {
-	DefaultZoneConfig       *zonepb.ZoneConfig
-	DefaultSystemZoneConfig *zonepb.ZoneConfig
-	OverrideKey             clusterversion.Key
-	Codec                   keys.SQLCodec
+	DefaultZoneConfig          *zonepb.ZoneConfig
+	DefaultSystemZoneConfig    *zonepb.ZoneConfig
+	OverrideKey                clusterversion.Key
+	Codec                      keys.SQLCodec
+	DynamicSystemTableIDOffset uint32
 }
 
 // GenerateInitialValues generates the initial values with which to bootstrap a
@@ -84,7 +85,7 @@ var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 func buildLatestInitialValues(
 	opts InitialValuesOpts,
 ) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
-	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
+	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig, opts.DynamicSystemTableIDOffset)
 	kvs, splits = schema.GetInitialValues()
 	return kvs, splits, nil
 }
