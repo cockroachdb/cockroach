@@ -56,7 +56,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		require.NoError(t, err)
 		reader := bytes.NewReader(manifestBytes)
 		require.NoError(t, err)
-		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.BackupManifestName, reader))
+		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.DeprecatedBackupManifestName, reader))
 	}
 
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given

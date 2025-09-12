@@ -670,7 +670,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if d.Name() == backupbase.BackupManifestName ||
+		if d.Name() == backupbase.DeprecatedBackupManifestName ||
 			!strings.HasSuffix(path, ".sst") ||
 			d.Name() == backupinfo.BackupMetadataDescriptorsListPath ||
 			d.Name() == backupinfo.BackupMetadataFilesListPath {

@@ -35,12 +35,12 @@ const (
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 
-	// BackupManifestName is the file name used for serialized BackupManifest
-	// protos.
+	// DeprecatedBackupManifestName is the file name used for serialized
+	// BackupManifest protos.
 	//
 	// TODO(msbutler): Remove 26.3 when we're guaranteed that no backup wrote
 	// exclusively the backup_manifest, and not the slim manifest.
-	BackupManifestName = "BACKUP_MANIFEST"
+	DeprecatedBackupManifestName = "BACKUP_MANIFEST"
 
 	// BackupMetadataName is the file name used for serialized BackupManifest
 	// protos written by 23.1 nodes and later. This manifest has the alloc heavy

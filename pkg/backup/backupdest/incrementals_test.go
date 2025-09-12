@@ -458,7 +458,7 @@ func writeEmptyBackupManifest(
 	)
 	require.NoError(
 		t,
-		cloud.WriteFile(context.Background(), backupStore, backupbase.BackupManifestName, emptyReader),
+		cloud.WriteFile(context.Background(), backupStore, backupbase.DeprecatedBackupManifestName, emptyReader),
 	)
 
 	if !indexed {
@@ -505,7 +505,7 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 	emptyReader := bytes.NewReader(nil)
 
 	writeManifest := func(t *testing.T, store cloud.ExternalStorage, path string, useOldBackup bool) {
-		manifestName := backupbase.BackupManifestName
+		manifestName := backupbase.DeprecatedBackupManifestName
 		if useOldBackup {
 			manifestName = backupbase.BackupOldManifestName
 		}
