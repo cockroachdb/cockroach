@@ -2957,8 +2957,7 @@ func registerCDC(r registry.Registry) {
 				db := ct.DB()
 
 				for name, value := range map[string]string{
-					// TODO re-enable
-					//"changefeed.progress.frontier_persistence.interval": fmt.Sprintf(`'%s'`, interval),
+					"changefeed.progress.frontier_persistence.interval": fmt.Sprintf(`'%s'`, interval),
 					// Disable span-level checkpointing.
 					"changefeed.span_checkpoint.interval": "'0'",
 					// TODO make this randomly enabled

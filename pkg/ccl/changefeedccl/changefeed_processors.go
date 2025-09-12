@@ -1055,6 +1055,11 @@ type changeFrontier struct {
 	// record was updated to the frontier's highwater mark
 	lastProtectedTimestampUpdate time.Time
 
+	// TODO maybe group into one struct
+	// TODO add proper comments
+	lastFrontierPersistence     time.Time
+	frontierPersistenceDuration time.Duration
+
 	// js, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
 	js *jobState
@@ -1803,12 +1808,17 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint)
+		_, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint)
 		if err != nil {
 			return false, err
 		}
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
-		// TODO move this out of this if statement
+	}
+
+	// TODO gate with avg time to persist frontier
+	persistFrontier := timeutil.Since(cf.lastFrontierPersistence) >
+		changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
+	if persistFrontier {
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
 				return err
@@ -1817,14 +1827,14 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		}); err != nil {
 			return false, err
 		}
-		return updated, nil
 	}
 
-	return false, nil
+	return updateCheckpoint || updateHighWater, nil
 }
 
 const changefeedJobProgressTxnName = "changefeed job progress"
 
+// TODO remove bool return val (not useful)
 func (cf *changeFrontier) checkpointJobProgress(
 	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
 ) (bool, error) {
