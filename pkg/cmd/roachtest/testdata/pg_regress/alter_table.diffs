@@ -3976,7 +3976,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  and c.relname != 'my_locks'
  group by c.relname;
 +ERROR:  unknown function: pg_current_xact_id()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  create table alterlock (f1 int primary key, f2 text);
  insert into alterlock values (1, 'foo');
  create table alterlock2 (f3 int primary key, f1 int);
@@ -4205,7 +4204,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  and c.relname = 'my_locks'
  group by c.relname;
 +ERROR:  unknown function: pg_current_xact_id()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  -- raise exception
  alter table my_locks set (autovacuum_enabled = false);
 -ERROR:  unrecognized parameter "autovacuum_enabled"

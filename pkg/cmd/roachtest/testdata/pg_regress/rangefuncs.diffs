@@ -325,7 +325,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +ERROR:  unknown function: getrngfunc8()
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc8(1);
 +ERROR:  unknown function: getrngfunc8()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  SELECT * FROM vw_getrngfunc;
 - getrngfunc8 
 --------------
@@ -337,7 +336,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +ERROR:  relation "vw_getrngfunc" does not exist
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc8(1) WITH ORDINALITY AS t1(v,o);
 +ERROR:  unknown function: getrngfunc8()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  SELECT * FROM vw_getrngfunc;
 - v | o 
 ----+---
@@ -366,7 +364,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +ERROR:  unknown function: getrngfunc9()
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc9(1);
 +ERROR:  unknown function: getrngfunc9()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  SELECT * FROM vw_getrngfunc;
 - rngfuncid | rngfuncsubid | rngfuncname 
 ------------+--------------+-------------
@@ -378,7 +375,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
 +ERROR:  relation "vw_getrngfunc" does not exist
  CREATE VIEW vw_getrngfunc AS SELECT * FROM getrngfunc9(1) WITH ORDINALITY AS t1(a,b,c,o);
 +ERROR:  unknown function: getrngfunc9()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  SELECT * FROM vw_getrngfunc;
 - a | b |  c  | o 
 ----+---+-----+---
@@ -419,7 +415,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
                        getrngfunc1(1))
                  with ordinality as t1(a,b,c,d,e,f,g,n);
 +ERROR:  unknown function: getrngfunc9()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select * from vw_rngfunc;
 - a | b |  c  | d | e |  f  | g | n 
 ----+---+-----+---+---+-----+---+---
@@ -1906,7 +1901,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rangefuncs.out --
  create temp view usersview as
  SELECT * FROM ROWS FROM(get_users(), generate_series(10,11)) WITH ORDINALITY;
 +ERROR:  unknown function: get_users()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select * from usersview;
 - userid | seq | email  | moredrop | enabled | generate_series | ordinality 
 ---------+-----+--------+----------+---------+-----------------+------------
