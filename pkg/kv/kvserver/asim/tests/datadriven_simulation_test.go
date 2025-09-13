@@ -477,7 +477,14 @@ func TestDataDriven(t *testing.T) {
 				knownConfigurations := map[string]func(eg *gen.StaticEvents){
 					// In default mode, the test manages its rebalancer-related settings
 					// manually.
-					"default": func(*gen.StaticEvents) {},
+					"default": func(eg *gen.StaticEvents) {
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserverbase.LBRebalancingLeasesAndReplicas),
+							})
+					},
 					// 'mma-only' runs with the multi-metric allocator and turns off the
 					// replicate and lease queues.
 					"sma-only": func(eg *gen.StaticEvents) {
