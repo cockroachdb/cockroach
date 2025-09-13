@@ -134,3 +134,19 @@ ALTER DATABASE db PLACEMENT DEFAULT
 ALTER DATABASE db PLACEMENT DEFAULT -- fully parenthesized
 ALTER DATABASE db PLACEMENT DEFAULT -- literals removed
 ALTER DATABASE _ PLACEMENT DEFAULT -- identifiers removed
+
+parse
+ALTER DATABASE db SET (max_row_size_log = '1KiB', max_row_size_err = '1KiB')
+----
+ALTER DATABASE db SET ('max_row_size_log' = '1KiB', 'max_row_size_err' = '1KiB') -- normalized!
+ALTER DATABASE db SET ('max_row_size_log' = ('1KiB'), 'max_row_size_err' = ('1KiB')) -- fully parenthesized
+ALTER DATABASE db SET ('max_row_size_log' = '_', 'max_row_size_err' = '_') -- literals removed
+ALTER DATABASE _ SET ('max_row_size_log' = '1KiB', 'max_row_size_err' = '1KiB') -- identifiers removed
+
+parse
+ALTER DATABASE db RESET ( max_row_size_log, max_row_size_err)
+----
+ALTER DATABASE db RESET ('max_row_size_log', 'max_row_size_err') -- normalized!
+ALTER DATABASE db RESET ('max_row_size_log', 'max_row_size_err') -- fully parenthesized
+ALTER DATABASE db RESET ('max_row_size_log', 'max_row_size_err') -- literals removed
+ALTER DATABASE _ RESET ('max_row_size_log', 'max_row_size_err') -- identifiers removed
