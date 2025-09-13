@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +79,7 @@ func TestTxnRegistry_ShouldStartTxnDiagnostic(t *testing.T) {
 			request.minExecutionLatency = tc.minExecutionLatency
 			request.samplingProbability = tc.samplingProbability
 
-			registry := NewTxnRegistry(noopDb{}, nil, nil)
+			registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
 			requestId := RequestID(1)
 			registry.mu.requests[requestId] = request
 
@@ -108,7 +110,7 @@ func TestTxnRegistry_ShouldStartTxnDiagnostic(t *testing.T) {
 	}
 
 	t.Run("request_conditional_shouldnt_collect", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil)
+		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
 		requestId := RequestID(1)
 		expectedRequest := TxnRequest{
 			txnFingerprintId:    1111,
@@ -140,53 +142,104 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-
-	registry := NewTxnRegistry(s.InternalDB().(isql.DB), s.ClusterSettings(), nil)
-
-	t.Run("valid request", func(t *testing.T) {
-		err := registry.InsertTxnRequest(
-			ctx,
-			1111,
-			[]uint64{1111, 2222, 3333},
-			"testuser",
-			0.5,
-			time.Millisecond*100,
-			time.Hour,
-			false,
-		)
-		require.NoError(t, err)
-		require.NotEmpty(t, registry.mu.requests)
-	})
-
-	t.Run("invalid sampling probability", func(t *testing.T) {
-		err := registry.InsertTxnRequest(
-			ctx,
-			1111,
-			[]uint64{1111, 2222, 3333},
-			"testuser",
-			1.5,
-			time.Millisecond*100,
-			time.Hour,
-			false,
-		)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "expected sampling probability in range [0.0, 1.0]")
-	})
-
-	t.Run("sampling without latency", func(t *testing.T) {
-		err := registry.InsertTxnRequest(
-			ctx,
-			1111,
-			[]uint64{1111, 2222, 3333},
-			"testuser",
-			0.5,
-			0,
-			time.Hour,
-			false,
-		)
-		require.ErrorContains(t, err, "got non-zero sampling probability")
-	})
-
+	now := timeutil.Unix(0, 0)
+	db := s.InternalDB().(isql.DB)
+	registry := NewTxnRegistry(db, s.ClusterSettings(), nil, timeutil.NewManualTime(now))
+	for i, tc := range []struct {
+		name                string
+		samplingProbability float64
+		minExecutionLatency time.Duration
+		expiresAfter        time.Duration
+		redacted            bool
+		expectedError       string
+	}{
+		{
+			name:                "valid",
+			samplingProbability: 0.5,
+			minExecutionLatency: time.Millisecond * 100,
+			expiresAfter:        time.Hour,
+			redacted:            false,
+			expectedError:       "",
+		}, {
+			name:                "valid redacted",
+			samplingProbability: 0.5,
+			minExecutionLatency: time.Millisecond * 100,
+			expiresAfter:        time.Hour,
+			redacted:            true,
+			expectedError:       "",
+		}, {
+			name:                "valid 1.0 sampling",
+			samplingProbability: 1,
+			minExecutionLatency: time.Millisecond * 100,
+			expiresAfter:        0,
+			redacted:            false,
+			expectedError:       "",
+		}, {
+			name:                "valid no expiration",
+			samplingProbability: 0.5,
+			minExecutionLatency: time.Millisecond * 100,
+			expiresAfter:        0,
+			redacted:            false,
+			expectedError:       "",
+		}, {
+			name:                "valid not conditional",
+			samplingProbability: 0,
+			minExecutionLatency: 0,
+			expiresAfter:        0,
+			redacted:            false,
+			expectedError:       "",
+		}, {
+			name:                "invalid sampling probability",
+			samplingProbability: 1.5,
+			minExecutionLatency: time.Millisecond * 100,
+			expiresAfter:        time.Hour,
+			redacted:            false,
+			expectedError:       "expected sampling probability in range [0.0, 1.0]",
+		}, {
+			name:                "sampling without latency",
+			samplingProbability: 0.5,
+			minExecutionLatency: 0,
+			expiresAfter:        time.Hour,
+			redacted:            false,
+			expectedError:       "got non-zero sampling probability",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := registry.InsertTxnRequest(
+				ctx,
+				uint64(i),
+				[]uint64{1111, 2222, 3333},
+				"testuser",
+				tc.samplingProbability,
+				tc.minExecutionLatency,
+				tc.expiresAfter,
+				tc.redacted,
+			)
+			if tc.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError)
+			} else {
+				var expectedExpiresAt time.Time
+				if tc.expiresAfter != 0 {
+					expectedExpiresAt = now.Add(tc.expiresAfter)
+				}
+				expectedRequest := TxnRequest{
+					txnFingerprintId:    uint64(i),
+					stmtFingerprintIds:  []uint64{1111, 2222, 3333},
+					redacted:            tc.redacted,
+					username:            "testuser",
+					minExecutionLatency: tc.minExecutionLatency,
+					samplingProbability: tc.samplingProbability,
+					expiresAt:           expectedExpiresAt,
+				}
+				require.NoError(t, err)
+				id, req, ok := registry.GetRequestForFingerprint(uint64(i))
+				require.True(t, ok)
+				require.Equal(t, expectedRequest, req)
+				checkDatabaseForRequest(t, id, expectedRequest, sqlutils.MakeSQLRunner(srv.SQLConn(t)))
+			}
+		})
+	}
 }
 
 func TestTxnRegistry_InsertTxnRequest_Polling(t *testing.T) {
@@ -198,7 +251,7 @@ func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	t.Run("request_reset", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil)
+		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
 		requestId := RequestID(1)
 		expectedRequest := TxnRequest{
 			txnFingerprintId:    1111,
@@ -225,7 +278,7 @@ func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
 	})
 
 	t.Run("request_not_found", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil)
+		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
 		requestId := RequestID(1)
 		expectedRequest := TxnRequest{
 			txnFingerprintId:    1111,
@@ -255,17 +308,11 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 
 	// Create a statement registry for testing
 	stmtRegistry := NewRegistry(s.InternalDB().(isql.DB), s.ClusterSettings())
-	registry := NewTxnRegistry(s.InternalDB().(isql.DB), s.ClusterSettings(), stmtRegistry)
+	now := timeutil.Unix(0, 0)
+	registry := NewTxnRegistry(s.InternalDB().(isql.DB), s.ClusterSettings(), stmtRegistry, timeutil.NewManualTime(now))
 
 	runner := sqlutils.MakeSQLRunner(srv.SQLConn(t))
 
-	// Verify table is initially empty
-	var count int
-	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics").Scan(&count)
-	initialCount := count
-	require.Zero(t, initialCount)
-	// Create test data
-	requestID := RequestID(123)
 	request := TxnRequest{
 		txnFingerprintId:    1111,
 		stmtFingerprintIds:  []uint64{1111, 2222},
@@ -276,6 +323,18 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 		samplingProbability: 0,
 	}
 
+	requestID, err := registry.insertTxnRequestInternal(
+		ctx,
+		request.txnFingerprintId,
+		request.stmtFingerprintIds,
+		request.username,
+		request.samplingProbability,
+		request.minExecutionLatency,
+		0, // no expiration
+		request.redacted,
+	)
+
+	require.NoError(t, err)
 	// Create mock statement diagnostics for the transaction
 	req1 := Request{
 		fingerprint:         "SELECT _ FROM test",
@@ -322,19 +381,50 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 	require.NoError(t, err)
 	require.NotZero(t, diagID)
 
-	// Verify that statement_diagnostics table now has entries
-	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics").Scan(&count)
-	require.Greater(t, count, initialCount, "statement_diagnostics table should have new entries")
-
+	var count int
+	// Verify that statement_diagnostics table now has entries for the transaction diagnostic
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE transaction_diagnostics_id=$1", diagID).Scan(&count)
 	// Verify we have exactly 2 new statement diagnostic entries (one for each statement in the transaction)
-	require.Equal(t, initialCount+2, count, "should have added 2 statement diagnostic entries")
+	require.Equal(t, 2, count, "should have 2 statement diagnostic entries")
 
 	var bundleChunkCount int
-	// Verify that statement_bundle_chunks table now has entries
-	runner.QueryRow(t, "SELECT count(*) FROM system.statement_bundle_chunks WHERE description ='transaction diagnostics bundle'").Scan(&bundleChunkCount)
+	// Verify that statement_bundle_chunks table has entries for the transaction diagnostic
+	runner.QueryRow(t, `
+  SELECT count(*)
+  FROM system.statement_bundle_chunks sbc
+  JOIN system.transaction_diagnostics td ON sbc.id = ANY(td.bundle_chunks)
+  WHERE td.id = $1
+`, diagID).Scan(&bundleChunkCount)
 	require.Equal(t, 1, bundleChunkCount, "should have added 1 transaction diagnostic bundle entry")
-	// TODO: Verify that data is in the txn_diagnostics table once it is created
 
+	// Verify the transaction_diagnostics entry has correct data
+	var (
+		dbTxnFingerprintBytes     []byte
+		dbTxnFingerprint          string
+		dbStmtFingerprintIdsBytes [][]byte
+		dbCollectedAt             time.Time
+		dbRequestCompleted        bool
+	)
+
+	row := runner.QueryRow(t, `
+		SELECT td.transaction_fingerprint_id, 
+		       td.transaction_fingerprint,
+		       td.statement_fingerprint_ids,
+		       td.collected_at,
+		       tdr.completed
+		FROM system.transaction_diagnostics td
+		JOIN system.transaction_diagnostics_requests tdr ON td.id = tdr.transaction_diagnostics_id
+		WHERE td.id = $1
+	`, diagID)
+
+	row.Scan(&dbTxnFingerprintBytes, &dbTxnFingerprint, pq.Array(&dbStmtFingerprintIdsBytes), &dbCollectedAt, &dbRequestCompleted)
+
+	require.Equal(t, request.txnFingerprintId, toUint64(t, dbTxnFingerprintBytes), "transaction fingerprint ID should match")
+	require.Equal(t, request.stmtFingerprintIds, toUint64Slice(t, dbStmtFingerprintIdsBytes), "statement fingerprint IDs should match")
+	require.Contains(t, dbTxnFingerprint, req1.fingerprint, "transaction fingerprint string should contain statement 1 fingerprint")
+	require.Contains(t, dbTxnFingerprint, req2.fingerprint, "transaction fingerprint string should contain statement 2 fingerprint")
+	require.True(t, dbRequestCompleted, "request should be completed")
+	require.Equal(t, now, dbCollectedAt, "collection time should match current time")
 }
 
 type noopDb struct{}
@@ -354,3 +444,70 @@ func (n noopDb) Executor(option ...isql.ExecutorOption) isql.Executor {
 }
 
 var _ isql.DB = noopDb{}
+
+func toUint64(t *testing.T, bytes []byte) uint64 {
+	t.Helper()
+	_, fpId, err := encoding.DecodeUint64Ascending(bytes)
+	require.NoError(t, err)
+	return fpId
+}
+
+func toUint64Slice(t *testing.T, bytes [][]byte) []uint64 {
+	t.Helper()
+	var ids []uint64
+	for _, b := range bytes {
+		ids = append(ids, toUint64(t, b))
+	}
+	return ids
+}
+
+func checkDatabaseForRequest(
+	t *testing.T, id RequestID, expectedRequest TxnRequest, runner *sqlutils.SQLRunner,
+) {
+	t.Helper()
+	row := runner.QueryRow(t, `
+			SELECT transaction_fingerprint_id,
+			       CAST(EXTRACT(EPOCH FROM min_execution_latency) * 1000000000 AS INT8), 
+			       expires_at, 
+			       sampling_probability, 
+			       redacted, 
+			       username,
+			       statement_fingerprint_ids
+			FROM system.transaction_diagnostics_requests 
+			WHERE id = $1
+		`, id)
+	// Query the database to get the inserted TxnRequest data
+	var (
+		txnFingerprintBytes      []byte
+		minExecutionLatencyNanos *int64 // Scan as nanoseconds to avoid driver issues
+		expiresAt                *time.Time
+		samplingProbability      *float64
+		redacted                 bool
+		username                 string
+		statementFpIdBytes       [][]byte
+		statementFpIds           []uint64
+	)
+	row.Scan(&txnFingerprintBytes,
+		&minExecutionLatencyNanos, &expiresAt, &samplingProbability, &redacted, &username, pq.Array(&statementFpIdBytes))
+
+	statementFpIds = toUint64Slice(t, statementFpIdBytes)
+
+	actualRequest := TxnRequest{
+		txnFingerprintId:   toUint64(t, txnFingerprintBytes),
+		stmtFingerprintIds: statementFpIds,
+		redacted:           redacted,
+		username:           username,
+	}
+
+	if minExecutionLatencyNanos != nil {
+		actualRequest.minExecutionLatency = time.Duration(*minExecutionLatencyNanos)
+	}
+	if expiresAt != nil {
+		actualRequest.expiresAt = *expiresAt
+	}
+	if samplingProbability != nil {
+		actualRequest.samplingProbability = *samplingProbability
+	}
+
+	require.Equal(t, expectedRequest, actualRequest)
+}
