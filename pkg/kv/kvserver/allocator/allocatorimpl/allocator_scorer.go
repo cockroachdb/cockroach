@@ -229,6 +229,20 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 	},
 )
 
+// DiskUnhealthyIOOverloadScore is the IO overload score assigned to a store
+// when its disk is considered unhealthy. The value set here will be used in
+// the context of {LeaseIOOverloadThreshold, LeaseIOOverloadShedThreshold,
+// LeaseIOOverloadThresholdEnforcement} to shed leases, and in the context of
+// {ReplicaIOOverloadThreshold, ReplicaIOOverloadThresholdEnforcement}, when
+// transferring replicas.
+//
+// TODO(sumeer): change to DefaultLeaseIOOverloadShedThreshold after discussion.
+var DiskUnhealthyIOOverloadScore = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.disk_unhealthy_io_overload_score",
+	"the IO overload score to assign to a store when its disk is unhealthy",
+	0)
+
 // maxDiskUtilizationThreshold controls the point at which the store cedes
 // having room for new replicas. If the fraction used of a store descriptor
 // capacity is greater than this value, it will never be used as a rebalance or
@@ -2466,42 +2480,55 @@ type IOOverloadOptions struct {
 	ReplicaIOOverloadThreshold   float64
 	LeaseIOOverloadThreshold     float64
 	LeaseIOOverloadShedThreshold float64
+
+	DiskUnhealthyScore float64
 }
 
 func ioOverloadCheck(
-	score, avg, absThreshold, meanThreshold float64,
+	overloadScore, overloadAvg, diskUnhealthyScore, absThreshold, meanThreshold float64,
 	enforcement IOOverloadEnforcementLevel,
 	disallowed ...IOOverloadEnforcementLevel,
 ) (ok bool, reason string) {
-	absCheck := score < absThreshold
-	meanCheck := score < avg*meanThreshold
+	absCheck := overloadScore < absThreshold
+	meanCheck := overloadScore < overloadAvg*meanThreshold
+	// We do not bother with the mean for the disk unhealthy score, because disk
+	// unhealthiness is rare, and also because this code was bolted on later
+	// (and was simpler to ignore the mean).
+	//
+	// TODO(sumeer): revisit this if this turns out to be useful, and do a
+	// cleaner version for MMA.
+	diskCheck := diskUnhealthyScore < epsilon || diskUnhealthyScore < absThreshold
 
 	// The score needs to be no less than both the average threshold and the
 	// absolute threshold in order to be considered IO overloaded.
-	if absCheck || meanCheck {
+	if (absCheck || meanCheck) && diskCheck {
 		return true, ""
 	}
 
 	for _, disallowedEnforcement := range disallowed {
 		if enforcement == disallowedEnforcement {
 			return false, fmt.Sprintf(
-				"io overload %.2f exceeds threshold %.2f, above average: %.2f, enforcement %d",
-				score, absThreshold, avg, enforcement)
+				"io overload %.2f (disk %.2f) exceeds threshold %.2f, above average: %.2f, enforcement %d",
+				overloadScore, diskUnhealthyScore, absThreshold, overloadAvg, enforcement)
 		}
 	}
 
 	return true, ""
 }
 
-func (o IOOverloadOptions) storeScore(store roachpb.StoreDescriptor) float64 {
-	var score float64
+func (o IOOverloadOptions) storeScore(
+	store roachpb.StoreDescriptor,
+) (overloadScore float64, diskUnhealthyScore float64) {
 	if o.UseIOThresholdMax {
-		score, _ = store.Capacity.IOThresholdMax.Score()
+		overloadScore, _ = store.Capacity.IOThresholdMax.Score()
 	} else {
-		score, _ = store.Capacity.IOThreshold.Score()
+		overloadScore, _ = store.Capacity.IOThreshold.Score()
 	}
-
-	return score
+	diskUnhealthyScore = 0
+	if store.Capacity.IOThreshold.DiskUnhealthy {
+		diskUnhealthyScore = o.DiskUnhealthyScore
+	}
+	return overloadScore, diskUnhealthyScore
 }
 
 func (o IOOverloadOptions) storeListAvgScore(storeList storepool.StoreList) float64 {
@@ -2517,10 +2544,10 @@ func (o IOOverloadOptions) storeListAvgScore(storeList storepool.StoreList) floa
 func (o IOOverloadOptions) allocateReplicaToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score := o.storeScore(store)
+	score, diskUnhealthyScore := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg,
+	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
 		o.ReplicaEnforcementLevel,
 		IOOverloadThresholdBlockAll,
@@ -2538,10 +2565,10 @@ func (o IOOverloadOptions) allocateReplicaToCheck(
 func (o IOOverloadOptions) rebalanceReplicaToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score := o.storeScore(store)
+	score, diskUnhealthyScore := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg,
+	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
 		o.ReplicaEnforcementLevel,
 		IOOverloadThresholdBlockTransfers, IOOverloadThresholdBlockAll,
@@ -2558,10 +2585,10 @@ func (o IOOverloadOptions) rebalanceReplicaToCheck(
 func (o IOOverloadOptions) transferLeaseToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score := o.storeScore(store)
+	score, diskUnhealthyScore := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg,
+	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
 		o.LeaseIOOverloadThreshold, IOOverloadMeanThreshold,
 		o.LeaseEnforcementLevel,
 		IOOverloadThresholdBlockTransfers, IOOverloadThresholdShed,
@@ -2579,10 +2606,10 @@ func (o IOOverloadOptions) transferLeaseToCheck(
 func (o IOOverloadOptions) ExistingLeaseCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score := o.storeScore(store)
+	score, diskUnhealthyScore := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg,
+	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
 		o.LeaseIOOverloadShedThreshold, IOOverloadMeanShedThreshold,
 		o.LeaseEnforcementLevel,
 		IOOverloadThresholdShed,

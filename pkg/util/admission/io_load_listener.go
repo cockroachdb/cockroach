@@ -568,6 +568,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				L0NumFilesThreshold:      math.MaxInt64,
 				L0Size:                   m.Levels[0].TablesSize,
 				L0MinimumSizePerSubLevel: 0,
+				DiskUnhealthy:            metrics.DiskUnhealthy,
 			},
 		}
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
@@ -730,6 +731,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
 		metrics.MemTable.Size,
 		metrics.MemTableSizeForStopWrites,
+		metrics.DiskUnhealthy,
 	)
 	io.adjustTokensResult = res
 	cumIngestedBytes := cumLSMIngestedBytes(metrics.Metrics)
@@ -839,6 +841,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	minFlushUtilTargetFraction float64,
 	memTableSize uint64,
 	memTableSizeForStopWrites uint64,
+	diskUnhealthy bool,
 ) adjustTokensResult {
 	ioThreshold := &admissionpb.IOThreshold{
 		L0NumFiles:               l0Metrics.TablesCount,
@@ -847,6 +850,7 @@ func (io *ioLoadListener) adjustTokensInner(
 		L0NumSubLevelsThreshold:  threshNumSublevels,
 		L0Size:                   l0Metrics.TablesSize,
 		L0MinimumSizePerSubLevel: l0MinSizePerSubLevel,
+		DiskUnhealthy:            diskUnhealthy,
 	}
 	unflushedMemTableTooLarge := memTableSize > memTableSizeForStopWrites
 	// If it was too large in the last sample 15s ago, and is not large now, the
