@@ -99,6 +99,7 @@ func emitInternal(
 				return err
 			}
 		}
+		e.emitNodeFootnotes(n)
 		ob.LeaveNode()
 		return nil
 	}
@@ -1267,6 +1268,35 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		return errors.AssertionFailedf("unhandled op %d", n.op)
 	}
 	return nil
+}
+
+// emitNodeFootnotes populates the Node's information after having recursed into
+// the Node's children.
+func (e *emitter) emitNodeFootnotes(n *Node) {
+	switch n.op {
+	case applyJoinOp:
+		a := n.args.(*applyJoinArgs)
+		if a.RightSideForExplainFn != nil {
+			e.ob.EnterNode("inner loop (unoptimized)" /* name */, nil /* columns */, nil /* ordering */)
+			defer e.ob.LeaveNode()
+			// RightSideForExplainFn can produce multiple lines that correspond
+			// to the unoptimized right side plan.
+			lines := strings.Split(a.RightSideForExplainFn(e.ob.flags.RedactValues), "\n")
+			var enteredNode bool
+			for _, l := range lines {
+				if len(l) == 0 {
+					continue
+				}
+				if !enteredNode {
+					e.ob.EnterNode(l /* name */, nil /* columns */, nil /* ordering */)
+					defer e.ob.LeaveNode() //nolint:deferloop
+					enteredNode = true
+				} else {
+					e.ob.Attr(l, "")
+				}
+			}
+		}
+	}
 }
 
 func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Index, suffix string) {

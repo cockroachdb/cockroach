@@ -292,6 +292,11 @@ type RecursiveCTEIterationFn func(ctx context.Context, ef Factory, bufferRef Nod
 // rightColumns passed to ConstructApplyJoin (in order).
 type ApplyJoinPlanRightSideFn func(ctx context.Context, ef Factory, leftRow tree.Datums) (Plan, error)
 
+// ApplyJoinRightSideForExplainFn is a function that lazily populates the
+// stringified version of the unoptimized right-hand side plan, for EXPLAIN
+// purposes.
+type ApplyJoinRightSideForExplainFn func(redactableValues bool) string
+
 // PostQuery describes a cascading query or an AFTER trigger action. The query
 // uses a node created by ConstructBuffer as an input; it should only be
 // triggered if this buffer is not empty.
