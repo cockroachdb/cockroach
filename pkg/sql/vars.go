@@ -4402,6 +4402,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`optimizer_ignore_wide_scans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_ignore_wide_scans`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_ignore_wide_scans", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerIgnoreWideScans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerIgnoreWideScans,
+			), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

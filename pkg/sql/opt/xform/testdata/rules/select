@@ -2893,6 +2893,251 @@ project
  └── projections
       └── mod(a, 16)
 
+
+# ----------------------------------------------------------
+# GenerateConstrainedScans with optimizer_ignore_wide_scans
+# ----------------------------------------------------------
+
+exec-ddl
+CREATE TABLE t_ignore_wide_scans (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f INT,
+  INDEX a_b_idx (a, b) STORING (c),
+  INDEX a_c_idx (a, c) STORING (b),
+  INDEX a_d_idx (a, d) STORING (f, c)
+)
+----
+
+# Do not generate a constrained scan over a_b_idx nor a_d_idx because they
+# would only constrain a.
+# NOTE: GenerateIndexScans is disabled to avoid generating full scans over
+# secondary indexes which make the output bigger and more confusing to read.
+memo set=(optimizer_ignore_wide_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_ignore_wide_scans WHERE a = 1 AND c = 2
+----
+memo (optimized, ~8KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_ignore_wide_scans,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans,cols=(1,2,4))
+ │         └── cost: 1129.02
+ ├── G5: (filters G6 G7)
+ ├── G6: (eq G8 G9)
+ ├── G7: (eq G10 G11)
+ ├── G8: (variable a)
+ ├── G9: (const 1)
+ ├── G10: (variable c)
+ └── G11: (const 2)
+
+# Similar case as above, but when all the indexes are non-covering.
+memo set=(optimizer_ignore_wide_scans=true) disable=GenerateIndexScans
+SELECT k, e FROM t_ignore_wide_scans WHERE a = 1 AND c = 2
+----
+memo (optimized, ~9KB, required=[presentation: k:1,e:6])
+ ├── G1: (project G2 G3 k e)
+ │    └── [presentation: k:1,e:6]
+ │         ├── best: (project G2 G3 k e)
+ │         └── cost: 25.23
+ ├── G2: (select G4 G5) (index-join G6 t_ignore_wide_scans,cols=(1,2,4,6))
+ │    └── []
+ │         ├── best: (index-join G6 t_ignore_wide_scans,cols=(1,2,4,6))
+ │         └── cost: 25.20
+ ├── G3: (projections)
+ ├── G4: (scan t_ignore_wide_scans,cols=(1,2,4,6))
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans,cols=(1,2,4,6))
+ │         └── cost: 1139.12
+ ├── G5: (filters G7 G8)
+ ├── G6: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G7: (eq G9 G10)
+ ├── G8: (eq G11 G12)
+ ├── G9: (variable a)
+ ├── G10: (const 1)
+ ├── G11: (variable c)
+ └── G12: (const 2)
+
+# We should generate a wide constrained scan over a_d_idx because it is covering
+# and no narrower constraints are covering.
+memo set=(optimizer_ignore_wide_scans=true) disable=GenerateIndexScans
+SELECT k, f FROM t_ignore_wide_scans WHERE a = 1 AND c = 2
+----
+memo (optimized, ~11KB, required=[presentation: k:1,f:7])
+ ├── G1: (project G2 G3 k f)
+ │    └── [presentation: k:1,f:7]
+ │         ├── best: (project G2 G3 k f)
+ │         └── cost: 25.23
+ ├── G2: (select G4 G5) (index-join G6 t_ignore_wide_scans,cols=(1,2,4,7)) (select G7 G8)
+ │    └── []
+ │         ├── best: (index-join G6 t_ignore_wide_scans,cols=(1,2,4,7))
+ │         └── cost: 25.20
+ ├── G3: (projections)
+ ├── G4: (scan t_ignore_wide_scans,cols=(1,2,4,7))
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans,cols=(1,2,4,7))
+ │         └── cost: 1139.12
+ ├── G5: (filters G9 G10)
+ ├── G6: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G7: (scan t_ignore_wide_scans@a_d_idx,cols=(1,2,4,7),constrained)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_d_idx,cols=(1,2,4,7),constrained)
+ │         └── cost: 28.92
+ ├── G8: (filters G10)
+ ├── G9: (eq G11 G12)
+ ├── G10: (eq G13 G14)
+ ├── G11: (variable a)
+ ├── G12: (const 1)
+ ├── G13: (variable c)
+ └── G14: (const 2)
+
+# We should generate a wide constrained scan over a_b_idx because it can provide
+# the required ordering.
+# TODO(mgartner): This is broken because it tries to use required orderings, but
+# that doesn't work.
+memo set=(optimizer_ignore_wide_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_ignore_wide_scans WHERE a = 1 AND c = 2 ORDER BY b
+----
+memo (optimized, ~8KB, required=[presentation: k:1] [ordering: +3])
+ ├── G1: (project G2 G3 k b)
+ │    ├── [presentation: k:1] [ordering: +3]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 19.19
+ │    └── []
+ │         ├── best: (project G2 G3 k b)
+ │         └── cost: 19.13
+ ├── G2: (select G4 G5) (scan t_ignore_wide_scans@a_c_idx,cols=(1-4),constrained)
+ │    ├── [ordering: +3 opt(2,4)]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 19.18
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_idx,cols=(1-4),constrained)
+ │         └── cost: 19.10
+ ├── G3: (projections)
+ ├── G4: (scan t_ignore_wide_scans,cols=(1-4))
+ │    ├── [ordering: +2,+3]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1409.57
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans,cols=(1-4))
+ │         └── cost: 1139.12
+ ├── G5: (filters G6 G7)
+ ├── G6: (eq G8 G9)
+ ├── G7: (eq G10 G11)
+ ├── G8: (variable a)
+ ├── G9: (const 1)
+ ├── G10: (variable c)
+ └── G11: (const 2)
+
+# Hinted, wide constrained scans are not ignored.
+opt set=(optimizer_ignore_wide_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_ignore_wide_scans@a_b_idx WHERE a = 1 AND c = 2
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null c:4!null
+      ├── key: (1)
+      ├── fd: ()-->(2,4)
+      ├── scan t_ignore_wide_scans@a_b_idx
+      │    ├── columns: k:1!null a:2!null c:4
+      │    ├── constraint: /2/3/1: [/1 - /1]
+      │    ├── flags: force-index=a_b_idx
+      │    ├── key: (1)
+      │    └── fd: ()-->(2), (1)-->(4)
+      └── filters
+           └── c:4 = 2 [outer=(4), constraints=(/4: [/2 - /2]; tight), fd=()-->(4)]
+
+exec-ddl
+CREATE INDEX a_c_partial_idx ON t_ignore_wide_scans (a) WHERE c = 2
+----
+
+# Constrained partial index scans are considered even when wide scans are
+# ignored.
+memo set=(optimizer_ignore_wide_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_ignore_wide_scans WHERE a = 1 AND c = 2
+----
+memo (optimized, ~12KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained) (project G6 G7 k a)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_ignore_wide_scans,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans,cols=(1,2,4))
+ │         └── cost: 1129.02
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan t_ignore_wide_scans@a_c_partial_idx,partial,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_partial_idx,partial,cols=(1,2),constrained)
+ │         └── cost: 19.06
+ ├── G7: (projections G10)
+ ├── G8: (eq G11 G12)
+ ├── G9: (eq G13 G10)
+ ├── G10: (const 2)
+ ├── G11: (variable a)
+ ├── G12: (const 1)
+ └── G13: (variable c)
+
+exec-ddl
+DROP INDEX a_c_partial_idx
+----
+
+exec-ddl
+CREATE INDEX a_c_partial_idx ON t_ignore_wide_scans (a) WHERE c > 0
+----
+
+# Constrained partial index scans are not considered if they don't eliminate the
+# same number of remaining filters as another constrained scan.
+memo set=(optimizer_ignore_wide_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_ignore_wide_scans WHERE a = 1 AND c = 2
+----
+memo (optimized, ~10KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_ignore_wide_scans,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_ignore_wide_scans,cols=(1,2,4))
+ │         └── cost: 1129.02
+ ├── G5: (filters G6 G7)
+ ├── G6: (eq G8 G9)
+ ├── G7: (eq G10 G11)
+ ├── G8: (variable a)
+ ├── G9: (const 1)
+ ├── G10: (variable c)
+ └── G11: (const 2)
+
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
