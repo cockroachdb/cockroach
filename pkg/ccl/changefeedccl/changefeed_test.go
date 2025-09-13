@@ -6401,28 +6401,53 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
 				return errors.Errorf(`expected 22 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 22 {
 				return errors.Errorf(`expected 22 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.running`); c != 1 {
 				return errors.Errorf(`expected 1 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c <= 0 {
+				// f8a09a5c1dbcbfcb537ba4050c6061ef6d917687
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
 			return nil
