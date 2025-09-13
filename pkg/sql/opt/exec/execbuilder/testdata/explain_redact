@@ -3546,12 +3546,12 @@ memo (optimized, ~8KB, required=[presentation: info:9] [distribution: test])
  │    ├── [ordering: +8 opt(2)]
  │    │    ├── best: (sort G3)
  │    │    └── cost: 1398.52
+ │    ├── [ordering: +8 opt(2)] [distribution: test] [limit hint: 3.00]
+ │    │    ├── best: (distribute G3="[ordering: +8 opt(2)]")
+ │    │    └── cost: 1598.54
  │    ├── [ordering: +8 opt(2)] [limit hint: 3.00]
  │    │    ├── best: (sort G3)
  │    │    └── cost: 1398.52
- │    ├── [ordering: +8 opt(2)] [limit hint: 3.00] [distribution: test]
- │    │    ├── best: (distribute G3="[ordering: +8 opt(2)]")
- │    │    └── cost: 1598.54
  │    └── []
  │         ├── best: (project G5 G6 c d)
  │         └── cost: 1149.04
