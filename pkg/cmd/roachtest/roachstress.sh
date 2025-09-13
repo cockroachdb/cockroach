@@ -33,6 +33,7 @@ flags:
   -l       - run test locally on host
   -u       - build cockroach with ui (don't use buildshort)
   -b       - do not rebuild binaries if they exist
+  -g       - build with --greentea flag (only for local builds)
 
 Roachstress will build artifacts inside artifacts/<commit-hash> directory
 for later reuse. This is eliminating the need to rebuild when comparing
@@ -55,7 +56,8 @@ force_build=
 short=-short
 local=
 count=10
-while getopts ":c:lubh" o ; do
+greentea=
+while getopts ":c:lubgh" o ; do
   case "$o" in
     c)
      count="${OPTARG}"
@@ -68,6 +70,9 @@ while getopts ":c:lubh" o ; do
      ;;
     b)
      force_build=n
+     ;;
+    g)
+     greentea=--greentea
      ;;
     h)
      help
@@ -132,10 +137,10 @@ ln -fs "${sha}/${timestamp}" "artifacts/latest"
 
 if [ ! -f "${cr}" ] || [ "${force_build}" = "y" ]; then
   if [ -z "${local}" ]; then
-    ./dev build "cockroach${short}" --cross=linux
-    cp "artifacts/cockroach${short}" "${cr}"
+    ./dev build "cockroach${short}" ${greentea}
+    cp "cockroach${short}" "${cr}"
   else
-    ./dev build "cockroach${short}"
+    ./dev build "cockroach${short}" ${greentea}
     cp "cockroach${short}" "${cr}"
   fi
 fi

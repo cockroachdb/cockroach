@@ -162,6 +162,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED=true")
 			t.L().Printf("extra setup to use DRPC")
 		}
+		settings.Env = append(settings.Env, "GODEBUG=gctrace=2")
+		t.L().Printf("extra setup to enable go gc tracing")
 		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
@@ -383,7 +385,7 @@ func registerSysbench(r registry.Registry) {
 						`set cluster setting kv.allocator.load_based_rebalancing_interval = '10s'`,
 						`set cluster setting kv.allocator.store_cpu_rebalance_threshold = 0.01`,
 					},
-					useDRPC: true,
+					useDRPC: false,
 				}
 				return true
 			},
