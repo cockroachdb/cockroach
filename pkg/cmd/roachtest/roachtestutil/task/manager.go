@@ -229,7 +229,18 @@ func (t *group) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 			return nil
 		}
 		if !opt.DisableReporting {
-			t.manager.events <- event
+			// There's a slight chance that the context is canceled between the check
+			// above and this select. In which case Go might probabilistically select
+			// sending the event. This should not cause issues as the consumer of the
+			// events should also check if the parent context is canceled. But we
+			// require the select here to avoid blocking if the parent context is
+			// canceled, and the consumer is no longer consuming events.
+			select {
+			case t.manager.events <- event:
+			case <-t.manager.ctx.Done():
+				//  do not send the event if the parent context is canceled
+				return nil
+			}
 		}
 		return err
 	})
