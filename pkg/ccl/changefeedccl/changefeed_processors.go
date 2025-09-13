@@ -1820,13 +1820,14 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if persistFrontier {
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			if err := cf.checkpointSpanFrontier(ctx, txn); err != nil {
+			if err := cf.persistSpanFrontier(ctx, txn); err != nil {
 				return err
 			}
 			return nil
 		}); err != nil {
 			return false, err
 		}
+		cf.lastFrontierPersistence = timeutil.Now()
 	}
 
 	return updateCheckpoint || updateHighWater, nil
@@ -1917,7 +1918,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return true, nil
 }
 
-func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context, txn isql.Txn) error {
+func (cf *changeFrontier) persistSpanFrontier(ctx context.Context, txn isql.Txn) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_span_frontier")
 	defer sp.Finish()
 
