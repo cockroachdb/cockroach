@@ -2936,6 +2936,8 @@ func (r *Replica) maybeEnqueueProblemRange(
 
 	interval := EnqueueProblemRangeInReplicateQueueInterval.Get(&r.store.cfg.Settings.SV)
 	if interval == 0 {
+		log.KvDistribution.Infof(ctx, "not enqueuing replica ",
+			r.Desc(), isLeaseholder, leaseValid)
 		// The setting is disabled.
 		return
 	}

@@ -1437,6 +1437,24 @@ type node struct {
 	as          *mmaintegration.AllocatorSync
 }
 
+func (n *node) String() string {
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "\tn%d(", n.nodeID)
+	for _, locality := range n.desc.Locality.Tiers {
+		_, _ = fmt.Fprintf(&buf, "%s,", locality.Value)
+	}
+	_, _ = fmt.Fprintf(&buf, "%dvcpu): {",
+		n.cpuRateCapacity/time.Second.Nanoseconds())
+	for i, s := range n.Stores() {
+		_, _ = fmt.Fprintf(&buf, "s%d", s)
+		if i < len(n.Stores())-1 {
+			_, _ = fmt.Fprintf(&buf, ",")
+		}
+	}
+	_, _ = fmt.Fprintf(&buf, "}")
+	return buf.String()
+}
+
 // NodeID returns the ID of this node.
 func (n *node) NodeID() NodeID {
 	return n.nodeID
