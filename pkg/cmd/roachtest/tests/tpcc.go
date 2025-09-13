@@ -630,6 +630,8 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		// is no longer backwards compatible after #149374, so we need to use the same
 		// version as the cockroach cluster.
 		// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+		// why is h.System.FromVersion the correct binary version?
+		// FromVersion sounds like it'd be the old binary version
 		binary := uploadCockroach(ctx, t, c, randomNode, h.System.FromVersion)
 		l.Printf("waiting for tenant features to be enabled")
 		<-tenantFeaturesEnabled

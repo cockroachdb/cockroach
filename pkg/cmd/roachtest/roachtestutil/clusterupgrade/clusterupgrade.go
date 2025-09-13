@@ -31,6 +31,7 @@ import (
 )
 
 var (
+	// Use this for workload version as well?
 	TestBuildVersion *version.Version
 
 	currentBranch = os.Getenv("TC_BUILD_BRANCH")
@@ -39,6 +40,7 @@ var (
 	// versions associated with the current binary (the one being
 	// tested). Note that, in TeamCity, we use the branch name to make
 	// it even clearer.
+	// what is this?
 	CurrentVersionString = "<current>"
 )
 
@@ -199,7 +201,9 @@ func UploadCockroach(
 	// Short-circuit this special case to avoid the extra SSH
 	// connections: the current version is always uploaded to every node
 	// in the cluster in a fixed location.
+	l.Printf("[UploadCockroach] uploading cockroach binary for version %s", v.String())
 	if v.IsCurrent() {
+		l.Printf("[UploadCockroach] using default cockroach binary: %s", test.DefaultCockroachPath)
 		return test.DefaultCockroachPath, nil
 	}
 
@@ -221,6 +225,7 @@ func UploadWorkload(
 ) (string, bool, error) {
 	// minWorkloadBinaryVersion is the minimum version for which we have
 	// `workload` binaries available.
+	l.Printf("[UploadWorkload] uploading workload binary for version %s", v.String())
 	var minWorkloadBinaryVersion *Version
 	switch c.Architecture() {
 	case vm.ArchARM64:
@@ -228,10 +233,11 @@ func UploadWorkload(
 	default:
 		minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
 	}
-
+	l.Printf("[UploadWorkload] minWorkloadBinaryVersion: %s", minWorkloadBinaryVersion.String())
 	// If we are uploading the `current` version, skip version checking,
 	// as the binary used is the one passed via command line flags.
 	if !v.IsCurrent() && !v.AtLeast(minWorkloadBinaryVersion) {
+		l.Printf("[UploadWorkload] version %s is the same as current version???", v.String())
 		return "", false, nil
 	}
 
@@ -254,9 +260,12 @@ func uploadBinaryVersion(
 	dstBinary := BinaryPathForVersion(t, v, binary)
 	var defaultBinary string
 	var isOverridden bool
+	l.Printf("[uploadBinaryVersion] version: %s", v.String())
 	switch binary {
 	case "cockroach":
 		defaultBinary, isOverridden = t.VersionsBinaryOverride()[v.String()]
+		l.Printf("[uploadBinaryVersion] isOverridden: %v", isOverridden)
+		l.Printf("[uploadBinaryVersion] defaultBinary: %s", defaultBinary)
 		if isOverridden {
 			l.Printf("using cockroach binary override for version %s: %s", v, defaultBinary)
 		} else {
@@ -264,48 +273,64 @@ func uploadBinaryVersion(
 			// are not currently available with crdb_test enabled.
 			// TODO(DarrylWong): Compile older versions with crdb_test flag.
 			defaultBinary = t.StandardCockroach()
+			l.Printf("[uploadBinaryVersion] defaultBinary: %s", defaultBinary)
 		}
 	case "workload":
-		defaultBinary = t.DeprecatedWorkload()
+		l.Printf("[uploadBinaryVersion] using default workload binary for version %s", v)
+		defaultBinary = t.DeprecatedWorkload() // Hm testImpl sets this to what?
+		l.Printf("[uploadBinaryVersion] defaultBinary now set to: %s", defaultBinary)
 	default:
+		l.Printf("[uploadBinaryVersion] unknown binary name (should never be in here): %s", binary)
 		return "", fmt.Errorf("unknown binary name: %s", binary)
 	}
 
+	// when is isOverridden set?
 	if isOverridden {
+		l.Printf("[uploadBinaryVersion] isOverridden was set to true")
 		if err := c.PutE(ctx, l, defaultBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}
 	} else {
+
 		dir := filepath.Dir(dstBinary)
+		l.Printf("[uploadBinaryVersion] target dir: %s", dir)
 		// Avoid staging the binary if it already exists.
 		if err := c.RunE(ctx, option.WithNodes(nodes), "test -e", dstBinary); err == nil {
+			l.Printf("[uploadBinaryVersion] binary already exists: %s", dstBinary)
 			return dstBinary, nil
 		}
 
 		// Ensure binary directory exists.
 		if err := c.RunE(ctx, option.WithNodes(nodes), "mkdir -p", dir); err != nil {
+			l.Printf("[uploadBinaryVersion] failed to create binary directory: %s", dir)
 			return "", err
 		}
 
 		var application, stageVersion string
 		switch binary {
 		case "cockroach":
+			l.Printf("[uploadBinaryVersion] binary is cockroach")
 			application = "release"
 			stageVersion = v.String()
+			l.Printf("[uploadBinaryVersion] stageVersion: %s", stageVersion)
 		case "workload":
+			l.Printf("[uploadBinaryVersion] binary is workload")
 			application = "workload"
 			// For workload binaries, we do not have a convenient way to get
 			// a build for a specific release. Instead, we stage the binary
 			// for the corresponding release branch, which is good enough in
 			// most cases.
 			stageVersion = v.Format("release-%X.%Y")
+			l.Printf("[uploadBinaryVersion] stageVersion: %s", stageVersion)
+
 		}
 
 		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
+			l.Printf("[uploadBinaryVersion] failed to stage binary: %s", err)
 			return "", err
 		}
 	}
-
+	l.Printf("[uploadBinaryVersion] binary uploaded to: %s", dstBinary)
 	return dstBinary, nil
 }
 
@@ -343,6 +368,7 @@ func InstallFixtures(
 
 // StartWithSettings starts cockroach and constructs settings according
 // to the setting options passed.
+// Binaries are already downloaded / staged at this point this is too late for my change
 func StartWithSettings(
 	ctx context.Context,
 	l *logger.Logger,

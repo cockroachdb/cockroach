@@ -840,6 +840,9 @@ func (t *Test) BackgroundCommand(
 // be replaced with the cockroach binary of the current version the
 // cluster is running in.
 // TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+// The binary used to run the command(s) will always of the current version the
+// cluster is running in because the workload binary isn't guaranteed to be
+// backwards compatible
 func (t *Test) Workload(
 	name string,
 	node option.NodeListOption,
@@ -852,17 +855,25 @@ func (t *Test) Workload(
 			cmd.Flag("seed", seed)
 		}
 	}
-
+	t.logger.Printf("[Workload] name: %s, node: %v, initCmd: %s, runCmd: %s, overrideBinary: %t", name, node, initCmd.String(), runCmd.String(), overrideBinary)
 	if initCmd != nil {
 		addSeed(initCmd)
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 			if overrideBinary {
+				// Originally this block would only execute if overrideBinary (arg) was true
+				// Actually, instead of overriding the initCmd.Binary like this, I should just always set it to be the cluster version
+				// to begin with.
+				t.logger.Printf("[Workload][OnStartup][init] node: %v, h.System.FromVersion: %s", name, h.System.FromVersion.String())
 				binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
+				t.logger.Printf("[Workload][OnStartup][init] prev binary: %s", initCmd.Binary)
+				t.logger.Printf("[Workload][OnStartup][init] new binary: %s", binary)
 				if err != nil {
 					t.rt.Fatal(err)
 				}
 				initCmd.Binary = binary
 			}
+			// TODO replace with...
+			// should this method care about the binary? I don't think so
 			l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
 			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
 		})
@@ -871,7 +882,10 @@ func (t *Test) Workload(
 	addSeed(runCmd)
 	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 		if overrideBinary {
+			t.logger.Printf("[Workload][OnStartup][run] node: %v, h.System.FromVersion: %s", name, h.System.FromVersion.String())
 			binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
+			t.logger.Printf("[Workload][OnStartup][run] prev binary: %s", runCmd.Binary)
+			t.logger.Printf("[Workload][OnStartup][run] new binary: %s", binary)
 			if err != nil {
 				t.rt.Fatal(err)
 			}

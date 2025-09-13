@@ -92,20 +92,36 @@ func (s startStep) Description() string {
 	return fmt.Sprintf("start cluster at version %q", s.version)
 }
 
-// Run uploads the binary associated with the given version and starts
-// the cockroach binary on the nodes.
+// Run uploads the cockroach binary associated with the given version and
+// starts the cockroach binary on the nodes.
+// Also uploads the workload binary associated with the given version
 func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	systemNodes := h.System.Descriptor.Nodes
-	binaryPath, err := clusterupgrade.UploadCockroach(
+	binaryPath, err := clusterupgrade.UploadCockroach( // initial binary download?
 		ctx, s.rt, l, h.runner.cluster, systemNodes, s.version,
 	)
 	if err != nil {
 		return err
 	}
+	// i might not need the actual path? Should be able to infer it or get it with that path helper function?
+	// Also i don't trust this code path... even if this is the right spot
+	// looks like there's some default workload depreciated testImpl shenanigans going on
+	// TODO does this even work lol verify
+	//_, failed, err := clusterupgrade.UploadWorkload(
+	//	ctx, s.rt, l, h.runner.cluster, systemNodes, s.version,
+	//)
+	//if err != nil {
+	//	return err
+	//}
+	//if failed {
+	//	return errors.New("failed to upload workload")
+	//}
 
+	// what is this list for?
 	clusterSettings := append(
 		append([]install.ClusterSettingOption{}, s.settings...),
-		install.BinaryOption(binaryPath),
+		install.BinaryOption(binaryPath), // what does this call do?
+		//install.BinaryOption(something), // don't actually add this as a step
 		install.TagOption(systemTag),
 	)
 
