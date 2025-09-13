@@ -855,8 +855,19 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 	// TODO(drewk): Enable memo reuse with DO statements.
 	b.DisableMemoReuse = true
 
-	defer func(oldInsideFuncDep bool) { b.insideFuncDef = oldInsideFuncDep }(b.insideFuncDef)
+	doBlockImpl, ok := do.Code.(*plpgsqltree.DoBlock)
+	if !ok {
+		panic(errors.AssertionFailedf("expected a plpgsql block"))
+	}
+
+	defer func(oldInsideFuncDep bool, oldAnn tree.Annotations) {
+		b.insideFuncDef = oldInsideFuncDep
+		b.semaCtx.Annotations = oldAnn
+		b.evalCtx.Annotations = &b.semaCtx.Annotations
+	}(b.insideFuncDef, b.semaCtx.Annotations)
 	b.insideFuncDef = true
+	b.semaCtx.Annotations = doBlockImpl.Annotations
+	b.evalCtx.Annotations = &b.semaCtx.Annotations
 
 	// Build the routine body.
 	var bodyStmts []string
@@ -864,10 +875,6 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 		fmtCtx.FormatNode(do.Code)
 		bodyStmts = []string{fmtCtx.CloseAndGetString()}
-	}
-	doBlockImpl, ok := do.Code.(*plpgsqltree.DoBlock)
-	if !ok {
-		panic(errors.AssertionFailedf("expected a plpgsql block"))
 	}
 	bodyScope := b.buildPLpgSQLDoBody(doBlockImpl)
 
