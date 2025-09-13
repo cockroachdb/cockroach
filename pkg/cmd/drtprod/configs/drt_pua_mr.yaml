@@ -7,18 +7,12 @@
 # This yaml also creates a workload cluster with 3 nodes in 3 regions, 1 node in each region.
 # This also configures datadog and scripts for running workload and roachtest operations.
 environment:
-  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
-  ROACHPROD_DNS: drt.crdb.io
-  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
-  ROACHPROD_GCE_DNS_ZONE: drt
-  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-pua-15
   WORKLOAD_CLUSTER: workload-pua-15
   CLUSTER_NODES: 15
   WORKLOAD_NODES: 3
   STORE_COUNT: 2
-  COCKROACH_VERSION: v25.2.0
-  COCKROACH_UPGRADE_VERSION: v25.2.1
+  COCKROACH_ROACHPROD_INSECURE: false
 
   # variables used by tpcc_run_multiregion.sh
   NUM_REGIONS: 3
@@ -35,12 +29,13 @@ environment:
   MAX_CONN_LIFETIME: 3m
 
   # GCP Cloud Storage bucket for storing locality-aware backups
-  BUCKET_NORTH_AMERICA: cockroach-drt-backup
-  BUCKET_US_EAST_5: cockroach-drt-backup-us-east5
-  BUCKET_US_EAST_1: cockroach-drt-backup-us-east1
+  BUCKET_US_CENTRAL1: pua-backup-us-central-1
+  BUCKET_US_EAST_5: pua-backup-us-east5
+  BUCKET_US_EAST_1: pua-backup-us-east1
 
 dependent_file_locations:
   - artifacts/roachprod
+  - artifacts/drtprod
   - artifacts/roachtest
   - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
   - pkg/cmd/drtprod/scripts/setup_datadog_cluster
@@ -67,7 +62,7 @@ targets:
           gce-local-ssd-count: $STORE_COUNT
           os-volume-size: 100
           username: drt
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -79,7 +74,7 @@ targets:
         args:
           - $CLUSTER
           - release
-          - $COCKROACH_VERSION
+          - $CRDB_VERSION
       - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
       - command: start
@@ -157,7 +152,7 @@ targets:
           gce-machine-type: n2d-standard-4
           os-volume-size: 100
           username: workload
-          lifetime: 8760h
+          lifetime: 15h
         on_rollback:
           - command: destroy
             args:
@@ -178,6 +173,11 @@ targets:
           - $WORKLOAD_CLUSTER
           - artifacts/roachprod
           - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
+          - drtprod
       - command: put
         args:
           - $WORKLOAD_CLUSTER:1
@@ -260,7 +260,7 @@ targets:
           - --
           - -e
           - |
-            BACKUP INTO ('gs://$BUCKET_NORTH_AMERICA/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=default',
+            BACKUP INTO ('gs://$BUCKET_US_CENTRAL1/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=default',
                             'gs://$BUCKET_US_EAST_5/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east5',
                             'gs://$BUCKET_US_EAST_1/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east1')
             WITH OPTIONS (revision_history = true, detached)
@@ -283,7 +283,7 @@ targets:
         args:
           - $CLUSTER
           - release
-          - $COCKROACH_UPGRADE_VERSION
+          - $CRDB_UPGRADE_VERSION
         flags:
           pause: 5m
           grace-period: 500
@@ -375,3 +375,4 @@ targets:
           - $CLUSTER:11-15
         flags:
           restart: true
+        wait_after: 3300
