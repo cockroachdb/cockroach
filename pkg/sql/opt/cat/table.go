@@ -271,10 +271,8 @@ type TableStatistic interface {
 	// inverted index histograms, this will always return types.Bytes.
 	HistogramType() *types.T
 
-	// IsPartial returns true if this statistic was collected with a where
-	// clause. (If the where clause was something like "WHERE 1 = 1" or "WHERE
-	// true" this could technically be a full statistic rather than a partial
-	// statistic, but this function does not check for this.)
+	// IsPartial returns true if this statistic was collected with USING EXTREMES
+	// or with a WHERE clause.
 	IsPartial() bool
 
 	// IsMerged returns true if this statistic was created by merging a partial

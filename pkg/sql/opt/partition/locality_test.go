@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package partition
+package partition_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -104,7 +105,7 @@ func TestPrefixSorter(t *testing.T) {
 			index := &testcat.Index{}
 			index.SetPartitions(partitions)
 			// Make the PrefixSorter.
-			ps := GetSortedPrefixes(ctx, index, localPartitions, &evalCtx)
+			ps := partition.GetSortedPrefixes(ctx, index, localPartitions, &evalCtx)
 
 			// Run the tests.
 			if res := ps.String(); res != tc.expected {
@@ -116,9 +117,9 @@ func TestPrefixSorter(t *testing.T) {
 			prefixSlice, _, ok := ps.Slice(i)
 
 			for ; ok; prefixSlice, _, ok = ps.Slice(i) {
-				if PrefixesToString(prefixSlice) != tc.expectedSlices[i] {
+				if partition.PrefixesToString(prefixSlice) != tc.expectedSlices[i] {
 					t.Errorf("expected slice  %s  got  %s", tc.expectedSlices[i],
-						PrefixesToString(prefixSlice))
+						partition.PrefixesToString(prefixSlice))
 				}
 				i++
 			}
@@ -163,6 +164,6 @@ func ParsePartitionKey(evalCtx *eval.Context, str string, typs ...types.Family) 
 		typs = tree.InferTypes(key)
 	}
 
-	vals := ParseDatumPath(evalCtx, expr, typs)
+	vals := partition.ParseDatumPath(evalCtx, expr, typs)
 	return vals
 }
