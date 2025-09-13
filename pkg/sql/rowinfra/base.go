@@ -52,6 +52,12 @@ var defaultBatchBytesLimit = BytesLimit(skip.ClampMetamorphicConstantUnderDuress
 
 const defaultBatchBytesLimitProductionValue = 10 << 20 /* 10MiB */
 
+// MaxRowSizeFloor is the lower bound for max_row_size_{log|err} used for cluster-level and table-level guardrails.
+const MaxRowSizeFloor = 1 << 10
+
+// MaxRowSizeCeil is the upper bound for max_row_size_{log|err} used for cluster-level and table-level guardrails.
+const MaxRowSizeCeil = 1 << 30
+
 // GetDefaultBatchBytesLimit returns the maximum number of bytes a scan request
 // can return.
 func GetDefaultBatchBytesLimit(forceProductionValue bool) BytesLimit {
