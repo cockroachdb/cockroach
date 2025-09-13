@@ -137,6 +137,13 @@ func DefaultDeclareIsolatedKeys(
 			default:
 				return errors.AssertionFailedf("unexpected lock strength %s", str)
 			}
+		} else {
+			if header.Txn != nil {
+				// TODO(ssd): This is an experiment. By latching at the commit
+				// timestamp, we ensure that if that if we are on an Epoch > 0, then we
+				// don't overlap with readers who might be reading our old intents.
+				timestamp.Backward(header.Txn.MinTimestamp)
+			}
 		}
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)
