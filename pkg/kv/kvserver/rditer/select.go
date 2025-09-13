@@ -79,7 +79,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 	var sl []roachpb.Span
 
 	if opts.ReplicatedByRangeID {
-		sl = append(sl, makeRangeIDReplicatedSpan(rangeID))
+		sl = append(sl, MakeRangeIDReplicatedSpan(rangeID))
 	}
 
 	if opts.UnreplicatedByRangeID {
