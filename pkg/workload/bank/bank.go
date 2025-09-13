@@ -34,7 +34,7 @@ const (
 	defaultBatchSize    = 1000
 	defaultPayloadBytes = 100
 	defaultRanges       = 10
-	defaultNumTables    = 1
+	defaultTables       = 1
 	maxTransfer         = 999
 )
 
@@ -46,7 +46,7 @@ type bank struct {
 
 	rows, batchSize      int
 	payloadBytes, ranges int
-	numTables            int
+	tables               int
 }
 
 func init() {
@@ -68,7 +68,7 @@ var bankMeta = workload.Meta{
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
-		g.flags.IntVar(&g.numTables, `num-tables`, defaultNumTables, `Number of bank tables to create.`)
+		g.flags.IntVar(&g.tables, `tables`, defaultTables, `Initial number of bank tables to create.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		// Because this workload can create a large number of objects, the import
@@ -123,8 +123,8 @@ func (b *bank) Hooks() workload.Hooks {
 			if b.batchSize <= 0 {
 				return errors.Errorf(`Value of batch-size must be greater than zero; was %d`, b.batchSize)
 			}
-			if b.numTables <= 0 {
-				return errors.Errorf(`Value of num-tables must be greater than zero; was %d`, b.numTables)
+			if b.tables <= 0 {
+				return errors.Errorf(`Value of tables must be greater than zero; was %d`, b.tables)
 			}
 			return nil
 		},
@@ -133,7 +133,7 @@ func (b *bank) Hooks() workload.Hooks {
 
 // tableName returns the table name with optional schema prefix and table number.
 func (b *bank) tableName(baseName string, tableIdx int) string {
-	if b.numTables > 1 {
+	if b.tables > 1 {
 		return fmt.Sprintf("%s_%d", baseName, tableIdx)
 	}
 	return baseName
@@ -149,8 +149,8 @@ var bankTypes = []*types.T{
 func (b *bank) Tables() []workload.Table {
 	numBatches := (b.rows + b.batchSize - 1) / b.batchSize // ceil(b.rows/b.batchSize)
 
-	tables := make([]workload.Table, b.numTables)
-	for tableIdx := range b.numTables {
+	tables := make([]workload.Table, b.tables)
+	for tableIdx := range b.tables {
 		table := workload.Table{
 			Name:   b.tableName(`bank`, tableIdx),
 			Schema: bankSchema,
@@ -208,8 +208,8 @@ func (b *bank) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	// TODO(dan): Move the various queries in the backup/restore tests here.
-	updateStmts := make([]*gosql.Stmt, b.numTables)
-	for tableIdx := range b.numTables {
+	updateStmts := make([]*gosql.Stmt, b.tables)
+	for tableIdx := range b.tables {
 		updateStmt, err := db.Prepare(fmt.Sprintf(`
 			UPDATE %s
 			SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
@@ -233,7 +233,7 @@ func (b *bank) Ops(
 		hists := reg.GetHandle()
 
 		workerFn := func(ctx context.Context) error {
-			tableIdx := rng.IntN(b.numTables)
+			tableIdx := rng.IntN(b.tables)
 			updateStmt := updateStmts[tableIdx]
 
 			from := rng.IntN(b.rows)
