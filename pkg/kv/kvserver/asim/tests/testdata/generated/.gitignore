@@ -5,3 +5,5 @@
 
 # Except this specific directory (relative to .gitignore)
 !example_rebalancing/**
+# And the readme file.
+!README.md
