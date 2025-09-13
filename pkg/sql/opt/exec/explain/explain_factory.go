@@ -29,6 +29,11 @@ type Factory struct {
 
 var _ exec.ExplainFactory = &Factory{}
 
+// DisableSpoolElision implements the Factory interface.
+func (f *Factory) DisableSpoolElision() {
+	f.wrappedFactory.DisableSpoolElision()
+}
+
 // Ctx implements the Factory interface.
 func (f *Factory) Ctx() context.Context {
 	return f.wrappedFactory.Ctx()
