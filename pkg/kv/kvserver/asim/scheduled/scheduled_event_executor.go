@@ -70,15 +70,17 @@ func newExecutorWithNoEvents() *eventExecutor {
 // assertion events.
 func (e *eventExecutor) PrintEventSummary() string {
 	mutationEvents, assertionEvents := 0, 0
+	var buf strings.Builder
+	sort.Sort(e.scheduledEvents)
 	for _, e := range e.scheduledEvents {
+		_, _ = fmt.Fprintf(&buf, "%v\n", e)
 		if e.IsMutationEvent() {
 			mutationEvents++
 		} else {
 			assertionEvents++
 		}
 	}
-	return fmt.Sprintf(
-		"number of mutation events=%d, number of assertion events=%d", mutationEvents, assertionEvents)
+	return buf.String()
 }
 
 // PrintEventsExecuted returns a detailed string representation of executed

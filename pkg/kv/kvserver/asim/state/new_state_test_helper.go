@@ -37,7 +37,7 @@ func NewStateWithDistribution(
 	spanConfig.NumReplicas = int32(replicationFactor)
 	spanConfig.NumVoters = int32(replicationFactor)
 
-	rangesInfo := RangesInfoWithDistribution(
+	rangesInfo, _ := RangesInfoWithDistribution(
 		stores,
 		percentOfReplicas,
 		percentOfReplicas,
@@ -58,7 +58,7 @@ func NewStateWithReplCounts(
 	replCounts map[StoreID]int, replicationFactor, keyspace int, settings *config.SimulationSettings,
 ) State {
 	clusterInfo := ClusterInfoWithStoreCount(len(replCounts), 1 /* storesPerNode */)
-	rangesInfo := RangesInfoWithReplicaCounts(replCounts, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo, _ := RangesInfoWithReplicaCounts(replCounts, keyspace, replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -68,7 +68,7 @@ func NewStateEvenDistribution(
 	stores, ranges, replicationFactor, keyspace int, settings *config.SimulationSettings,
 ) State {
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode*/)
-	rangesInfo := RangesInfoEvenDistribution(stores, ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
+	rangesInfo, _ := RangesInfoEvenDistribution(stores, ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -78,7 +78,7 @@ func NewStateSkewedDistribution(
 	stores, ranges, replicationFactor, keyspace int, settings *config.SimulationSettings,
 ) State {
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoSkewedDistribution(stores, ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
+	rangesInfo, _ := RangesInfoSkewedDistribution(stores, ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -94,7 +94,7 @@ func NewStateRandDistribution(
 ) State {
 	randSource := rand.New(rand.NewSource(seed))
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, int64(MinKey),
+	rangesInfo, _ := RangesInfoRandDistribution(randSource, stores, ranges, int64(MinKey),
 		int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
@@ -111,7 +111,7 @@ func NewStateWeightedRandDistribution(
 ) State {
 	randSource := rand.New(rand.NewSource(seed))
 	clusterInfo := ClusterInfoWithStoreCount(len(weightedStores), 1 /* storesPerNode */)
-	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, int64(MinKey),
+	rangesInfo, _ := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, int64(MinKey),
 		int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
