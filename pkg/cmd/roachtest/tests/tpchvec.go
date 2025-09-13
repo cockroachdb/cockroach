@@ -600,6 +600,7 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
+		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.defaults.vectorize", /* settingName */
@@ -617,6 +618,7 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
+		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{})
 		},
@@ -631,6 +633,7 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
+		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
@@ -649,6 +652,7 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
+		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
@@ -667,6 +671,7 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
+		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			p := newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */

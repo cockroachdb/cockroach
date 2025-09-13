@@ -65,9 +65,6 @@ func registerTPCDSVec(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := clusterConn.Exec(`SET CLUSTER SETTING backup.index.read.enabled = false`); err != nil {
-			t.Fatal(err)
-		}
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`
@@ -193,6 +190,7 @@ WITH unsafe_restore_incompatible_version;
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
+		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCDSVec(ctx, t, c)
 		},

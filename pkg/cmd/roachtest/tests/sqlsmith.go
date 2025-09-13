@@ -116,9 +116,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			allConns = append(allConns, c.Conn(ctx, t.L(), node))
 		}
 		conn := allConns[0]
-		if _, err := conn.Exec(`SET CLUSTER SETTING backup.index.read.enabled = false`); err != nil {
-			t.Fatal(err)
-		}
 		t.Status("executing setup")
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
@@ -331,6 +328,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
+			Skip:             "153489. uses ancient fixture",
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
