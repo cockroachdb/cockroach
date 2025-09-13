@@ -2976,7 +2976,7 @@ func registerCDC(r registry.Registry) {
 				numRows := 1_000
 				numRanges := 10
 				initCmd := fmt.Sprintf(
-					"./cockroach workload init bank --rows=%d --ranges=%d --num-tables=%d {pgurl%s}",
+					"./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
 					numRows, numRanges, numTables, ct.crdbNodes.RandNode())
 				if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 					t.Fatalf("failed to initialize bank tables: %v", err)
@@ -2988,7 +2988,7 @@ func registerCDC(r registry.Registry) {
 					defer ct.workloadWg.Done()
 					workloadCmd := fmt.Sprintf(
 						// TODO make the duration longer
-						"./cockroach workload run bank --rows=%d --duration=10m --num-tables=%d {pgurl%s}",
+						"./cockroach workload run bank --rows=%d --duration=10m --tables=%d {pgurl%s}",
 						numRows, numTables, ct.crdbNodes)
 					return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
 				})
