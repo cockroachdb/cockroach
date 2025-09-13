@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1773,6 +1774,8 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 	cf.js.job.MarkIdle(isIdle)
 }
 
+var persistFrontierLogEveryN = util.Every(time.Minute)
+
 func (cf *changeFrontier) maybeCheckpointJob(
 	resolvedSpan jobspb.ResolvedSpan, frontierChanged bool,
 ) (bool, error) {
@@ -1817,16 +1820,19 @@ func (cf *changeFrontier) maybeCheckpointJob(
 
 	// TODO maybe put this in a helper struct
 	if persistFrontier := func() bool {
-		elapsed := timeutil.Since(cf.lastFrontierPersistence)
+		now := timeutil.Now()
+		elapsed := now.Sub(cf.lastFrontierPersistence)
 		interval := changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		if elapsed < interval {
 			return false
 		}
 		if elapsed < cf.frontierPersistenceDuration {
-			log.Changefeed.Warningf(ctx, "cannot persist frontier even though %s has elapsed "+
-				"since last save and %s is set to %s becauese average time to save was %s",
-				elapsed, changefeedbase.FrontierPersistenceInterval.Name(),
-				cf.frontierPersistenceDuration, cf.lastFrontierPersistence)
+			if persistFrontierLogEveryN.ShouldProcess(now) {
+				log.Changefeed.Warningf(ctx, "cannot persist frontier even though %s has elapsed "+
+					"since last save and %s is set to %s because average time to save was %s",
+					elapsed, changefeedbase.FrontierPersistenceInterval.Name(),
+					interval, cf.frontierPersistenceDuration)
+			}
 			return false
 		}
 		return true
