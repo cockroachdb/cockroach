@@ -1,0 +1,11 @@
+/* setup */
+CREATE TABLE t1 (id INT PRIMARY KEY, data TEXT);
+CREATE TABLE t2 (id INT PRIMARY KEY, value INT);
+CREATE VIEW v1 AS SELECT * FROM t1;
+CREATE SEQUENCE seq1 START 1;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t1 RENAME TO t1_renamed;
+----
+Schema change plan for ALTER TABLE ‹t1› RENAME TO ‹t1_renamed›;
+ └── execute 1 system table mutations transaction

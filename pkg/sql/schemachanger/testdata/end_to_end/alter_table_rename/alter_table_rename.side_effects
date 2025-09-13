@@ -1,0 +1,58 @@
+/* setup */
+CREATE TABLE t1 (id INT PRIMARY KEY, data TEXT);
+CREATE TABLE t2 (id INT PRIMARY KEY, value INT);
+CREATE VIEW v1 AS SELECT * FROM t1;
+CREATE SEQUENCE seq1 START 1;
+----
+...
++object {100 101 t1} -> 104
++object {100 101 t2} -> 105
++object {100 101 v1} -> 106
++object {100 101 seq1} -> 107
+
+/* test */
+ALTER TABLE t1 RENAME TO t1_renamed;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+## StatementPhase stage 1 of 1 with 3 MutationType ops
+delete object namespace entry {100 101 t1} -> 104
+add object namespace entry {100 101 t1_renamed} -> 104
+upsert descriptor #104
+  ...
+     id: 104
+     modificationTime: {}
+  -  name: t1
+  +  name: t1_renamed
+     nextColumnId: 3
+     nextConstraintId: 2
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+delete object namespace entry {100 101 t1} -> 104
+add object namespace entry {100 101 t1_renamed} -> 104
+upsert descriptor #104
+  ...
+     id: 104
+     modificationTime: {}
+  -  name: t1
+  +  name: t1_renamed
+     nextColumnId: 3
+     nextConstraintId: 2
+  ...
+     schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1
