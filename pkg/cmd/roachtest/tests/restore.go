@@ -42,6 +42,10 @@ import (
 )
 
 var restoreAggregateFunction = func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	if len(histogram.Summaries) == 0 {
+		return roachtestutil.AggregatedPerfMetrics{}, errors.New("histogram has no summaries")
+	}
+
 	metricValue := histogram.Summaries[0].HighestTrackableValue / 1e9
 
 	return roachtestutil.AggregatedPerfMetrics{

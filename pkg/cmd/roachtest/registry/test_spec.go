@@ -29,6 +29,9 @@ var PrometheusNameSpace = "roachtest"
 var DefaultProcessFunction = func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 	totalOps := 0.0
 	for _, summary := range histograms.Summaries {
+		if summary.TotalElapsed == 0 {
+			continue
+		}
 		totalOps += float64(summary.TotalCount*1000) / float64(summary.TotalElapsed)
 	}
 
