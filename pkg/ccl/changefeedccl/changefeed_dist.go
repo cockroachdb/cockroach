@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -470,6 +471,20 @@ func makePlan(
 			}
 		}
 
+		var resolvedTables *cdcprogresspb.ResolvedTables
+		if jobID != 0 && progressConfig != nil && progressConfig.PerTableTracking {
+			var rt cdcprogresspb.ResolvedTables
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return readChangefeedJobInfo(ctx, resolvedTablesFilename, &rt, txn, jobID)
+			}); err != nil {
+				return nil, nil, err
+			}
+			resolvedTables = &rt
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Dev.Infof(ctx, "read resolved tables: %v", resolvedTables)
+			}
+		}
+
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
@@ -493,6 +508,7 @@ func makePlan(
 				Select:              execinfrapb.Expression{Expr: details.Select},
 				Description:         description,
 				ProgressConfig:      progressConfig,
+				ResolvedTables:      resolvedTables,
 			}
 		}
 
@@ -508,6 +524,7 @@ func makePlan(
 			UserProto:           execCtx.User().EncodeProto(),
 			Description:         description,
 			ProgressConfig:      progressConfig,
+			ResolvedTables:      resolvedTables,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
