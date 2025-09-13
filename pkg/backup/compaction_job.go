@@ -745,17 +745,6 @@ func getBackupChain(
 			log.Dev.Warningf(ctx, "failed to cleanup base backup stores: %+v", err)
 		}
 	}()
-	incStores, incCleanup, err := backupdest.MakeBackupDestinationStores(
-		ctx, user, mkStore, resolvedIncDirs,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	defer func() {
-		if err := incCleanup(); err != nil {
-			log.Dev.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
-		}
-	}()
 	baseEncryptionInfo := encryptionOpts
 	if encryptionOpts != nil && !encryptionOpts.HasKey() {
 		baseEncryptionInfo, err = backupencryption.GetEncryptionFromBaseStore(
@@ -770,7 +759,7 @@ func getBackupChain(
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, execCfg, &mem, defaultCollectionURI, dest.To, baseStores, incStores, mkStore, resolvedSubdir,
+		ctx, execCfg, &mem, defaultCollectionURI, dest.To, mkStore, resolvedSubdir,
 		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
 		user, false /*includeSkipped */, true /*includeCompacted */, len(dest.IncrementalStorage) > 0,
 	)
