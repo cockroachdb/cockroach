@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -691,4 +692,63 @@ func TestChangePollInterval(t *testing.T) {
 	require.Equal(t, 1, waitForScans(1))
 	stmtdiagnostics.PollingInterval.Override(ctx, &settings.SV, 200*time.Microsecond)
 	waitForScans(10) // ensure several scans occur
+}
+
+func TestTxnRegistry_InsertTxnRequest_Polling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	// Set to 1s so that we can quickly pick up the request.
+	stmtdiagnostics.TxnPollingInterval.Override(ctx, &settings.SV, time.Second)
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	s0 := tc.Server(0).ApplicationLayer()
+	registry := s0.ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+	id, err := registry.InsertTxnRequestInternal(
+		ctx,
+		1111,
+		[]uint64{1111, 2222, 3333},
+		"testuser",
+		0.5,
+		time.Millisecond*100,
+		0,
+		false,
+	)
+	require.NoError(t, err)
+	require.NotEqual(t, stmtdiagnostics.RequestID(0), id)
+
+	expectedRequest, ok := registry.GetRequest(id)
+	require.True(t, ok)
+	testutils.SucceedsSoon(t, func() error {
+		registry2 := tc.Server(1).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+		registry3 := tc.Server(2).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+
+		req, ok := registry2.GetRequest(id)
+		if !ok {
+			return errors.New("request not found on server 2")
+		}
+		require.Equal(t, expectedRequest, req)
+		if !assert.Equal(t, expectedRequest, req) {
+			return errors.Newf("request on server2 doesnt match expected request. Expected: %+v, got: %+v", expectedRequest, req)
+		}
+
+		req, ok = registry3.GetRequest(id)
+		if !ok {
+			return errors.New("request not found on server 3")
+		}
+		require.Equal(t, expectedRequest, req)
+		if !assert.Equal(t, expectedRequest, req) {
+			return errors.Newf("request on server3 doesnt match expected request. Expected: %+v, got: %+v", expectedRequest, req)
+		}
+
+		return nil
+	})
 }
