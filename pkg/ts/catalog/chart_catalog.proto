@@ -8,6 +8,7 @@ package cockroach.ts.catalog;
 option go_package = "github.com/cockroachdb/cockroach/pkg/ts/catalog";
 
 import "ts/tspb/timeseries.proto";
+import "util/metric/metric.proto";
 
 import "gogoproto/gogo.proto";
 import "io/prometheus/client/metrics.proto";
@@ -96,6 +97,8 @@ message ChartMetric {
   optional string howToUse = 8 [(gogoproto.nullable) = false];
   // labeledName is the name of the metric with its labels, formatted as name{label1: value1, ...}.
   optional string labeledName = 9 [(gogoproto.nullable) = false];
+  // scope indicates the availability of this metric across different deployment offerings.
+  optional cockroach.util.metric.Metadata.Scope scope = 10 [(gogoproto.nullable) = false];
 }
 
 // IndividualChart describes both the properties necessary to display

@@ -211,7 +211,7 @@ func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
 
 func makeMetaResumeRetryError(jt jobspb.Type) metric.Metadata {
 	typeStr := typeToString(jt)
-	return metric.Metadata{
+	m := metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.resume_retry_error", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs which failed with a retriable error",
 			typeStr),
@@ -224,6 +224,13 @@ func makeMetaResumeRetryError(jt jobspb.Type) metric.Metadata {
 			metric.LabelStatus, "retry_error",
 		),
 	}
+
+	// Add shared scope for changefeed jobs
+	if jt == jobspb.TypeChangefeed {
+		m.Scope = metric.Metadata_SHARED
+	}
+
+	return m
 }
 
 func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {

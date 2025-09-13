@@ -600,6 +600,7 @@ func init() {
 						with a backup frequency of 60 minutes, monitor time() -
 						max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,
 						60min)).`,
+						Scope: metric.Metadata_SHARED,
 					}),
 					RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{
 						Name:        "schedules.BACKUP.last-completed-time-by-virtual_cluster",

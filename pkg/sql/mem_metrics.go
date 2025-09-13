@@ -60,12 +60,22 @@ var _ metric.Struct = MemoryMetrics{}
 const log10int64times1000 = 19 * 1000
 
 func makeMemMetricMetadata(name, help string) metric.Metadata {
-	return metric.Metadata{
+	m := metric.Metadata{
 		Name:        name,
 		Help:        help,
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+
+	// Add shared scope for specific memory metrics in the cloud shared list
+	switch name {
+	case "sql.mem.internal.session.current", "sql.mem.internal.session.max",
+		"sql.mem.internal.txn.current", "sql.mem.internal.txn.max",
+		"sql.mem.root.current":
+		m.Scope = metric.Metadata_SHARED
+	}
+
+	return m
 }
 
 func makeMemMetricHistogram(

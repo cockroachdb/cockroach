@@ -105,42 +105,52 @@ var _ metric.Struct = &SchedulerMetrics{}
 
 // MakeExecutorMetrics creates metrics for scheduled job executor.
 func MakeExecutorMetrics(name string) ExecutorMetrics {
+	// Create metadata with scope for BACKUP schedules
+	startedMeta := metric.Metadata{
+		Name:        fmt.Sprintf("schedules.%s.started", name),
+		Help:        fmt.Sprintf("Number of %s jobs started", name),
+		Measurement: "Jobs",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "schedules",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, name,
+			metric.LabelStatus, "started",
+		),
+	}
+	succeededMeta := metric.Metadata{
+		Name:        fmt.Sprintf("schedules.%s.succeeded", name),
+		Help:        fmt.Sprintf("Number of %s jobs succeeded", name),
+		Measurement: "Jobs",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "schedules",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, name,
+			metric.LabelStatus, "succeeded",
+		),
+	}
+	failedMeta := metric.Metadata{
+		Name:        fmt.Sprintf("schedules.%s.failed", name),
+		Help:        fmt.Sprintf("Number of %s jobs failed", name),
+		Measurement: "Jobs",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "schedules",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelName, name,
+			metric.LabelStatus, "failed",
+		),
+	}
+
+	// Add shared scope for BACKUP schedules
+	if name == tree.ScheduledBackupExecutor.UserName() {
+		startedMeta.Scope = metric.Metadata_SHARED
+		succeededMeta.Scope = metric.Metadata_SHARED
+		failedMeta.Scope = metric.Metadata_SHARED
+	}
+
 	m := ExecutorMetrics{
-		NumStarted: metric.NewCounter(metric.Metadata{
-			Name:        fmt.Sprintf("schedules.%s.started", name),
-			Help:        fmt.Sprintf("Number of %s jobs started", name),
-			Measurement: "Jobs",
-			Unit:        metric.Unit_COUNT,
-			LabeledName: "schedules",
-			StaticLabels: metric.MakeLabelPairs(
-				metric.LabelName, name,
-				metric.LabelStatus, "started",
-			),
-		}),
-
-		NumSucceeded: metric.NewCounter(metric.Metadata{
-			Name:        fmt.Sprintf("schedules.%s.succeeded", name),
-			Help:        fmt.Sprintf("Number of %s jobs succeeded", name),
-			Measurement: "Jobs",
-			Unit:        metric.Unit_COUNT,
-			LabeledName: "schedules",
-			StaticLabels: metric.MakeLabelPairs(
-				metric.LabelName, name,
-				metric.LabelStatus, "succeeded",
-			),
-		}),
-
-		NumFailed: metric.NewCounter(metric.Metadata{
-			Name:        fmt.Sprintf("schedules.%s.failed", name),
-			Help:        fmt.Sprintf("Number of %s jobs failed", name),
-			Measurement: "Jobs",
-			Unit:        metric.Unit_COUNT,
-			LabeledName: "schedules",
-			StaticLabels: metric.MakeLabelPairs(
-				metric.LabelName, name,
-				metric.LabelStatus, "failed",
-			),
-		}),
+		NumStarted:   metric.NewCounter(startedMeta),
+		NumSucceeded: metric.NewCounter(succeededMeta),
+		NumFailed:    metric.NewCounter(failedMeta),
 	}
 
 	if name == tree.ScheduledBackupExecutor.UserName() {

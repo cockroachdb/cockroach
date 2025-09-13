@@ -90,6 +90,20 @@ message Metadata {
     EXPIRATIONS = 16;
   }
 
+  // Scope defines the availability of metrics across different deployment offerings.
+  // This determines which metrics are exported in different CockroachDB deployment types.
+  enum Scope {
+    // SCOPE_UNSET is the default value when scope is not explicitly set.
+    // Metrics without explicit scope are available in self-hosted deployments only.
+    SCOPE_UNSET = 0;
+    // ADVANCED_ONLY metrics are only exported in advanced deployment offering.
+    ADVANCED_ONLY = 1;
+    // TENANT_ONLY metrics are only exported in serverless/tenant deployment offering.
+    TENANT_ONLY = 2;
+    // SHARED metrics are exported in both advanced and serverless/tenant deployment offerings.
+    SHARED = 3;
+  }
+
   // if essential is true, the metric is required to be included in
   // a DB Console dashboard, in our public docs, and in all tsdump
   // exports.
@@ -104,6 +118,10 @@ message Metadata {
   // how_to_use is an extended description of how to use this metric
   // with a running cluster. This is required if `essential` is true.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
+  // scope defines the availability of this metric across different deployment offerings.
+  // This determines whether the metric is exported to cloud deployments (advanced/serverless).
+  // Metrics without explicit scope are self-hosted only. Only set this field for cloud-exported metrics.
+  optional Scope scope = 13 [(gogoproto.nullable) = false];
 
-  // Next ID: 10 (then 13).
+  // Next ID: 10 (then 14).
 }

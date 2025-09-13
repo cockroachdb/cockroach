@@ -820,6 +820,7 @@ var (
 		Help:        "Latency of SQL statement execution",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaSQLExecLatencyConsistent = metric.Metadata{
 		Name:        "sql.exec.latency.consistent",
@@ -848,6 +849,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaSQLServiceLatencyConsistent = metric.Metadata{
 		Name:        "sql.service.latency.consistent",
@@ -878,6 +880,7 @@ var (
 		Help:        "Number of SELECT statements planned to be distributed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaDistSQLSelectDistributed = metric.Metadata{
 		Name:        "sql.distsql.select.distributed_exec.count",
@@ -891,6 +894,7 @@ var (
 		Measurement: "Latency",
 		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaDistSQLServiceLatency = metric.Metadata{
 		Name:        "sql.distsql.service.latency",
@@ -898,6 +902,7 @@ var (
 		Measurement: "Latency",
 		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaUniqueStatementCount = metric.Metadata{
 		Name:        "sql.query.unique.count",
@@ -913,6 +918,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This high-level metric reflects workload performance. A persistently high number of SQL transaction abort errors may negatively impact the workload performance and needs to be investigated.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaFailure = metric.Metadata{
 		Name:        "sql.failure.count",
@@ -922,6 +928,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is a high-level indicator of workload and application degradation with query failures. Use the Insights page to find failed executions with their error code to troubleshoot or use application-level logs, if instrumented, to determine the cause of error.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaStatementTimeout = metric.Metadata{
 		Name:        "sql.statement_timeout.count",
@@ -943,6 +950,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaSQLTxnsOpen = metric.Metadata{
 		Name:        "sql.txns.open",
@@ -952,6 +960,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric should roughly correspond to the number of cores * 4. If this metric is consistently larger, scale out the cluster.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaSQLActiveQueries = metric.Metadata{
 		Name:        "sql.statements.active",
@@ -961,6 +970,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This high-level metric reflects workload volume.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaFullTableOrIndexScan = metric.Metadata{
 		Name:        "sql.full.scan.count",
@@ -970,6 +980,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is a high-level indicator of potentially suboptimal query plans in the workload that may require index tuning and maintenance. To identify the statements with a full table scan, use SHOW FULL TABLE SCAN or the SQL Activity Statements page with the corresponding metric time frame. The Statements page also includes explain plans and index recommendations. Not all full scans are necessarily bad especially over smaller tables.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 
 	// Below are the metadata for the statement started counters.
@@ -1158,6 +1169,7 @@ var (
 		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaTxnBeginExecuted = metric.Metadata{
 		Name:        "sql.txn.begin.count",
@@ -1167,6 +1179,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric reflects workload volume by counting explicit transactions. Use this metric to determine whether explicit transactions can be refactored as implicit transactions (individual statements).",
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaTxnCommitExecuted = metric.Metadata{
 		Name:        "sql.txn.commit.count",
@@ -1176,6 +1189,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric shows the number of transactions that completed successfully. This metric can be used as a proxy to measure the number of successful explicit transactions.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaTxnRollbackExecuted = metric.Metadata{
 		Name:        "sql.txn.rollback.count",
@@ -1185,6 +1199,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric shows the number of orderly transaction rollbacks. A persistently high number of rollbacks may negatively impact the workload performance and needs to be investigated.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaTxnPrepareExecuted = metric.Metadata{
 		Name:        "sql.txn.prepare.count",
@@ -1214,6 +1229,7 @@ var (
 		Essential:    true,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Scope:        metric.Metadata_SHARED,
 	}
 	MetaUpdateExecuted = metric.Metadata{
 		Name:         "sql.update.count",
@@ -1225,6 +1241,7 @@ var (
 		Essential:    true,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Scope:        metric.Metadata_SHARED,
 	}
 	MetaInsertExecuted = metric.Metadata{
 		Name:         "sql.insert.count",
@@ -1236,6 +1253,7 @@ var (
 		Essential:    true,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Scope:        metric.Metadata_SHARED,
 	}
 	MetaDeleteExecuted = metric.Metadata{
 		Name:         "sql.delete.count",
@@ -1247,6 +1265,7 @@ var (
 		Essential:    true,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Scope:        metric.Metadata_SHARED,
 	}
 	MetaCRUDExecuted = metric.Metadata{
 		Name:        "sql.crud_query.count",
@@ -1298,6 +1317,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaCopyExecuted = metric.Metadata{
 		Name:        "sql.copy.count",
@@ -1322,6 +1342,7 @@ var (
 		Help:        "Number of other SQL statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	MetaRoutineSelectExecuted = metric.Metadata{
 		Name:         "sql.routine.select.count",

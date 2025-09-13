@@ -51,12 +51,14 @@ var (
 		Help:        "Number of batches processed",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaDistSenderPartialBatchCount = metric.Metadata{
 		Name:        "distsender.batches.partial",
 		Help:        "Number of partial batches processed after being divided on range boundaries",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaDistSenderReplicaAddressedBatchRequestBytes = metric.Metadata{
 		Name:        "distsender.batch_requests.replica_addressed.bytes",
@@ -133,12 +135,14 @@ var (
 		Help:        "Number of replica-addressed RPCs sent",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaTransportLocalSentCount = metric.Metadata{
 		Name:        "distsender.rpc.sent.local",
 		Help:        "Number of replica-addressed RPCs sent through the local-server optimization",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaTransportSenderNextReplicaErrCount = metric.Metadata{
 		Name:        "distsender.rpc.sent.nextreplicaerror",
@@ -148,6 +152,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse:    `RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
 		Name:        "distsender.errors.notleaseholder",
@@ -157,6 +162,7 @@ var (
 		Essential:   true,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse:    `Errors of this type are normal during elastic cluster topology changes when leaseholders are actively rebalancing. They are automatically retried. However they may create occasional response time spikes. In that case, this metric may provide the explanation of the cause.`,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
 		Name:        "distsender.errors.inleasetransferbackoffs",
@@ -180,6 +186,7 @@ cause values for this metric to be emitted by leaving a transaction open
 for a long time and contending with it using a second transaction.`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
+		Scope:       metric.Metadata_SHARED,
 	}
 	metaDistSenderSlowReplicaRPCs = metric.Metadata{
 		Name: "distsender.slow.replicarpcs",
