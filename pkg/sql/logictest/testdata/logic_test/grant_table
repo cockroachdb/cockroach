@@ -54,6 +54,7 @@ test           information_schema  domains                                table 
 test           information_schema  element_types                          table        public   SELECT          false
 test           information_schema  enabled_roles                          table        public   SELECT          false
 test           information_schema  engines                                table        public   SELECT          false
+test           information_schema  crdb_eventlog                          table        public   SELECT          false
 test           information_schema  events                                 table        public   SELECT          false
 test           information_schema  files                                  table        public   SELECT          false
 test           information_schema  foreign_data_wrapper_options           table        public   SELECT          false

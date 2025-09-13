@@ -95,6 +95,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaEnabledRolesID:                      informationSchemaEnabledRoles,
 		catconstants.InformationSchemaEnginesTableID:                      informationSchemaEnginesTable,
 		catconstants.InformationSchemaEventsTableID:                       informationSchemaEventsTable,
+		catconstants.InformationSchemaEventLogTableID:                     informationSchemaEventLogTable,
 		catconstants.InformationSchemaFilesTableID:                        informationSchemaFilesTable,
 		catconstants.InformationSchemaForeignDataWrapperOptionsTableID:    informationSchemaForeignDataWrapperOptionsTable,
 		catconstants.InformationSchemaForeignDataWrappersTableID:          informationSchemaForeignDataWrappersTable,
@@ -2266,6 +2267,21 @@ var informationSchemaEventsTable = virtualSchemaTable{
 		return nil
 	},
 	unimplemented: true,
+}
+
+var informationSchemaEventLogTable = virtualSchemaView{
+	comment: `event log entries from system.eventlog table
+https://www.cockroachlabs.com/docs/stable/eventlog.html`,
+	schema: vtable.InformationSchemaEventLog,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "timestamp", Typ: types.Timestamp},
+		{Name: "eventType", Typ: types.String},
+		{Name: "targetID", Typ: types.Int},
+		{Name: "reportingID", Typ: types.Int},
+		{Name: "info", Typ: types.String},
+		{Name: "uniqueID", Typ: types.Bytes},
+		{Name: "payload", Typ: types.Jsonb},
+	},
 }
 
 var informationSchemaDomainUdtUsageTable = virtualSchemaTable{

@@ -257,6 +257,7 @@ const (
 	InformationSchemaEnabledRolesID
 	InformationSchemaEnginesTableID
 	InformationSchemaEventsTableID
+	InformationSchemaEventLogTableID
 	InformationSchemaFilesTableID
 	InformationSchemaForeignDataWrapperOptionsTableID
 	InformationSchemaForeignDataWrappersTableID
