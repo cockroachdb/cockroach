@@ -11,29 +11,26 @@ eval duration=5m num_iterations=3 verbose=(config_gen)
 ----------------------------------
 sample1: start running
 configurations generated using seed 608747136543856411
-	loaded cluster with
- 		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
+store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 1926012586526624009
-	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
+store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 3534334367214237261
-	loaded cluster with
- 		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
+store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 sample3: pass
 ----------------------------------
 
@@ -59,15 +56,14 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 608747136543856411
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
-		region:US_West [zone=US_West_1(nodes=2,stores=1)]
-		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
+region:US_West [zone=US_West_1(nodes=2,stores=1)]
+region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 initial state at 2022-03-21 11:00:00:
-	stores(28)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(1)),s8n8=(replicas(1)),s9n9=(replicas(2)),s10n10=(replicas(1)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(1)),s14n14=(replicas(1)),s15n15=(replicas(1)),s16n16=(replicas(1)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(1)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(2)),s23n23=(replicas(1)),s24n24=(replicas(1)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(1))]
+stores(28)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(1)),s8n8=(replicas(1)),s9n9=(replicas(2)),s10n10=(replicas(1)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(1)),s14n14=(replicas(1)),s15n15=(replicas(1)),s16n16=(replicas(1)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(1)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(2)),s23n23=(replicas(1)),s24n24=(replicas(1)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(1))]
 topology:
 EU
   EU_1
@@ -93,15 +89,14 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 1926012586526624009
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=4,stores=1), zone=US_East_2(nodes=4,stores=1), zone=US_East_3(nodes=4,stores=1)]
-		region:US_West [zone=US_West_1(nodes=4,stores=1), zone=US_West_2(nodes=4,stores=1), zone=US_West_3(nodes=4,stores=1)]
-		region:EU [zone=EU_1(nodes=4,stores=1), zone=EU_2(nodes=4,stores=1), zone=EU_3(nodes=4,stores=1)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US_East [zone=US_East_1(nodes=4,stores=1), zone=US_East_2(nodes=4,stores=1), zone=US_East_3(nodes=4,stores=1)]
+region:US_West [zone=US_West_1(nodes=4,stores=1), zone=US_West_2(nodes=4,stores=1), zone=US_West_3(nodes=4,stores=1)]
+region:EU [zone=EU_1(nodes=4,stores=1), zone=EU_2(nodes=4,stores=1), zone=EU_3(nodes=4,stores=1)]
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 initial state at 2022-03-21 11:00:00:
-	stores(36)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(0)),s8n8=(replicas(1)),s9n9=(replicas(1)),s10n10=(replicas(1)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(0)),s14n14=(replicas(1)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(1)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(1)),s23n23=(replicas(1)),s24n24=(replicas(1)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(0)),s29n29=(replicas(1)),s30n30=(replicas(1)),s31n31=(replicas(0)),s32n32=(replicas(1)),s33n33=(replicas(1)),s34n34=(replicas(1)),s35n35=(replicas(1)),s36n36=(replicas(1))]
+stores(36)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(0)),s8n8=(replicas(1)),s9n9=(replicas(1)),s10n10=(replicas(1)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(0)),s14n14=(replicas(1)),s15n15=(replicas(0)),s16n16=(replicas(0)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(1)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(1)),s23n23=(replicas(1)),s24n24=(replicas(1)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(0)),s29n29=(replicas(1)),s30n30=(replicas(1)),s31n31=(replicas(0)),s32n32=(replicas(1)),s33n33=(replicas(1)),s34n34=(replicas(1)),s35n35=(replicas(1)),s36n36=(replicas(1))]
 topology:
 EU
   EU_1
@@ -129,15 +124,14 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 3534334367214237261
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
-		region:US_West [zone=US_West_1(nodes=2,stores=1)]
-		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
+region:US_West [zone=US_West_1(nodes=2,stores=1)]
+region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 initial state at 2022-03-21 11:00:00:
-	stores(28)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(1)),s8n8=(replicas(1)),s9n9=(replicas(2)),s10n10=(replicas(1)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(1)),s14n14=(replicas(1)),s15n15=(replicas(1)),s16n16=(replicas(1)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(1)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(2)),s23n23=(replicas(1)),s24n24=(replicas(1)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(1))]
+stores(28)=[s1n1=(replicas(1)),s2n2=(replicas(1)),s3n3=(replicas(1)),s4n4=(replicas(1)),s5n5=(replicas(1)),s6n6=(replicas(1)),s7n7=(replicas(1)),s8n8=(replicas(1)),s9n9=(replicas(2)),s10n10=(replicas(1)),s11n11=(replicas(1)),s12n12=(replicas(1)),s13n13=(replicas(1)),s14n14=(replicas(1)),s15n15=(replicas(1)),s16n16=(replicas(1)),s17n17=(replicas(1)),s18n18=(replicas(1)),s19n19=(replicas(1)),s20n20=(replicas(1)),s21n21=(replicas(1)),s22n22=(replicas(2)),s23n23=(replicas(1)),s24n24=(replicas(1)),s25n25=(replicas(1)),s26n26=(replicas(1)),s27n27=(replicas(1)),s28n28=(replicas(1))]
 topology:
 EU
   EU_1
@@ -173,30 +167,27 @@ eval duration=5m num_iterations=3 verbose=(config_gen)
 ----------------------------------
 sample1: start running
 configurations generated using seed 608747136543856411
-	loaded cluster with
- 		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
+store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 1926012586526624009
-	loaded cluster with
- 		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
+store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 3534334367214237261
-	loaded cluster with
- 		region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
-		region:US_West [zone=US_West_1(nodes=2,stores=1)]
-		region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
-	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
-	number of mutation events=0, number of assertion events=0
+	cluster: region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
+region:US_West [zone=US_West_1(nodes=2,stores=1)]
+region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+	[0,200000): 10(rf=3), 0MiB
+	[0,200000): write-only [1B/op, 0ops/s]	
 sample3: pass
 ----------------------------------

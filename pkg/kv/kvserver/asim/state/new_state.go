@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -165,12 +166,14 @@ func RangesInfoWithDistribution(
 	numRanges int,
 	config roachpb.SpanConfig,
 	minKey, maxKey, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	ret := make([]RangeInfo, numRanges)
 	rf := int(config.NumReplicas)
 
 	targetReplicaCount := make(requestCounts, len(stores))
 	targetLeaseCount := map[StoreID]int{}
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "[")
 	for i, store := range stores {
 		requiredReplicas := int(float64(numRanges*rf) * (replicaWeights[i]))
 		requiredLeases := int(float64(numRanges) * (leaseWeights[i]))
@@ -179,7 +182,13 @@ func RangesInfoWithDistribution(
 			id:  int(store),
 		}
 		targetLeaseCount[store] = requiredLeases
+		_, _ = fmt.Fprintf(&buf, "s%d:(%d,%d*)",
+			int(store), requiredReplicas, requiredLeases)
+		if i != len(stores)-1 {
+			_, _ = fmt.Fprintf(&buf, ",")
+		}
 	}
+	_, _ = fmt.Fprintf(&buf, "]")
 
 	// If there are no ranges specified, default to 1 range.
 	if numRanges == 0 {
@@ -233,7 +242,7 @@ func RangesInfoWithDistribution(
 		ret[rngIdx] = rangeInfo
 	}
 
-	return ret
+	return ret, buf.String()
 }
 
 // ClusterInfoWithDistribution returns a ClusterInfo. The ClusterInfo regions
@@ -284,7 +293,7 @@ func makeStoreList(stores int) []StoreID {
 
 func RangesInfoSkewedDistribution(
 	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	distribution := skewedDistribution(stores)
 	storeList := makeStoreList(stores)
 
@@ -295,7 +304,7 @@ func RangesInfoSkewedDistribution(
 
 func RangesInfoWithReplicaCounts(
 	replCounts map[StoreID]int, keyspace, replicationFactor int, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	stores := len(replCounts)
 	counts := make([]int, stores)
 	total := 0
@@ -315,7 +324,7 @@ func RangesInfoWithReplicaCounts(
 
 func RangesInfoEvenDistribution(
 	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	distribution := evenDistribution(stores)
 	storeList := makeStoreList(stores)
 
@@ -333,7 +342,7 @@ func RangesInfoWeightedRandDistribution(
 	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	if randSource == nil || len(weightedStores) == 0 {
 		panic("randSource cannot be nil and weightedStores must be non-empty in order to generate weighted random range info")
 	}
@@ -359,7 +368,7 @@ func RangesInfoRandDistribution(
 	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	if randSource == nil {
 		panic("randSource cannot be nil in order to generate random range info")
 	}
@@ -377,7 +386,7 @@ func RangesInfoRandDistribution(
 
 func RangesInfoWithReplicaPlacement(
 	rp ReplicaPlacement, numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	// If there are no ranges specified, default to 1 range.
 	if numRanges == 0 {
 		numRanges = 1
@@ -385,6 +394,25 @@ func RangesInfoWithReplicaPlacement(
 
 	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
 	result := rp.findReplicaPlacementForEveryStoreSet(numRanges)
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "[")
+	for i, ratio := range result {
+		_, _ = fmt.Fprintf(&buf, "{")
+		for j, sid := range ratio.StoreIDs {
+			_, _ = fmt.Fprintf(&buf, "s%v", sid)
+			if sid == ratio.LeaseholderID {
+				_, _ = fmt.Fprintf(&buf, "*")
+			}
+			if j != len(ratio.StoreIDs)-1 {
+				_, _ = fmt.Fprintf(&buf, ",")
+			}
+		}
+		_, _ = fmt.Fprintf(&buf, "}:%d", ratio.Ranges)
+		if i != len(result)-1 {
+			_, _ = fmt.Fprintf(&buf, ",")
+		}
+	}
+	_, _ = fmt.Fprintf(&buf, "]")
 
 	rf := int(config.NumReplicas)
 
@@ -412,5 +440,5 @@ func RangesInfoWithReplicaPlacement(
 		ret[rngIdx].Leaseholder = StoreID(ratio.LeaseholderID)
 		result[nextStoreSet].Ranges--
 	}
-	return ret
+	return ret, buf.String()
 }
