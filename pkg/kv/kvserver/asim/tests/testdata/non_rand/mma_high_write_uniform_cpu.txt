@@ -25,7 +25,7 @@ gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_k
 setting split_queue_enabled=false
 ----
 
-eval duration=20m samples=1 seed=42 cfgs=(mma-only,both) metrics=(cpu,write_bytes_per_second,replicas,leases)
+eval duration=20m samples=1 seed=42 cfgs=(mma-only,mma-and-count) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=50109583, s2=49628333, s3=50182500, s4=49952500, s5=49919166, s6=49699166, s7=49752916, s8=50564583, s9=50066250, s10=50125000] (stddev=261258.69, mean=49999999.70, sum=499999997)
 leases#1: first: [s1=19, s2=11, s3=6, s4=3, s5=3, s6=3, s7=4, s8=3, s9=4, s10=4] (stddev=4.92, mean=6.00, sum=60)
@@ -40,4 +40,4 @@ leases#1: last:  [s1=10, s2=5, s3=3, s4=3, s5=5, s6=6, s7=8, s8=4, s9=9, s10=7] 
 replicas#1: first: [s1=39, s2=33, s3=23, s4=16, s5=13, s6=12, s7=11, s8=11, s9=11, s10=11] (stddev=9.76, mean=18.00, sum=180)
 replicas#1: last:  [s1=18, s2=18, s3=17, s4=19, s5=19, s6=18, s7=17, s8=18, s9=18, s10=18] (stddev=0.63, mean=18.00, sum=180)
 write_bytes_per_second#1: last:  [s1=6014996, s2=5993243, s3=6011888, s4=5988889, s5=5994900, s6=6012972, s7=5993648, s8=5996647, s9=5990770, s10=5994204] (stddev=9454.23, mean=5999215.70, sum=59992157)
-artifacts[both]: 9411650b130765a1
+artifacts[mma-and-count]: 9411650b130765a1

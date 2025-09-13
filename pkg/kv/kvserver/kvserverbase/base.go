@@ -129,12 +129,13 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		LBRebalancingOff:                 "off",
 		LBRebalancingLeasesOnly:          "leases",
 		LBRebalancingLeasesAndReplicas:   "leases and replicas",
-		LBRebalancingMultiMetricOnly:     "multi-metric",
+		LBRebalancingMultiMetricOnly:     "multi-metric only",
 		LBRebalancingMultiMetricAndCount: "multi-metric and count",
 	},
 	settings.WithPublic,
 	settings.WithValidateEnum(func(enumStr string) error {
-		if buildutil.CrdbTestBuild || enumStr != "multi-metric" || allowMMA {
+		isMMA := enumStr == "multi-metric and count" || enumStr == "multi-metric only"
+		if buildutil.CrdbTestBuild || !isMMA || allowMMA {
 			return nil
 		}
 		return unimplemented.NewWithIssue(
