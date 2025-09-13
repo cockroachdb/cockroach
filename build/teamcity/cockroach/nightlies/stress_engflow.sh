@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-export EXTRA_TEST_ARGS="--config use_ci_timeouts"
+export EXTRA_TEST_ARGS="--config use_ci_timeoutsi --test_env=COCKROACH_NIGHTLY_STRESS=true"
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 
