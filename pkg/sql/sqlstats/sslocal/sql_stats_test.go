@@ -2103,3 +2103,103 @@ func populateSqlStats(t testing.TB, sqlStats *sslocal.SQLStats, expectedCountSta
 	err = sqlStats.AddAppStats(context.Background(), "app", txnContainer)
 	require.NoError(t, err)
 }
+
+// TestTransactionIdleLatencyTracking verifies that ex.extraTxnState.idleLatency
+// is correctly tracked across multiple statements in a transaction.
+func TestTransactionIdleLatencyTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	type capturedStats struct {
+		syncutil.Mutex
+		txnStats      []*sqlstats.RecordedTxnStats
+		stmtCount     int
+		expectedStmts int
+		txnFinished   bool
+	}
+
+	stats := &capturedStats{expectedStmts: 3}
+	waitTxnFinish := make(chan struct{})
+
+	var params base.TestServerArgs
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
+			if isInternal {
+				return
+			}
+			stats.Lock()
+			defer stats.Unlock()
+			stats.stmtCount++
+		},
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, txnStats *sqlstats.RecordedTxnStats) {
+			if isInternal {
+				return
+			}
+			stats.Lock()
+			defer stats.Unlock()
+			stats.txnStats = append(stats.txnStats, txnStats)
+			if stats.stmtCount >= stats.expectedStmts {
+				stats.txnFinished = true
+				close(waitTxnFinish)
+			}
+		},
+	}
+
+	s := serverutils.StartServerOnly(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(s.SQLConn(t))
+
+	// Create a test table
+	db.Exec(t, "CREATE TABLE test_idle (id INT PRIMARY KEY, val TEXT)")
+
+	// Execute a multi-statement transaction with deliberate delays
+	// to accumulate idle latency
+	db.Exec(t, "BEGIN")
+
+	// First statement
+	db.Exec(t, "INSERT INTO test_idle VALUES (1, 'first')")
+
+	// Add a small delay to simulate idle time
+	time.Sleep(10 * time.Second)
+
+	// Second statement
+	db.Exec(t, "INSERT INTO test_idle VALUES (2, 'second')")
+
+	// Add another delay
+	time.Sleep(15 * time.Second)
+
+	// Third statement
+	db.Exec(t, "SELECT COUNT(*) FROM test_idle")
+
+	// Commit to finish the transaction
+	db.Exec(t, "COMMIT")
+
+	// Wait for transaction to be recorded
+	select {
+	case <-waitTxnFinish:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for transaction to finish")
+	}
+
+	stats.Lock()
+	defer stats.Unlock()
+
+	// Verify we captured transaction stats
+	require.True(t, stats.txnFinished, "transaction should have finished")
+	require.NotEmpty(t, stats.txnStats, "should have captured transaction stats")
+
+	// Check the last transaction stats (the multi-statement one)
+	lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
+
+	// Verify idle latency was tracked
+	require.Greater(t, lastTxnStats.IdleLatency, time.Duration(0),
+		"idle latency should be greater than 0 for multi-statement transaction")
+
+	// Verify it's reasonable (should be at least the sleep time we added)
+	expectedMinIdleLatency := 20 * time.Second // conservative estimate
+	require.GreaterOrEqual(t, lastTxnStats.IdleLatency, expectedMinIdleLatency,
+		"idle latency should be at least the accumulated sleep time")
+
+}

@@ -133,6 +133,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := ast.(tree.ObserverStatement); ok {
+		ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
 		// Note that regardless of res.Err(), these observer statements don't
@@ -447,6 +448,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
@@ -1340,6 +1342,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// https://github.com/cockroachdb/cockroach/issues/99625
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
@@ -2295,8 +2298,7 @@ func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context)
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, ast tree.Statement, commitFn func(context.Context) error,
 ) (fsm.Event, fsm.EventPayload) {
-	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
-		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	if ex.sessionData().InjectRetryErrorsOnCommitEnabled && ast.StatementTag() == "COMMIT" {
 		if ex.state.injectedTxnRetryCounter < numTxnRetryErrors {
 			retryErr := ex.state.mu.txn.GenerateForcedRetryableErr(
@@ -2499,8 +2501,7 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 func (ex *connExecutor) rollbackSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
-		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
 		return ex.makeErrEvent(err, stmt)
@@ -3412,6 +3413,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		}
 		return rwMode, now, nil, nil
 	}
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 	if err != nil {
