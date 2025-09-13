@@ -41,6 +41,13 @@ type Histogram struct {
 	selectivity float64
 	buckets     []cat.HistogramBucket
 	col         opt.ColumnID
+	// hasTightUB and hasTightLB indicate whether there are guaranteed upper
+	// bounds on the range of values in the underlying dataset (possibly, though
+	// not necessarily, equal to the upper and lower bounds of the histogram).
+	// This is the case for a histogram derived after a filter that restricts the
+	// column's values to a finite range. Contrast this with the histogram derived
+	// from a table sample, which may miss extreme values or become stale.
+	hasTightUB, hasTightLB bool
 }
 
 func (h *Histogram) String() string {
@@ -63,28 +70,28 @@ func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.
 	}
 }
 
-// bucketCount returns the number of buckets in the histogram.
-func (h *Histogram) bucketCount() int {
+// BucketCount returns the number of buckets in the histogram.
+func (h *Histogram) BucketCount() int {
 	return len(h.buckets)
 }
 
 // numEq returns NumEq for the ith histogram bucket, with the histogram's
 // selectivity applied. i must be greater than or equal to 0 and less than
-// bucketCount.
+// BucketCount.
 func (h *Histogram) numEq(i int) float64 {
 	return h.buckets[i].NumEq * h.selectivity
 }
 
 // numRange returns NumRange for the ith histogram bucket, with the histogram's
 // selectivity applied. i must be greater than or equal to 0 and less than
-// bucketCount.
+// BucketCount.
 func (h *Histogram) numRange(i int) float64 {
 	return h.buckets[i].NumRange * h.selectivity
 }
 
 // distinctRange returns DistinctRange for the ith histogram bucket, with the
 // histogram's selectivity applied. i must be greater than or equal to 0 and
-// less than bucketCount.
+// less than BucketCount.
 func (h *Histogram) distinctRange(i int) float64 {
 	n := h.buckets[i].NumRange
 	d := h.buckets[i].DistinctRange
@@ -104,7 +111,7 @@ func (h *Histogram) distinctRange(i int) float64 {
 }
 
 // upperBound returns UpperBound for the ith histogram bucket. i must be
-// greater than or equal to 0 and less than bucketCount.
+// greater than or equal to 0 and less than BucketCount.
 func (h *Histogram) upperBound(i int) tree.Datum {
 	return h.buckets[i].UpperBound
 }
@@ -119,6 +126,16 @@ func (h *Histogram) ValuesCount() float64 {
 		count += h.numEq(i)
 	}
 	return count
+}
+
+// TightBounds returns whether the histogram has been constrained such that
+// there are guaranteed finite upper and lower bounds on the values in the
+// histogram column. Note that the guaranteed bounds may not match the
+// histogram's maximum and minimum values. This information can be used to
+// determine how to clamp row-count estimates for inequality filters to avoid
+// over-fitting on stale or inaccurate histograms.
+func (h *Histogram) TightBounds() (tightUpper, tightLower bool) {
+	return h.hasTightUB, h.hasTightLB
 }
 
 // EqEstimate returns the estimated number of rows that equal the given
@@ -307,6 +324,33 @@ func (h *Histogram) CanFilter(
 	return 0, exactPrefix, false
 }
 
+// checkSpanBounds determines whether the given spans bound the histogram column
+// above and below. This can be used to determine how to clamp row-count
+// estimates for inequality filters to avoid over-fitting on stale or inaccurate
+// histograms.
+func checkSpanBounds(
+	spanCount int, getSpan func(int) *constraint.Span, desc bool, colOffset int,
+) (hasUpperBound, hasLowerBound bool) {
+	if spanCount == 0 {
+		return false, false
+	}
+	firstSpan := getSpan(0)
+	lastSpan := getSpan(spanCount - 1)
+	hasBound := func(key constraint.Key) bool {
+		// A NULL value is not considered a bound in this context, since they order
+		// before (or after) all non-NULL values and are not included in histograms.
+		return key.Length() > colOffset && key.Value(colOffset) != tree.DNull
+	}
+	if desc {
+		hasUpperBound = hasBound(firstSpan.StartKey())
+		hasLowerBound = hasBound(lastSpan.EndKey())
+	} else {
+		hasLowerBound = hasBound(firstSpan.StartKey())
+		hasUpperBound = hasBound(lastSpan.EndKey())
+	}
+	return hasUpperBound, hasLowerBound
+}
+
 func (h *Histogram) filter(
 	ctx context.Context,
 	spanCount int,
@@ -316,11 +360,20 @@ func (h *Histogram) filter(
 	prefix []tree.Datum,
 	columns constraint.Columns,
 ) *Histogram {
-	bucketCount := h.bucketCount()
+	bucketCount := h.BucketCount()
 	filtered := &Histogram{
 		evalCtx:     h.evalCtx,
 		col:         h.col,
 		selectivity: h.selectivity,
+		hasTightLB:  h.hasTightLB,
+		hasTightUB:  h.hasTightUB,
+	}
+	spanUB, spanLB := checkSpanBounds(spanCount, getSpan, desc, colOffset)
+	if spanUB {
+		filtered.hasTightUB = true
+	}
+	if spanLB {
+		filtered.hasTightLB = true
 	}
 	if bucketCount == 0 {
 		return filtered
@@ -645,7 +698,7 @@ func (hi *histogramIter) init(h *Histogram, desc bool) {
 		desc: desc,
 	}
 	if desc {
-		hi.idx = h.bucketCount()
+		hi.idx = h.BucketCount()
 	}
 	hi.next()
 }
@@ -689,7 +742,7 @@ func (hi *histogramIter) next() (ok bool) {
 		hi.eub, hi.ub, hi.elb, hi.lb = getBounds()
 	} else {
 		hi.idx++
-		if hi.idx >= hi.h.bucketCount() {
+		if hi.idx >= hi.h.BucketCount() {
 			return false
 		}
 		// If iter.desc=false, the lower bounds are less than the upper bounds.
