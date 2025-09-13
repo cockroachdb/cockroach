@@ -118,6 +118,7 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),
 		Suites:                     registry.Suites(registry.Nightly),
+		Skip:                       "153489. uses ancient tpch fixture",
 		RequiresDeprecatedWorkload: true, // uses querybench
 		PostProcessPerfMetrics: func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 
