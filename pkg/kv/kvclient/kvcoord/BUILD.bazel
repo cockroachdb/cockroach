@@ -122,10 +122,6 @@ gomock(
     ],
 )
 
-# This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
-#
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord //build/bazelutil:noop
-
 go_test(
     name = "kvcoord_test",
     size = "large",
@@ -174,7 +170,6 @@ go_test(
     }),
     shard_count = 16,
     deps = [
-        "//build/bazelutil:noop",
         "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",
