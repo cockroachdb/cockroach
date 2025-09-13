@@ -1517,6 +1517,8 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/asim/state:state_test",
     "//pkg/kv/kvserver/asim/storerebalancer:storerebalancer",
     "//pkg/kv/kvserver/asim/storerebalancer:storerebalancer_test",
+    "//pkg/kv/kvserver/asim/tests/cmd/asimview:asimview",
+    "//pkg/kv/kvserver/asim/tests/cmd/asimview:asimview_lib",
     "//pkg/kv/kvserver/asim/tests:tests",
     "//pkg/kv/kvserver/asim/tests:tests_test",
     "//pkg/kv/kvserver/asim/workload:workload",
