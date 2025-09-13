@@ -588,12 +588,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-seclabel.html"
 pg_catalog,pg_seclabels,table,node,permanent,prefix,"security labels (empty)
 https://www.postgresql.org/docs/9.6/view-pg-seclabels.html"
 pg_catalog,pg_sequence,table,node,permanent,prefix,"sequences (see also information_schema.sequences)
-https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html"
+https://www.postgresql.org/docs/10/catalog-pg-sequence.html"
 pg_catalog,pg_sequences,table,node,permanent,prefix,"pg_sequences is very similar as pg_sequence.
 https://www.postgresql.org/docs/13/view-pg-sequences.html
 "
 pg_catalog,pg_settings,table,node,permanent,prefix,"session variables (incomplete)
-https://www.postgresql.org/docs/9.5/catalog-pg-settings.html"
+https://www.postgresql.org/docs/9.5/view-pg-settings.html"
 pg_catalog,pg_shadow,table,node,permanent,prefix,"pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
 https://www.postgresql.org/docs/13/view-pg-shadow.html"
 pg_catalog,pg_shdepend,table,node,permanent,prefix,"Shared Dependencies (Roles depending on objects). 
