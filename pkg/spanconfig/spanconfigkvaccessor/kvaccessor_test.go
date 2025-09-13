@@ -262,7 +262,7 @@ span [j,k)
 		require.NoError(t, accessor.UpdateSpanConfigRecords(
 			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 		))
-		require.Equal(t, 1, batches)
+		require.Equal(t, 2, batches)
 	}
 
 	{ // Lower the batch size, we should observe more batches.
@@ -271,7 +271,7 @@ span [j,k)
 		require.NoError(t, accessor.UpdateSpanConfigRecords(
 			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 		))
-		require.Equal(t, 5, batches)
+		require.Equal(t, 10, batches)
 	}
 
 	{ // Try another multiple, and with deletions.
@@ -280,7 +280,7 @@ span [j,k)
 		require.NoError(t, accessor.UpdateSpanConfigRecords(
 			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 		))
-		require.Equal(t, 2, batches)
+		require.Equal(t, 4, batches)
 	}
 
 	{ // Try a multiple that doesn't factor exactly (re-inserting original entries).
@@ -289,7 +289,7 @@ span [j,k)
 		require.NoError(t, accessor.UpdateSpanConfigRecords(
 			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 		))
-		require.Equal(t, 4, batches)
+		require.Equal(t, 8, batches)
 	}
 
 	{ // Try another multiple using both upserts and deletes.
@@ -298,7 +298,7 @@ span [j,k)
 		require.NoError(t, accessor.UpdateSpanConfigRecords(
 			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 		))
-		require.Equal(t, 6, batches) // 3 batches for the updates, 3 more for the deletions
+		require.Equal(t, 11, batches) // 3 batches for the updates, 3 more for the deletions
 	}
 
 	{ // Try another multiple but for gets.

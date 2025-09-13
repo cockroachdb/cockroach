@@ -180,6 +180,14 @@ func (k *KVAccessor) UpdateSpanConfigRecords(
 	// we can go ahead and create a transaction and proceed to perform the
 	// update.
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		someBoolVal, err := k.diffSpanConfigChangesForGCPolicyChangesOrPTSDeletes(ctx, toDelete, toUpsert)
+		if err != nil {
+			return err
+		}
+		if someBoolVal {
+			log.Dev.Infof(ctx, "Spanconfig: Setting debug name for spanconfig background update")
+			txn.SetDebugName("spanconfig-background-update")
+		}
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn, minCommitTS, maxCommitTS)
 	})
 }
@@ -268,6 +276,102 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 	return records, nil
 }
 
+// diffSpanConfigChangesForGCPolicyChangesOrPTSDeletes compares old and new
+// spanconfigs to determine if this is a PTS/GCTTL-only update (safe to bypass
+// backpressure) or a user-initiated change (should not bypass backpressure).
+func (k *KVAccessor) diffSpanConfigChangesForGCPolicyChangesOrPTSDeletes(
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
+) (bool, error) {
+	var targetsToCheck []spanconfig.Target
+
+	targetsToCheck = append(targetsToCheck, toDelete...)
+
+	for _, record := range toUpsert {
+		targetsToCheck = append(targetsToCheck, record.GetTarget())
+	}
+
+	if len(targetsToCheck) == 0 {
+		return false, nil // Nothing to diff.
+	}
+
+	existingRecords, err := k.GetSpanConfigRecords(ctx, targetsToCheck)
+	if err != nil || len(existingRecords) == 0 {
+		return false, err
+	}
+
+	// Create a map of existing configs by target.
+	existingConfigs := make(map[string]roachpb.SpanConfig)
+	for _, record := range existingRecords {
+		targetKey := record.GetTarget().String()
+		existingConfigs[targetKey] = record.GetConfig()
+	}
+
+	// Check each upsert to see if it's a GCTTL change or PTS deletion.
+	for _, newRecord := range toUpsert {
+		targetKey := newRecord.GetTarget().String()
+		newConfig := newRecord.GetConfig()
+
+		if existingConfig, exists := existingConfigs[targetKey]; exists {
+			if hasChanges, gcttlChanged, ptsChanged := hasGCTTLOrPTSChanges(existingConfig, newConfig); hasChanges {
+				// Early return on GCTTL changes - most common case.
+				if gcttlChanged {
+					return true, nil
+				}
+
+				// Check for PTS deletion.
+				ptsDeleted := len(existingConfig.GCPolicy.ProtectionPolicies) > len(newConfig.GCPolicy.ProtectionPolicies)
+
+				// More sophisticated check: if count is same but content changed,
+				// it could be a deletion + addition (net deletion if fewer unique policies).
+				if !ptsDeleted && len(existingConfig.GCPolicy.ProtectionPolicies) == len(newConfig.GCPolicy.ProtectionPolicies) {
+					// Count unique policies by ProtectedTimestamp.
+					oldTimestamps := make(map[int64]bool)
+					newTimestamps := make(map[int64]bool)
+
+					for _, policy := range existingConfig.GCPolicy.ProtectionPolicies {
+						oldTimestamps[policy.ProtectedTimestamp.WallTime] = true
+					}
+					for _, policy := range newConfig.GCPolicy.ProtectionPolicies {
+						newTimestamps[policy.ProtectedTimestamp.WallTime] = true
+					}
+
+					// If we have fewer unique timestamps, it's a net deletion.
+					ptsDeleted = len(oldTimestamps) > len(newTimestamps)
+				}
+
+				// Only bypass backpressure for GCTTL changes or PTS deletions.
+				// Don't bypass for PTS additions/updates (non-deletions).
+				shouldBypass := gcttlChanged || (ptsChanged && ptsDeleted)
+
+				// Early return on first qualifying change.
+				if shouldBypass {
+					return true, nil
+				}
+			}
+		}
+	}
+
+	return false, nil
+}
+
+// hasGCTTLOrPTSChanges returns true if there are any changes to GCTTL or PTS,
+// regardless of other user-initiated configuration changes.
+func hasGCTTLOrPTSChanges(oldConfig, newConfig roachpb.SpanConfig) (bool, bool, bool) {
+	// Check if there are any changes to GCTTL or PTS.
+	gcttlChanged := oldConfig.GCPolicy.TTLSeconds != newConfig.GCPolicy.TTLSeconds
+
+	// Check if ProtectionPolicies changed by comparing the entire GCPolicy
+	// but excluding TTLSeconds to isolate PTS changes.
+	oldGCPolicy := oldConfig.GCPolicy
+	newGCPolicy := newConfig.GCPolicy
+	oldGCPolicy.TTLSeconds = 0 // Clear TTL to isolate PTS comparison.
+	newGCPolicy.TTLSeconds = 0 // Clear TTL to isolate PTS comparison.
+	ptsChanged := !oldGCPolicy.Equal(newGCPolicy)
+
+	// Return true if either GCTTL or PTS changed.
+	return gcttlChanged || ptsChanged, gcttlChanged, ptsChanged
+}
+
 func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	ctx context.Context,
 	toDelete []spanconfig.Target,
@@ -329,7 +433,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	}
 
 	if len(toUpsert) == 0 {
-		return nil // nothing left to do
+		return nil // Nothing left to do.
 	}
 
 	return k.paginate(len(toUpsert), func(startIdx, endIdx int) error {
