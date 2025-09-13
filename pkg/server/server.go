@@ -1184,6 +1184,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storesForRACv2,
 		node.storeCfg.KVFlowStreamTokenProvider,
 		kvserver.MakeStoresForStoreLiveness(stores),
+		kvserver.MakeStoresForRangefeeds(stores),
 	)
 	if err = cfg.CidrLookup.Start(ctx, stopper); err != nil {
 		return nil, err
