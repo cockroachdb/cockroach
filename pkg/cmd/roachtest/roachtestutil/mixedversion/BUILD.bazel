@@ -73,6 +73,7 @@ go_test(
         "//pkg/roachprod/vm",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/release",
+        "//pkg/testutils/skip",
         "//pkg/util/intsets",
         "//pkg/util/randutil",
         "//pkg/util/retry",
