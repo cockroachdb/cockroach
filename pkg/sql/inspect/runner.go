@@ -52,6 +52,28 @@ type inspectLogger interface {
 	hasIssues() bool
 }
 
+type inspectLoggers []inspectLogger
+
+var _ inspectLogger = inspectLoggers{}
+
+func (l inspectLoggers) logIssue(ctx context.Context, issue *inspectIssue) error {
+	for _, logger := range l {
+		if err := logger.logIssue(ctx, issue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l inspectLoggers) hasIssues() bool {
+	for _, logger := range l {
+		if logger.hasIssues() {
+			return true
+		}
+	}
+	return false
+}
+
 // inspectRunner coordinates the execution of a set of inspectChecks.
 //
 // It manages the lifecycle of each check, including initialization,
