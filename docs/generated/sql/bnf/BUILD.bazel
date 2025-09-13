@@ -264,6 +264,7 @@ FILES = [
     "show_keys",
     "show_locality",
     "show_locality_stmt",
+    "show_inspect_errors_stmt",
     "show_partitions_stmt",
     "show_range_for_row_stmt",
     "show_ranges_stmt",

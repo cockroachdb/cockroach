@@ -270,6 +270,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:show_functions_stmt.bnf",
     "//docs/generated/sql/bnf:show_grants_stmt.bnf",
     "//docs/generated/sql/bnf:show_indexes_stmt.bnf",
+    "//docs/generated/sql/bnf:show_inspect_errors_stmt.bnf",
     "//docs/generated/sql/bnf:show_jobs.bnf",
     "//docs/generated/sql/bnf:show_keys.bnf",
     "//docs/generated/sql/bnf:show_locality.bnf",

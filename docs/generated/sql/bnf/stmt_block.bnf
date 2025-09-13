@@ -328,6 +328,7 @@ show_stmt ::=
 	| show_zone_stmt
 	| show_full_scans_stmt
 	| show_default_privileges_stmt
+	| show_inspect_errors_stmt
 
 truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
@@ -998,7 +999,7 @@ show_sessions_stmt ::=
 	| 'SHOW' 'ALL' opt_cluster 'SESSIONS'
 
 show_stats_stmt ::=
-	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name opt_with_options
+	'SHOW' 'STATISTICS' 'FOR_TABLE' 'TABLE' table_name opt_with_options
 
 show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name with_comment
@@ -1042,6 +1043,9 @@ show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'GRANTEE' role_spec_list opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schema
+
+show_inspect_errors_stmt ::=
+	'SHOW' 'INSPECT' 'ERRORS' opt_for_table_clause opt_for_job_clause opt_with_details
 
 opt_table ::=
 	'TABLE'
@@ -1201,6 +1205,7 @@ unreserved_keyword ::=
 	| 'ENCRYPTION_INFO_DIR'
 	| 'ENUM'
 	| 'ENUMS'
+	| 'ERRORS'
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
@@ -1459,6 +1464,7 @@ unreserved_keyword ::=
 	| 'ROUTINES'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUN'
 	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
@@ -2208,6 +2214,18 @@ opt_for_roles ::=
 
 opt_in_schema ::=
 	'IN' 'SCHEMA' schema_name
+	| 
+
+opt_for_table_clause ::=
+	'FOR_TABLE' 'TABLE' table_name
+	| 
+
+opt_for_job_clause ::=
+	'FOR_JOB' 'JOB' iconst64
+	| 
+
+opt_with_details ::=
+	'WITH' 'DETAILS'
 	| 
 
 relation_expr ::=
@@ -4107,6 +4125,7 @@ bare_label_keywords ::=
 	| 'END'
 	| 'ENUM'
 	| 'ENUMS'
+	| 'ERRORS'
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
@@ -4417,6 +4436,7 @@ bare_label_keywords ::=
 	| 'ROW'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUN'
 	| 'RUNNING'
 	| 'SAVEPOINT'
 	| 'SCANS'
