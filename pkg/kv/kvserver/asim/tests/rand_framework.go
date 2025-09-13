@@ -118,7 +118,7 @@ func (f randTestingFramework) runRandTest() testResult {
 	staticSettings := f.getStaticSettings()
 	staticEvents := f.getStaticEvents(cluster, staticSettings)
 	seed := f.s.randSource.Int63()
-	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
+	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed, nil)
 	initialStateStr, initialTime := simulator.State().PrettyPrint(), simulator.Curr()
 	simulator.RunSim(ctx)
 	history := simulator.History()
