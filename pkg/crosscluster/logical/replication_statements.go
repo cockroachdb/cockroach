@@ -23,6 +23,14 @@ type columnSchema struct {
 	isComputed   bool
 }
 
+func toDatumTypes(input []*types.T) ([]*types.T, error) {
+	datumTypes := make([]*types.T, 0, len(input))
+	for _, t := range input {
+		datumTypes = append(datumTypes, t.Canonical())
+	}
+	return datumTypes, nil
+}
+
 // getColumnSchema returns the list of all columns that is decoded by the CRUD
 // writer. It returns columns in column key order. The crud writer passes
 // around a tree.Datums for each row where column[i] is the column definition
@@ -86,11 +94,11 @@ func newTypedPlaceholder(idx int, col catalog.Column) (*tree.CastExpr, error) {
 // in the table. Parameters are ordered by column ID.
 func newInsertStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	columns := getColumnSchema(table)
-
 	columnNames := make(tree.NameList, 0, len(columns))
 	parameters := make(tree.Exprs, 0, len(columns))
+	paramTypes := make([]*types.T, 0, len(columns))
 	for i, col := range columns {
 		// NOTE: this consumes a placholder ID because its part of the tree.Datums,
 		// but it doesn't show up in the query because computed columns are not
@@ -102,11 +110,14 @@ func newInsertStatement(
 		var err error
 		parameter, err := newTypedPlaceholder(i+1, col.column)
 		if err != nil {
-			return statements.Statement[tree.Statement]{}, err
+			return statements.Statement[tree.Statement]{}, nil, err
 		}
 
 		columnNames = append(columnNames, tree.Name(col.column.GetName()))
 		parameters = append(parameters, parameter)
+	}
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.column.GetType())
 	}
 
 	parameterValues := &tree.ValuesClause{
@@ -129,7 +140,15 @@ func newInsertStatement(
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return toParsedStatement(insert)
+	stmt, err := toParsedStatement(insert)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
 }
 
 // newMatchesLastRow creates a WHERE clause for matching all columns of a row.
@@ -183,16 +202,16 @@ func newMatchesLastRow(columns []columnSchema, startParamIdx int) (tree.Expr, er
 // Parameters are ordered by column ID.
 func newUpdateStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	columns := getColumnSchema(table)
-
 	// Create WHERE clause for matching the previous row values
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
 	}
 
 	exprs := make(tree.UpdateExprs, 0, len(columns))
+	paramTypes := make([]*types.T, 0, 2*len(columns))
 	for i, col := range columns {
 		if col.isComputed {
 			// Skip computed columns since they are not needed to fully specify the
@@ -208,13 +227,22 @@ func newUpdateStatement(
 		// are for the where clause.
 		placeholder, err := newTypedPlaceholder(len(columns)+i+1, col.column)
 		if err != nil {
-			return statements.Statement[tree.Statement]{}, err
+			return statements.Statement[tree.Statement]{}, nil, err
 		}
 
 		exprs = append(exprs, &tree.UpdateExpr{
 			Names: names,
 			Expr:  placeholder,
 		})
+	}
+
+	// Add parameter types for WHERE clause (previous values)
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.column.GetType())
+	}
+	// Add parameter types for SET clause (new values)
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.column.GetType())
 	}
 
 	// Create the final update statement
@@ -228,7 +256,15 @@ func newUpdateStatement(
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return toParsedStatement(update)
+	stmt, err := toParsedStatement(update)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
 }
 
 // newDeleteStatement returns a statement that can be used to delete a row from
@@ -239,13 +275,19 @@ func newUpdateStatement(
 // Parameters are ordered by column ID.
 func newDeleteStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	columns := getColumnSchema(table)
 
 	// Create WHERE clause for matching the row to delete
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+
+	// Create parameter types for WHERE clause
+	paramTypes := make([]*types.T, 0, len(columns))
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.column.GetType())
 	}
 
 	// Create the final delete statement
@@ -261,7 +303,15 @@ func newDeleteStatement(
 		Returning: &tree.ReturningExprs{tree.StarSelectExpr()},
 	}
 
-	return toParsedStatement(delete)
+	stmt, err := toParsedStatement(delete)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
 }
 
 // newBulkSelectStatement returns a statement that can be used to query
@@ -289,7 +339,7 @@ func newDeleteStatement(
 //			AND replication_target.secondary_id = key_list.key2
 func newBulkSelectStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	cols := getColumnSchema(table)
 	primaryKeyColumns := make([]catalog.Column, 0, len(cols))
 	for _, col := range cols {
@@ -298,17 +348,23 @@ func newBulkSelectStatement(
 		}
 	}
 
+	// Create parameter types for primary key arrays
+	paramTypes := make([]*types.T, 0, len(primaryKeyColumns))
+	for _, pkCol := range primaryKeyColumns {
+		paramTypes = append(paramTypes, types.MakeArray(pkCol.GetType()))
+	}
+
 	// keyListName is the name of the CTE that contains the primary keys supplied
 	// via array parameters.
 	keyListName, err := tree.NewUnresolvedObjectName(1, [3]string{"key_list"}, tree.NoAnnotation)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
 	}
 
 	// targetName is used to name the user's table.
 	targetName, err := tree.NewUnresolvedObjectName(1, [3]string{"replication_target"}, tree.NoAnnotation)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
 	}
 
 	// Create the `SELECT unnest($1::[]INT, $2::[]INT) WITH ORDINALITY AS key_list(key1, key2, index)` table expression.
@@ -430,7 +486,37 @@ func newBulkSelectStatement(
 		},
 	}
 
-	return toParsedStatement(selectStmt)
+	stmt, err := toParsedStatement(selectStmt)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
+}
+
+func setOriginTimestampStatement() (statements.Statement[tree.Statement], []*types.T, error) {
+	placeholder, err := tree.NewPlaceholder(fmt.Sprintf("%d", 1))
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	set := &tree.SetVar{
+		Name: "crdb_internal_origin_timestamp",
+		Values: tree.Exprs{
+			&tree.CastExpr{
+				Expr:       placeholder,
+				Type:       types.String,
+				SyntaxMode: tree.CastShort,
+			},
+		},
+	}
+	stmt, err := toParsedStatement(set)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, []*types.T{types.String}, nil
 }
 
 func toParsedStatement(stmt tree.Statement) (statements.Statement[tree.Statement], error) {

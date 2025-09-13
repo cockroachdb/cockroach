@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,5 +49,32 @@ loop:
 			s += fmt.Sprintf("%s (%d) ", types.Family_name[int32(f)], f)
 		}
 		t.Fatal(errors.Errorf("%s", s))
+	}
+}
+
+func TestCanonical(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewTestRand()
+	for range 1000 {
+		typ := RandType(rng)
+
+		if !typ.Canonical().Equivalent(typ.WithoutTypeModifiers()) {
+			t.Fail()
+			t.Logf("fail: canonical type of %+v should be equivalent to the type without modifiers", typ)
+		}
+
+		datum := RandDatum(rng, typ, false)
+		datumTyp := datum.ResolvedType()
+		if !datumTyp.Equivalent(typ.Canonical()) {
+			t.Fail()
+			t.Logf("fail: canonical type of %+v is %+v and the datum's type is %+v", typ, typ.Canonical(), datumTyp)
+		}
+
+		if datumTyp.Oid() != typ.Canonical().Oid() {
+			t.Fail()
+			t.Logf("fail type %+v: canonical type oid %d does not match the datum's (%+v) oid %+v",
+				typ, typ.Canonical().Oid(), datum, datumTyp.Oid())
+		}
 	}
 }

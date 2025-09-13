@@ -4367,7 +4367,6 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
-
 	// CockroachDB extension.
 	`allow_unsafe_internals`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`allow_unsafe_internals`),
@@ -4400,7 +4399,38 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 			), nil
 		},
+	},
+	// CockroachDB extension.
+	`use_swap_mutations`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_swap_mutations`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_swap_mutations", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseSwapMutations(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseSwapMutations), nil
+		},
 		GlobalDefault: globalTrue,
+	},
+	`crdb_internal_origin_timestamp`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ts := evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+			if !ts.IsSet() {
+				return "", nil
+			}
+			return ts.AsOfSystemTime(), nil
+		},
+		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
+			// TODO: only allow this to be set by LDR.
+			return m.SetOriginTimestampForLogicalDataReplication(s)
+		},
+		GlobalDefault: func(_ *settings.Values) string {
+			return ""
+		},
 	},
 }
 
