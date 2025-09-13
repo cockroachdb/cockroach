@@ -1002,7 +1002,7 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	attemptsMade := 0
 	for {
 		// Acquire a fresh lease.
-		didAcquire, err := acquireNodeLease(ctx, m, id, AcquireFreshestBlock)
+		didAcquire, err := m.acquireNodeLease(ctx, id, AcquireFreshestBlock)
 		if err != nil {
 			return err
 		}
@@ -1024,8 +1024,8 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 // being dropped or offline, the error will be of type inactiveTableError.
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
-func acquireNodeLease(
-	ctx context.Context, m *Manager, id descpb.ID, typ AcquireType,
+func (m *Manager) acquireNodeLease(
+	ctx context.Context, id descpb.ID, typ AcquireType,
 ) (bool, error) {
 	start := timeutil.Now()
 	log.VEventf(ctx, 2, "acquiring lease for descriptor %d...", id)
@@ -1037,7 +1037,7 @@ func acquireNodeLease(
 		},
 		func(ctx context.Context) (interface{}, error) {
 			if m.IsDraining() {
-				return nil, errLeaseManagerIsDraining
+				return false, errLeaseManagerIsDraining
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
@@ -1051,26 +1051,75 @@ func acquireNodeLease(
 			if err != nil {
 				return false, errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
 			}
-			desc, regionPrefix, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
-			if err != nil {
-				return nil, err
+
+			doAcquisition := func() (catalog.Descriptor, error) {
+				desc, _, err := m.storage.acquire(ctx, session, id, currentVersion, currentSessionID)
+				if err != nil {
+					return nil, err
+				}
+
+				return desc, nil
 			}
-			// If a nil descriptor is returned, then the latest version has already
-			// been leased. So, nothing needs to be done here.
-			if desc == nil {
-				return true, nil
+
+			doUpsertion := func(desc catalog.Descriptor) error {
+				t := m.findDescriptorState(id, false /* create */)
+				if t == nil {
+					return errors.AssertionFailedf("could not find descriptor state for id %d", id)
+				}
+				t.mu.Lock()
+				t.mu.takenOffline = false
+				defer t.mu.Unlock()
+				err = t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
+				if err != nil {
+					return err
+				}
+
+				return nil
 			}
-			t := m.findDescriptorState(id, false /* create */)
-			if t == nil {
-				return nil, errors.AssertionFailedf("could not find descriptor state for id %d", id)
+
+			// These tables are special and can have their versions bumped
+			// without blocking on other nodes converging to that version.
+			if newest != nil && (id == keys.UsersTableID ||
+				id == keys.RoleMembersTableID ||
+				id == keys.RoleOptionsTableID ||
+				m.isMaybeSystemPrivilegesTable(ctx, id)) {
+
+				// The two-version invariant allows an update in lease manager
+				// without (immediately) acquiring a new lease. This prevents
+				// a race on where the lease is acquired but the manager isn't
+				// yet updated.
+				desc, err := m.maybeGetDescriptorWithoutValidation(ctx, id, true /* existenceRequired */)
+				if err != nil {
+					return false, err
+				}
+				err = doUpsertion(desc)
+				if err != nil {
+					return false, err
+				}
+
+				desc, err = doAcquisition()
+				if err != nil {
+					return false, err
+				}
+				if desc == nil {
+					return true, nil
+				}
+			} else {
+				desc, err := doAcquisition()
+				if err != nil {
+					return false, err
+				}
+				// If a nil descriptor is returned, then the latest version has already
+				// been leased. So, nothing needs to be done here.
+				if desc == nil {
+					return true, nil
+				}
+				err = doUpsertion(desc)
+				if err != nil {
+					return false, err
+				}
 			}
-			t.mu.Lock()
-			t.mu.takenOffline = false
-			defer t.mu.Unlock()
-			err = t.upsertLeaseLocked(ctx, desc, session, regionPrefix)
-			if err != nil {
-				return nil, err
-			}
+
 			return true, nil
 		})
 	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
@@ -1082,6 +1131,25 @@ func acquireNodeLease(
 	}
 	log.VEventf(ctx, 2, "acquired lease for descriptor %d, took %v", id, timeutil.Since(start))
 	return didAcquire, nil
+}
+
+var systemPrivilegesTableDescID descpb.ID = descpb.InvalidID
+var setSystemPrivilegesTableDescID sync.Once
+
+// isMaybeSystemPrivilegesTable tries to determine if the given descriptor is
+// for the system privileges table. It depends on the namecache to resolve the
+// descriptor ID after which the ID is memoized.
+func (m *Manager) isMaybeSystemPrivilegesTable(ctx context.Context, desc descpb.ID) bool {
+	if systemPrivilegesTableDescID == descpb.InvalidID {
+		if privilegesDesc, _ := m.names.get(ctx, keys.SystemDatabaseID, keys.SystemPublicSchemaID, "privileges", hlc.Timestamp{}); privilegesDesc != nil {
+			setSystemPrivilegesTableDescID.Do(func() {
+				systemPrivilegesTableDescID = privilegesDesc.GetID()
+			})
+			privilegesDesc.Release(ctx)
+		}
+	}
+
+	return desc == systemPrivilegesTableDescID
 }
 
 // releaseLease deletes an entry from system.lease.
@@ -1729,7 +1797,7 @@ func (m *Manager) Acquire(
 				t.markAcquisitionStart(ctx)
 				defer t.markAcquisitionDone(ctx)
 				// Renew lease and retry. This will block until the lease is acquired.
-				_, errLease := acquireNodeLease(ctx, m, id, AcquireBlock)
+				_, errLease := m.acquireNodeLease(ctx, id, AcquireBlock)
 				return errLease
 			}(); err != nil {
 				return nil, err
@@ -2371,7 +2439,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, refreshAndPurgeAllDescr
 						return
 					}
 				}
-				if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
+				if _, err := m.acquireNodeLease(ctx, id, AcquireBackground); err != nil {
 					log.Dev.Errorf(ctx, "refreshing descriptor: %d lease failed: %s", id, err)
 
 					if errors.Is(err, catalog.ErrDescriptorNotFound) || errors.Is(err, catalog.ErrDescriptorDropped) {

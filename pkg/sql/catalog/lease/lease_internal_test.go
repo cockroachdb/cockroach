@@ -571,8 +571,8 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 	expiration := lease.Expiration(context.Background())
 	// Acquire another lease.
-	if _, err := acquireNodeLease(
-		context.Background(), leaseManager, tableDesc.GetID(), AcquireBlock,
+	if _, err := leaseManager.acquireNodeLease(
+		context.Background(), tableDesc.GetID(), AcquireBlock,
 	); err != nil {
 		t.Fatal(err)
 	}

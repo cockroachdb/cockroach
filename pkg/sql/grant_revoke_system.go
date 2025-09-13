@@ -128,10 +128,11 @@ VALUES ($1, $2, $3, $4, (
 					return err
 				}
 				userPrivs, found := syntheticPrivDesc.FindUser(user)
+				emptyPrivs := !found || userPrivs.Privileges == 0
 
 				// For Public role and virtual tables, leave an empty
 				// row to indicate that SELECT has been revoked.
-				if !found && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
+				if emptyPrivs && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
 					_, err := params.p.InternalSQLTxn().ExecEx(
 						params.ctx,
 						`insert-system-privilege`,
@@ -151,7 +152,7 @@ VALUES ($1, $2, $3, $4, (
 
 				// If there are no entries remaining on the PrivilegeDescriptor for the user
 				// we can remove the entire row for the user.
-				if !found {
+				if emptyPrivs {
 					_, err := params.p.InternalSQLTxn().ExecEx(
 						params.ctx,
 						`delete-system-privilege`,

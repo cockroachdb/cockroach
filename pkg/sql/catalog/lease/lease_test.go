@@ -557,16 +557,7 @@ func TestWaitForNewVersion(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
-	skip.WithIssue(testingT, 152051)
-
 	var params base.TestClusterArgs
-	params.ServerArgs.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &lease.ManagerTestingKnobs{
-			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
-				LeaseAcquiredEvent: nil, // TODO
-			},
-		},
-	}
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
@@ -589,7 +580,10 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		defer cancel()
 
 		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, nil, retry.Options{})
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		if !(sqltestutils.IsClientSideQueryCanceledErr(err) ||
+			errors.Is(err, context.DeadlineExceeded)) {
+			t.Fatalf("The client or the context should have timed out. Unexpected error: %v", err)
+		}
 	}
 
 	t.mustAcquire(3, descID)
