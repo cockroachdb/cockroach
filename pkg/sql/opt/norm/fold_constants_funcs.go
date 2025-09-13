@@ -338,7 +338,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			if err != nil {
 				return nil, false, err
 			}
-			oid, ok := tree.AsDOid(cDatum)
+			oid, ok := cDatum.(*tree.DOid)
 			if !ok {
 				return nil, false, nil
 			}

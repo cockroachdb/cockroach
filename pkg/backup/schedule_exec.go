@@ -544,12 +544,12 @@ func getBackupFnTelemetry(
 			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
 		}
 
-		jobID, ok := tree.AsDInt(jobIDDatum)
+		jobID, ok := jobIDDatum.(*tree.DInt)
 		if !ok {
 			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
 		}
 
-		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(*jobID), txn)
 		if err != nil {
 			return jobspb.BackupDetails{}, errors.Wrap(err, "failed to load dry-run backup job")
 		}

@@ -825,7 +825,7 @@ func readOneJSONValue(row cdcevent.Row, colName string) (*tree.DJSON, error) {
 		if d == tree.DNull {
 			return nil
 		}
-		if valJSON, ok = tree.AsDJSON(d); !ok {
+		if valJSON, ok = d.(*tree.DJSON); !ok {
 			return errors.Newf("expected a JSON object, got %s", d.ResolvedType())
 		}
 		return nil

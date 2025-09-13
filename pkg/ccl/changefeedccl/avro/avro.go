@@ -450,7 +450,11 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 		setNullable(
 			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
-				return string(*d.(*tree.DString)), nil
+				s, ok := tree.AsDString(d)
+				if !ok {
+					return nil, errors.Newf("expected string type, got %T", d)
+				}
+				return string(s), nil
 			},
 			func(x interface{}) (tree.Datum, error) {
 				return tree.NewDString(x.(string)), nil
@@ -460,7 +464,11 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 		setNullable(
 			SchemaTypeString,
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
-				return d.(*tree.DCollatedString).Contents, nil
+				cs, ok := tree.AsDCollatedString(d)
+				if !ok {
+					return nil, errors.Newf("expected collated string type, got %T", d)
+				}
+				return cs.Contents, nil
 			},
 			func(x interface{}) (tree.Datum, error) {
 				return tree.NewDCollatedString(x.(string), typ.Locale(), &tree.CollationEnvironment{})

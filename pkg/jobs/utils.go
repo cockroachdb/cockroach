@@ -171,11 +171,11 @@ func JobCoordinatorID(
 	if row == nil {
 		return 0, errors.Errorf("coordinator not found for job %d", jobID)
 	}
-	coordinatorID, ok := tree.AsDInt(row[0])
+	coordinatorID, ok := row[0].(*tree.DInt)
 	if !ok {
 		return 0, errors.AssertionFailedf("expected coordinator ID to be an int, got %T", row[0])
 	}
-	return int32(coordinatorID), nil
+	return int32(*coordinatorID), nil
 }
 
 // getJobTypeStrs is a helper function that returns a string representation of
