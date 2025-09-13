@@ -1,0 +1,65 @@
+# LogicTest: 5node
+
+subtest regression_151325
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2);
+
+statement ok
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 2) AS g(i)
+
+retry
+statement ok
+ALTER TABLE kv EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], i FROM generate_series(0, 2) AS g(i)
+
+statement ok
+BEGIN;
+
+# The row inserted in the subquery is initially buffered by the KV client, but
+# usage of the MVCC timestamp system column disables write buffering. That row
+# isn't visible by the main query.
+statement count 2
+SELECT
+  crdb_internal_mvcc_timestamp
+FROM
+  [
+    INSERT INTO kv VALUES (3, 3) RETURNING NULL
+  ],
+  kv;
+
+# Now all rows are visible.
+statement count 3
+SELECT crdb_internal_mvcc_timestamp FROM kv;
+
+statement ok
+COMMIT;
+
+# Try another txn where the flushed write should be observed by the following
+# stmt which should encounter an error.
+
+statement ok
+BEGIN;
+
+statement count 3
+SELECT
+  crdb_internal_mvcc_timestamp
+FROM
+  [
+    INSERT INTO kv VALUES (4, 4) RETURNING NULL
+  ],
+  kv;
+
+statement error duplicate key value violates unique constraint \"kv_pkey\"
+INSERT INTO kv VALUES (4, 4);
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM kv;
+----
+3
+
+subtest end
