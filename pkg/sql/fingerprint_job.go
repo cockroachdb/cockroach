@@ -44,7 +44,8 @@ func init() {
 
 // Resume implements the jobs.Resumer interface.
 func (f *fingerprintResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	execCfg := execCtx.(JobExecContext).ExecCfg()
+	p := execCtx.(JobExecContext)
+	execCfg := p.ExecCfg()
 	details := f.job.Details().(jobspb.FingerprintDetails)
 	
 	log.Infof(ctx, "starting fingerprint job %d", f.job.ID())
@@ -207,9 +208,6 @@ func (f *fingerprintResumer) fingerprintIndex(
 	index catalog.Index,
 	excludedColumns []string,
 ) (uint64, error) {
-	// Build the fingerprint query similar to existing implementation
-	ie := execCfg.InternalExecutor
-	
 	// Use existing BuildFingerprintQueryForIndex function
 	query, err := BuildFingerprintQueryForIndex(tableDesc, index, excludedColumns)
 	if err != nil {
@@ -218,22 +216,32 @@ func (f *fingerprintResumer) fingerprintIndex(
 	
 	log.VEventf(ctx, 2, "executing fingerprint query: %s", query)
 	
-	// Execute the query
-	rows, err := ie.QueryRowEx(ctx, "fingerprint-job", nil,
-		sessiondata.InternalExecutorOverride{User: sessiondata.AdminUserName()}, query)
-	if err != nil {
+	// Execute the query using InternalDB
+	var rows tree.Datums
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		fingerprintCols, err := execCfg.InternalDB.Executor().QueryRowEx(
+			ctx, "fingerprint-job", txn,
+			sessiondata.NodeUserSessionDataOverride,
+			query,
+		)
+		if err != nil {
+			return err
+		}
+		rows = fingerprintCols
+		return nil
+	}); err != nil {
 		return 0, err
 	}
 	
-	if len(rows) != 1 || len(rows[0]) != 1 {
+	if len(rows) != 1 {
 		return 0, errors.New("fingerprint query returned unexpected results")
 	}
 	
-	if rows[0][0] == tree.DNull {
+	if rows[0] == tree.DNull {
 		return 0, nil
 	}
 	
-	fingerprintDatum := rows[0][0]
+	fingerprintDatum := rows[0]
 	fingerprint := uint64(*fingerprintDatum.(*tree.DInt))
 	
 	return fingerprint, nil
