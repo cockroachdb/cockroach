@@ -56,7 +56,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		require.NoError(t, err)
 		reader := bytes.NewReader(manifestBytes)
 		require.NoError(t, err)
-		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.BackupManifestName, reader))
+		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.DeprecatedBackupManifestName, reader))
 	}
 
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
@@ -396,22 +396,6 @@ func TestResolveBackupManifests(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	baseStores, err := util.MapE(fullyResolvedBaseDirs, func(uri string) (cloud.ExternalStorage, error) {
-		return execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
-	})
-	require.NoError(t, err)
-	for i := range baseStores {
-		defer baseStores[i].Close()
-	}
-
-	incStores, err := util.MapE(fullyResolvedIncDirs, func(uri string) (cloud.ExternalStorage, error) {
-		return execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
-	})
-	require.NoError(t, err)
-	for i := range incStores {
-		defer incStores[i].Close()
-	}
-
 	t.Run("resolve backup manifests with latest AOST", func(t *testing.T) {
 		uris, manifests, locality, memSize, err := ResolveBackupManifests(
 			ctx,
@@ -419,8 +403,6 @@ func TestResolveBackupManifests(t *testing.T) {
 			&mem,
 			collections[0],
 			collections,
-			baseStores,
-			incStores,
 			execCfg.DistSQLSrv.ExternalStorageFromURI,
 			fullSubdir,
 			fullyResolvedBaseDirs,
@@ -448,8 +430,6 @@ func TestResolveBackupManifests(t *testing.T) {
 			&mem,
 			collections[0],
 			collections,
-			baseStores,
-			incStores,
 			execCfg.DistSQLSrv.ExternalStorageFromURI,
 			fullSubdir,
 			fullyResolvedBaseDirs,

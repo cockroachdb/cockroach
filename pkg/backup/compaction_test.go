@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -47,11 +46,9 @@ func TestBackupCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	tempDir, tempDirCleanup := testutils.TempDir(t)
 	defer tempDirCleanup()
 	st := cluster.MakeTestingClusterSettings()
-	backupinfo.WriteMetadataWithExternalSSTsEnabled.Override(ctx, &st.SV, true)
 	_, db, cleanupDB := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{

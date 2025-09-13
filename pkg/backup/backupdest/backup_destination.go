@@ -53,7 +53,7 @@ const (
 // On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
 // omit a leading slash. However, backups in a subdirectory of a base bucket
 // will contain one.
-var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.BackupManifestName + "$")
+var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
 
 // featureFullBackupUserSubdir, when true, will create a full backup at a user
 // specified subdirectory if no backup already exists at that subdirectory. As
@@ -68,7 +68,7 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 
 // TODO(adityamaru): Move this to the soon to be `backupinfo` package.
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, _, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName, cloud.ReadOptions{NoFileSize: true})
+	r, _, err := exportStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
@@ -534,7 +534,7 @@ func ListFullBackupsInCollection(
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
-		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.BackupManifestName)
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.DeprecatedBackupManifestName)
 	}
 	return backupPaths, nil
 }
@@ -557,8 +557,6 @@ func ResolveBackupManifests(
 	mem *mon.BoundAccount,
 	defaultCollectionURI string,
 	collectionURIs []string,
-	baseStores []cloud.ExternalStorage,
-	incStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	resolvedSubdir string,
 	fullyResolvedBaseDirectory []string,
@@ -590,7 +588,7 @@ func ResolveBackupManifests(
 
 	if !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || !exists || isCustomIncLocation {
 		return legacyResolveBackupManifests(
-			ctx, execCfg, mem, defaultCollectionURI, baseStores, incStores, mkStore,
+			ctx, execCfg, mem, defaultCollectionURI, mkStore,
 			resolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory,
 			endTime, encryption, kmsEnv, user, includeSkipped, includeCompacted,
 		)
@@ -609,8 +607,6 @@ func legacyResolveBackupManifests(
 	execCfg *sql.ExecutorConfig,
 	mem *mon.BoundAccount,
 	defaultCollectionURI string,
-	baseStores []cloud.ExternalStorage,
-	incStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	resolvedSubdir string,
 	fullyResolvedBaseDirectory []string,
@@ -637,6 +633,27 @@ func legacyResolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
+
+	baseStores, baseCleanupFn, err := MakeBackupDestinationStores(ctx, user, mkStore, fullyResolvedBaseDirectory)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	defer func() {
+		if err := baseCleanupFn(); err != nil {
+			log.Dev.Warningf(ctx, "failed to close base store: %+v", err)
+		}
+	}()
+
+	incStores, incCleanupFn, err := MakeBackupDestinationStores(ctx, user, mkStore, fullyResolvedIncrementalsDirectory)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	defer func() {
+		if err := incCleanupFn(); err != nil {
+			log.Dev.Warningf(ctx, "failed to close inc store: %+v", err)
+		}
+	}()
+
 	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0], fullyResolvedBaseDirectory[0],
 		encryption, kmsEnv)
 	if err != nil {
@@ -646,11 +663,6 @@ func legacyResolveBackupManifests(
 
 	var incrementalBackups []string
 	if len(incStores) > 0 {
-		rootStore, err := mkStore(ctx, defaultCollectionURI, user)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-		defer rootStore.Close()
 		incrementalBackups, err = LegacyFindPriorBackups(ctx, incStores[0], includeManifest)
 		if err != nil {
 			return nil, nil, nil, 0, err
@@ -771,23 +783,15 @@ func indexedResolveBackupManifests(
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveBackupManifestsWithIndexes")
 	defer sp.Finish()
 
-	rootStores := make([]cloud.ExternalStorage, 0, len(collectionURIs))
+	rootStores, rootCleanupFn, err := MakeBackupDestinationStores(ctx, user, mkStore, collectionURIs)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
 	defer func() {
-		for _, store := range rootStores {
-			if store != nil {
-				if err := store.Close(); err != nil {
-					log.Dev.Errorf(ctx, "error closing store: %v", err)
-				}
-			}
+		if err := rootCleanupFn(); err != nil {
+			log.Dev.Warningf(ctx, "failed to close collection store: %s", err)
 		}
 	}()
-	for _, uri := range collectionURIs {
-		store, err := mkStore(ctx, uri, user)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-		rootStores = append(rootStores, store)
-	}
 
 	indexes, err := GetBackupTreeIndexMetadata(
 		ctx, rootStores[0], resolvedSubdir,
