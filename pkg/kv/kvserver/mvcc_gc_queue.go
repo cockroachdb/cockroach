@@ -783,6 +783,12 @@ func (mgcq *mvccGCQueue) process(
 	if scoreAfter.ShouldQueue {
 		// The scores are very long, so splitting into multiple lines manually for
 		// readability.
+		//
+		// NB: there are likely situations in which this check triggers incorrectly,
+		// for example when the GC hint triggers GC but a protected timestamp
+		// prevents the GC threshold from advancing. In that case, not only did we
+		// run a GC cycle without improving anything, but we also pile up a stats
+		// recomputation. This is hopefully too rare to matter.
 		log.Dev.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
 		log.Dev.Infof(ctx, "old score %s", r)
 		log.Dev.Infof(ctx, "new score %s", scoreAfter)
