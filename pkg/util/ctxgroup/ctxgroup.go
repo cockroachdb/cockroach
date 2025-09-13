@@ -116,6 +116,7 @@ package ctxgroup
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -126,12 +127,10 @@ import (
 type Group struct {
 	wrapped *errgroup.Group
 	ctx     context.Context
-	panicMu *recovered
-}
-
-type recovered struct {
-	syncutil.Mutex
-	payload error
+	panicMu *struct {
+		syncutil.Mutex
+		payload error
+	}
 }
 
 // Wait blocks until all function calls from the Go method have returned, then
@@ -147,7 +146,7 @@ func (g Group) Wait() error {
 	err := g.wrapped.Wait()
 
 	if g.panicMu.payload != nil {
-		panic(g.panicMu.payload)
+		panic(recovered{g.panicMu.payload})
 	}
 
 	if err != nil {
@@ -162,7 +161,10 @@ func WithContext(ctx context.Context) Group {
 	return Group{
 		wrapped: grp,
 		ctx:     ctx,
-		panicMu: &recovered{},
+		panicMu: &struct {
+			syncutil.Mutex
+			payload error
+		}{},
 	}
 }
 
@@ -193,7 +195,9 @@ func (g Group) GoCtx(f func(ctx context.Context) error) {
 				err = wrapPanic(1, r)
 				g.panicMu.Lock()
 				defer g.panicMu.Unlock()
-				g.panicMu.payload = errors.CombineErrors(g.panicMu.payload, err)
+				if g.panicMu.payload == nil {
+					g.panicMu.payload = err
+				}
 			}
 		}()
 		return f(g.ctx)
@@ -224,15 +228,33 @@ func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error
 }
 
 // wrapPanic turns r into an error if it is not one already.
-//
-// TODO(dt): consider raw recovered payload as well.
-//
-// TODO(dt): replace this with logcrash.PanicAsError after moving that to a new
-// standalone pkg (since we cannot depend on `util/log` here) and teaching it to
-// preserve the original payload.
 func wrapPanic(depth int, r interface{}) error {
 	if err, ok := r.(error); ok {
+		if recoveredErr, ok := err.(recovered); ok {
+			err = recoveredErr.error
+		}
 		return errors.WithStackDepth(err, depth+1)
 	}
 	return errors.NewWithDepthf(depth+1, "panic: %v", r)
+}
+
+type recovered struct {
+	error // always a errors.WithStack.withStack
+}
+
+// Error overrides WithStack.withStack()'s Error to include the stack.
+//
+// Typically withstack's Error() just delegates to the underlying error and
+// requires formatting with %+v to print the stacktrace. However this wrapper is
+// used to wrap a recovered panic that is *rethrown*. If this rethrown panic is
+// not recovered, the runtime will eventually crash and print it... by calling
+// .Error(), which will *not* indicate the stack to the original panic we so
+// dutifully captured by using WithStack. So override .Error() to include the
+// stack, but leave .Format() to fallthrough to withStack as usual.
+func (p recovered) Error() string {
+	return fmt.Sprintf("%+v", p.error)
+}
+
+func (p recovered) Unwrap() error {
+	return p.error
 }
