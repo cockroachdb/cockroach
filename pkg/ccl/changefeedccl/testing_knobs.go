@@ -98,6 +98,11 @@ type TestingKnobs struct {
 	// to check if the table is lagging.
 	IsTableLagging func(tableID descpb.ID) bool
 
+	// IsPTSReversionLagging is a callback that's invoked by manage protected timestamp
+	// to check if the changefeed's highwater has caught up to the primary PTS record
+	// when reverting per-table protected timestamps.
+	IsPTSReversionLagging func() bool
+
 	// PulsarClientSkipCreation skips creating the sink client when
 	// dialing.
 	PulsarClientSkipCreation bool
