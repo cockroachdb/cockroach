@@ -1,0 +1,47 @@
+setup
+SET CLUSTER SETTING feature.vector_index.enabled = true;
+SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true;
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, embedding VECTOR(3), metadata TEXT);
+INSERT INTO t(i, j, embedding, metadata) VALUES (-4, -4, '[1,2,3]', 'data1'), (-2, -2, '[4,5,6]', 'data2'), (-3, -3, NULL, 'null_data');
+CREATE VECTOR INDEX vec_idx ON t(embedding);
+----
+
+# Test DML operations during primary key alteration with vector indexes
+# Vector indexes should be recreated with proper partial predicates
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES($stageKey, $stageKey, '[7,8,9]', 'stage_data');
+INSERT INTO t VALUES($stageKey + 1, $stageKey + 1, NULL, 'stage_null');
+UPDATE t SET embedding = '[10,11,12]' WHERE i = $stageKey;
+UPDATE t SET metadata = 'updated_stage' WHERE i = $stageKey + 1;
+DELETE FROM t WHERE i=-4;
+DELETE FROM t WHERE i=$stageKey;
+INSERT INTO t VALUES($stageKey, $stageKey, '[13,14,15]', 'stage_reinsert');
+INSERT INTO t VALUES(-4, -4, '[1,2,3]', 'data1');
+----
+
+# Verify vector data is correctly indexed during recreation
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*) FROM t WHERE embedding IS NOT NULL;
+----
+17
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey + 100, $stageKey + 100, '[16,17,18]', 'final_data');
+INSERT INTO t VALUES($stageKey + 101, $stageKey + 101, NULL, 'final_null');
+UPDATE t SET embedding = '[19,20,21]' WHERE i = $stageKey + 100;
+UPDATE t SET metadata = 'updated_final' WHERE embedding IS NULL;
+DELETE FROM t WHERE i=-4;
+DELETE FROM t WHERE i=$stageKey + 100;
+INSERT INTO t VALUES($stageKey + 100, $stageKey + 100, '[22,23,24]', 'final_reinsert');
+INSERT INTO t VALUES(-4, -4, '[1,2,3]', 'data1');
+----
+
+# Verify final state after primary key change
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) FROM t WHERE embedding IS NOT NULL;
+----
+6
+
+test
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
+----
