@@ -64,6 +64,10 @@ message ChangeAggregatorSpec {
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 10;
+
+  // ResolvedSpans contains the resolved spans that should be restored
+  // when the changefeed resumes.
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 11 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -98,6 +102,10 @@ message ChangeFrontierSpec {
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 7;
+
+  // ResolvedSpans contains the resolved spans that should be restored
+  // when the changefeed resumes.
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 8 [(gogoproto.nullable) = false];
 }
 
 // ChangefeedProgressConfig is the configuration for the changefeed's progress tracking.

@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -654,6 +654,12 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, errors.Wrapf(err, "failed to restore span-level checkpoint")
 	}
 
+	for _, rs := range ca.spec.ResolvedSpans {
+		if _, err := ca.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+			return nil, errors.Wrapf(err, "failed to restore frontier")
+		}
+	}
+
 	return spans, nil
 }
 
@@ -1100,25 +1106,6 @@ const (
 // slowLogEveryN rate-limits the logging of slow spans
 var slowLogEveryN = log.Every(slowSpanMaxFrequency)
 
-// jobState encapsulates changefeed job state.
-type jobState struct {
-	// job is set for changefeeds other than core/sinkless changefeeds.
-	job *jobs.Job
-
-	settings *cluster.Settings
-	metrics  *Metrics
-	ts       timeutil.TimeSource
-
-	// The last time we updated job run status.
-	lastRunStatusUpdate time.Time
-	// The last time we updated job progress.
-	lastProgressUpdate time.Time
-	// How long checkpoint (job progress update) expected to take.
-	checkpointDuration time.Duration
-	// Flag set if we skip some updates due to rapid progress update requests.
-	progressUpdatesSkipped bool
-}
-
 // cachedState is a changefeed progress stored in memory.
 // It is used to reduce the number of duplicate events emitted during retries.
 type cachedState struct {
@@ -1157,15 +1144,41 @@ func (cs *cachedState) AggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Tim
 	}
 }
 
+// jobState encapsulates changefeed job state.
+type jobState struct {
+	// job is set for changefeeds other than core/sinkless changefeeds.
+	job *jobs.Job
+
+	settings *cluster.Settings
+	metrics  *Metrics
+	ts       timeutil.TimeSource
+
+	// The last time we updated job run status.
+	lastRunStatusUpdate time.Time
+	// The last time we updated job progress.
+	lastProgressUpdate time.Time
+	// How long checkpoint (job progress update) expected to take.
+	checkpointDuration time.Duration
+	// Flag set if we skip some updates due to rapid progress update requests.
+	progressUpdatesSkipped bool
+
+	// TODO take these fields out of here
+	// The last time we persisted the frontier.
+	lastFrontierPersistence time.Time
+	// How long frontier persistence (job info write) expected to take.
+	frontierPersistenceDuration time.Duration
+}
+
 func newJobState(
 	j *jobs.Job, st *cluster.Settings, metrics *Metrics, ts timeutil.TimeSource,
 ) *jobState {
 	return &jobState{
-		job:                j,
-		settings:           st,
-		metrics:            metrics,
-		ts:                 ts,
-		lastProgressUpdate: ts.Now(),
+		job:                     j,
+		settings:                st,
+		metrics:                 metrics,
+		ts:                      ts,
+		lastProgressUpdate:      ts.Now(),
+		lastFrontierPersistence: ts.Now(),
 	}
 }
 
@@ -1205,8 +1218,26 @@ func (j *jobState) canCheckpointHighWatermark(frontierChanged bool) bool {
 	return true
 }
 
+func (j *jobState) canPersistFrontier() bool {
+	if j.job == nil {
+		return false
+	}
+
+	interval := changefeedbase.FrontierPersistenceInterval.Get(&j.settings.SV)
+	if interval == 0 {
+		return false
+	}
+
+	// Use the max of the configured interval and the actual time it takes to persist,
+	// similar to canCheckpointHighWatermark logic. This prevents back-to-back persistence
+	// operations if persistence takes longer than the configured interval.
+	minInterval := max(j.frontierPersistenceDuration, interval)
+	return j.ts.Since(j.lastFrontierPersistence) >= minInterval
+}
+
 // checkpointCompleted must be called when job checkpoint completes.
 // checkpointDuration indicates how long the checkpoint took.
+// frontierPersisted indicates whether the frontier was persisted during this checkpoint.
 func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration time.Duration) {
 	if j.progressUpdatesSkipped {
 		// Log message if we skipped updates for some time.
@@ -1222,7 +1253,8 @@ func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration t
 	}
 
 	j.metrics.CheckpointHistNanos.RecordValue(checkpointDuration.Nanoseconds())
-	j.lastProgressUpdate = j.ts.Now()
+	now := j.ts.Now()
+	j.lastProgressUpdate = now
 	j.checkpointDuration = time.Duration(j.metrics.CheckpointHistNanos.CumulativeSnapshot().Mean())
 	j.progressUpdatesSkipped = false
 }
@@ -1470,6 +1502,15 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			"moving to draining due to error restoring span-level checkpoint: %v", err)
 		cf.MoveToDraining(err)
 		return
+	}
+
+	for _, rs := range cf.spec.ResolvedSpans {
+		if _, err := cf.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+			log.Changefeed.Warningf(cf.Ctx(),
+				"moving to draining due to error restoring frontier: %v", err)
+			cf.MoveToDraining(err)
+			return
+		}
 	}
 
 	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
@@ -1791,6 +1832,17 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// also store as many of those leading spans as we can in the job progress
 	updateCheckpoint := (inBackfill || cf.frontier.HasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
 
+	// Check whether we should persist the entire frontier again.
+	persistFrontier := cf.js.canPersistFrontier()
+
+	log.Changefeed.Infof(ctx,
+		"ANDY DEBUG: updateHighwater: %t, updateCheckpoint: %t, persistFrontier: %t",
+		updateHighWater, updateCheckpoint, persistFrontier)
+
+	if !updateHighWater && !updateCheckpoint && !persistFrontier {
+		return false, nil
+	}
+
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint *jobspb.TimestampSpansMap
 	if updateCheckpoint {
@@ -1798,37 +1850,64 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		checkpoint = cf.frontier.MakeCheckpoint(maxBytes, cf.sliMetrics.CheckpointMetrics)
 	}
 
+	var changefeedProgress *jobspb.ChangefeedProgress
 	if updateCheckpoint || updateHighWater {
 		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint, cf.evalCtx.Settings.Version)
+		var err error
+		changefeedProgress, err = cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint)
 		if err != nil {
 			return false, err
 		}
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
-		return updated, nil
 	}
 
-	return false, nil
+	// TODO could share a txn
+	if persistFrontier {
+		log.Changefeed.Infof(ctx, "ANDY DEBUG: about to persist frontier")
+		if _, err := cf.checkpointSpanFrontier(ctx); err != nil {
+			return false, err
+		}
+		cf.js.lastFrontierPersistence = timeutil.Now()
+		cf.js.frontierPersistenceDuration = time.Duration(
+			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean())
+		log.Changefeed.Infof(ctx, "ANDY DEBUG: persisted frontier, avg duration: %v", cf.js.frontierPersistenceDuration)
+	}
+
+	// TODO(#153299): Make sure we only updated per-table PTS if
+	// we persisted the span frontier.
+	if cf.spec.JobID != 0 {
+		var ptsUpdated bool
+		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			var err error
+			ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress)
+			return err
+		}); err != nil {
+			log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
+			return false, err
+		}
+		if ptsUpdated {
+			cf.lastProtectedTimestampUpdate = timeutil.Now()
+		}
+	}
+
+	return true, nil
 }
 
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	ctx context.Context,
-	frontier hlc.Timestamp,
-	spanLevelCheckpoint *jobspb.TimestampSpansMap,
-	cv clusterversion.Handle,
-) (bool, error) {
+	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
+) (*jobspb.ChangefeedProgress, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(
+			return nil, changefeedbase.MarkRetryableError(
 				errors.New("cf.knobs.RaiseRetryableError"))
 		}
 	}
@@ -1838,8 +1917,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
 	cf.metrics.FrontierUpdates.Inc(1)
+	var changefeedProgress *jobspb.ChangefeedProgress
 	if cf.js.job != nil {
-		var ptsUpdated bool
+		// TODO maybe we pass it a txn
 		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -1854,13 +1934,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 				HighWater: &frontier,
 			}
 
-			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
+			changefeedProgress = progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
-
-			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
-				log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
-				return err
-			}
 
 			if updateRunStatus {
 				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
@@ -1884,10 +1959,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			return nil
 		}); err != nil {
-			return false, err
-		}
-		if ptsUpdated {
-			cf.lastProtectedTimestampUpdate = timeutil.Now()
+			return nil, err
 		}
 		if log.V(2) {
 			log.Changefeed.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
@@ -1898,6 +1970,38 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
+	return changefeedProgress, nil
+}
+
+// TODO rename to persist span frontier
+func (cf *changeFrontier) checkpointSpanFrontier(ctx context.Context) (bool, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_span_frontier")
+	defer sp.Finish()
+
+	if cf.js.job == nil {
+		return false, nil
+	}
+
+	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
+	for tableID, tableFrontier := range cf.frontier.Frontiers() {
+		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			name := func() string {
+				if tableID == 0 {
+					return "coordinator"
+				}
+				return fmt.Sprintf("table%d", tableID)
+			}()
+			if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, name, tableFrontier); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return false, err
+		}
+	}
+	timer()
+
+	log.Changefeed.Infof(ctx, "ANDY DEBUG: persisted span frontier")
 	return true, nil
 }
 
