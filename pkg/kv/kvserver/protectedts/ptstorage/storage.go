@@ -8,6 +8,8 @@ package ptstorage
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -158,6 +160,39 @@ func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (*ptpb.Record, er
 	return &r, nil
 }
 
+func (p *storage) GetRecords(ctx context.Context, ids []uuid.UUID) ([]ptpb.Record, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id.GetBytesMut()
+	}
+	query := getRecordsQueryBase + " WHERE id IN (" + strings.Join(placeholders, ", ") + ");"
+
+	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-GetRecords", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, query, args...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read records")
+	}
+
+	var ok bool
+	var records []ptpb.Record
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var record ptpb.Record
+		if err := rowToRecord(it.Cur(), &record, false /* isDeprecatedRow */); err != nil {
+			log.Dev.Errorf(ctx, "failed to parse row as record: %v", err)
+		}
+		records = append(records, record)
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read records")
+	}
+	return records, nil
+}
+
 func (p storage) MarkVerified(ctx context.Context, id uuid.UUID) error {
 	numRows, err := p.txn.ExecEx(ctx, "protectedts-MarkVerified", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -259,6 +294,53 @@ func (p storage) UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hl
 	}
 	if len(row) == 0 {
 		return protectedts.ErrNotExists
+	}
+	return nil
+}
+
+func (p *storage) UpdateTimestamps(
+	ctx context.Context, recordsToUpdate map[uuid.UUID]hlc.Timestamp,
+) error {
+	if len(recordsToUpdate) == 0 {
+		return nil
+	}
+
+	// Use batched approach for better performance
+	return p.updateTimestampsBatched(ctx, recordsToUpdate)
+}
+
+func (p *storage) updateTimestampsBatched(
+	ctx context.Context, recordsToUpdate map[uuid.UUID]hlc.Timestamp,
+) error {
+	// Build VALUES clause with placeholders for each id, ts pair
+	placeholders := make([]string, 0, len(recordsToUpdate))
+	args := make([]interface{}, 0, len(recordsToUpdate)*2)
+	paramIndex := 1
+	for id, timestamp := range recordsToUpdate {
+		placeholders = append(placeholders, fmt.Sprintf("($%d, $%d)", paramIndex, paramIndex+1))
+		args = append(args, id.GetBytesMut(), timestamp.AsOfSystemTime())
+		paramIndex += 2
+	}
+	// Build the complete query with the VALUES clause
+	query := fmt.Sprintf(updateTimestampsBatchQuery, strings.Join(placeholders, ", "))
+	// Execute the batched update
+	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-update-batch", p.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, query, args...)
+	if err != nil {
+		return errors.Wrapf(err, "failed to batch update records")
+	}
+	// Count the number of updated records
+	updatedCount := 0
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		updatedCount++
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to iterate updated records")
+	}
+	// Verify we updated the expected number of records
+	if updatedCount != len(recordsToUpdate) {
+		return errors.Errorf("expected to update %d records, but updated %d", len(recordsToUpdate), updatedCount)
 	}
 	return nil
 }

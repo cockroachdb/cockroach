@@ -171,6 +171,10 @@ FROM
 WHERE
     id = $1;`
 
+	getRecordsByIDsQuery = getRecordsQueryBase + `
+WHERE
+    id = ANY($1);`
+
 	markVerifiedQuery = `
 UPDATE
     system.protected_ts_records
@@ -274,6 +278,13 @@ WHERE
 RETURNING
     id
 `
+
+	updateTimestampsBatchQuery = `
+UPDATE system.protected_ts_records
+SET ts = updates.ts::DECIMAL
+FROM (VALUES %s) AS updates(id, ts)
+WHERE system.protected_ts_records.id = updates.id::UUID
+RETURNING system.protected_ts_records.id;`
 
 	getMetadataQuery = `
 WITH

@@ -41,6 +41,15 @@ func (s *storageWithDatabase) GetRecord(
 	})
 }
 
+func (s *storageWithDatabase) GetRecords(
+	ctx context.Context, ids []uuid.UUID,
+) (rs []ptpb.Record, err error) {
+	return rs, s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		rs, err = s.s.WithTxn(txn).GetRecords(ctx, ids)
+		return err
+	})
+}
+
 func (s *storageWithDatabase) MarkVerified(ctx context.Context, id uuid.UUID) error {
 	return s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return s.s.WithTxn(txn).MarkVerified(ctx, id)
@@ -72,5 +81,13 @@ func (s *storageWithDatabase) UpdateTimestamp(
 ) (err error) {
 	return s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		return s.s.WithTxn(txn).UpdateTimestamp(ctx, id, timestamp)
+	})
+}
+
+func (s *storageWithDatabase) UpdateTimestamps(
+	ctx context.Context, recordsToUpdate map[uuid.UUID]hlc.Timestamp,
+) error {
+	return s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return s.s.WithTxn(txn).UpdateTimestamps(ctx, recordsToUpdate)
 	})
 }
