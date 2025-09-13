@@ -10,6 +10,8 @@ eval duration=20m seed=42 metrics=(replicas,leases)
 ----
 leases#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 leases#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
 replicas#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 replicas#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
+replicas#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
 artifacts[default]: db55b6d407888d3c

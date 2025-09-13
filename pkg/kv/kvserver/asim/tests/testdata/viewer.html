@@ -54,6 +54,27 @@
       min-width: 400px;
       max-width: 600px;
     }
+    .chart-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .copy-button {
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .copy-button:hover {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -252,8 +273,27 @@
           const chartWrapper = document.createElement('div');
           chartWrapper.className = 'chart-wrapper';
           
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'chart-title';
+          
+          const titleText = document.createElement('span');
+          titleText.textContent = file.name;
+          titleText.style.fontWeight = 'bold';
+          titleText.style.fontSize = '14px';
+          
+          const copyButton = document.createElement('button');
+          copyButton.className = 'copy-button';
+          copyButton.textContent = '📋';
+          copyButton.title = 'Copy timeseries data';
+          copyButton.onclick = (event) => copyChartData(metricName, fileIndex, event.target);
+          
+          titleDiv.appendChild(titleText);
+          titleDiv.appendChild(copyButton);
+          
           const canvas = document.createElement('canvas');
           canvas.id = `chart-${metricName}-${fileIndex}`;
+          
+          chartWrapper.appendChild(titleDiv);
           chartWrapper.appendChild(canvas);
           chartsContainer.appendChild(chartWrapper);
 
@@ -292,11 +332,6 @@
               responsive: true,
               maintainAspectRatio: true,
               plugins: { 
-                title: { 
-                  display: true, 
-                  text: `${file.name}`,
-                  font: { size: 14 }
-                },
                 legend: {
                   position: 'bottom'
                 },
@@ -419,6 +454,44 @@
         chart.options.scales.y.min = yAxisMin;
         chart.options.scales.y.max = yAxisMax;
         chart.update('none');
+      });
+    }
+
+    function copyChartData(metricName, fileIndex, button) {
+      const file = loadedFiles[fileIndex];
+      if (!file || !file.data.metrics || !file.data.metrics[metricName]) {
+        alert('No data found for this chart');
+        return;
+      }
+
+      const storeData = file.data.metrics[metricName];
+      const tickInterval = file.data.tickInterval || 500000000;
+      const labelCount = Math.max(...Object.values(storeData).map(arr => arr.length));
+      
+      // Generate time labels
+      const totalDurationNs = (labelCount - 1) * tickInterval;
+      const timeUnit = getTimeUnit(totalDurationNs);
+      const timeScale = getTimeScale(timeUnit);
+      
+      // Format data as double array split by store
+      const storeNames = Object.keys(storeData);
+      const storeArrays = storeNames.map(storeName => storeData[storeName]);
+      
+      const jsonOutput = JSON.stringify(storeArrays, null, 2);
+      
+      // Copy to clipboard
+      navigator.clipboard.writeText(jsonOutput).then(() => {
+        // Show success feedback
+        const originalText = button.textContent;
+        button.textContent = '✓';
+        button.style.background = '#28a745';
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '#007acc';
+        }, 1000);
+      }).catch(err => {
+        console.error('Failed to copy to clipboard:', err);
+        alert('Failed to copy data to clipboard. Check console for details.');
       });
     }
 

@@ -39,9 +39,13 @@ setting split_queue_enabled=false
 eval duration=90m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=90629232, s2=90891770, s3=90720435, s4=76036553, s5=76098830, s6=75795916] (stddev=7386001.42, mean=83362122.67, sum=500172736)
+cpu#1: thrash_pct: [s1=11%, s2=53%, s3=55%, s4=27%, s5=30%, s6=27%]  (sum=202%)
 leases#1: first: [s1=300, s2=0, s3=0, s4=300, s5=0, s6=0] (stddev=141.42, mean=100.00, sum=600)
 leases#1: last:  [s1=55, s2=129, s3=115, s4=209, s5=46, s6=46] (stddev=58.88, mean=100.00, sum=600)
+leases#1: thrash_pct: [s1=0%, s2=21%, s3=21%, s4=32%, s5=0%, s6=0%]  (sum=74%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300] (stddev=0.00, mean=300.00, sum=1800)
 replicas#1: last:  [s1=283, s2=430, s3=430, s4=209, s5=211, s6=237] (stddev=95.10, mean=300.00, sum=1800)
+replicas#1: thrash_pct: [s1=47%, s2=22%, s3=22%, s4=34%, s5=36%, s6=35%]  (sum=197%)
 write_bytes_per_second#1: last:  [s1=4565462, s2=10497859, s3=10497096, s4=10961474, s5=10895186, s6=12602252] (stddev=2533989.43, mean=10003221.50, sum=60019329)
+write_bytes_per_second#1: thrash_pct: [s1=1%, s2=9%, s3=10%, s4=3%, s5=71%, s6=94%]  (sum=187%)
 artifacts[mma-only]: 7e2ef8861fdf2e81
