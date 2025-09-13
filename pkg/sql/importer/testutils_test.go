@@ -18,28 +18,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 func descForTable(
-	ctx context.Context,
-	t *testing.T,
-	create string,
-	parent, parentSchemaID, id descpb.ID,
-	fks fkHandler,
+	ctx context.Context, t *testing.T, create string, parent, parentSchemaID, id descpb.ID,
 ) *tabledesc.Mutable {
 	t.Helper()
 	parsed, err := parser.Parse(create)
@@ -47,45 +39,12 @@ func descForTable(
 		t.Fatalf("could not parse %q: %v", create, err)
 	}
 	nanos := testEvalCtx.StmtTimestamp.UnixNano()
-
 	settings := testEvalCtx.Settings
-
-	var stmt *tree.CreateTable
-
-	if len(parsed) == 2 {
-		stmt = parsed[1].AST.(*tree.CreateTable)
-		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
-
-		ts := hlc.Timestamp{WallTime: nanos}
-		priv := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
-		desc, err := sql.NewSequenceTableDesc(
-			ctx,
-			nil, /* planner */
-			settings,
-			name,
-			tree.SequenceOptions{},
-			parent,
-			keys.PublicSchemaIDForBackup,
-			id-1,
-			ts,
-			priv,
-			tree.PersistencePermanent,
-			false, /* isMultiRegion */
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fks.resolver.tableNameToDesc[name] = desc
-	} else {
-		stmt = parsed[0].AST.(*tree.CreateTable)
-	}
+	stmt := parsed[0].AST.(*tree.CreateTable)
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	table, err := MakeTestingSimpleTableDescriptor(context.Background(), &semaCtx, settings, stmt, parent, parentSchemaID, id, fks, nanos)
+	table, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, settings, stmt, parent, parentSchemaID, id, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
-	}
-	if err := fixDescriptorFKState(table); err != nil {
-		t.Fatal(err)
 	}
 	return table
 }
