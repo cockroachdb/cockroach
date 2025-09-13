@@ -154,6 +154,13 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 			targetObject:          privilege.Schemas,
 			objectCreator:         creatorUser,
 		},
+		{
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
+			privileges:            privilege.List{privilege.CHANGEFEED},
+			grantees:              []username.SQLUsername{fooUser, barUser, bazUser},
+			targetObject:          privilege.Databases,
+			objectCreator:         creatorUser,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -269,6 +276,19 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 			grantees:              []username.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          privilege.Schemas,
 			objectCreator:         creatorUser,
+		},
+		{
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
+			grantPrivileges:       privilege.List{privilege.ALL},
+			revokePrivileges:      privilege.List{privilege.CHANGEFEED},
+			expectedPrivileges: privilege.List{
+				privilege.ALL, privilege.BACKUP, privilege.CONNECT,
+				privilege.CREATE, privilege.DROP, privilege.RESTORE,
+				privilege.ZONECONFIG, privilege.INSPECT,
+			},
+			grantees:      []username.SQLUsername{fooUser, barUser, bazUser},
+			targetObject:  privilege.Databases,
+			objectCreator: creatorUser,
 		},
 	}
 
@@ -677,6 +697,60 @@ func TestDefaultPrivileges(t *testing.T) {
 				},
 			},
 		},
+		{
+			objectCreator:         username.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: username.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          privilege.Databases,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   username.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   username.RootUserName(),
+					grants: privilege.List{privilege.ALL},
+				},
+				{
+					user:   username.AdminRoleName(),
+					grants: privilege.List{privilege.ALL},
+				},
+				{
+					user: username.MakeSQLUsernameFromPreNormalizedString("foo"),
+					// Should be the union of the default privileges on the db and schema.
+					grants: privilege.List{privilege.ALL},
+				},
+			},
+		},
+		{
+			objectCreator:         username.MakeSQLUsernameFromPreNormalizedString("creator"),
+			defaultPrivilegesRole: username.MakeSQLUsernameFromPreNormalizedString("creator"),
+			targetObject:          privilege.Databases,
+			dbID:                  defaultDatabaseID,
+			userAndGrants: []userAndGrants{
+				{
+					user:   username.MakeSQLUsernameFromPreNormalizedString("foo"),
+					grants: privilege.List{privilege.CHANGEFEED},
+				},
+			},
+			expectedGrantsOnObject: []userAndGrants{
+				{
+					user:   username.RootUserName(),
+					grants: privilege.List{privilege.ALL},
+				},
+				{
+					user:   username.AdminRoleName(),
+					grants: privilege.List{privilege.ALL},
+				},
+				{
+					user: username.MakeSQLUsernameFromPreNormalizedString("foo"),
+					// Should be the union of the default privileges on the db and schema.
+					grants: privilege.List{privilege.CHANGEFEED},
+				},
+			},
+		},
 	}
 	for _, tc := range testCases {
 		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
@@ -751,6 +825,10 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 		{
 			targetObject:             privilege.Schemas,
 			revokeAndGrantPrivileges: privilege.List{privilege.USAGE},
+		},
+		{
+			targetObject:             privilege.Schemas,
+			revokeAndGrantPrivileges: privilege.List{privilege.CHANGEFEED},
 		},
 	}
 
@@ -932,6 +1010,12 @@ func TestApplyDefaultPrivileges(t *testing.T) {
 			privilege.List{privilege.SELECT, privilege.INSERT},
 			privilege.List{privilege.CREATE},
 			privilege.List{privilege.CREATE}},
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, username.AdminRoleName()),
+			testUser, privilege.Database,
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{privilege.CREATE, privilege.CHANGEFEED},
+			privilege.List{privilege.CREATE, privilege.CHANGEFEED}},
 	}
 
 	for tcNum, tc := range testCases {

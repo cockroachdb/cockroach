@@ -3262,6 +3262,7 @@ target_object_type ::=
 	| 'SCHEMAS'
 	| 'FUNCTIONS'
 	| 'ROUTINES'
+	| 'DATABASES'
 
 alter_changefeed_cmd ::=
 	'ADD' changefeed_table_targets opt_with_options
