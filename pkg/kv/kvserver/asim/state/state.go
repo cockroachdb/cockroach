@@ -33,6 +33,11 @@ type (
 	RangeID int32
 )
 
+func (n NodeID) SafeValue()    {}
+func (n StoreID) SafeValue()   {}
+func (n ReplicaID) SafeValue() {}
+func (n RangeID) SafeValue()   {}
+
 // State encapsulates the current configuration and load of a simulation run.
 // It provides methods for accessing and mutation simulation state of nodes,
 // stores, ranges and replicas.

@@ -1,0 +1,44 @@
+# Six nodes, two stores per node.
+# Initially, all replicas are on the first store of each node (equally distributed).
+# Leases and replicas should even out by count.
+
+skip_under_ci
+----
+
+gen_cluster nodes=6 node_cpu_rate_capacity=16000000000 stores_per_node=2
+----
+
+
+# Odd stores are the nodes' first stores.
+
+gen_ranges ranges=100 min_key=min max_key=5000 placement_type=replica_placement bytes=268435456
+{s1,s3,s5}:1
+----
+{s1:*,s3,s5}:1
+
+gen_ranges ranges=100 min_key=5000 max_key=max placement_type=replica_placement bytes=268435456
+{s7,s9,s11}:1
+----
+{s7:*,s9,s11}:1
+
+# NB: due to LeaseRebalanceThresholdMin=5, a store must have at least five
+# leases more than # its peers to be considered for lease rebalancing.
+# See shouldTransferLeaseForLeaseCountConvergence. As a result, the final
+# balance isn't tighter.
+assertion type=balance stat=leases upper_bound=1.32
+----
+
+# NB: due to minRebalanceThreshold=2, unless some store is at least two replicas
+# above the mean, no rebalancing will occur. As a result, there is a tiny bit
+# of give in the final balance - less than for leases, because there are only
+# a third as many leases as there are replicas.
+assertion type=balance stat=replicas upper_bound=1.05
+----
+
+eval duration=30m cfgs=(sma-only) metrics=(replicas,leases)
+----
+leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=100, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=37.27, mean=16.67, sum=200)
+leases#1: last:  [s1=21, s2=14, s3=14, s4=18, s5=14, s6=16, s7=21, s8=15, s9=13, s10=21, s11=15, s12=18] (stddev=2.90, mean=16.67, sum=200)
+replicas#1: first: [s1=100, s2=0, s3=100, s4=0, s5=100, s6=0, s7=100, s8=0, s9=100, s10=0, s11=100, s12=0] (stddev=50.00, mean=50.00, sum=600)
+replicas#1: last:  [s1=50, s2=51, s3=47, s4=50, s5=50, s6=51, s7=49, s8=50, s9=49, s10=49, s11=52, s12=52] (stddev=1.35, mean=50.00, sum=600)
+artifacts[sma-only]: 3f80459e74dec0f3
