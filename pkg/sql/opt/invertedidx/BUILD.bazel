@@ -37,6 +37,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/json",
+        "//pkg/util/jsonpath",
         "//pkg/util/trigram",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_geo//r1",

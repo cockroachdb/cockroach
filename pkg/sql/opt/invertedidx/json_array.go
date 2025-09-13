@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
 
@@ -412,6 +413,11 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		}
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
+	case *memo.FunctionExpr:
+		if t.Properties.Category == "Jsonpath" {
+			jp := t.Args[1].(*memo.ConstExpr).Value.(*tree.DJsonpath).Path
+			invertedExpr = j.extractJSONPathCondition(ctx, evalCtx, jp)
+		}
 	}
 
 	if invertedExpr == nil {
@@ -476,6 +482,20 @@ func (j *jsonOrArrayFilterPlanner) extractJSONInCondition(
 
 	return invertedExpr
 
+}
+
+func (j *jsonOrArrayFilterPlanner) extractJSONPathCondition(
+	ctx context.Context, evalCtx *eval.Context, jp jsonpath.Path,
+) inverted.Expression {
+	jps, ok := jp.(jsonpath.Paths)
+	if !ok {
+		return nil
+	}
+	res, err := jsonpath.EncodeJsonPathInvertedIndexSpans(nil, jps)
+	if err != nil {
+		return nil
+	}
+	return res
 }
 
 // extractArrayOverlapsCondition extracts an InvertedExpression
