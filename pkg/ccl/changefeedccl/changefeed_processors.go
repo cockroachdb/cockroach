@@ -1815,10 +1815,22 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 	}
 
-	// TODO gate with avg time to persist frontier
-	persistFrontier := timeutil.Since(cf.lastFrontierPersistence) >
-		changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
-	if persistFrontier {
+	// TODO maybe put this in a helper struct
+	if persistFrontier := func() bool {
+		elapsed := timeutil.Since(cf.lastFrontierPersistence)
+		interval := changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
+		if elapsed < interval {
+			return false
+		}
+		if elapsed < cf.frontierPersistenceDuration {
+			log.Changefeed.Warningf(ctx, "cannot persist frontier even though %s has elapsed "+
+				"since last save and %s is set to %s becauese average time to save was %s",
+				elapsed, changefeedbase.FrontierPersistenceInterval.Name(),
+				cf.frontierPersistenceDuration, cf.lastFrontierPersistence)
+			return false
+		}
+		return true
+	}(); persistFrontier {
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			if err := cf.persistSpanFrontier(ctx, txn); err != nil {
 				return err
@@ -1828,6 +1840,9 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, err
 		}
 		cf.lastFrontierPersistence = timeutil.Now()
+		// TODO set this to something high for manual testing
+		cf.frontierPersistenceDuration = time.Duration(
+			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean())
 	}
 
 	return updateCheckpoint || updateHighWater, nil
