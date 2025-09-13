@@ -1170,7 +1170,7 @@ func (ie *InternalExecutor) execInternal(
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = NewInternalSessionData(context.Background(), ie.s.cfg.Settings, "" /* opName */)
+		sd = NewInternalSessionData(ctx, ie.s.cfg.Settings, "" /* opName */)
 	}
 	if globalOverride := ieMultiOverride.Get(&ie.s.cfg.Settings.SV); globalOverride != "" {
 		globalOverride = strings.TrimSpace(globalOverride)
