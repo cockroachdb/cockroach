@@ -9818,7 +9818,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~42KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~43KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -12003,7 +12003,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~37KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~38KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)

@@ -89,10 +89,16 @@ func (s *Selectivity) Divide(other Selectivity) {
 
 // MinSelectivity returns the smaller value of two selectivities.
 func MinSelectivity(a, b Selectivity) Selectivity {
-	if a.selectivity < b.selectivity {
-		return a
+	return Selectivity{
+		selectivity: min(a.selectivity, b.selectivity),
 	}
-	return b
+}
+
+// MinSelectivity3 returns the smallest value of three selectivities.
+func MinSelectivity3(a, b, c Selectivity) Selectivity {
+	return Selectivity{
+		selectivity: min(a.selectivity, b.selectivity, c.selectivity),
+	}
 }
 
 // MaxSelectivity returns the larger value of two selectivities.
