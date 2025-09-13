@@ -798,122 +798,126 @@ WHERE (Name, SetName, Number) > ('Shock', '7E', 248)
 ORDER BY Name, SetName, Number
 LIMIT 50
 ----
-project
+sort
  ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null buyprice:11!null sellprice:12!null desiredinventory:14!null actualinventory:15!null version:17!null discount:13!null maxinventory:16!null twodaysales:37
- ├── cardinality: [0 - 50]
  ├── immutable
- ├── stats: [rows=50]
+ ├── stats: [rows=49.9764]
  ├── key: (17,37)
  ├── fd: (1)-->(2-6,11-17), (2,4,5)~~>(1,3,6), (17)-->(1-6,11-16)
  ├── ordering: +2,+4,+5
- ├── limit
- │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null sum:36
- │    ├── internal-ordering: +2,+4,+5
- │    ├── cardinality: [0 - 50]
- │    ├── immutable
- │    ├── stats: [rows=50]
- │    ├── key: (10)
- │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(1-6,11-17,36), (17)-->(10-16), (1)==(10), (10)==(1)
- │    ├── ordering: +2,+4,+5
- │    ├── group-by (partial streaming)
- │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null sum:36
- │    │    ├── grouping columns: name:2!null setname:4 number:5!null cardsinfo.cardid:10!null
- │    │    ├── internal-ordering: +2,+4,+5 opt(9)
- │    │    ├── immutable
- │    │    ├── stats: [rows=29618.5, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
- │    │    ├── key: (10)
- │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(1-6,11-17,36), (17)-->(10-16), (1)==(10), (10)==(1)
- │    │    ├── ordering: +2,+4,+5
- │    │    ├── limit hint: 50.00
- │    │    ├── left-join (lookup transactiondetails@detailscardidindex)
- │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null transactiondetails.dealerid:24 isbuy:25 transactiondate:26 transactiondetails.cardid:27 quantity:28
- │    │    │    ├── lookup expression
- │    │    │    │    └── filters
- │    │    │    │         ├── (transactiondate:26 >= '2020-02-28 00:00:00+00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
- │    │    │    │         ├── "lookup_join_const_col_@24":44 = transactiondetails.dealerid:24 [outer=(24,44), constraints=(/24: (/NULL - ]; /44: (/NULL - ]), fd=(24)==(44), (44)==(24)]
- │    │    │    │         ├── "lookup_join_const_col_@25":45 = isbuy:25 [outer=(25,45), constraints=(/25: (/NULL - ]; /45: (/NULL - ]), fd=(25)==(45), (45)==(25)]
- │    │    │    │         └── id:1 = transactiondetails.cardid:27 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
- │    │    │    ├── immutable
- │    │    │    ├── stats: [rows=519622, distinct(10)=19000, null(10)=0, distinct(27)=19000, null(27)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
- │    │    │    ├── key: (10,26-28)
- │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (10,26-28)-->(24,25), (1)==(10), (10)==(1)
- │    │    │    ├── ordering: +2,+4,+5 opt(9) [actual: +2,+4,+5]
- │    │    │    ├── limit hint: 877.19
- │    │    │    ├── project
- │    │    │    │    ├── columns: "lookup_join_const_col_@24":44!null "lookup_join_const_col_@25":45!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
- │    │    │    │    ├── immutable
- │    │    │    │    ├── stats: [rows=29618.5]
- │    │    │    │    ├── key: (10)
- │    │    │    │    ├── fd: ()-->(9,44,45), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
- │    │    │    │    ├── ordering: +2,+4,+5 opt(9,44,45) [actual: +2,+4,+5]
- │    │    │    │    ├── limit hint: 100.00
- │    │    │    │    ├── inner-join (lookup cardsinfo)
- │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
- │    │    │    │    │    ├── key columns: [38 1] = [9 10]
- │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    ├── immutable
- │    │    │    │    │    ├── stats: [rows=29618.5, distinct(1)=19000, null(1)=0, distinct(10)=19000, null(10)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
- │    │    │    │    │    ├── key: (10)
- │    │    │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
- │    │    │    │    │    ├── ordering: +2,+4,+5 opt(9) [actual: +2,+4,+5]
- │    │    │    │    │    ├── limit hint: 100.00
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@9":38!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │    │    │    │    │    │    ├── immutable
- │    │    │    │    │    │    ├── stats: [rows=19000]
- │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    ├── fd: ()-->(38), (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │    │    │    │    │    ├── ordering: +2,+4,+5 opt(38) [actual: +2,+4,+5]
- │    │    │    │    │    │    ├── limit hint: 100.00
- │    │    │    │    │    │    ├── index-join cards
- │    │    │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │    │    │    │    │    │    │    ├── immutable
- │    │    │    │    │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(2,4,5)=19000, null(2,4,5)=0]
- │    │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │    │    │    │    │    │    ├── ordering: +2,+4,+5
- │    │    │    │    │    │    │    ├── limit hint: 100.00
- │    │    │    │    │    │    │    └── scan cards@cardsnamesetnumber
- │    │    │    │    │    │    │         ├── columns: id:1!null name:2!null setname:4 number:5!null
- │    │    │    │    │    │    │         ├── constraint: /2/4/5: [/'Shock'/'7E'/249 - ]
- │    │    │    │    │    │    │         ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0]
- │    │    │    │    │    │    │         ├── key: (1)
- │    │    │    │    │    │    │         ├── fd: (1)-->(2,4,5), (2,4,5)~~>(1)
- │    │    │    │    │    │    │         ├── ordering: +2,+4,+5
- │    │    │    │    │    │    │         └── limit hint: 100.00
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         └── 1 [as="lookup_join_const_col_@9":38]
- │    │    │    │    │    └── filters (true)
- │    │    │    │    └── projections
- │    │    │    │         ├── 1 [as="lookup_join_const_col_@24":44]
- │    │    │    │         └── false [as="lookup_join_const_col_@25":45]
- │    │    │    └── filters (true)
- │    │    └── aggregations
- │    │         ├── sum [as=sum:36, outer=(28)]
- │    │         │    └── quantity:28
- │    │         ├── const-agg [as=id:1, outer=(1)]
- │    │         │    └── id:1
- │    │         ├── const-agg [as=rarity:3, outer=(3)]
- │    │         │    └── rarity:3
- │    │         ├── const-agg [as=isfoil:6, outer=(6)]
- │    │         │    └── isfoil:6
- │    │         ├── const-agg [as=cardsinfo.buyprice:11, outer=(11)]
- │    │         │    └── cardsinfo.buyprice:11
- │    │         ├── const-agg [as=cardsinfo.sellprice:12, outer=(12)]
- │    │         │    └── cardsinfo.sellprice:12
- │    │         ├── const-agg [as=cardsinfo.discount:13, outer=(13)]
- │    │         │    └── cardsinfo.discount:13
- │    │         ├── const-agg [as=desiredinventory:14, outer=(14)]
- │    │         │    └── desiredinventory:14
- │    │         ├── const-agg [as=actualinventory:15, outer=(15)]
- │    │         │    └── actualinventory:15
- │    │         ├── const-agg [as=maxinventory:16, outer=(16)]
- │    │         │    └── maxinventory:16
- │    │         └── const-agg [as=cardsinfo.version:17, outer=(17)]
- │    │              └── cardsinfo.version:17
- │    └── 50
- └── projections
-      └── COALESCE(sum:36, 0) [as=value:37, outer=(36)]
+ └── project
+      ├── columns: value:37 id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
+      ├── immutable
+      ├── stats: [rows=49.9764]
+      ├── key: (17,37)
+      ├── fd: (1)-->(2-6,11-17), (2,4,5)~~>(1,3,6), (17)-->(1-6,11-16)
+      ├── group-by (hash)
+      │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null sum:36
+      │    ├── grouping columns: cardsinfo.cardid:10!null
+      │    ├── immutable
+      │    ├── stats: [rows=49.9764, distinct(10)=49.9764, null(10)=0]
+      │    ├── key: (10)
+      │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(1-6,11-17,36), (17)-->(10-16), (1)==(10), (10)==(1)
+      │    ├── left-join (lookup transactiondetails@detailscardidindex)
+      │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null transactiondetails.dealerid:24 isbuy:25 transactiondate:26 transactiondetails.cardid:27 quantity:28
+      │    │    ├── lookup expression
+      │    │    │    └── filters
+      │    │    │         ├── (transactiondate:26 >= '2020-02-28 00:00:00+00') AND (transactiondate:26 <= '2020-03-01 00:00:00+00') [outer=(26), constraints=(/26: [/'2020-02-28 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
+      │    │    │         ├── "lookup_join_const_col_@24":44 = transactiondetails.dealerid:24 [outer=(24,44), constraints=(/24: (/NULL - ]; /44: (/NULL - ]), fd=(24)==(44), (44)==(24)]
+      │    │    │         ├── "lookup_join_const_col_@25":45 = isbuy:25 [outer=(25,45), constraints=(/25: (/NULL - ]; /45: (/NULL - ]), fd=(25)==(45), (45)==(25)]
+      │    │    │         └── id:1 = transactiondetails.cardid:27 [outer=(1,27), constraints=(/1: (/NULL - ]; /27: (/NULL - ]), fd=(1)==(27), (27)==(1)]
+      │    │    ├── immutable
+      │    │    ├── stats: [rows=877.193, distinct(10)=49.9764, null(10)=0, distinct(27)=49.9764, null(27)=0]
+      │    │    ├── key: (10,26-28)
+      │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (10,26-28)-->(24,25), (1)==(10), (10)==(1)
+      │    │    ├── project
+      │    │    │    ├── columns: "lookup_join_const_col_@24":44!null "lookup_join_const_col_@25":45!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
+      │    │    │    ├── cardinality: [0 - 50]
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=50]
+      │    │    │    ├── key: (10)
+      │    │    │    ├── fd: ()-->(9,44,45), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
+      │    │    │    ├── limit
+      │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
+      │    │    │    │    ├── internal-ordering: +2,+4,+5 opt(9)
+      │    │    │    │    ├── cardinality: [0 - 50]
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── stats: [rows=50, distinct(1)=49.9764, null(1)=0, distinct(10)=49.9764, null(10)=0]
+      │    │    │    │    ├── key: (10)
+      │    │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
+      │    │    │    │    ├── inner-join (lookup cardsinfo)
+      │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null cardsinfo.dealerid:9!null cardsinfo.cardid:10!null cardsinfo.buyprice:11!null cardsinfo.sellprice:12!null cardsinfo.discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null cardsinfo.version:17!null
+      │    │    │    │    │    ├── key columns: [38 1] = [9 10]
+      │    │    │    │    │    ├── lookup columns are key
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── stats: [rows=29618.5, distinct(1)=19000, null(1)=0, distinct(10)=19000, null(10)=0]
+      │    │    │    │    │    ├── key: (10)
+      │    │    │    │    │    ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
+      │    │    │    │    │    ├── ordering: +2,+4,+5 opt(9) [actual: +2,+4,+5]
+      │    │    │    │    │    ├── limit hint: 50.00
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: "lookup_join_const_col_@9":38!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+      │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    ├── stats: [rows=19000]
+      │    │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    │    ├── fd: ()-->(38), (1)-->(2-6), (2,4,5)~~>(1,3,6)
+      │    │    │    │    │    │    ├── ordering: +2,+4,+5 opt(38) [actual: +2,+4,+5]
+      │    │    │    │    │    │    ├── limit hint: 100.00
+      │    │    │    │    │    │    ├── index-join cards
+      │    │    │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+      │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0]
+      │    │    │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
+      │    │    │    │    │    │    │    ├── ordering: +2,+4,+5
+      │    │    │    │    │    │    │    ├── limit hint: 100.00
+      │    │    │    │    │    │    │    └── scan cards@cardsnamesetnumber
+      │    │    │    │    │    │    │         ├── columns: id:1!null name:2!null setname:4 number:5!null
+      │    │    │    │    │    │    │         ├── constraint: /2/4/5: [/'Shock'/'7E'/249 - ]
+      │    │    │    │    │    │    │         ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0]
+      │    │    │    │    │    │    │         ├── key: (1)
+      │    │    │    │    │    │    │         ├── fd: (1)-->(2,4,5), (2,4,5)~~>(1)
+      │    │    │    │    │    │    │         ├── ordering: +2,+4,+5
+      │    │    │    │    │    │    │         └── limit hint: 100.00
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── 1 [as="lookup_join_const_col_@9":38]
+      │    │    │    │    │    └── filters (true)
+      │    │    │    │    └── 50
+      │    │    │    └── projections
+      │    │    │         ├── 1 [as="lookup_join_const_col_@24":44]
+      │    │    │         └── false [as="lookup_join_const_col_@25":45]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         ├── sum [as=sum:36, outer=(28)]
+      │         │    └── quantity:28
+      │         ├── const-agg [as=id:1, outer=(1)]
+      │         │    └── id:1
+      │         ├── const-agg [as=name:2, outer=(2)]
+      │         │    └── name:2
+      │         ├── const-agg [as=rarity:3, outer=(3)]
+      │         │    └── rarity:3
+      │         ├── const-agg [as=setname:4, outer=(4)]
+      │         │    └── setname:4
+      │         ├── const-agg [as=number:5, outer=(5)]
+      │         │    └── number:5
+      │         ├── const-agg [as=isfoil:6, outer=(6)]
+      │         │    └── isfoil:6
+      │         ├── const-agg [as=cardsinfo.buyprice:11, outer=(11)]
+      │         │    └── cardsinfo.buyprice:11
+      │         ├── const-agg [as=cardsinfo.sellprice:12, outer=(12)]
+      │         │    └── cardsinfo.sellprice:12
+      │         ├── const-agg [as=cardsinfo.discount:13, outer=(13)]
+      │         │    └── cardsinfo.discount:13
+      │         ├── const-agg [as=desiredinventory:14, outer=(14)]
+      │         │    └── desiredinventory:14
+      │         ├── const-agg [as=actualinventory:15, outer=(15)]
+      │         │    └── actualinventory:15
+      │         ├── const-agg [as=maxinventory:16, outer=(16)]
+      │         │    └── maxinventory:16
+      │         └── const-agg [as=cardsinfo.version:17, outer=(17)]
+      │              └── cardsinfo.version:17
+      └── projections
+           └── COALESCE(sum:36, 0) [as=value:37, outer=(36)]
 
 # Daily transaction query.
 #
