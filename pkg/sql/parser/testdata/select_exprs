@@ -2171,6 +2171,14 @@ SELECT (((ARRAY[('A.B'), ('')])::LTREE[]) ?@> (('A')::LTREE)) -- fully parenthes
 SELECT ARRAY['_', '_']::LTREE[] ?@> '_'::LTREE -- literals removed
 SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE -- identifiers removed
 
+error
+SELECT ARRAY['A.B', '']::LTREE[] ?@< 'A'::LTREE
+----
+at or near "<": syntax error
+DETAIL: source SQL:
+SELECT ARRAY['A.B', '']::LTREE[] ?@< 'A'::LTREE
+                                   ^
+
 parse
 SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE
 ----
@@ -2178,3 +2186,11 @@ SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE
 SELECT (((ARRAY[('A.B'), ('')])::LTREE[]) ?<@ (('A')::LTREE)) -- fully parenthesized
 SELECT ARRAY['_', '_']::LTREE[] ?<@ '_'::LTREE -- literals removed
 SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE -- identifiers removed
+
+error
+SELECT ARRAY['A.B', '']::LTREE[] ?<< 'A'::LTREE
+----
+at or near "<": syntax error
+DETAIL: source SQL:
+SELECT ARRAY['A.B', '']::LTREE[] ?<< 'A'::LTREE
+                                  ^
