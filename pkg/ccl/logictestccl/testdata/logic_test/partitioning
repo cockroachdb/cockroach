@@ -1563,6 +1563,9 @@ PARTITION y OF INDEX test.public.bar@bar_pkey  ALTER PARTITION y OF INDEX test.p
                                                  constraints = '[]',
                                                  lease_preferences = '[]'
 
+# The declarative schema changer will correctly maintain the
+# old zone configs until the index is GCed. The legacy one instantly
+# removes the zone configs, which can lead to unexpected behavior.
 query T rowsort
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
@@ -1572,6 +1575,8 @@ WITH subzone_spans AS (
 SELECT crdb_internal.pretty_key(decode(key, 'base64'), 0) AS pretty_key
 FROM subzone_spans;
 ----
+/1/1
+/1/2
 /2/1
 /2/2
 

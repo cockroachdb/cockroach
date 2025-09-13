@@ -196,12 +196,19 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 
 // MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
 func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
-	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	indexToBackfill catalog.Index,
+	copyIndexSource catalog.Index,
 ) error {
-	// We will always pre-split index spans if there is partitioning.
-	err := is.MaybeSplitIndexSpansForPartitioning(ctx, table, indexToBackfill)
-	if err != nil {
-		return err
+	// If we are asked to copy a source indexes splits, then there is
+	// no need split along partitioning.
+	if copyIndexSource == nil {
+		// We will always pre-split index spans if there is partitioning.
+		err := is.MaybeSplitIndexSpansForPartitioning(ctx, table, indexToBackfill)
+		if err != nil {
+			return err
+		}
 	}
 
 	const backfillSplitExpiration = time.Hour
@@ -210,7 +217,11 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	nNodes := is.nodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 	var copySplitsFromIndexID descpb.IndexID
-	for _, idx := range table.ActiveIndexes() {
+	indexesToConsider := table.ActiveIndexes()
+	if copyIndexSource != nil {
+		indexesToConsider = []catalog.Index{copyIndexSource}
+	}
+	for _, idx := range indexesToConsider {
 		if idx.GetID() != indexToBackfill.GetID() &&
 			idx.CollectKeyColumnIDs().Equals(indexToBackfill.CollectKeyColumnIDs()) {
 			copySplitsFromIndexID = idx.GetID()

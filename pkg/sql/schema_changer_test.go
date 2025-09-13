@@ -3951,7 +3951,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateRunning, jobs.Record{
 			Description:   "GC for TRUNCATE TABLE t.public.test",
-			Username:      username.RootUserName(),
+			Username:      username.NodeUserName(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 		})
 	})
@@ -4010,6 +4010,7 @@ func TestTruncateCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	sqlRunner.Exec(t, "SET use_declarative_schema_changer='off'")
 	sqlRunner.Exec(t, "TRUNCATE TABLE t.test")
 
 	// Check that SQL thinks the table is empty.

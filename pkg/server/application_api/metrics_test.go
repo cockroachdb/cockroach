@@ -338,7 +338,7 @@ func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 	)
 
 	_, err := db.Exec(`		
-		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE) WITH (schema_locked=false);
+		CREATE TABLE tbl (id SERIAL PRIMARY KEY, t text UNIQUE);
 		INSERT INTO tbl (t) VALUES ('d');`)
 	require.NoError(t, err)
 
@@ -376,11 +376,9 @@ func TestStoreProcedureCallStatementMetrics(t *testing.T) {
 
 	// This is to show that the metrics is globally aggregated across all calls of
 	// store procedures.
-	_, err = db.Exec(`
-			TRUNCATE tbl;
-			CALL inserttbl();
-	`)
-
+	_, err = db.Exec(`TRUNCATE tbl;`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CALL inserttbl();`)
 	require.NoError(t, err)
 
 	expectedStartedInsertCount += 5
@@ -569,10 +567,9 @@ func TestUDFStatementMetrics(t *testing.T) {
 
 	// This is to show that the metrics is globally aggregated across all calls of
 	// store procedures.
-	_, err = db.Exec(`
-			TRUNCATE tbl;
-			SELECT inserttbl();
-	`)
+	_, err = db.Exec(`TRUNCATE tbl;`)
+	require.NoError(t, err)
+	_, err = db.Exec(`SELECT inserttbl();`)
 	require.NoError(t, err)
 
 	expectedStartedInsertCount += 5

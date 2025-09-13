@@ -245,15 +245,16 @@ ORDER BY "timestamp", info
 # Truncate a table
 ##################
 
-
+onlyif config local-mixed-25.3
 statement ok
 ALTER TABLE a SET (schema_locked=false)
 
 statement ok
 TRUNCATE TABLE a
 
+onlyif config local-mixed-25.3
 statement ok
-ALTER TABLE a RESET (schema_locked)
+ALTER TABLE a SET (schema_locked=true)
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'

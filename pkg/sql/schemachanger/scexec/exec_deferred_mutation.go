@@ -36,8 +36,9 @@ type databaseRoleSettingToDelete struct {
 }
 
 type indexesToSplitAndScatter struct {
-	tableID catid.DescID
-	indexID catid.IndexID
+	tableID     catid.DescID
+	indexID     catid.IndexID
+	copyIndexID catid.IndexID
 }
 
 type schemaChangerJobUpdate struct {
@@ -57,12 +58,13 @@ func (s *deferredState) DeleteDatabaseRoleSettings(ctx context.Context, dbID des
 }
 
 func (s *deferredState) AddIndexForMaybeSplitAndScatter(
-	tableID catid.DescID, indexID catid.IndexID,
+	tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
 ) {
 	s.indexesToSplitAndScatter = append(s.indexesToSplitAndScatter,
 		indexesToSplitAndScatter{
-			tableID: tableID,
-			indexID: indexID,
+			tableID:     tableID,
+			indexID:     indexID,
+			copyIndexID: copyIndexID,
 		})
 }
 
@@ -198,7 +200,14 @@ func (s *deferredState) exec(
 		if err != nil {
 			return err
 		}
-		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
+		var copyIndexSource catalog.Index
+		if idx.copyIndexID != 0 {
+			copyIndexSource, err = catalog.MustFindIndexByID(tableDesc, idx.copyIndexID)
+			if err != nil {
+				return err
+			}
+		}
+		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc, copyIndexSource); err != nil {
 			return err
 		}
 	}

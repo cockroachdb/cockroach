@@ -535,6 +535,10 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 		}
 	}
 	if _, _, tbl := scpb.FindTable(b.QueryByID(screl.GetDescID(pb.Element()))); tbl != nil {
+		// If the table has a payload attached use that instead of ALTER TABLE.
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
 		return &eventpb.AlterTable{
 			TableName:           fullyQualifiedName(b, pb.Element()),
 			MutationID:          mutationID,

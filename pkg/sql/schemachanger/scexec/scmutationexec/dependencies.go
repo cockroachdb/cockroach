@@ -146,6 +146,6 @@ type DeferredMutationStateUpdater interface {
 	// AddIndexForMaybeSplitAndScatter splits and scatters rows for a given index,
 	// if it's either hash sharded or under the system tenant.
 	AddIndexForMaybeSplitAndScatter(
-		tableID catid.DescID, indexID catid.IndexID,
+		tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
 	)
 }
