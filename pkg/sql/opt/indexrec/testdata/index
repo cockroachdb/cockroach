@@ -722,22 +722,17 @@ t1:
 index-recommendations
 SELECT * FROM t1 WHERE k = 1 AND f != 0
 ----
-creation: CREATE INDEX ON t.public.t1 (k) STORING (i, f, s);
+creation: CREATE INDEX ON t.public.t1 (k, f) STORING (i, s);
 --
 optimal plan:
-select
+scan t1@_hyp_3
  ├── columns: k:1!null i:2 f:3!null s:4
- ├── cost: 29.0500001
+ ├── constraint: /1/3/5
+ │    ├── (/1/NULL - /1/-5e-324]
+ │    └── [/1/5e-324 - /1]
+ ├── cost: 32.1933333
  ├── cost-flags: unbounded-cardinality
- ├── fd: ()-->(1)
- ├── scan t1@_hyp_1
- │    ├── columns: k:1!null i:2 f:3 s:4
- │    ├── constraint: /1/5: [/1 - /1]
- │    ├── cost: 28.9200001
- │    ├── cost-flags: unbounded-cardinality
- │    └── fd: ()-->(1)
- └── filters
-      └── f:3 != 0.0 [outer=(3), constraints=(/3: (/NULL - /-5e-324] [/5e-324 - ]; tight)]
+ └── fd: ()-->(1)
 
 # Multi-column combinations used: EQ, EQ + R.
 index-candidates
@@ -1195,7 +1190,7 @@ FROM (
 )
 ----
 creation: CREATE INDEX ON t.public.t1 (k);
-creation: CREATE INDEX ON t.public.t1 (s) STORING (f);
+creation: CREATE INDEX ON t.public.t1 (s, f);
 creation: CREATE INDEX ON t.public.t2 (k) STORING (i, s);
 --
 optimal plan:
@@ -1204,7 +1199,7 @@ union-all
  ├── left columns: count_rows:14
  ├── right columns: count_rows:22
  ├── cardinality: [1 - ]
- ├── cost: 2766.55828
+ ├── cost: 2769.71494
  ├── cost-flags: unbounded-cardinality
  ├── project
  │    ├── columns: count_rows:14!null
@@ -1239,23 +1234,18 @@ union-all
  └── scalar-group-by
       ├── columns: count_rows:22!null
       ├── cardinality: [1 - 1]
-      ├── cost: 28.9733334
+      ├── cost: 32.13
       ├── cost-flags: unbounded-cardinality
       ├── key: ()
       ├── fd: ()-->(22)
-      ├── select
+      ├── scan t1@_hyp_4
       │    ├── columns: f:17!null t1.s:18!null
-      │    ├── cost: 28.8500001
+      │    ├── constraint: /18/17/19
+      │    │    ├── (/'NG'/NULL - /'NG'/-5e-324]
+      │    │    └── [/'NG'/5e-324 - /'NG']
+      │    ├── cost: 32.0066667
       │    ├── cost-flags: unbounded-cardinality
-      │    ├── fd: ()-->(18)
-      │    ├── scan t1@_hyp_1
-      │    │    ├── columns: f:17 t1.s:18!null
-      │    │    ├── constraint: /18/19: [/'NG' - /'NG']
-      │    │    ├── cost: 28.7200001
-      │    │    ├── cost-flags: unbounded-cardinality
-      │    │    └── fd: ()-->(18)
-      │    └── filters
-      │         └── f:17 != 0.0 [outer=(17), constraints=(/17: (/NULL - /-5e-324] [/5e-324 - ]; tight)]
+      │    └── fd: ()-->(18)
       └── aggregations
            └── count-rows [as=count_rows:22]
 
