@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "roachprod-centralized_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/config",
+        "//pkg/cmd/roachprod-centralized/controllers/clusters",
+        "//pkg/cmd/roachprod-centralized/controllers/health",
+        "//pkg/cmd/roachprod-centralized/controllers/tasks",
+        "//pkg/cmd/roachprod-centralized/repositories/clusters/memory",
+        "//pkg/cmd/roachprod-centralized/repositories/tasks/memory",
+        "//pkg/cmd/roachprod-centralized/services/clusters",
+        "//pkg/cmd/roachprod-centralized/services/tasks",
+    ],
+)
+
+go_binary(
+    name = "roachprod-centralized",
+    embed = [":roachprod-centralized_lib"],
+    visibility = ["//visibility:public"],
+)

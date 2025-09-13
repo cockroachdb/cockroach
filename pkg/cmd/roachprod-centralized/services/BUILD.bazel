@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "services",
+    srcs = ["services.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/cmd/roachprod-centralized/utils"],
+)
