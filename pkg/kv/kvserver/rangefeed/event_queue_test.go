@@ -254,6 +254,56 @@ func (lq *lockedQueue) popFront() (sharedMuxEvent, bool) {
 	return lq.pop()
 }
 
+func (lq *lockedQueue) len() int {
+	lq.Lock()
+	defer lq.Unlock()
+	return int(lq.q.len())
+}
+
+// lockedQueue is how we expect callers may implement concurrent use
+// of eventQueue.
+type lockedQueueBatch struct {
+	syncutil.Mutex
+	q       *eventQueue
+	notifyC chan struct{}
+	chunkQ  chunkQueue
+}
+
+func (lq *lockedQueueBatch) pushBack(e sharedMuxEvent) {
+	lq.Lock()
+	lq.q.pushBack(e)
+	lq.Unlock()
+	select {
+	case lq.notifyC <- struct{}{}:
+	default:
+	}
+}
+
+func (lq *lockedQueueBatch) popFront() (sharedMuxEvent, bool) {
+	// first, check if we can use our cached chunk
+	if event, ok := lq.chunkQ.popFront(); ok {
+		return event, true
+	}
+
+	// if not, we need to wait for the mutex
+	lq.Lock()
+	defer lq.Unlock()
+
+	// try to grab a chunkQ
+	if chunkQ, ok := lq.q.popChunk(); ok {
+		lq.chunkQ = chunkQ
+		return lq.chunkQ.popFront()
+	}
+
+	return lq.q.popFront()
+}
+
+func (lq *lockedQueueBatch) len() int {
+	lq.Lock()
+	defer lq.Unlock()
+	return int(lq.q.len())
+}
+
 // chanQueue is a queue implementation using simple channels for
 // comparison purposes. Note that as it uses a fixed channel buffer,
 // it may block if the benchmark adds too much data before draining.
@@ -270,20 +320,29 @@ func (c *chanQueue) popFront() (sharedMuxEvent, bool) {
 	return e, ok
 }
 
+func (c *chanQueue) len() int {
+	return len(c.c)
+}
+
 // BenchmarkEventQueueMPSC tries to compare this queue to a simple
 // channel for the MPSC use case.
-func BenchmarkEventQueueMPSC(b *testing.B) {
+func benchmarkEventQueueMPSC(n int, b *testing.B) {
 	ctx := context.Background()
 	b.ReportAllocs()
 
 	type queue interface {
 		pushBack(e sharedMuxEvent)
 		popFront() (sharedMuxEvent, bool)
+		len() int
 	}
 
-	eventsPerWorker := 10 * eventQueueChunkSize
-	producerCount := 10
+	eventsPerWorker := 1 * eventQueueChunkSize
+	producerCount := n
+
+	fmt.Printf("events: %v\n", eventsPerWorker*producerCount)
+
 	runBench := func(b *testing.B, q queue) {
+		maxQueueSize := 0
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			g := ctxgroup.WithContext(ctx)
@@ -291,6 +350,10 @@ func BenchmarkEventQueueMPSC(b *testing.B) {
 				expectedEventCount := eventsPerWorker * producerCount
 				eventCount := 0
 				for {
+					queueSize := q.len()
+					if queueSize > maxQueueSize {
+						maxQueueSize = queueSize
+					}
 					_, t := q.popFront()
 					if t {
 						eventCount++
@@ -312,9 +375,18 @@ func BenchmarkEventQueueMPSC(b *testing.B) {
 
 			require.NoError(b, g.Wait())
 		}
+		fmt.Printf("maxQueueSize: %v\n", maxQueueSize)
 	}
 	b.Run("eventQueue", func(b *testing.B) {
 		q := &lockedQueue{
+			q:       newEventQueue(),
+			notifyC: make(chan struct{}, 1),
+		}
+		defer q.q.free()
+		runBench(b, q)
+	})
+	b.Run("lockedQueueBatch", func(b *testing.B) {
+		q := &lockedQueueBatch{
 			q:       newEventQueue(),
 			notifyC: make(chan struct{}, 1),
 		}
@@ -327,4 +399,64 @@ func BenchmarkEventQueueMPSC(b *testing.B) {
 		}
 		runBench(b, q)
 	})
+}
+
+func BenchmarkEventQueueMPSC16(b *testing.B) {
+	benchmarkEventQueueMPSC(16, b)
+}
+
+func BenchmarkEventQueueMPSC32(b *testing.B) {
+	benchmarkEventQueueMPSC(32, b)
+}
+
+func BenchmarkEventQueueMPSC64(b *testing.B) {
+	benchmarkEventQueueMPSC(64, b)
+}
+
+func BenchmarkEventQueueMPSC128(b *testing.B) {
+	benchmarkEventQueueMPSC(128, b)
+}
+
+func TestEventQueueMPSC(t *testing.T) {
+	ctx := context.Background()
+
+	type queue interface {
+		pushBack(e sharedMuxEvent)
+		popFront() (sharedMuxEvent, bool)
+	}
+
+	eventsPerWorker := 100 * eventQueueChunkSize
+	producerCount := 32
+	g := ctxgroup.WithContext(ctx)
+
+	q := &lockedQueueBatch{
+		q:       newEventQueue(),
+		notifyC: make(chan struct{}, 1),
+	}
+	defer q.q.free()
+
+	g.GoCtx(func(ctx context.Context) error {
+		expectedEventCount := eventsPerWorker * producerCount
+		eventCount := 0
+		for {
+			_, t := q.popFront()
+			if t {
+				eventCount++
+			}
+			if eventCount == expectedEventCount {
+				return nil
+			}
+		}
+	})
+
+	for range producerCount {
+		g.GoCtx(func(ctx context.Context) error {
+			for range eventsPerWorker {
+				q.pushBack(sharedMuxEvent{})
+			}
+			return nil
+		})
+	}
+
+	require.NoError(t, g.Wait())
 }
