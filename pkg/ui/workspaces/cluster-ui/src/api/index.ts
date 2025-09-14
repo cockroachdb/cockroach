@@ -5,6 +5,7 @@
 
 export * from "./fetchData";
 export * from "./statementDiagnosticsApi";
+export * from "./transactionDiagnosticsApi";
 export * from "./statementsApi";
 export * from "./basePath";
 export * from "./nodesApi";
