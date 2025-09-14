@@ -2352,6 +2352,10 @@ type durationSetting interface {
 	Get(sv *settings.Values) time.Duration
 }
 
+// saveRateLimiter is a rate limiter for saving a piece of progress.
+// It uses a duration setting as the minimum interval between saves.
+// It also limits saving to not be more frequent than the average
+// time it takes to save progress.
 type saveRateLimiter struct {
 	name         string
 	saveInterval durationSetting
@@ -2360,6 +2364,7 @@ type saveRateLimiter struct {
 	warnEveryN   *util.EveryN
 }
 
+// newSaveRateLimiter returns a new saveRateLimiter.
 func newSaveRateLimiter(name string, saveInterval durationSetting) *saveRateLimiter {
 	warnEveryN := util.Every(time.Minute)
 	return &saveRateLimiter{
@@ -2369,6 +2374,7 @@ func newSaveRateLimiter(name string, saveInterval durationSetting) *saveRateLimi
 	}
 }
 
+// canSave returns whether enough time has passed to save progress again.
 func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool {
 	interval := l.saveInterval.Get(sv)
 	if interval == 0 {
@@ -2392,6 +2398,8 @@ func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool
 	return true
 }
 
+// doneSave should be called after each save is completed with the average
+// time it took to save progress.
 func (l *saveRateLimiter) doneSave(avgSaveTime time.Duration) {
 	l.lastSave = timeutil.Now()
 	l.avgSaveTime = avgSaveTime

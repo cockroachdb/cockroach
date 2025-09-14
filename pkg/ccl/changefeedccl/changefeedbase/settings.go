@@ -421,10 +421,13 @@ var TrackPerTableProgress = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
 )
 
+// FrontierPersistenceInterval configures the minimum amount of time that must
+// elapse before a changefeed will persist its entire span frontier again.
 var FrontierPersistenceInterval = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.ApplicationLevel,
 	"changefeed.progress.frontier_persistence.interval",
-	"minimum amount of time that must elapse before we will persist the entire span frontier again",
+	"minimum amount of time that must elapse before a changefeed "+
+		"will persist its entire span frontier again",
 	30*time.Second, /* defaultValue */
 	settings.DurationInRange(5*time.Second, 10*time.Minute),
 	settings.WithPublic,
