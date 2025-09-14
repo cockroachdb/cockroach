@@ -1776,8 +1776,6 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 	cf.js.job.MarkIdle(isIdle)
 }
 
-var persistFrontierLogEveryN = util.Every(time.Minute)
-
 func (cf *changeFrontier) maybeCheckpointJob(
 	resolvedSpan jobspb.ResolvedSpan, frontierChanged bool,
 ) (bool, error) {
@@ -1826,10 +1824,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		}); err != nil {
 			return false, err
 		}
-		// TODO set this to something high for manual testing
-		//cf.frontierPersistenceLimiter.doneSave(time.Duration(
-		//	cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean()))
-		cf.frontierPersistenceLimiter.doneSave(time.Hour)
+		cf.frontierPersistenceLimiter.doneSave(time.Duration(
+			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean()))
 	}
 
 	return updateCheckpoint || updateHighWater, nil
