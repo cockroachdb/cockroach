@@ -565,13 +565,8 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// This goroutine is the only one that can modify txnState.mu.priority and
 	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
-	ctx = ih.Setup(
-		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-		&stmt, os.ImplicitTxn.Get(),
-		ex.state.mu.priority,
-		ex.extraTxnState.shouldCollectTxnExecutionStats,
-		ex.state.mu.autoRetryCounter,
-	)
+	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
+		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
@@ -580,9 +575,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer func() {
 		if ih.needFinish {
 			retErr = ih.Finish(
-				ex.server.cfg,
-				ex.statsCollector,
-				&ex.extraTxnState.accumulatedStats,
+				ex,
 				ih.collectExecStats,
 				p,
 				ast,
@@ -1462,13 +1455,8 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// This goroutine is the only one that can modify txnState.mu.priority and
 	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
 	if !portal.isPausable() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
-		ctx = ih.Setup(
-			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			&vars.stmt, os.ImplicitTxn.Get(),
-			ex.state.mu.priority,
-			ex.extraTxnState.shouldCollectTxnExecutionStats,
-			ex.state.mu.autoRetryCounter,
-		)
+		ctx = ih.Setup(ctx, ex, p, &vars.stmt, os.ImplicitTxn.Get(),
+			ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
 	}
@@ -1509,9 +1497,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 		if ihToFinish.needFinish {
 			retErr = ihToFinish.Finish(
-				ex.server.cfg,
-				ex.statsCollector,
-				&ex.extraTxnState.accumulatedStats,
+				ex,
 				ihToFinish.collectExecStats,
 				p,
 				vars.ast,
