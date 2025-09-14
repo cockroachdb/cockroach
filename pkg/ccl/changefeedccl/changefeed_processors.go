@@ -1916,7 +1916,8 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
 	defer sp.Finish()
 
-	if !cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
+	if cf.spec.JobID == 0 ||
+		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
 		!cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
 		return nil
 	}
