@@ -847,6 +847,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if err := s.http.setupRoutes(ctx,
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
+		s.tenantAdmin,                /* adminServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */

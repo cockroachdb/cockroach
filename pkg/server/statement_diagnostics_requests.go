@@ -6,7 +6,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -16,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc/metadata"
 )
 
 // stmtDiagnosticsRequest contains a subset of columns that are stored in
@@ -258,4 +264,76 @@ func (s *statusServer) StatementDiagnostics(
 	}
 
 	return response, nil
+}
+
+func (s *adminServer) buildBundle(
+	ctx context.Context, chunkIds *tree.DArray,
+) (bytes.Buffer, error) {
+	var bundle bytes.Buffer
+	for _, chunkID := range chunkIds.Array {
+		chunkRow, err := s.internalExecutor.QueryRowEx(
+			ctx, "admin-stmt-bundle", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
+			chunkID,
+		)
+		if err != nil {
+			return bytes.Buffer{}, err
+		}
+		if chunkRow == nil {
+			return bytes.Buffer{}, errors.Newf("No bundle chunks found for id: %s", chunkID.String())
+		}
+		data := chunkRow[0].(*tree.DBytes)
+		bundle.WriteString(string(*data))
+	}
+
+	return bundle, nil
+}
+
+func (s *adminServer) StmtBundleHandler(w http.ResponseWriter, req *http.Request) {
+	idStr := req.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	// The privilege checks in the privilege checker below checks the user in the incoming
+	// gRPC metadata.
+	md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
+	authCtx := metadata.NewIncomingContext(req.Context(), md)
+	authCtx = s.AnnotateCtx(authCtx)
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	row, err := s.sqlServer.internalExecutor.QueryRowEx(
+		authCtx, "admin-stmt-bundle", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
+		id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if row == nil {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	// Put together the entire bundle. Ideally we would stream it in chunks,
+	// but it's hard to return errors once we start.
+	chunkIDs := row[0].(*tree.DArray)
+	bundle, err := s.buildBundle(authCtx, chunkIDs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set(
+		"Content-Disposition",
+		fmt.Sprintf("attachment; filename=stmt-bundle-%d.zip", id),
+	)
+
+	_, _ = io.Copy(w, &bundle)
 }
