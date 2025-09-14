@@ -20,7 +20,6 @@ import {
 import isUndefined from "lodash/isUndefined";
 import moment from "moment-timezone";
 import React, { useEffect, useRef, useState } from "react";
-import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 
@@ -41,7 +40,6 @@ import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trustIcon } from "src/util/trust";
-import HeaderSection from "src/views/shared/components/headerSection";
 
 import "./statementDiagnosticsHistoryView.styl";
 
@@ -223,15 +221,7 @@ const StatementDiagnosticsHistoryView: React.FC<
   }));
 
   return (
-    <section className="section">
-      <Helmet title="Statement diagnostics history | Debug" />
-      <HeaderSection
-        title="Statement diagnostics history"
-        navigationBackConfig={{
-          text: "Advanced Debug",
-          path: "/debug",
-        }}
-      />
+    <>
       {renderTableTitle()}
       <StatementDiagnosticsHistoryTable
         className="statements-table"
@@ -259,7 +249,7 @@ const StatementDiagnosticsHistoryView: React.FC<
         onChangeSortSetting={changeSortSetting}
       />
       <DownloadFile ref={downloadRef} />
-    </section>
+    </>
   );
 };
 
