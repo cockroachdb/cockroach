@@ -449,6 +449,9 @@ func TestDataDriven(t *testing.T) {
 				seed := int64(42)
 				duration := 30 * time.Minute
 				name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+				plotDir := datapathutils.TestDataPath(t, "generated", name)
+				var rewrite bool
+				require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
 				var cfgs []string    // configurations to run the simulation with
 				var metrics []string // metrics to summarize
 
@@ -551,9 +554,6 @@ func TestDataDriven(t *testing.T) {
 
 						// Generate artifacts. Hash artifact input data to ensure they are
 						// up to date.
-						var rewrite bool
-						require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
-						plotDir := datapathutils.TestDataPath(t, "generated", name)
 						hasher := fnv.New64a()
 						// TODO(tbg): need to decide whether multiple evals in a single file
 						// is a feature or an anti-pattern. If it's a feature, we should let
