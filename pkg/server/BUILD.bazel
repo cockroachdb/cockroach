@@ -328,6 +328,7 @@ go_library(
         "//pkg/util/log/logmetrics",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
+        "//pkg/util/memzipper",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/netutil",
