@@ -147,6 +147,7 @@ func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
+	adminServer *adminServer,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
@@ -193,8 +194,12 @@ func (s *httpServer) setupRoutes(
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
 	var authenticatedHandler = handleRequestsUnauthenticated
+	var stmtBundleHandlerFunc = http.HandlerFunc(adminServer.StmtBundleHandler)
+	var txnBundleHandlerFunc = http.HandlerFunc(adminServer.TxnBundleHandler)
 	if !s.cfg.InsecureWebAccess() {
 		authenticatedHandler = authserver.NewMux(authnServer, authenticatedHandler, false /* allowAnonymous */)
+		stmtBundleHandlerFunc = authserver.NewMux(authnServer, stmtBundleHandlerFunc, false).ServeHTTP
+		txnBundleHandlerFunc = authserver.NewMux(authnServer, txnBundleHandlerFunc, false).ServeHTTP
 	}
 
 	// Login and logout paths.
@@ -210,6 +215,8 @@ func (s *httpServer) setupRoutes(
 
 	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
 	s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
+	s.mux.Handle(apiconstants.AdminStmtBundle, stmtBundleHandlerFunc)
+	s.mux.Handle(apiconstants.AdminTxnBundle, txnBundleHandlerFunc)
 	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
 
 	// The timeseries endpoint, used to produce graphs.
