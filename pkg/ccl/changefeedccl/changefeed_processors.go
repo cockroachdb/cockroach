@@ -1817,19 +1817,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 	}
 
-	persistFrontier := cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) &&
-		cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV)
-
-	if persistFrontier {
-		var persistDuration time.Duration
-		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			var err error
-			persistDuration, err = cf.persistSpanFrontier(ctx, txn)
-			return err
-		}); err != nil {
-			return false, err
-		}
-		cf.frontierPersistenceLimiter.doneSave(persistDuration)
+	if err := cf.maybePersistFrontier(ctx); err != nil {
+		return false, err
 	}
 
 	// TODO(#153462): Determine if this return value should return true
@@ -1923,18 +1912,24 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return nil
 }
 
-func (cf *changeFrontier) persistSpanFrontier(
-	ctx context.Context, txn isql.Txn,
-) (time.Duration, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.persist_span_frontier")
+func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
 	defer sp.Finish()
 
-	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
-	if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier); err != nil {
-		return 0, err
+	if !cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
+		!cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
+		return nil
 	}
-	elapsed := timer()
-	return elapsed, nil
+
+	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
+	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
+	}); err != nil {
+		return err
+	}
+	persistDuration := timer()
+	cf.frontierPersistenceLimiter.doneSave(persistDuration)
+	return nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
