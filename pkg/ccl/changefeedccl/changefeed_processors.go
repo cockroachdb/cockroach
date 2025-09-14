@@ -2351,7 +2351,7 @@ type durationSetting interface {
 // It also limits saving to not be more frequent than the average
 // time it takes to save progress.
 type saveRateLimiter struct {
-	name         string
+	name         redact.SafeString
 	saveInterval durationSetting
 	warnEveryN   *util.EveryN
 
@@ -2360,7 +2360,7 @@ type saveRateLimiter struct {
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
-func newSaveRateLimiter(name string, saveInterval durationSetting) *saveRateLimiter {
+func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *saveRateLimiter {
 	warnEveryN := util.Every(time.Minute)
 	return &saveRateLimiter{
 		name:         name,
