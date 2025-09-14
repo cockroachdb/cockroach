@@ -539,7 +539,6 @@ func TestDataDriven(t *testing.T) {
 								duration, clusterGen, rangeGen, loadGen,
 								settingsGen, eventGen, seedGen.Int63(), tmpStrB,
 							)
-							run.stateStrAcrossSamples = append(run.stateStrAcrossSamples, simulator.State().String())
 							if stateStrForOnce == "" {
 								stateStrForOnce = tmpStrB.String()
 							}
@@ -686,9 +685,8 @@ func TestDataDriven(t *testing.T) {
 }
 
 type modeHistory struct {
-	mode                  string
-	hs                    []history.History
-	stateStrAcrossSamples []string
+	mode string
+	hs   []history.History
 }
 
 func generateTopology(
