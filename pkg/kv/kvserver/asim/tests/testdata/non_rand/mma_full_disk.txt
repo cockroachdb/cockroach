@@ -16,3 +16,4 @@ leases#1: last:  [s1=5, s2=1, s3=3, s4=2, s5=4] (stddev=1.41, mean=3.00, sum=15)
 replicas#1: first: [s1=15, s2=14, s3=8, s4=4, s5=4] (stddev=4.73, mean=9.00, sum=45)
 replicas#1: last:  [s1=9, s2=9, s3=9, s4=9, s5=9] (stddev=0.00, mean=9.00, sum=45)
 artifacts[mma-only]: 68b784316a0597fa
+==========================
