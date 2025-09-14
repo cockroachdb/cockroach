@@ -8,7 +8,9 @@ package stmtdiagnostics_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,11 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -767,6 +771,260 @@ func TestTxnRegistry_InsertTxnRequest_Polling(t *testing.T) {
 		}
 		if _, ok = registry3.GetRequest(id); ok {
 			return errors.New("request still found on server 3")
+		}
+		return nil
+	})
+}
+
+func TestTxnBundleCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	txnStatements := []string{"SELECT 'aaaaaa', 'bbbbbb'",
+		"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'"}
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	// Set to 1s so that we can quickly pick up the request.
+	stmtdiagnostics.TxnPollingInterval.Override(ctx, &settings.SV, time.Second)
+
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.SynchronousSQLStats = true
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: knobs,
+			},
+		},
+	})
+
+	defer tc.Stopper().Stop(ctx)
+
+	// SETUP
+	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Execute to transaction so that it is in transaction_statistics
+	executeTransactions(t, sqlConn, txnStatements)
+
+	// Get the fingerprint id and statement fingerprint ids for the transaction
+	// to make the txn diagnostics request
+	row := sqlConn.QueryRow(t,
+		`
+SELECT 
+  ts.fingerprint_id AS fingerprint_id,
+  ts.metadata->'stmtFingerprintIDs' as fingerprint_ids
+FROM crdb_internal.transaction_statistics ts
+JOIN crdb_internal.statement_statistics ss on ss.transaction_fingerprint_id = ts.fingerprint_id
+WHERE ss.metadata->>'query' LIKE 'SELECT _, _' 
+LIMIT 1`)
+	var fingerprintId []byte
+	var fingerprintIdsBytes []byte
+
+	row.Scan(&fingerprintId, &fingerprintIdsBytes)
+	_, txnFingerprintId, err := encoding.DecodeUint64Ascending(fingerprintId)
+	require.NoError(t, err)
+
+	var statementFingerprintStrs []string
+
+	err = json.Unmarshal(fingerprintIdsBytes, &statementFingerprintStrs)
+	require.NoError(t, err)
+
+	var statementFingerprintIds []uint64
+	for _, s := range statementFingerprintStrs {
+		value, err := strconv.ParseUint(s, 16, 64)
+		require.NoError(t, err)
+		statementFingerprintIds = append(statementFingerprintIds, value)
+	}
+
+	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+
+	t.Run("txn diagnostic request", func(t *testing.T) {
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			0,
+			0,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		var count int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+
+		// Execute the transaction until the request is marked as complete.
+		// We use a connection to a different server than the diagnostics request
+		// was made on to ensure that the request is properly gossiped.
+		runTxnUntilDiagnosticsCollected(t, tc, sqlutils.MakeSQLRunner(tc.ServerConn(1)), txnStatements, reqId)
+
+	})
+
+	t.Run("txn diagnostic with statement diagnostic request", func(t *testing.T) {
+
+		stmtReqId, err := registry.StmtRegistry.InsertRequestInternal(
+			ctx,
+			"SELECT _, _",
+			"", false, 0, 0, 0,
+		)
+		require.NoError(t, err)
+		var stmtcount int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		// execute the statement to ensure that the correct statement diagnostics
+		// request is actually being created.
+		sqlConn.Exec(t, txnStatements[0])
+		// should be complete now
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=true and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		// Make a new request for the same statement
+		stmtReqId, err = registry.StmtRegistry.InsertRequestInternal(
+			ctx,
+			"SELECT _, _",
+			"", false, 0, 0, 0,
+		)
+		require.NoError(t, err)
+		// make sure the statement diagnostics request is also marked as
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			0,
+			0,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		var count int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+		runTxnUntilDiagnosticsCollected(t, tc, sqlutils.MakeSQLRunner(tc.ServerConn(1)), txnStatements, reqId)
+		// Ensure there are no more active transaction diagnostics requests
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 0, count)
+		// make sure the statement diagnostics request is still incomplete
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		executeTransactions(t, sqlConn, txnStatements)
+		// should be complete now that there is no transaction diagnostics request
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=true and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+	})
+
+	t.Run("multiple txn executions", func(t *testing.T) {
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			1,
+			1,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		var count int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+
+		conn2 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
+		conn3 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
+
+		// Wait for the request to be in all node registries
+		testutils.SucceedsSoon(t, func() error {
+			for i := range tc.NumServers() {
+				innerRegistry := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+				_, ok := innerRegistry.GetRequest(reqId)
+				if !ok {
+					return errors.New("expected request to be in registry")
+				}
+			}
+			return nil
+		})
+
+		conn2.Exec(t, "BEGIN")
+		conn3.Exec(t, "BEGIN")
+
+		conn2.Exec(t, txnStatements[0])
+		conn2.Exec(t, txnStatements[1])
+
+		conn3.Exec(t, txnStatements[0])
+		conn3.Exec(t, txnStatements[1])
+		conn3.Exec(t, "COMMIT")
+		conn2.Exec(t, "COMMIT")
+
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+
+		sqlConn.QueryRow(t, ""+
+			"SELECT count(*) FROM system.statement_diagnostics sd "+
+			"JOIN system.transaction_diagnostics_requests tdr on tdr.transaction_diagnostics_id = sd.transaction_diagnostics_id "+
+			"WHERE tdr.id=$1", reqId).Scan(&count)
+
+		require.Equal(t, 3, count)
+	})
+
+}
+
+func executeTransactions(t *testing.T, runner *sqlutils.SQLRunner, statements []string) {
+	t.Helper()
+	runner.Exec(t, "BEGIN")
+	for _, stmt := range statements {
+		runner.Exec(t, stmt)
+	}
+	runner.Exec(t, "COMMIT")
+}
+
+func runTxnUntilDiagnosticsCollected(
+	t *testing.T,
+	tc serverutils.TestClusterInterface,
+	sqlConn *sqlutils.SQLRunner,
+	statements []string,
+	reqId stmtdiagnostics.RequestID,
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		executeTransactions(t, sqlConn, statements)
+		r := tc.ServerConn(0).QueryRow("SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true and id=$1", reqId)
+		if r.Err() != nil {
+			return r.Err()
+		}
+		var count int
+		err := r.Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return errors.Newf("expected 1 completed bundle, got %d", count)
+		}
+		return nil
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		for i := range tc.NumServers() {
+			registry := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+			_, ok := registry.GetRequest(reqId)
+			if ok {
+				return errors.Newf("expected request to be removed from registry. Still exits in registry %d", i)
+			}
 		}
 		return nil
 	})

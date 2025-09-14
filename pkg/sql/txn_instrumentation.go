@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -17,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,10 +28,11 @@ type txnDiagnosticsCollector struct {
 	stmtBundles       []stmtdiagnostics.StmtDiagnostic
 	stmtsFpsToCapture []uint64
 	readyToFinalize   bool
+	span              *tracing.Span
 }
 
 func newTxnDiagnosticsCollector(
-	request stmtdiagnostics.TxnRequest, requestId stmtdiagnostics.RequestID,
+	request stmtdiagnostics.TxnRequest, requestId stmtdiagnostics.RequestID, span *tracing.Span,
 ) txnDiagnosticsCollector {
 	collector := txnDiagnosticsCollector{
 		stmtsFpsToCapture: request.StmtFingerprintIds(),
@@ -39,9 +40,18 @@ func newTxnDiagnosticsCollector(
 		stmtBundles:       nil,
 		requestId:         requestId,
 		readyToFinalize:   false,
+		span:              span,
 	}
 	collector.z.Init()
 	return collector
+}
+
+func (tds *txnDiagnosticsCollector) ShouldCollect(executionDuration time.Duration) bool {
+	if !tds.readyToFinalize {
+		return false
+	}
+
+	return executionDuration >= tds.request.MinExecutionLatency()
 }
 
 func (tds *txnDiagnosticsCollector) AddStatementBundle(
@@ -67,8 +77,16 @@ func (tds *txnDiagnosticsCollector) AddStatementBundle(
 	return true, nil
 }
 
-func (tds *txnDiagnosticsCollector) AddTrace(trace tracingpb.Recording) {
-	if tds.request.IsRedacted() || len(trace) == 0 {
+func (tds *txnDiagnosticsCollector) collectTrace() {
+	if tds.request.IsRedacted() {
+		tds.z.AddFile("trace.txt", "trace not collected due to redacted request")
+		return
+	}
+	span := tds.span
+	trace := span.GetRecording(span.RecordingType())
+
+	if len(trace) == 0 {
+		tds.z.AddFile("trace.txt", "trace empty")
 		return
 	}
 
@@ -105,17 +123,20 @@ type txnInstrumentationHelper struct {
 }
 
 func (h *txnInstrumentationHelper) StartDiagnostics(
-	txnRequest stmtdiagnostics.TxnRequest, reqID stmtdiagnostics.RequestID,
+	txnRequest stmtdiagnostics.TxnRequest, reqID stmtdiagnostics.RequestID, span *tracing.Span,
 ) {
-	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID)
+	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID, span)
 }
 
 func (h *txnInstrumentationHelper) DiagnosticsInProgress() bool {
-	return h.diagnosticsCollector.requestId != 0
+	return h.diagnosticsCollector.requestId != 0 ||
+		len(h.diagnosticsCollector.stmtBundles) > 0 ||
+		len(h.diagnosticsCollector.stmtsFpsToCapture) > 0
 }
 
 func (h *txnInstrumentationHelper) Reset() {
 	if h.diagnosticsCollector.requestId != 0 {
+		h.diagnosticsCollector.span.SetRecordingType(tracingpb.RecordingOff)
 		h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
 	}
 
@@ -145,6 +166,25 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 	}
 }
 
+func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
+	ctx context.Context, stmtFpId uint64, tracer *tracing.Tracer,
+) (newCtx context.Context, diagnosticsStarted bool) {
+	if !h.DiagnosticsInProgress() {
+		collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
+		if collectDiagnostics {
+			var sp *tracing.Span
+			newCtx = ctx
+			if !req.IsRedacted() {
+				newCtx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
+					tracing.WithRecording(tracingpb.RecordingVerbose))
+				h.StartDiagnostics(req, requestId, sp)
+			}
+			return newCtx, true
+		}
+	}
+	return ctx, false
+}
+
 func (h *txnInstrumentationHelper) ShouldContinueDiagnostics(
 	stmt tree.Statement, stmtFpId uint64,
 ) bool {
@@ -170,10 +210,11 @@ func (h *txnInstrumentationHelper) ShouldRedact() bool {
 	return h.diagnosticsCollector.request.IsRedacted()
 }
 
-func (h *txnInstrumentationHelper) Finalize(ctx context.Context, txnID uuid.UUID) {
+func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
 	defer h.Reset()
 	collector := h.diagnosticsCollector
-	if collector.readyToFinalize {
+	if collector.ShouldCollect(executionDuration) {
+		collector.collectTrace()
 		buf, err := collector.z.Finalize()
 		var b []byte
 		if err != nil {
