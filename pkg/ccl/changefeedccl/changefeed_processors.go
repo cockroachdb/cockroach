@@ -2340,6 +2340,7 @@ func shouldCountUsageError(err error) bool {
 		status.Code(err) != codes.Canceled
 }
 
+// durationSetting is a duration cluster setting.
 type durationSetting interface {
 	Name() settings.SettingName
 	Get(sv *settings.Values) time.Duration
