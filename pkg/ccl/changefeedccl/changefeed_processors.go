@@ -1821,13 +1821,15 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV)
 
 	if persistFrontier {
+		var persistDuration time.Duration
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			return cf.persistSpanFrontier(ctx, txn)
+			var err error
+			persistDuration, err = cf.persistSpanFrontier(ctx, txn)
+			return err
 		}); err != nil {
 			return false, err
 		}
-		cf.frontierPersistenceLimiter.doneSave(time.Duration(
-			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean()))
+		cf.frontierPersistenceLimiter.doneSave(persistDuration)
 	}
 
 	// TODO(#153462): Determine if this return value should return true
@@ -1921,16 +1923,18 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return nil
 }
 
-func (cf *changeFrontier) persistSpanFrontier(ctx context.Context, txn isql.Txn) error {
+func (cf *changeFrontier) persistSpanFrontier(
+	ctx context.Context, txn isql.Txn,
+) (time.Duration, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.persist_span_frontier")
 	defer sp.Finish()
 
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 	if err := jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier); err != nil {
-		return err
+		return 0, err
 	}
-	timer()
-	return nil
+	elapsed := timer()
+	return elapsed, nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
@@ -2357,14 +2361,16 @@ type durationSetting interface {
 // saveRateLimiter is a rate limiter for saving a piece of progress.
 // It uses a duration setting as the minimum interval between saves.
 // It also limits saving to not be more frequent than the average
-// time it takes to save progress.
+// duration it takes to save progress.
 type saveRateLimiter struct {
 	name         redact.SafeString
 	saveInterval durationSetting
 	warnEveryN   util.EveryN
 
-	lastSave    time.Time
-	avgSaveTime time.Duration
+	lastSave time.Time
+
+	saveCount       int
+	avgSaveDuration time.Duration
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
@@ -2387,22 +2393,25 @@ func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool
 	if elapsed < interval {
 		return false
 	}
-	if elapsed < l.avgSaveTime {
+	if elapsed < l.avgSaveDuration {
 		if l.warnEveryN.ShouldProcess(now) {
 			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
-				"since last save and %s is set to %s because average time to save was %s "+
+				"since last save and %s is set to %s because average duration to save was %s "+
 				"and further saving is disabled until that much time elapses",
 				l.name, elapsed, l.saveInterval.Name(),
-				interval, l.avgSaveTime)
+				interval, l.avgSaveDuration)
 		}
 		return false
 	}
 	return true
 }
 
-// doneSave should be called after each save is completed with the average
-// time it took to save progress.
-func (l *saveRateLimiter) doneSave(avgSaveTime time.Duration) {
+// doneSave must be called after each save is completed with the duration
+// it took to save progress.
+func (l *saveRateLimiter) doneSave(saveDuration time.Duration) {
 	l.lastSave = timeutil.Now()
-	l.avgSaveTime = avgSaveTime
+
+	// Update the average save duration.
+	l.saveCount++
+	l.avgSaveDuration += (saveDuration - l.avgSaveDuration) / time.Duration(l.saveCount)
 }

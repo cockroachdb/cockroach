@@ -103,14 +103,16 @@ type timer struct {
 	hist *aggmetric.Histogram
 }
 
-func (t *timer) Start() (end func()) {
+func (t *timer) Start() (end func() time.Duration) {
 	if t == nil {
-		return func() {}
+		return func() time.Duration { return 0 }
 	}
 
 	start := timeutil.Now()
-	return func() {
-		t.hist.RecordValue(timeutil.Since(start).Nanoseconds())
+	return func() time.Duration {
+		elapsed := timeutil.Since(start)
+		t.hist.RecordValue(elapsed.Nanoseconds())
+		return elapsed
 	}
 }
 
