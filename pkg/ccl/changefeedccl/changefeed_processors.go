@@ -2353,7 +2353,7 @@ type durationSetting interface {
 type saveRateLimiter struct {
 	name         redact.SafeString
 	saveInterval durationSetting
-	warnEveryN   *util.EveryN
+	warnEveryN   util.EveryN
 
 	lastSave    time.Time
 	avgSaveTime time.Duration
@@ -2361,11 +2361,10 @@ type saveRateLimiter struct {
 
 // newSaveRateLimiter returns a new saveRateLimiter.
 func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *saveRateLimiter {
-	warnEveryN := util.Every(time.Minute)
 	return &saveRateLimiter{
 		name:         name,
 		saveInterval: saveInterval,
-		warnEveryN:   &warnEveryN,
+		warnEveryN:   util.Every(time.Minute),
 	}
 }
 
@@ -2381,7 +2380,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool
 		return false
 	}
 	if elapsed < l.avgSaveTime {
-		if l.warnEveryN != nil && l.warnEveryN.ShouldProcess(now) {
+		if l.warnEveryN.ShouldProcess(now) {
 			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
 				"since last save and %s is set to %s because average time to save was %s "+
 				"and further saving is disabled until that much time elapses",
