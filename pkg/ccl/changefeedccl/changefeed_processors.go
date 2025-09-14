@@ -1868,6 +1868,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
+			// TODO(#153299): Make sure we only updated per-table PTS if we persisted
+			// the span frontier. We'll probably want to move this code out of
+			// checkpointJobProgress and into maybeCheckpointJob.
 			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
 				log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
 				return err
