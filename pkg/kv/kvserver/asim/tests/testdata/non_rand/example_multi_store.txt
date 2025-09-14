@@ -22,6 +22,7 @@ eval duration=5m seed=42 metrics=(leases) cfgs=(sma-count,mma-only)
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
 leases#1: last:  [s1=1, s2=1, s3=1, s4=1, s5=1, s6=1, s7=1, s8=1, s9=1, s10=1, s11=1, s12=1, s13=1, s14=1] (stddev=0.00, mean=1.00, sum=14)
 artifacts[sma-count]: a7d052306059b056
+==========================
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
 leases#1: last:  [s1=4, s2=1, s3=0, s4=0, s5=0, s6=1, s7=0, s8=0, s9=1, s10=1, s11=1, s12=1, s13=2, s14=2] (stddev=1.07, mean=1.00, sum=14)
 artifacts[mma-only]: 3c31149bdddfe022
@@ -33,3 +34,4 @@ failed assertion sample 1
 	max/mean=4.00 tick=3
 	max/mean=4.00 tick=4
 	max/mean=4.00 tick=5
+==========================

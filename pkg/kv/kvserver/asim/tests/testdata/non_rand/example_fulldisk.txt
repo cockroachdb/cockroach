@@ -27,8 +27,10 @@ disk_fraction_used#1: last:  [s1=0.30, s2=0.30, s3=0.30, s4=0.30, s5=0.95] (stdd
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
 replicas#1: last:  [s1=322, s2=328, s3=327, s4=323, s5=200] (stddev=50.05, mean=300.00, sum=1500)
 artifacts[sma-count]: 686ff7227dd03ade
+==========================
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
 disk_fraction_used#1: last:  [s1=0.31, s2=0.31, s3=0.31, s4=0.29, s5=0.92] (stddev=0.25, mean=0.43, sum=2)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
 replicas#1: last:  [s1=331, s2=329, s3=329, s4=316, s5=195] (stddev=52.77, mean=300.00, sum=1500)
 artifacts[mma-only]: 5e2f0de2e66830b6
+==========================

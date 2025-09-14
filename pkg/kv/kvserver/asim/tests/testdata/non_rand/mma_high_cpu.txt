@@ -35,3 +35,4 @@ replicas#1: first: [s1=80, s2=70, s3=51, s4=42, s5=37, s6=35, s7=34, s8=33, s9=3
 replicas#1: last:  [s1=80, s2=59, s3=47, s4=42, s5=38, s6=38, s7=36, s8=36, s9=38, s10=36] (stddev=13.51, mean=45.00, sum=450)
 write_bytes_per_second#1: last:  [s1=39525, s2=26018, s3=18332, s4=15205, s5=12566, s6=12630, s7=11413, s8=11354, s9=12670, s10=11323] (stddev=8639.53, mean=17103.60, sum=171036)
 artifacts[mma-only]: 898f82bb7ceb21ad
+==========================

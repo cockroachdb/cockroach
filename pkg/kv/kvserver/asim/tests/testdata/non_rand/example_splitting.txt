@@ -34,11 +34,13 @@ replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 artifacts[sma-count]: e827ff169690da40
+==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 artifacts[mma-only]: 87a98d4c0bdb6484
+==========================
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
 # Now the load based splitter must find a split key from a skewed distribution
@@ -55,8 +57,10 @@ replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 artifacts[sma-count]: c87fad367527e848
+==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=10] (stddev=0.00, mean=10.00, sum=10)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 artifacts[mma-only]: 98939d5671334290
+==========================
