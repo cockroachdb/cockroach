@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1816,7 +1817,10 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 	}
 
-	if cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
+	persistFrontier := cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) &&
+		cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV)
+
+	if persistFrontier {
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return cf.persistSpanFrontier(ctx, txn)
 		}); err != nil {
@@ -1826,6 +1830,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean()))
 	}
 
+	// TODO(#153462): Determine if this return value should return true
+	// only if the highwater was updated.
 	return updateCheckpoint || updateHighWater, nil
 }
 
