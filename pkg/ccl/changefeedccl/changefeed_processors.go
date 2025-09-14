@@ -2366,7 +2366,6 @@ func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *s
 		name:         name,
 		saveInterval: saveInterval,
 		warnEveryN:   &warnEveryN,
-		lastSave:     timeutil.Now(),
 	}
 }
 
