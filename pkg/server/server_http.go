@@ -147,6 +147,7 @@ func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
+	adminServer *adminServer,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
@@ -210,6 +211,8 @@ func (s *httpServer) setupRoutes(
 
 	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
 	s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
+	s.mux.Handle(apiconstants.AdminStmtBundle, http.HandlerFunc(adminServer.StmtBundleHandler))
+	s.mux.Handle(apiconstants.AdminTxnBundle, http.HandlerFunc(adminServer.TxnBundleHandler))
 	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
 
 	// The timeseries endpoint, used to produce graphs.
