@@ -17,45 +17,71 @@ import {
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import isUndefined from "lodash/isUndefined";
 import moment from "moment-timezone";
-import React from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
+import React, { useRef, useState, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
+import useSWR from "swr";
 
 import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
+import {
+  createStatementDiagnosticsAlertLocalSetting,
+  cancelStatementDiagnosticsAlertLocalSetting,
+} from "src/redux/alerts";
 import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
-import {
-  invalidateStatementDiagnosticsRequests,
-  refreshStatementDiagnosticsRequests,
-} from "src/redux/apiReducers";
-import { AdminUIState, AppDispatch } from "src/redux/state";
-import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
-import {
-  selectStatementDiagnosticsReports,
-  selectStatementByFingerprint,
-  statementDiagnosticsReportsInFlight,
-} from "src/redux/statements/statementsSelectors";
+import { AdminUIState } from "src/redux/state";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trustIcon } from "src/util/trust";
-import HeaderSection from "src/views/shared/components/headerSection";
 
 import "./statementDiagnosticsHistoryView.styl";
 
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
 
-type StatementDiagnosticsHistoryViewProps = MapStateToProps &
-  MapDispatchToProps;
+export type Stmt =
+  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
-interface StatementDiagnosticsHistoryViewState {
-  sortSetting: {
-    columnTitle?: string;
-    ascending: boolean;
+const DIAGNOSTICS_REPORTS_KEY = "statement-diagnostics-reports";
+
+function useStatementDiagnosticsReports() {
+  const {
+    data,
+    error,
+    isLoading,
+    mutate: mutateDiagnostics,
+  } = useSWR(
+    DIAGNOSTICS_REPORTS_KEY,
+    () => clusterUiApi.getStatementDiagnosticsReports(),
+    {
+      // Poll every 30 seconds if there are active (non-completed) reports
+      refreshInterval: latestData => {
+        if (!latestData) return 0;
+        const hasActiveRequests = latestData.some(report => !report.completed);
+        return hasActiveRequests ? 30000 : 0;
+      },
+      revalidateOnFocus: true,
+    },
+  );
+
+  return {
+    data: data || [],
+    loading: isLoading,
+    error,
+    refresh: mutateDiagnostics,
   };
+}
+
+interface StatementDiagnosticsHistoryViewProps {
+  diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[];
+  loading: boolean;
+  getStatementByFingerprint: (fingerprint: string) => Stmt | undefined;
+  onCancelRequest: (
+    report: clusterUiApi.StatementDiagnosticsReport,
+  ) => Promise<void>;
 }
 
 class StatementDiagnosticsHistoryTable extends SortedTable<clusterUiApi.StatementDiagnosticsReport> {}
@@ -85,11 +111,23 @@ const StatementColumn: React.FC<{ fingerprint: string }> = ({
   return <Text textType={TextTypes.Code}>{shortenedStatement}</Text>;
 };
 
-class StatementDiagnosticsHistoryView extends React.Component<
-  StatementDiagnosticsHistoryViewProps,
-  StatementDiagnosticsHistoryViewState
-> {
-  columns: ColumnDescriptor<clusterUiApi.StatementDiagnosticsReport>[] = [
+export const StatementDiagnosticsHistoryView: React.FC<
+  StatementDiagnosticsHistoryViewProps
+> = ({
+  diagnosticsReports,
+  loading,
+  getStatementByFingerprint,
+  onCancelRequest,
+}) => {
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    columnTitle: "activated_on",
+    ascending: false,
+  });
+
+  const downloadRef = useRef<DownloadFileRef>();
+  const tablePageSize = 16;
+
+  const columns: ColumnDescriptor<clusterUiApi.StatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
       name: "activated_on",
@@ -104,7 +142,6 @@ class StatementDiagnosticsHistoryView extends React.Component<
       title: "Statement",
       name: "statement",
       cell: record => {
-        const { getStatementByFingerprint } = this.props;
         const fingerprint = record.statement_fingerprint;
         const statement = getStatementByFingerprint(fingerprint);
         const { implicit_txn: implicitTxn = "true", query } =
@@ -175,7 +212,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
               size="small"
               type="secondary"
               onClick={() => {
-                this.props.onDiagnosticCancelRequest(record);
+                onCancelRequest(record);
               }}
             >
               Cancel request
@@ -186,26 +223,10 @@ class StatementDiagnosticsHistoryView extends React.Component<
     },
   ];
 
-  tablePageSize = 16;
-
-  downloadRef = React.createRef<DownloadFileRef>();
-
-  constructor(props: StatementDiagnosticsHistoryViewProps) {
-    super(props);
-    (this.state = {
-      sortSetting: {
-        columnTitle: "activated_on",
-        ascending: false,
-      },
-    }),
-      props.refresh();
-  }
-
-  renderTableTitle = () => {
-    const { diagnosticsReports } = this.props;
+  const renderTableTitle = () => {
     const totalCount = diagnosticsReports.length;
 
-    if (totalCount <= this.tablePageSize) {
+    if (totalCount <= tablePageSize) {
       return (
         <div className="diagnostics-history-view__table-header">
           <Text>{`${totalCount} diagnostics bundles`}</Text>
@@ -215,107 +236,123 @@ class StatementDiagnosticsHistoryView extends React.Component<
 
     return (
       <div className="diagnostics-history-view__table-header">
-        <Text>{`${this.tablePageSize} of ${totalCount} diagnostics bundles`}</Text>
+        <Text>{`${tablePageSize} of ${totalCount} diagnostics bundles`}</Text>
       </div>
     );
   };
 
-  changeSortSetting = (ss: SortSetting) => {
-    this.setState({
-      sortSetting: ss,
-    });
+  const changeSortSetting = (ss: SortSetting) => {
+    setSortSetting(ss);
   };
 
-  render() {
-    const { diagnosticsReports, loading } = this.props;
-    const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
-      ...diagnosticsReport,
-      key: idx,
-    }));
+  const dataSource = diagnosticsReports.map((diagnosticsReport, idx) => ({
+    ...diagnosticsReport,
+    key: idx,
+  }));
 
-    return (
-      <section className="section">
-        <Helmet title="Statement diagnostics history | Debug" />
-        <HeaderSection
-          title="Statement diagnostics history"
-          navigationBackConfig={{
-            text: "Advanced Debug",
-            path: "/debug",
-          }}
-        />
-        {this.renderTableTitle()}
-        <StatementDiagnosticsHistoryTable
-          className="statements-table"
-          tableWrapperClassName="sorted-table"
-          data={dataSource}
-          columns={this.columns}
-          loading={loading}
-          renderNoResult={
-            <EmptyTable
-              title="No statement diagnostics to show"
-              icon={EmptyTableIcon}
-              message={
-                "Statement diagnostics  can help when troubleshooting issues with specific queries. " +
-                "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
-                " plans, table statistics, and traces."
-              }
-              footer={
-                <Anchor href={statementDiagnostics} target="_blank">
-                  Learn more about statement diagnostics
-                </Anchor>
-              }
-            />
-          }
-          sortSetting={this.state.sortSetting}
-          onChangeSortSetting={this.changeSortSetting}
-        />
-        <DownloadFile ref={this.downloadRef} />
-      </section>
-    );
-  }
-}
+  return (
+    <>
+      {renderTableTitle()}
+      <StatementDiagnosticsHistoryTable
+        className="statements-table"
+        tableWrapperClassName="sorted-table"
+        data={dataSource}
+        columns={columns}
+        loading={loading}
+        renderNoResult={
+          <EmptyTable
+            title="No statement diagnostics to show"
+            icon={EmptyTableIcon}
+            message={
+              "Statement diagnostics can help when troubleshooting issues with specific queries. " +
+              "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
+              " plans, table statistics, and traces."
+            }
+            footer={
+              <Anchor href={statementDiagnostics} target="_blank">
+                Learn more about statement diagnostics
+              </Anchor>
+            }
+          />
+        }
+        sortSetting={sortSetting}
+        onChangeSortSetting={changeSortSetting}
+      />
+      <DownloadFile ref={downloadRef} />
+    </>
+  );
+};
 
-interface MapStateToProps {
-  loading: boolean;
-  diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[];
-  getStatementByFingerprint: (
-    fingerprint: string,
-  ) => ReturnType<typeof selectStatementByFingerprint>;
-}
+const StatementDiagnosticsHistoryContainer: React.FC = () => {
+  const dispatch = useDispatch();
+  const {
+    data: diagnosticsReports,
+    loading,
+    refresh,
+  } = useStatementDiagnosticsReports();
 
-interface MapDispatchToProps {
-  onDiagnosticCancelRequest: (
-    report: clusterUiApi.StatementDiagnosticsReport,
-  ) => void;
-  refresh: () => void;
-}
+  const statements = useSelector(
+    (state: AdminUIState) => state.cachedData.statements.data?.statements,
+  );
 
-const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
-  loading: statementDiagnosticsReportsInFlight(state),
-  diagnosticsReports: selectStatementDiagnosticsReports(state) || [],
-  getStatementByFingerprint: (fingerprint: string) =>
-    selectStatementByFingerprint(state, fingerprint),
-});
+  const getStatementByFingerprint = useCallback(
+    (fingerprint: string): Stmt | undefined => {
+      return (statements || []).find(
+        statement => statement.key.key_data.query === fingerprint,
+      );
+    },
+    [statements],
+  );
 
-const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
-  onDiagnosticCancelRequest: (
-    report: clusterUiApi.StatementDiagnosticsReport,
-  ) => {
-    dispatch(cancelStatementDiagnosticsReportAction({ requestId: report.id }));
-    dispatch(trackCancelDiagnosticsBundleAction(report.statement_fingerprint));
-  },
-  refresh: () => {
-    dispatch(invalidateStatementDiagnosticsRequests());
-    dispatch(refreshStatementDiagnosticsRequests());
-  },
-});
+  const handleCancelRequest = useCallback(
+    async (report: clusterUiApi.StatementDiagnosticsReport) => {
+      try {
+        await clusterUiApi.cancelStatementDiagnosticsReport({
+          requestId: report.id,
+        });
 
-export default connect<
-  MapStateToProps,
-  MapDispatchToProps,
-  StatementDiagnosticsHistoryViewProps,
-  AdminUIState
->(
-  mapStateToProps,
-  mapDispatchToProps,
-)(StatementDiagnosticsHistoryView);
+        dispatch(
+          trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
+        );
+
+        dispatch(
+          createStatementDiagnosticsAlertLocalSetting.set({
+            show: false,
+          }),
+        );
+        dispatch(
+          cancelStatementDiagnosticsAlertLocalSetting.set({
+            show: true,
+            status: "SUCCESS",
+          }),
+        );
+
+        await refresh();
+      } catch (error) {
+        dispatch(
+          createStatementDiagnosticsAlertLocalSetting.set({
+            show: false,
+          }),
+        );
+        dispatch(
+          cancelStatementDiagnosticsAlertLocalSetting.set({
+            show: true,
+            status: "FAILED",
+          }),
+        );
+      }
+    },
+    [dispatch, refresh],
+  );
+
+  return (
+    <StatementDiagnosticsHistoryView
+      diagnosticsReports={diagnosticsReports}
+      loading={loading}
+      getStatementByFingerprint={getStatementByFingerprint}
+      onCancelRequest={handleCancelRequest}
+    />
+  );
+};
+
+export default StatementDiagnosticsHistoryContainer;
