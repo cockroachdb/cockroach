@@ -23,6 +23,19 @@ export const CANCEL_STATEMENT_DIAGNOSTICS_COMPLETE =
 export const CANCEL_STATEMENT_DIAGNOSTICS_FAILED =
   "cockroachui/statements/CANCEL_STATEMENT_DIAGNOSTICS_FAILED";
 
+export const CREATE_TRANSACTION_DIAGNOSTICS_REPORT =
+  "cockroachui/statements/CREATE_TRANSACTION_DIAGNOSTICS_REPORT";
+export const CREATE_TRANSACTION_DIAGNOSTICS_COMPLETE =
+  "cockroachui/statements/CREATE_TRANSACTION_DIAGNOSTICS_COMPLETE";
+export const CREATE_TRANSACTION_DIAGNOSTICS_FAILED =
+  "cockroachui/statements/CREATE_TRANSACTION_DIAGNOSTICS_FAILED";
+export const CANCEL_TRANSACTION_DIAGNOSTICS_REPORT =
+  "cockroachui/statements/CANCEL_TRANSACTION_DIAGNOSTICS_REPORT";
+export const CANCEL_TRANSACTION_DIAGNOSTICS_COMPLETE =
+  "cockroachui/statements/CANCEL_TRANSACTION_DIAGNOSTICS_COMPLETE";
+export const CANCEL_TRANSACTION_DIAGNOSTICS_FAILED =
+  "cockroachui/statements/CANCEL_TRANSACTION_DIAGNOSTICS_FAILED";
+
 export type DiagnosticsReportPayload = {
   statementFingerprint: string;
 };
@@ -77,6 +90,48 @@ export function createOpenDiagnosticsModalAction(
     payload: {
       statementFingerprint,
     },
+  };
+}
+
+export function createTransactionDiagnosticsReportAction(
+  insertTxnDiagnosticsRequest: clusterUiApi.InsertTxnDiagnosticRequest,
+): PayloadAction<clusterUiApi.InsertTxnDiagnosticRequest> {
+  return {
+    type: CREATE_TRANSACTION_DIAGNOSTICS_REPORT,
+    payload: insertTxnDiagnosticsRequest,
+  };
+}
+
+export function createTransactionDiagnosticsReportCompleteAction(): Action {
+  return {
+    type: CREATE_TRANSACTION_DIAGNOSTICS_COMPLETE,
+  };
+}
+
+export function createTransactionDiagnosticsReportFailedAction(): Action {
+  return {
+    type: CREATE_TRANSACTION_DIAGNOSTICS_FAILED,
+  };
+}
+
+export function cancelTransactionDiagnosticsReportAction(
+  cancelTxnDiagnosticsRequest: clusterUiApi.CancelTxnDiagnosticRequest,
+): PayloadAction<clusterUiApi.CancelTxnDiagnosticRequest> {
+  return {
+    type: CANCEL_TRANSACTION_DIAGNOSTICS_REPORT,
+    payload: cancelTxnDiagnosticsRequest,
+  };
+}
+
+export function cancelTransactionDiagnosticsReportCompleteAction(): Action {
+  return {
+    type: CANCEL_TRANSACTION_DIAGNOSTICS_COMPLETE,
+  };
+}
+
+export function cancelTransactionDiagnosticsReportFailedAction(): Action {
+  return {
+    type: CANCEL_TRANSACTION_DIAGNOSTICS_FAILED,
   };
 }
 

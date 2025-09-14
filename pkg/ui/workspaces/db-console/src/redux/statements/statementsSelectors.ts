@@ -50,6 +50,18 @@ export const statementDiagnosticsReportsInFlight = createSelector(
   inFlight => inFlight,
 );
 
+export const selectTransactionDiagnosticsReports = createSelector(
+  (state: AdminUIState) =>
+    state.cachedData.transactionDiagnosticsReports.data || [],
+  diagnosticsReports => diagnosticsReports,
+);
+
+export const transactionDiagnosticsReportsInFlight = createSelector(
+  (state: AdminUIState) =>
+    state.cachedData.transactionDiagnosticsReports.inFlight,
+  inFlight => inFlight,
+);
+
 type StatementDiagnosticsDictionary = {
   [statementFingerprint: string]: clusterUiApi.StatementDiagnosticsReport[];
 };

@@ -382,6 +382,20 @@ export const invalidateStatementDiagnosticsRequests =
 export const RECEIVE_STATEMENT_DIAGNOSTICS_REPORT =
   statementDiagnosticsReportsReducerObj.RECEIVE;
 
+export const transactionDiagnosticInvalidationPeriod = moment.duration(5, "m");
+const transactionDiagnosticsReportsReducerObj = new CachedDataReducer(
+  clusterUiApi.getTransactionDiagnosticsReports,
+  "transactionDiagnosticsReports",
+  transactionDiagnosticInvalidationPeriod,
+  moment.duration(1, "m"),
+);
+export const refreshTransactionDiagnosticsRequests =
+  transactionDiagnosticsReportsReducerObj.refresh;
+export const invalidateTransactionDiagnosticsRequests =
+  transactionDiagnosticsReportsReducerObj.invalidateData;
+export const RECEIVE_TRANSACTION_DIAGNOSTICS_REPORT =
+  transactionDiagnosticsReportsReducerObj.RECEIVE;
+
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
   "dataDistribution",
@@ -560,6 +574,7 @@ export interface APIReducersState {
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
+  transactionDiagnosticsReports: CachedDataReducerState<clusterUiApi.TransactionDiagnosticsResponse>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<
@@ -623,6 +638,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
   [statementDiagnosticsReportsReducerObj.actionNamespace]:
     statementDiagnosticsReportsReducerObj.reducer,
+  [transactionDiagnosticsReportsReducerObj.actionNamespace]:
+    transactionDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,

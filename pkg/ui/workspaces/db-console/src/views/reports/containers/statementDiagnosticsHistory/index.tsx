@@ -234,7 +234,7 @@ const StatementDiagnosticsHistoryView: React.FC<
             title="No statement diagnostics to show"
             icon={EmptyTableIcon}
             message={
-              "Statement diagnostics  can help when troubleshooting issues with specific queries. " +
+              "Statement diagnostics can help when troubleshooting issues with specific queries. " +
               "The diagnostic bundle can be activated from individual statement pages and will include EXPLAIN" +
               " plans, table statistics, and traces."
             }

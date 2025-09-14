@@ -27,6 +27,8 @@ import {
   RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
   refreshStatementDiagnosticsRequests,
   statementDiagnosticInvalidationPeriod,
+  invalidateTransactionDiagnosticsRequests,
+  refreshTransactionDiagnosticsRequests,
 } from "src/redux/apiReducers";
 import { setTimeScale } from "src/redux/timeScale";
 
@@ -38,6 +40,12 @@ import {
   CANCEL_STATEMENT_DIAGNOSTICS_REPORT,
   cancelStatementDiagnosticsReportCompleteAction,
   cancelStatementDiagnosticsReportFailedAction,
+  CREATE_TRANSACTION_DIAGNOSTICS_REPORT,
+  createTransactionDiagnosticsReportCompleteAction,
+  createTransactionDiagnosticsReportFailedAction,
+  CANCEL_TRANSACTION_DIAGNOSTICS_REPORT,
+  cancelTransactionDiagnosticsReportCompleteAction,
+  cancelTransactionDiagnosticsReportFailedAction,
 } from "./statementsActions";
 
 export function* createDiagnosticsReportSaga(
@@ -123,6 +131,38 @@ export function* cancelDiagnosticsReportSaga(
   }
 }
 
+export function* createTransactionDiagnosticsReportSaga(
+  action: PayloadAction<clusterUiApi.InsertTxnDiagnosticRequest>,
+) {
+  try {
+    yield call(clusterUiApi.createTransactionDiagnosticsReport, action.payload);
+    yield put(createTransactionDiagnosticsReportCompleteAction());
+    yield put(invalidateTransactionDiagnosticsRequests());
+    // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface.
+    yield put(refreshTransactionDiagnosticsRequests() as any);
+    // TODO: Add transaction diagnostics alert handling when alerts are implemented
+  } catch (e) {
+    yield put(createTransactionDiagnosticsReportFailedAction());
+    // TODO: Add transaction diagnostics alert handling when alerts are implemented
+  }
+}
+
+export function* cancelTransactionDiagnosticsReportSaga(
+  action: PayloadAction<clusterUiApi.CancelTxnDiagnosticRequest>,
+) {
+  try {
+    yield call(clusterUiApi.cancelTransactionDiagnosticsReport, action.payload);
+    yield put(cancelTransactionDiagnosticsReportCompleteAction());
+    yield put(invalidateTransactionDiagnosticsRequests());
+    // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface.
+    yield put(refreshTransactionDiagnosticsRequests() as any);
+    // TODO: Add transaction diagnostics alert handling when alerts are implemented
+  } catch (e) {
+    yield put(cancelTransactionDiagnosticsReportFailedAction());
+    // TODO: Add transaction diagnostics alert handling when alerts are implemented
+  }
+}
+
 // receivedStatementDiagnosticsSaga creates a saga that handles RECEIVE action for statement diagnostics in
 // addition to default workflow defined in CachedDataReducer.
 // The main goal of this saga is request statement diagnostics results more often if received list of requested
@@ -162,6 +202,14 @@ export function* statementsSaga() {
   yield all([
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, createDiagnosticsReportSaga),
     takeEvery(CANCEL_STATEMENT_DIAGNOSTICS_REPORT, cancelDiagnosticsReportSaga),
+    takeEvery(
+      CREATE_TRANSACTION_DIAGNOSTICS_REPORT,
+      createTransactionDiagnosticsReportSaga,
+    ),
+    takeEvery(
+      CANCEL_TRANSACTION_DIAGNOSTICS_REPORT,
+      cancelTransactionDiagnosticsReportSaga,
+    ),
     takeLatest(SET_GLOBAL_TIME_SCALE, setCombinedStatementsTimeScaleSaga),
     takeEvery(
       RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,

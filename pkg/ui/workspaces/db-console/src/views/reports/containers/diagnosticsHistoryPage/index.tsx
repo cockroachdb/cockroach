@@ -11,8 +11,9 @@ import { RouteComponentProps } from "react-router-dom";
 
 import { tabAttr } from "src/util/constants";
 import StatementDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
+import TransactionDiagnosticsHistoryView from "src/views/reports/containers/transactionDiagnosticsHistory";
 
-const { TabPane } = Tabs;
+import type { TabsProps } from "antd";
 
 export enum DiagnosticsHistoryTabType {
   Statements = "Statements",
@@ -22,21 +23,13 @@ export enum DiagnosticsHistoryTabType {
 export const DIAGNOSTICS_HISTORY_DEFAULT_TAB: DiagnosticsHistoryTabType =
   DiagnosticsHistoryTabType.Statements;
 
-// Placeholder component for transactions tab
-const TransactionDiagnosticsPlaceholder: React.FC = () => (
-  <div style={{ padding: "24px", textAlign: "center" }}>
-    <h3>Transaction Diagnostics</h3>
-    <p>
-      Transaction diagnostics history will be available here in a future
-      release.
-    </p>
-  </div>
-);
-
 const DiagnosticsHistoryPage: React.FC<RouteComponentProps> = props => {
-  const currentTab =
-    util.queryByName(props.location, tabAttr) ||
-    DiagnosticsHistoryTabType.Statements;
+  const tabFromUrl = util.queryByName(props.location, tabAttr);
+  const currentTab = Object.values(DiagnosticsHistoryTabType).includes(
+    tabFromUrl as DiagnosticsHistoryTabType,
+  )
+    ? (tabFromUrl as DiagnosticsHistoryTabType)
+    : DiagnosticsHistoryTabType.Statements;
 
   const onTabChange = (tabId: string): void => {
     const params = new URLSearchParams({ tab: tabId });
@@ -44,6 +37,19 @@ const DiagnosticsHistoryPage: React.FC<RouteComponentProps> = props => {
       search: params.toString(),
     });
   };
+
+  const tabItems: TabsProps["items"] = [
+    {
+      key: DiagnosticsHistoryTabType.Statements,
+      label: "Statements",
+      children: <StatementDiagnosticsHistoryView />,
+    },
+    {
+      key: DiagnosticsHistoryTabType.Transactions,
+      label: "Transactions",
+      children: <TransactionDiagnosticsHistoryView />,
+    },
+  ];
 
   return (
     <div>
@@ -55,14 +61,8 @@ const DiagnosticsHistoryPage: React.FC<RouteComponentProps> = props => {
         onChange={onTabChange}
         activeKey={currentTab}
         destroyInactiveTabPane
-      >
-        <TabPane tab="Statements" key="Statements">
-          <StatementDiagnosticsHistoryView />
-        </TabPane>
-        <TabPane tab="Transactions" key="Transactions">
-          <TransactionDiagnosticsPlaceholder />
-        </TabPane>
-      </Tabs>
+        items={tabItems}
+      />
     </div>
   );
 };
