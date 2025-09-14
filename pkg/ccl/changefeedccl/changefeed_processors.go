@@ -2353,9 +2353,10 @@ type durationSetting interface {
 type saveRateLimiter struct {
 	name         string
 	saveInterval durationSetting
-	lastSave     time.Time
-	avgSaveTime  time.Duration
 	warnEveryN   *util.EveryN
+
+	lastSave    time.Time
+	avgSaveTime time.Duration
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
@@ -2365,6 +2366,7 @@ func newSaveRateLimiter(name string, saveInterval durationSetting) *saveRateLimi
 		name:         name,
 		saveInterval: saveInterval,
 		warnEveryN:   &warnEveryN,
+		lastSave:     timeutil.Now(),
 	}
 }
 
