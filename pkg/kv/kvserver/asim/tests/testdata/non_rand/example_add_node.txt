@@ -42,3 +42,4 @@ failed assertion sample 1
 	max/mean=1.08 tick=3
 	max/mean=1.08 tick=4
 	max/mean=1.08 tick=5
+==========================

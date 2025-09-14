@@ -28,3 +28,4 @@ eval duration=30m samples=1 seed=42 metrics=(replicas)
 replicas#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
 replicas#1: last:  [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
 artifacts[default]: 36e2a4ffe85a04c2
+==========================

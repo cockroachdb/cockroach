@@ -578,6 +578,7 @@ func TestDataDriven(t *testing.T) {
 									sample+1, failString)
 							}
 						}
+						_, _ = fmt.Fprintf(&buf, "==========================\n")
 					})
 				}
 				return buf.String()
