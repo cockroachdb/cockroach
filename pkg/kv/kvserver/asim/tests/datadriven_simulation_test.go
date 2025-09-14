@@ -546,7 +546,6 @@ func TestDataDriven(t *testing.T) {
 								duration, clusterGen, rangeGen, loadGen,
 								settingsGen, eventGen, seedGen.Int63(), tmpStrB,
 							)
-							run.stateStrAcrossSamples = append(run.stateStrAcrossSamples, simulator.State().String())
 							if stateStrForOnce == "" {
 								stateStrForOnce = tmpStrB.String()
 							}
