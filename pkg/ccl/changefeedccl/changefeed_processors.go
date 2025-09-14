@@ -1307,8 +1307,7 @@ func newChangeFrontierProcessor(
 	}
 
 	cf.frontierPersistenceLimiter = newSaveRateLimiter(
-		"frontier",
-		changefeedbase.FrontierPersistenceInterval)
+		"frontier" /* name */, changefeedbase.FrontierPersistenceInterval)
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
