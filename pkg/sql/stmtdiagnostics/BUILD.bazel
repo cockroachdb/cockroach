@@ -53,6 +53,7 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/isql",
         "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlstats",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
