@@ -6,12 +6,9 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,10 +74,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcerr"
@@ -280,44 +275,6 @@ func (s *adminServer) RegisterDRPCService(d drpc.Mux) error {
 func (s *adminServer) RegisterGateway(
 	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
-	// Register the /_admin/v1/stmtbundle endpoint, which serves statement support
-	// bundles as files.
-	stmtBundlePattern := gwruntime.MustPattern(gwruntime.NewPattern(
-		1, /* version */
-		[]int{
-			int(gwutil.OpLitPush), 0, int(gwutil.OpLitPush), 1, int(gwutil.OpLitPush), 2,
-			int(gwutil.OpPush), 0, int(gwutil.OpConcatN), 1, int(gwutil.OpCapture), 3},
-		[]string{"_admin", "v1", "stmtbundle", "id"},
-		"", /* verb */
-	))
-
-	mux.Handle("GET", stmtBundlePattern, func(
-		w http.ResponseWriter, req *http.Request, pathParams map[string]string,
-	) {
-		idStr, ok := pathParams["id"]
-		if !ok {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-
-		// The privilege checks in the privilege checker below checks the user in the incoming
-		// gRPC metadata.
-		md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
-		authCtx := metadata.NewIncomingContext(req.Context(), md)
-		authCtx = s.AnnotateCtx(authCtx)
-		if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-		s.getStatementBundle(req.Context(), id, w)
-	})
-
-	// Register the endpoints defined in the proto.
 	return serverpb.RegisterAdminHandler(ctx, mux, conn)
 }
 
@@ -2644,55 +2601,6 @@ func (s *adminServer) QueryPlan(
 	return &serverpb.QueryPlanResponse{
 		DistSQLPhysicalQueryPlan: string(dbDatum),
 	}, nil
-}
-
-// getStatementBundle retrieves the statement bundle with the given id and
-// writes it out as an attachment. Note this function assumes the user has
-// permission to access the statement bundle.
-func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
-	row, err := s.internalExecutor.QueryRowEx(
-		ctx, "admin-stmt-bundle", nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
-		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
-		id,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if row == nil {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-	// Put together the entire bundle. Ideally we would stream it in chunks,
-	// but it's hard to return errors once we start.
-	var bundle bytes.Buffer
-	chunkIDs := row[0].(*tree.DArray).Array
-	for _, chunkID := range chunkIDs {
-		chunkRow, err := s.internalExecutor.QueryRowEx(
-			ctx, "admin-stmt-bundle", nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
-			chunkID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if chunkRow == nil {
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			return
-		}
-		data := chunkRow[0].(*tree.DBytes)
-		bundle.WriteString(string(*data))
-	}
-
-	w.Header().Set(
-		"Content-Disposition",
-		fmt.Sprintf("attachment; filename=stmt-bundle-%d.zip", id),
-	)
-
-	_, _ = io.Copy(w, &bundle)
 }
 
 // DecommissionPreCheck runs checks and returns the DecommissionPreCheckResponse
