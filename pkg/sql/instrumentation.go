@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -76,6 +76,8 @@ type instrumentationHelper struct {
 
 	// Query fingerprint (anonymized statement).
 	fingerprint string
+
+	fingerprintId appstatspb.StmtFingerprintID
 
 	// Transaction information.
 	implicitTxn bool
@@ -410,16 +412,18 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 // which case Finish() is a no-op).
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
-	cfg *ExecutorConfig,
-	statsCollector *sslocal.StatsCollector,
+	ex *connExecutor,
 	p *planner,
-	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	stmt *Statement,
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
-	collectTxnExecStats bool,
 	retryCount int32,
 ) (newCtx context.Context) {
+	cfg := ex.server.cfg
+	statsCollector := ex.statsCollector
+	stmtDiagnosticsRecorder := ex.stmtDiagnosticsRecorder
+	collectTxnExecStats := ex.extraTxnState.shouldCollectTxnExecutionStats
+
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
@@ -431,7 +435,9 @@ func (ih *instrumentationHelper) Setup(
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
 	ih.topLevelStats = topLevelQueryStats{}
-
+	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
+		stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+	ih.fingerprintId = stmtFingerprintId
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
 		ih.collectBundle = true
@@ -445,10 +451,20 @@ func (ih *instrumentationHelper) Setup(
 		ih.discardRows = true
 
 	default:
-		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
-		// IsRedacted will be false when ih.collectBundle is false.
-		ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
+		// Handle transaction-level diagnostics
+		if collectingDiagnostics := ih.handleTransactionDiagnostics(
+			&ex.state,
+			ex.transitionCtx.tracer,
+			stmt,
+			stmtFingerprintId,
+		); !collectingDiagnostics {
+			// If no transaction diagnostics are in progress, check for statement-level
+			// diagnostics
+			ih.collectBundle, ih.diagRequestID, ih.diagRequest =
+				stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, stmt.StmtNoConstants, "" /* planGist */)
+			// IsRedacted will be false when ih.collectBundle is false.
+			ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
+		}
 	}
 
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
@@ -602,9 +618,7 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 }
 
 func (ih *instrumentationHelper) Finish(
-	cfg *ExecutorConfig,
-	statsCollector *sslocal.StatsCollector,
-	txnStats *execstats.QueryLevelStats,
+	ex *connExecutor,
 	collectExecStats bool,
 	p *planner,
 	ast tree.Statement,
@@ -614,6 +628,10 @@ func (ih *instrumentationHelper) Finish(
 	retErr error,
 ) error {
 	ctx := ih.origCtx
+	cfg := ex.server.cfg
+	statsCollector := ex.statsCollector
+	txnStats := &ex.extraTxnState.accumulatedStats
+	txnHelper := &ex.state.txnInstrumentationHelper
 	if _, ok := ih.Tracing(); !ok {
 		return retErr
 	}
@@ -711,13 +729,21 @@ func (ih *instrumentationHelper) Finish(
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.ErrAllowReleased(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
-			// Include all non-critical errors as warnings. Note that these
-			// error strings might contain PII, but the warnings are only shown
-			// to the current user and aren't included into the bundle.
-			warnings = append(warnings, bundle.errorStrings...)
-			bundle.insert(
-				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
-			)
+
+			if txnHelper.DiagnosticsInProgress() {
+				// If we're collecting a transaction bundle, add the statement to the
+				// current txn diagnostic bundle. These will be persisted at the end
+				// of the transaction if the transaction matches the request.
+				txnHelper.AddStatementBundle(ctx, ast, uint64(ih.fingerprintId), ih.fingerprint, bundle)
+			} else {
+				// Include all non-critical errors as warnings. Note that these
+				// error strings might contain PII, but the warnings are only shown
+				// to the current user and aren't included into the bundle.
+				warnings = append(warnings, bundle.errorStrings...)
+				bundle.insert(
+					bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+				)
+			}
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
 	}
@@ -1213,4 +1239,42 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		recommendations,
 		reset,
 	)
+}
+
+// handleTransactionDiagnostics manages transaction-level diagnostics collection.
+// It handles both starting diagnostics for the first statement in a transaction
+// and continuing diagnostics for subsequent statements.
+func (ih *instrumentationHelper) handleTransactionDiagnostics(
+	txnState *txnState,
+	tracer *tracing.Tracer,
+	stmt *Statement,
+	stmtFingerprintId appstatspb.StmtFingerprintID,
+) (collectingDiagnostics bool) {
+	shouldCollect := false
+
+	// As per the documentation of txnState.mu, a lock isn't required here since
+	// we are just reading the value from the session's main go routine.
+	if txnState.mu.stmtCount == 1 {
+		// If this is the first statement being executed in the transaction,
+		// check if we need to start collecting transaction-level diagnostics.
+		newCtx, started := txnState.txnInstrumentationHelper.MaybeStartDiagnostics(txnState.Ctx, uint64(stmtFingerprintId), tracer)
+		if started {
+			// Set txn_state context to the one returned by MaybeStartDiagnostics,
+			// which contains the trace span started for diagnostics
+			txnState.Ctx = newCtx
+			shouldCollect = true
+		}
+	} else if txnState.txnInstrumentationHelper.ShouldContinueDiagnostics(stmt.AST, uint64(stmtFingerprintId)) {
+		// Continuing transaction diagnostics for subsequent statements
+		shouldCollect = true
+	}
+
+	if shouldCollect {
+		ih.collectBundle = true
+		ih.diagRequestID = 0
+		ih.diagRequest = stmtdiagnostics.Request{}
+		ih.explainFlags.RedactValues = txnState.txnInstrumentationHelper.ShouldRedact()
+	}
+
+	return shouldCollect
 }
