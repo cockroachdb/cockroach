@@ -1056,10 +1056,8 @@ type changeFrontier struct {
 	// record was updated to the frontier's highwater mark
 	lastProtectedTimestampUpdate time.Time
 
-	// TODO maybe group into one struct
-	// TODO add proper comments
-	lastFrontierPersistence     time.Time
-	frontierPersistenceDuration time.Duration
+	// frontierPersistenceLimiter is a rate limiter for persisting the span frontier.
+	frontierPersistenceLimiter *saveRateLimiter
 
 	// js, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
@@ -1307,6 +1305,10 @@ func newChangeFrontierProcessor(
 	} else {
 		cf.freqEmitResolved = emitNoResolved
 	}
+
+	cf.frontierPersistenceLimiter = newSaveRateLimiter(
+		"frontier",
+		changefeedbase.FrontierPersistenceInterval)
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
@@ -1818,37 +1820,16 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 	}
 
-	// TODO maybe put this in a helper struct
-	if persistFrontier := func() bool {
-		now := timeutil.Now()
-		elapsed := now.Sub(cf.lastFrontierPersistence)
-		interval := changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
-		if elapsed < interval {
-			return false
-		}
-		if elapsed < cf.frontierPersistenceDuration {
-			if persistFrontierLogEveryN.ShouldProcess(now) {
-				log.Changefeed.Warningf(ctx, "cannot persist frontier even though %s has elapsed "+
-					"since last save and %s is set to %s because average time to save was %s",
-					elapsed, changefeedbase.FrontierPersistenceInterval.Name(),
-					interval, cf.frontierPersistenceDuration)
-			}
-			return false
-		}
-		return true
-	}(); persistFrontier {
+	if cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			if err := cf.persistSpanFrontier(ctx, txn); err != nil {
-				return err
-			}
-			return nil
+			return cf.persistSpanFrontier(ctx, txn)
 		}); err != nil {
 			return false, err
 		}
-		cf.lastFrontierPersistence = timeutil.Now()
 		// TODO set this to something high for manual testing
-		cf.frontierPersistenceDuration = time.Duration(
-			cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean())
+		//cf.frontierPersistenceLimiter.doneSave(time.Duration(
+		//	cf.metrics.AggMetrics.Timers.FrontierPersistence.CumulativeSnapshot().Mean()))
+		cf.frontierPersistenceLimiter.doneSave(time.Hour)
 	}
 
 	return updateCheckpoint || updateHighWater, nil
@@ -2364,4 +2345,54 @@ func shouldCountUsageError(err error) bool {
 		!errors.Is(err, cancelchecker.QueryCanceledError) &&
 		pgerror.GetPGCode(err) != pgcode.UndefinedTable &&
 		status.Code(err) != codes.Canceled
+}
+
+type durationSetting interface {
+	Name() settings.SettingName
+	Get(sv *settings.Values) time.Duration
+}
+
+type saveRateLimiter struct {
+	name         string
+	saveInterval durationSetting
+	lastSave     time.Time
+	avgSaveTime  time.Duration
+	warnEveryN   *util.EveryN
+}
+
+func newSaveRateLimiter(name string, saveInterval durationSetting) *saveRateLimiter {
+	warnEveryN := util.Every(time.Minute)
+	return &saveRateLimiter{
+		name:         name,
+		saveInterval: saveInterval,
+		warnEveryN:   &warnEveryN,
+	}
+}
+
+func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool {
+	interval := l.saveInterval.Get(sv)
+	if interval == 0 {
+		return false
+	}
+	now := timeutil.Now()
+	elapsed := now.Sub(l.lastSave)
+	if elapsed < interval {
+		return false
+	}
+	if elapsed < l.avgSaveTime {
+		if l.warnEveryN != nil && l.warnEveryN.ShouldProcess(now) {
+			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
+				"since last save and %s is set to %s because average time to save was %s "+
+				"and further saving is disabled until that much time elapses",
+				l.name, elapsed, l.saveInterval.Name(),
+				interval, l.avgSaveTime)
+		}
+		return false
+	}
+	return true
+}
+
+func (l *saveRateLimiter) doneSave(avgSaveTime time.Duration) {
+	l.lastSave = timeutil.Now()
+	l.avgSaveTime = avgSaveTime
 }
