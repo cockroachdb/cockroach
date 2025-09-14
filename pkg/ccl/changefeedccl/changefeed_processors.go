@@ -1811,8 +1811,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		_, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint)
-		if err != nil {
+		if err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint); err != nil {
 			return false, err
 		}
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
@@ -1833,18 +1832,16 @@ func (cf *changeFrontier) maybeCheckpointJob(
 
 const changefeedJobProgressTxnName = "changefeed job progress"
 
-// TODO remove bool return val (not useful)
 func (cf *changeFrontier) checkpointJobProgress(
 	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
-) (bool, error) {
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(
-				errors.New("cf.knobs.RaiseRetryableError"))
+			return changefeedbase.MarkRetryableError(errors.New("cf.knobs.RaiseRetryableError"))
 		}
 	}
 
@@ -1899,7 +1896,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			return nil
 		}); err != nil {
-			return false, err
+			return err
 		}
 		if ptsUpdated {
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
@@ -1913,7 +1910,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
-	return true, nil
+	return nil
 }
 
 func (cf *changeFrontier) persistSpanFrontier(ctx context.Context, txn isql.Txn) error {
