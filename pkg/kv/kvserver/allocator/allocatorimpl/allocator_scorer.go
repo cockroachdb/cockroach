@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -728,6 +729,13 @@ func (o *LoadScorerOptions) removalMaximallyConvergesScore(
 	}
 	return 0
 }
+
+type LoadAndRangeCountScorerOptions struct {
+	*RangeCountScorerOptions
+	*mmaintegration.AllocatorSync
+}
+
+var _ ScorerOptions = LoadAndRangeCountScorerOptions{}
 
 // DiskCapacityOptions is the scorer options for disk fullness. It is used to
 // inform scoring based on the disk utilization of a store.
