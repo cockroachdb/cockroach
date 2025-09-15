@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -2134,7 +2135,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if s.drpc.enabled {
+	if rpcbase.ExperimentalDRPCEnabled.Get(&s.st.SV) {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2180,7 +2181,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if s.drpc.enabled {
+	if rpcbase.ExperimentalDRPCEnabled.Get(&s.st.SV) {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
