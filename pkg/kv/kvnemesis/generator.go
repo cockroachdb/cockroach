@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 // GeneratorConfig contains all the tunable knobs necessary to run a Generator.
@@ -185,6 +186,15 @@ type ClientOperationConfig struct {
 	// PutMustAcquireExclusiveLockExisting is an operation that Puts a key that
 	// likely exists, with MustAcquireExclusiveLock set to true.
 	PutMustAcquireExclusiveLockExisting int
+	// CPutMatchVal is an operation that CPuts a key with the condition likely
+	// matching the key's previous value.
+	CPutMatchVal int
+	// CPutNoMatch is an operation that CPuts a key with the condition definitely
+	// not matching the key's previous value.
+	CPutNoMatch int
+	// CPutAllowIfDoesNotExist is an operation that CPuts a key with the condition
+	// allowing to succeed when no value exists.
+	CPutAllowIfDoesNotExist int
 	// Scan is an operation that Scans a key range that may contain values.
 	Scan int
 	// ScanForUpdate is an operation that Scans a key range that may contain
@@ -404,6 +414,9 @@ func newAllOperationsConfig() GeneratorConfig {
 		PutExisting:                         1,
 		PutMustAcquireExclusiveLockMissing:  1,
 		PutMustAcquireExclusiveLockExisting: 1,
+		CPutMatchVal:                        1,
+		CPutNoMatch:                         1,
+		CPutAllowIfDoesNotExist:             1,
 		Scan:                                1,
 		ScanForUpdate:                       1,
 		ScanForUpdateGuaranteedDurability:   1,
@@ -637,7 +650,7 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 	g.mu.generator = generator{
 		Config:           config,
 		replicasFn:       replicasFn,
-		keys:             make(map[string]struct{}),
+		keys:             make(map[string]string),
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
 	}
@@ -659,9 +672,9 @@ type generator struct {
 
 	seqGen kvnemesisutil.Seq
 
-	// keys is the set of every key that has been written to, including those
-	// deleted or in rolled back transactions.
-	keys map[string]struct{}
+	// keys is a key-value map of every key that has been written to, including
+	// those deleted or in rolled back transactions.
+	keys map[string]string
 
 	// currentSplits is approximately the set of every split that has been made
 	// within DataSpan. The exact accounting is hard because Generator can hand
@@ -794,6 +807,8 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
 	addOpGen(allowed, randPutMustAcquireExclusiveLockMissing, c.PutMustAcquireExclusiveLockMissing)
+	addOpGen(allowed, randCPutNoMatch, c.CPutNoMatch)
+	addOpGen(allowed, randCPutAllowIfDoesNotExist, c.CPutAllowIfDoesNotExist)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
 	addOpGen(allowed, randDelMustAcquireExclusiveLockMissing, c.DeleteMustAcquireExclusiveLockMissing)
 
@@ -826,6 +841,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 		addOpGen(allowed, randPutMustAcquireExclusiveLockExisting, c.PutMustAcquireExclusiveLockExisting)
+		addOpGen(allowed, randCPutMatchVal, c.CPutMatchVal)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
 		addOpGen(allowed, randDelMustAcquireExclusiveLockExisting, c.DeleteMustAcquireExclusiveLockExisting)
 	}
@@ -945,7 +961,7 @@ func randGetMissingForShareSkipLockedGuaranteedDurability(g *generator, rng *ran
 }
 
 func randGetExisting(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.keys)
+	key := randSliceKey(rng, maps.Keys(g.keys))
 	return get(key)
 }
 
@@ -1012,27 +1028,58 @@ func randGetExistingForShareSkipLockedGuaranteedDurability(g *generator, rng *ra
 func randPutMissing(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
 	key := randKey(rng)
-	g.keys[key] = struct{}{}
-	return put(key, seq)
+	op := put(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
 }
 
 func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
-	key := randMapKey(rng, g.keys)
-	return put(key, seq)
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	op := put(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
 }
 
 func randPutMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
 	key := randKey(rng)
-	g.keys[key] = struct{}{}
-	return putMustAcquireLock(key, seq)
+	op := putMustAcquireLock(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
 }
 
 func randPutMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
-	key := randMapKey(rng, g.keys)
-	return putMustAcquireLock(key, seq)
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	op := putMustAcquireLock(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
+}
+
+func randCPutMatchVal(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	expVal := g.keys[key]
+	// There is no guarantee the expVal will actually match because the key may be
+	// overwritten concurrently.
+	op := cput(key, seq, expVal, false)
+	g.keys[key] = op.CPut.Value()
+	return op
+}
+
+func randCPutAllowIfDoesNotExist(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	op := cput(key, seq, "non-existent value", true)
+	g.keys[key] = op.CPut.Value()
+	return op
+}
+
+func randCPutNoMatch(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	return cput(key, seq, "non-existent value", false)
 }
 
 func randAddSSTable(g *generator, rng *rand.Rand) Operation {
@@ -1057,8 +1104,8 @@ func randAddSSTable(g *generator, rng *rand.Rand) Operation {
 	// AddSSTable requests cannot span multiple ranges, so we try to fit them
 	// within an existing range. This may race with a concurrent split, in which
 	// case the AddSSTable will fail, but that's ok -- most should still succeed.
-	rangeStart, rangeEnd := randRangeSpan(rng, g.currentSplits)
-	curKeys := keysBetween(g.keys, rangeStart, rangeEnd)
+	rangeStart, rangeEnd := randRangeSpan(rng, maps.Keys(g.currentSplits))
+	curKeys := keysBetween(maps.Keys(g.keys), rangeStart, rangeEnd)
 
 	// Generate keys first, to write them in order and without duplicates. We pick
 	// either existing or new keys depending on probReplace, making sure they're
@@ -1187,7 +1234,7 @@ func randBarrier(g *generator, rng *rand.Rand) Operation {
 		// them within an existing range. This may race with a concurrent split, in
 		// which case the Barrier will fail, but that's ok -- most should still
 		// succeed. These errors are ignored by the validator.
-		key, endKey = randRangeSpan(rng, g.currentSplits)
+		key, endKey = randRangeSpan(rng, maps.Keys(g.currentSplits))
 	} else {
 		key, endKey = randSpan(rng)
 	}
@@ -1197,7 +1244,7 @@ func randBarrier(g *generator, rng *rand.Rand) Operation {
 func randFlushLockTable(g *generator, rng *rand.Rand) Operation {
 	// FlushLockTable can't span multiple ranges. We want to test a combination of
 	// requests that span the entire range and those that span part of a range.
-	key, endKey := randRangeSpan(rng, g.currentSplits)
+	key, endKey := randRangeSpan(rng, maps.Keys(g.currentSplits))
 
 	wholeRange := rng.Float64() < 0.5
 	if !wholeRange {
@@ -1338,26 +1385,26 @@ func randReverseScanForShareSkipLockedGuaranteedDurability(g *generator, rng *ra
 
 func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
-	g.keys[key] = struct{}{}
+	g.keys[key] = ""
 	seq := g.nextSeq()
 	return del(key, seq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.keys)
+	key := randSliceKey(rng, maps.Keys(g.keys))
 	seq := g.nextSeq()
 	return del(key, seq)
 }
 
 func randDelMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.keys)
+	key := randSliceKey(rng, maps.Keys(g.keys))
 	seq := g.nextSeq()
 	return delMustAcquireLock(key, seq)
 }
 
 func randDelMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
-	g.keys[key] = struct{}{}
+	g.keys[key] = ""
 	seq := g.nextSeq()
 	return delMustAcquireLock(key, seq)
 }
@@ -1371,11 +1418,11 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 }
 
 func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
-	return randDelRangeUsingTombstoneImpl(g.currentSplits, g.keys, g.nextSeq, rng)
+	return randDelRangeUsingTombstoneImpl(maps.Keys(g.currentSplits), maps.Keys(g.keys), g.nextSeq, rng)
 }
 
 func randDelRangeUsingTombstoneImpl(
-	currentSplits, keys map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
+	currentSplits, keys []string, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
 ) Operation {
 	yn := func(probY float64) bool {
 		return rng.Float64() <= probY
@@ -1410,7 +1457,7 @@ func randDelRangeUsingTombstoneImpl(
 		if yn(0.5) || len(keys) == 0 {
 			k = randKey(rng)
 		} else {
-			k = randMapKey(rng, keys)
+			k = randSliceKey(rng, keys)
 		}
 		ek = tk(fk(k) + 1)
 	} else {
@@ -1434,7 +1481,7 @@ func randSplitNew(g *generator, rng *rand.Rand) Operation {
 }
 
 func randSplitAgain(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.historicalSplits)
+	key := randSliceKey(rng, maps.Keys(g.historicalSplits))
 	g.currentSplits[key] = struct{}{}
 	return split(key)
 }
@@ -1445,7 +1492,7 @@ func randMergeNotSplit(g *generator, rng *rand.Rand) Operation {
 }
 
 func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.currentSplits)
+	key := randSliceKey(rng, maps.Keys(g.currentSplits))
 	// Assume that this split actually got merged, even though we may have handed
 	// out a concurrent split for the same key.
 	delete(g.currentSplits, key)
@@ -1792,10 +1839,10 @@ func tk(n uint64) string {
 
 // keysBetween returns the keys between the given [start,end) span
 // in an undefined order. It takes a map for use with g.keys.
-func keysBetween(keys map[string]struct{}, start, end string) []string {
+func keysBetween(keys []string, start, end string) []string {
 	between := []string{}
 	s, e := fk(start), fk(end)
-	for key := range keys {
+	for _, key := range keys {
 		if nk := fk(key); nk >= s && nk < e {
 			between = append(between, key)
 		}
@@ -1818,11 +1865,7 @@ func randKey(rng *rand.Rand) string {
 
 // Interprets the provided map as the split points of the key space and returns
 // the boundaries of a random range.
-func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string, string) {
-	keys := make([]string, 0, len(curOrHistSplits))
-	for key := range curOrHistSplits {
-		keys = append(keys, key)
-	}
+func randRangeSpan(rng *rand.Rand, keys []string) (string, string) {
 	sort.Strings(keys)
 	if len(keys) == 0 {
 		// No splits.
@@ -1842,11 +1885,11 @@ func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string,
 	return keys[idx-1], keys[idx]
 }
 
-func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
-	if len(m) == 0 {
+func randSliceKey(rng *rand.Rand, keys []string) string {
+	if len(keys) == 0 {
 		return randKey(rng)
 	}
-	k, ek := randRangeSpan(rng, m)
+	k, ek := randRangeSpan(rng, keys)
 	// If there is only one key in the map we will get [0,x) or [x,max)
 	// back and want to return `x` to avoid the endpoints, which are
 	// reserved.
@@ -1963,6 +2006,18 @@ func putMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
 		Key:                      []byte(key),
 		MustAcquireExclusiveLock: true,
 		Seq:                      seq}}
+}
+
+func cput(key string, seq kvnemesisutil.Seq, expVal string, allowIfDoesNotExist bool) Operation {
+	op := Operation{CPut: &CPutOperation{
+		Key: []byte(key),
+		Seq: seq,
+		ExpVal: []byte(expVal),
+		AllowIfDoesNotExist: allowIfDoesNotExist}}
+	if expVal != "" {
+		op.CPut.ExpVal = nil
+	}
+	return op
 }
 
 func scan(key, endKey string) Operation {

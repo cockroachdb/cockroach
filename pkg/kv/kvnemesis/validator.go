@@ -478,6 +478,40 @@ func (v *validator) processOp(op Operation) {
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`put`, t.Result)
 		}
+	case *CPutOperation:
+		if v.checkNonAmbError(op, t.Result, exceptConditionFailed) {
+			break
+		}
+		observation := &observedRead{Key: t.Key}
+		// If the CPut failed due to a ConditionFailedError, the actual value (in
+		// the ConditionFailedError) is observed.
+		if e := (*kvpb.ConditionFailedError)(nil); errors.As(errorFromResult(t.Result), &e) {
+			if e.ActualValue != nil {
+				if valueBytes, err := e.ActualValue.GetBytes(); err == nil {
+					observation.Value = roachpb.MakeValueFromBytes(valueBytes)
+				}
+			}
+		} else if !t.AllowIfDoesNotExist {
+			// If AllowIfDoesNotExist == true and the CPut succeeded (i.e. no
+			// ConditionFailedError), we don't know if the read found the expected
+			// value or no value, so we can't add a value observation. Otherwise,
+			// since the CPut succeeded, it must have observed the expected value.
+			observation.Value = roachpb.MakeValueFromBytes(t.ExpVal)
+		}
+		v.curObservations = append(v.curObservations, observation)
+		write := &observedWrite{
+			Key:   t.Key,
+			Seq:   t.Seq,
+			Value: roachpb.MakeValueFromString(t.Value()),
+		}
+		if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
+			write.Timestamp = sv.Timestamp
+		}
+		v.curObservations = append(v.curObservations, write)
+
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`cput`, t.Result)
+		}
 	case *DeleteOperation:
 		if v.checkNonAmbError(op, t.Result) {
 			break
