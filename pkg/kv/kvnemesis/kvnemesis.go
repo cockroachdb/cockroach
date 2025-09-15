@@ -161,15 +161,24 @@ func RunNemesis(
 
 	failures := Validate(allSteps, kvs, env.Tracker)
 
+	var filteredFailures []error
+	for _, f := range failures {
+		// ConditionFailedErrors are expected and can be ignored.
+		canBeIgnored := exceptConditionFailed(f)
+		if !canBeIgnored {
+			filteredFailures = append(filteredFailures, f)
+		}
+	}
+
 	// Run consistency checks across the data span, primarily to check the
 	// accuracy of evaluated MVCC stats.
-	failures = append(failures, env.CheckConsistency(ctx, dataSpan)...)
+	filteredFailures = append(filteredFailures, env.CheckConsistency(ctx, dataSpan)...)
 
-	if len(failures) > 0 {
+	if len(filteredFailures) > 0 {
 		var failuresFile string
 		{
 			var buf strings.Builder
-			for _, err := range failures {
+			for _, err := range filteredFailures {
 				l(ctx, "", "%s", err)
 				fmt.Fprintf(&buf, "%+v\n", err)
 				fmt.Fprintln(&buf, strings.Repeat("=", 80))
@@ -218,7 +227,7 @@ scan KVs: %s`,
 			failuresFile, reproFile, rangefeedFile, kvsFile)
 	}
 
-	return failures, nil
+	return filteredFailures, nil
 }
 
 func printRepro(stepsByWorker [][]Step) string {
