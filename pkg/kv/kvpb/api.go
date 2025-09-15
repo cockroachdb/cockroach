@@ -248,7 +248,9 @@ var _ SafeFormatterRequest = (*EndTxnRequest)(nil)
 func (etr *EndTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.Printf("%s(", etr.Method())
 	if etr.Commit {
-		if etr.IsParallelCommit() {
+		if etr.Prepare {
+			s.Printf("prepare")
+		} else if etr.IsParallelCommit() {
 			s.Printf("parallel commit")
 		} else {
 			s.Printf("commit")
