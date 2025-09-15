@@ -6,6 +6,7 @@
 package mmaprototype
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -43,7 +44,7 @@ func (p *testLoadInfoProvider) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeL
 }
 
 func (p *testLoadInfoProvider) computeLoadSummary(
-	roachpb.StoreID, *meanStoreLoad, *meanNodeLoad,
+	context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad,
 ) storeLoadSummary {
 	fmt.Fprintf(&p.b, "called computeLoadSummary: returning seqnum %d", p.returnedLoadSeqNum)
 	return storeLoadSummary{
@@ -161,7 +162,7 @@ func TestMeansMemo(t *testing.T) {
 				var loadSeqNum uint64
 				d.ScanArgs(t, "load-seq-num", &loadSeqNum)
 				loadProvider.returnedLoadSeqNum = loadSeqNum
-				_ = mm.getStoreLoadSummary(mss, roachpb.StoreID(storeID), loadSeqNum)
+				_ = mm.getStoreLoadSummary(context.Background(), mss, roachpb.StoreID(storeID), loadSeqNum)
 				rv := loadProvider.b.String()
 				loadProvider.b.Reset()
 				return rv

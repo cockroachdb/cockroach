@@ -328,7 +328,7 @@ func (mm *meansMemo) clear() {
 type loadInfoProvider interface {
 	getStoreReportedLoad(roachpb.StoreID) (roachpb.NodeID, *storeLoad)
 	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
-	computeLoadSummary(roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
+	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
 }
 
 // getMeans returns the means for an expression.
@@ -347,13 +347,13 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 // the given set (encoded in means). It attempts to utilize a cached value if
 // curLoadSeqNum permits.
 func (mm *meansMemo) getStoreLoadSummary(
-	means *meansForStoreSet, storeID roachpb.StoreID, curLoadSeqNum uint64,
+	ctx context.Context, means *meansForStoreSet, storeID roachpb.StoreID, curLoadSeqNum uint64,
 ) storeLoadSummary {
 	summary, ok := means.tryGetStoreLoadSummary(storeID, curLoadSeqNum)
 	if ok {
 		return summary
 	}
-	summary = mm.loadInfoProvider.computeLoadSummary(storeID, &means.storeLoad, &means.nodeLoad)
+	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad)
 	means.putStoreLoadSummary(storeID, summary)
 	return summary
 }
@@ -465,6 +465,7 @@ func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Computes the loadSummary for a particular load dimension.
 func loadSummaryForDimension(
+	ctx context.Context,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
 	dim LoadDimension,
@@ -509,10 +510,10 @@ func loadSummaryForDimension(
 	defer func() {
 		if log.V(2) {
 			if storeID == 0 {
-				log.Dev.Infof(context.Background(), "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+				log.Dev.Infof(ctx, "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
 					nodeID, dim, load, meanLoad, fractionAbove, summary)
 			} else {
-				log.Dev.Infof(context.Background(), "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+				log.Dev.Infof(ctx, "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
 					storeID, dim, load, meanLoad, fractionAbove, summary)
 			}
 		}
