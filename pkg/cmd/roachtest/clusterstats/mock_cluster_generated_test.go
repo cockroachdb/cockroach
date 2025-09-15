@@ -48,9 +48,7 @@ func (m *MockCluster) EXPECT() *MockClusterMockRecorder {
 }
 
 // AddGrafanaAnnotation mocks base method.
-func (m *MockCluster) AddGrafanaAnnotation(
-	arg0 context.Context, arg1 *logger.Logger, arg2 grafana.AddAnnotationRequest,
-) error {
+func (m *MockCluster) AddGrafanaAnnotation(arg0 context.Context, arg1 *logger.Logger, arg2 grafana.AddAnnotationRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddGrafanaAnnotation", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -64,9 +62,7 @@ func (mr *MockClusterMockRecorder) AddGrafanaAnnotation(arg0, arg1, arg2 interfa
 }
 
 // AddInternalGrafanaAnnotation mocks base method.
-func (m *MockCluster) AddInternalGrafanaAnnotation(
-	arg0 context.Context, arg1 *logger.Logger, arg2 grafana.AddAnnotationRequest,
-) error {
+func (m *MockCluster) AddInternalGrafanaAnnotation(arg0 context.Context, arg1 *logger.Logger, arg2 grafana.AddAnnotationRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddInternalGrafanaAnnotation", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -74,17 +70,13 @@ func (m *MockCluster) AddInternalGrafanaAnnotation(
 }
 
 // AddInternalGrafanaAnnotation indicates an expected call of AddInternalGrafanaAnnotation.
-func (mr *MockClusterMockRecorder) AddInternalGrafanaAnnotation(
-	arg0, arg1, arg2 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) AddInternalGrafanaAnnotation(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddInternalGrafanaAnnotation", reflect.TypeOf((*MockCluster)(nil).AddInternalGrafanaAnnotation), arg0, arg1, arg2)
 }
 
 // AdminUIPorts mocks base method.
-func (m *MockCluster) AdminUIPorts(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 string, arg4 int,
-) ([]int, error) {
+func (m *MockCluster) AdminUIPorts(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 string, arg4 int) ([]int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AdminUIPorts", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].([]int)
@@ -93,9 +85,7 @@ func (m *MockCluster) AdminUIPorts(
 }
 
 // AdminUIPorts indicates an expected call of AdminUIPorts.
-func (mr *MockClusterMockRecorder) AdminUIPorts(
-	arg0, arg1, arg2, arg3, arg4 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) AdminUIPorts(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminUIPorts", reflect.TypeOf((*MockCluster)(nil).AdminUIPorts), arg0, arg1, arg2, arg3, arg4)
 }
@@ -171,9 +161,7 @@ func (mr *MockClusterMockRecorder) Cloud() *gomock.Call {
 }
 
 // Conn mocks base method.
-func (m *MockCluster) Conn(
-	arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.OptionFunc,
-) *sql.DB {
+func (m *MockCluster) Conn(arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.OptionFunc) *sql.DB {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -185,18 +173,14 @@ func (m *MockCluster) Conn(
 }
 
 // Conn indicates an expected call of Conn.
-func (mr *MockClusterMockRecorder) Conn(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Conn(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Conn", reflect.TypeOf((*MockCluster)(nil).Conn), varargs...)
 }
 
 // ConnE mocks base method.
-func (m *MockCluster) ConnE(
-	arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.OptionFunc,
-) (*sql.DB, error) {
+func (m *MockCluster) ConnE(arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.OptionFunc) (*sql.DB, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -209,18 +193,14 @@ func (m *MockCluster) ConnE(
 }
 
 // ConnE indicates an expected call of ConnE.
-func (mr *MockClusterMockRecorder) ConnE(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) ConnE(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConnE", reflect.TypeOf((*MockCluster)(nil).ConnE), varargs...)
 }
 
 // CreateSnapshot mocks base method.
-func (m *MockCluster) CreateSnapshot(
-	arg0 context.Context, arg1 string,
-) ([]vm.VolumeSnapshot, error) {
+func (m *MockCluster) CreateSnapshot(arg0 context.Context, arg1 string) ([]vm.VolumeSnapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateSnapshot", arg0, arg1)
 	ret0, _ := ret[0].([]vm.VolumeSnapshot)
@@ -247,9 +227,7 @@ func (m *MockCluster) DeleteSnapshots(arg0 context.Context, arg1 ...vm.VolumeSna
 }
 
 // DeleteSnapshots indicates an expected call of DeleteSnapshots.
-func (mr *MockClusterMockRecorder) DeleteSnapshots(
-	arg0 interface{}, arg1 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) DeleteSnapshots(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSnapshots", reflect.TypeOf((*MockCluster)(nil).DeleteSnapshots), varargs...)
@@ -270,9 +248,7 @@ func (mr *MockClusterMockRecorder) DestroyDNS(arg0, arg1 interface{}) *gomock.Ca
 }
 
 // ExternalAddr mocks base method.
-func (m *MockCluster) ExternalAddr(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption,
-) ([]string, error) {
+func (m *MockCluster) ExternalAddr(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExternalAddr", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]string)
@@ -287,9 +263,7 @@ func (mr *MockClusterMockRecorder) ExternalAddr(arg0, arg1, arg2 interface{}) *g
 }
 
 // ExternalAdminUIAddr mocks base method.
-func (m *MockCluster) ExternalAdminUIAddr(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...option.OptionFunc,
-) ([]string, error) {
+func (m *MockCluster) ExternalAdminUIAddr(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...option.OptionFunc) ([]string, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -302,18 +276,14 @@ func (m *MockCluster) ExternalAdminUIAddr(
 }
 
 // ExternalAdminUIAddr indicates an expected call of ExternalAdminUIAddr.
-func (mr *MockClusterMockRecorder) ExternalAdminUIAddr(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) ExternalAdminUIAddr(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalAdminUIAddr", reflect.TypeOf((*MockCluster)(nil).ExternalAdminUIAddr), varargs...)
 }
 
 // ExternalIP mocks base method.
-func (m *MockCluster) ExternalIP(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption,
-) ([]string, error) {
+func (m *MockCluster) ExternalIP(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExternalIP", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]string)
@@ -328,12 +298,7 @@ func (mr *MockClusterMockRecorder) ExternalIP(arg0, arg1, arg2 interface{}) *gom
 }
 
 // ExternalPGUrl mocks base method.
-func (m *MockCluster) ExternalPGUrl(
-	arg0 context.Context,
-	arg1 *logger.Logger,
-	arg2 option.NodeListOption,
-	arg3 roachprod.PGURLOptions,
-) ([]string, error) {
+func (m *MockCluster) ExternalPGUrl(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 roachprod.PGURLOptions) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExternalPGUrl", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]string)
@@ -348,9 +313,7 @@ func (mr *MockClusterMockRecorder) ExternalPGUrl(arg0, arg1, arg2, arg3 interfac
 }
 
 // FetchDebugZip mocks base method.
-func (m *MockCluster) FetchDebugZip(
-	arg0 context.Context, arg1 *logger.Logger, arg2 string, arg3 ...option.Option,
-) error {
+func (m *MockCluster) FetchDebugZip(arg0 context.Context, arg1 *logger.Logger, arg2 string, arg3 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -362,9 +325,7 @@ func (m *MockCluster) FetchDebugZip(
 }
 
 // FetchDebugZip indicates an expected call of FetchDebugZip.
-func (mr *MockClusterMockRecorder) FetchDebugZip(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) FetchDebugZip(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchDebugZip", reflect.TypeOf((*MockCluster)(nil).FetchDebugZip), varargs...)
@@ -399,9 +360,7 @@ func (mr *MockClusterMockRecorder) FetchTimeseriesData(arg0, arg1 interface{}) *
 }
 
 // Get mocks base method.
-func (m *MockCluster) Get(
-	arg0 context.Context, arg1 *logger.Logger, arg2, arg3 string, arg4 ...option.Option,
-) error {
+func (m *MockCluster) Get(arg0 context.Context, arg1 *logger.Logger, arg2, arg3 string, arg4 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -413,22 +372,14 @@ func (m *MockCluster) Get(
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockClusterMockRecorder) Get(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Get(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCluster)(nil).Get), varargs...)
 }
 
 // GetFailer mocks base method.
-func (m *MockCluster) GetFailer(
-	arg0 *logger.Logger,
-	arg1 option.NodeListOption,
-	arg2 string,
-	arg3 bool,
-	arg4 ...failures.ClusterOptionFunc,
-) (*failures.Failer, error) {
+func (m *MockCluster) GetFailer(arg0 *logger.Logger, arg1 option.NodeListOption, arg2 string, arg3 bool, arg4 ...failures.ClusterOptionFunc) (*failures.Failer, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -441,18 +392,14 @@ func (m *MockCluster) GetFailer(
 }
 
 // GetFailer indicates an expected call of GetFailer.
-func (mr *MockClusterMockRecorder) GetFailer(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) GetFailer(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailer", reflect.TypeOf((*MockCluster)(nil).GetFailer), varargs...)
 }
 
 // GetPreemptedVMs mocks base method.
-func (m *MockCluster) GetPreemptedVMs(
-	arg0 context.Context, arg1 *logger.Logger,
-) ([]vm.PreemptedVM, error) {
+func (m *MockCluster) GetPreemptedVMs(arg0 context.Context, arg1 *logger.Logger) ([]vm.PreemptedVM, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPreemptedVMs", arg0, arg1)
 	ret0, _ := ret[0].([]vm.PreemptedVM)
@@ -467,9 +414,7 @@ func (mr *MockClusterMockRecorder) GetPreemptedVMs(arg0, arg1 interface{}) *gomo
 }
 
 // GitClone mocks base method.
-func (m *MockCluster) GitClone(
-	arg0 context.Context, arg1 *logger.Logger, arg2, arg3, arg4 string, arg5 option.NodeListOption,
-) error {
+func (m *MockCluster) GitClone(arg0 context.Context, arg1 *logger.Logger, arg2, arg3, arg4 string, arg5 option.NodeListOption) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GitClone", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(error)
@@ -477,17 +422,13 @@ func (m *MockCluster) GitClone(
 }
 
 // GitClone indicates an expected call of GitClone.
-func (mr *MockClusterMockRecorder) GitClone(
-	arg0, arg1, arg2, arg3, arg4, arg5 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) GitClone(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GitClone", reflect.TypeOf((*MockCluster)(nil).GitClone), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
 // Install mocks base method.
-func (m *MockCluster) Install(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...string,
-) error {
+func (m *MockCluster) Install(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...string) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -499,18 +440,14 @@ func (m *MockCluster) Install(
 }
 
 // Install indicates an expected call of Install.
-func (mr *MockClusterMockRecorder) Install(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Install(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Install", reflect.TypeOf((*MockCluster)(nil).Install), varargs...)
 }
 
 // InternalAddr mocks base method.
-func (m *MockCluster) InternalAddr(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption,
-) ([]string, error) {
+func (m *MockCluster) InternalAddr(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InternalAddr", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]string)
@@ -525,9 +462,7 @@ func (mr *MockClusterMockRecorder) InternalAddr(arg0, arg1, arg2 interface{}) *g
 }
 
 // InternalAdminUIAddr mocks base method.
-func (m *MockCluster) InternalAdminUIAddr(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...option.OptionFunc,
-) ([]string, error) {
+func (m *MockCluster) InternalAdminUIAddr(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 ...option.OptionFunc) ([]string, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -540,18 +475,14 @@ func (m *MockCluster) InternalAdminUIAddr(
 }
 
 // InternalAdminUIAddr indicates an expected call of InternalAdminUIAddr.
-func (mr *MockClusterMockRecorder) InternalAdminUIAddr(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) InternalAdminUIAddr(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InternalAdminUIAddr", reflect.TypeOf((*MockCluster)(nil).InternalAdminUIAddr), varargs...)
 }
 
 // InternalIP mocks base method.
-func (m *MockCluster) InternalIP(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption,
-) ([]string, error) {
+func (m *MockCluster) InternalIP(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InternalIP", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]string)
@@ -566,12 +497,7 @@ func (mr *MockClusterMockRecorder) InternalIP(arg0, arg1, arg2 interface{}) *gom
 }
 
 // InternalPGUrl mocks base method.
-func (m *MockCluster) InternalPGUrl(
-	arg0 context.Context,
-	arg1 *logger.Logger,
-	arg2 option.NodeListOption,
-	arg3 roachprod.PGURLOptions,
-) ([]string, error) {
+func (m *MockCluster) InternalPGUrl(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 roachprod.PGURLOptions) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InternalPGUrl", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]string)
@@ -614,9 +540,7 @@ func (mr *MockClusterMockRecorder) IsSecure() *gomock.Call {
 }
 
 // ListSnapshots mocks base method.
-func (m *MockCluster) ListSnapshots(
-	arg0 context.Context, arg1 vm.VolumeSnapshotListOpts,
-) ([]vm.VolumeSnapshot, error) {
+func (m *MockCluster) ListSnapshots(arg0 context.Context, arg1 vm.VolumeSnapshotListOpts) ([]vm.VolumeSnapshot, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListSnapshots", arg0, arg1)
 	ret0, _ := ret[0].([]vm.VolumeSnapshot)
@@ -663,9 +587,7 @@ func (mr *MockClusterMockRecorder) Name() *gomock.Call {
 }
 
 // NewDeprecatedMonitor mocks base method.
-func (m *MockCluster) NewDeprecatedMonitor(
-	arg0 context.Context, arg1 ...option.Option,
-) cluster.Monitor {
+func (m *MockCluster) NewDeprecatedMonitor(arg0 context.Context, arg1 ...option.Option) cluster.Monitor {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
 	for _, a := range arg1 {
@@ -677,9 +599,7 @@ func (m *MockCluster) NewDeprecatedMonitor(
 }
 
 // NewDeprecatedMonitor indicates an expected call of NewDeprecatedMonitor.
-func (mr *MockClusterMockRecorder) NewDeprecatedMonitor(
-	arg0 interface{}, arg1 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) NewDeprecatedMonitor(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewDeprecatedMonitor", reflect.TypeOf((*MockCluster)(nil).NewDeprecatedMonitor), varargs...)
@@ -742,18 +662,14 @@ func (m *MockCluster) Put(arg0 context.Context, arg1, arg2 string, arg3 ...optio
 }
 
 // Put indicates an expected call of Put.
-func (mr *MockClusterMockRecorder) Put(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Put(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockCluster)(nil).Put), varargs...)
 }
 
 // PutE mocks base method.
-func (m *MockCluster) PutE(
-	arg0 context.Context, arg1 *logger.Logger, arg2, arg3 string, arg4 ...option.Option,
-) error {
+func (m *MockCluster) PutE(arg0 context.Context, arg1 *logger.Logger, arg2, arg3 string, arg4 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -765,9 +681,7 @@ func (m *MockCluster) PutE(
 }
 
 // PutE indicates an expected call of PutE.
-func (mr *MockClusterMockRecorder) PutE(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) PutE(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutE", reflect.TypeOf((*MockCluster)(nil).PutE), varargs...)
@@ -788,9 +702,7 @@ func (mr *MockClusterMockRecorder) PutLibraries(arg0, arg1, arg2 interface{}) *g
 }
 
 // PutString mocks base method.
-func (m *MockCluster) PutString(
-	arg0 context.Context, arg1, arg2 string, arg3 fs.FileMode, arg4 ...option.Option,
-) error {
+func (m *MockCluster) PutString(arg0 context.Context, arg1, arg2 string, arg3 fs.FileMode, arg4 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -802,9 +714,7 @@ func (m *MockCluster) PutString(
 }
 
 // PutString indicates an expected call of PutString.
-func (mr *MockClusterMockRecorder) PutString(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) PutString(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutString", reflect.TypeOf((*MockCluster)(nil).PutString), varargs...)
@@ -839,9 +749,7 @@ func (mr *MockClusterMockRecorder) RefetchCertsFromNode(arg0, arg1 interface{}) 
 }
 
 // Reformat mocks base method.
-func (m *MockCluster) Reformat(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 string,
-) error {
+func (m *MockCluster) Reformat(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Reformat", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -855,25 +763,19 @@ func (mr *MockClusterMockRecorder) Reformat(arg0, arg1, arg2, arg3 interface{}) 
 }
 
 // RegisterClusterHook mocks base method.
-func (m *MockCluster) RegisterClusterHook(
-	arg0 string, arg1 option.ClusterHookType, arg2 time.Duration, arg3 func(context.Context) error,
-) {
+func (m *MockCluster) RegisterClusterHook(arg0 string, arg1 option.ClusterHookType, arg2 time.Duration, arg3 func(context.Context) error) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterClusterHook", arg0, arg1, arg2, arg3)
 }
 
 // RegisterClusterHook indicates an expected call of RegisterClusterHook.
-func (mr *MockClusterMockRecorder) RegisterClusterHook(
-	arg0, arg1, arg2, arg3 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) RegisterClusterHook(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterClusterHook", reflect.TypeOf((*MockCluster)(nil).RegisterClusterHook), arg0, arg1, arg2, arg3)
 }
 
 // Reset mocks base method.
-func (m *MockCluster) Reset(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption,
-) error {
+func (m *MockCluster) Reset(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Reset", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -923,9 +825,7 @@ func (mr *MockClusterMockRecorder) RunE(arg0, arg1 interface{}, arg2 ...interfac
 }
 
 // RunWithDetails mocks base method.
-func (m *MockCluster) RunWithDetails(
-	arg0 context.Context, arg1 *logger.Logger, arg2 install.RunOptions, arg3 ...string,
-) ([]install.RunResultDetails, error) {
+func (m *MockCluster) RunWithDetails(arg0 context.Context, arg1 *logger.Logger, arg2 install.RunOptions, arg3 ...string) ([]install.RunResultDetails, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -938,18 +838,14 @@ func (m *MockCluster) RunWithDetails(
 }
 
 // RunWithDetails indicates an expected call of RunWithDetails.
-func (mr *MockClusterMockRecorder) RunWithDetails(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) RunWithDetails(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunWithDetails", reflect.TypeOf((*MockCluster)(nil).RunWithDetails), varargs...)
 }
 
 // RunWithDetailsSingleNode mocks base method.
-func (m *MockCluster) RunWithDetailsSingleNode(
-	arg0 context.Context, arg1 *logger.Logger, arg2 install.RunOptions, arg3 ...string,
-) (install.RunResultDetails, error) {
+func (m *MockCluster) RunWithDetailsSingleNode(arg0 context.Context, arg1 *logger.Logger, arg2 install.RunOptions, arg3 ...string) (install.RunResultDetails, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -962,18 +858,14 @@ func (m *MockCluster) RunWithDetailsSingleNode(
 }
 
 // RunWithDetailsSingleNode indicates an expected call of RunWithDetailsSingleNode.
-func (mr *MockClusterMockRecorder) RunWithDetailsSingleNode(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) RunWithDetailsSingleNode(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunWithDetailsSingleNode", reflect.TypeOf((*MockCluster)(nil).RunWithDetailsSingleNode), varargs...)
 }
 
 // SQLPorts mocks base method.
-func (m *MockCluster) SQLPorts(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 string, arg4 int,
-) ([]int, error) {
+func (m *MockCluster) SQLPorts(arg0 context.Context, arg1 *logger.Logger, arg2 option.NodeListOption, arg3 string, arg4 int) ([]int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SQLPorts", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].([]int)
@@ -1012,9 +904,7 @@ func (mr *MockClusterMockRecorder) SetRandomSeed(arg0 interface{}) *gomock.Call 
 }
 
 // Signal mocks base method.
-func (m *MockCluster) Signal(
-	arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.Option,
-) {
+func (m *MockCluster) Signal(arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.Option) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -1024,18 +914,14 @@ func (m *MockCluster) Signal(
 }
 
 // Signal indicates an expected call of Signal.
-func (mr *MockClusterMockRecorder) Signal(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Signal(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Signal", reflect.TypeOf((*MockCluster)(nil).Signal), varargs...)
 }
 
 // SignalE mocks base method.
-func (m *MockCluster) SignalE(
-	arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.Option,
-) error {
+func (m *MockCluster) SignalE(arg0 context.Context, arg1 *logger.Logger, arg2 int, arg3 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -1047,9 +933,7 @@ func (m *MockCluster) SignalE(
 }
 
 // SignalE indicates an expected call of SignalE.
-func (mr *MockClusterMockRecorder) SignalE(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) SignalE(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignalE", reflect.TypeOf((*MockCluster)(nil).SignalE), varargs...)
@@ -1070,9 +954,7 @@ func (mr *MockClusterMockRecorder) Spec() *gomock.Call {
 }
 
 // Stage mocks base method.
-func (m *MockCluster) Stage(
-	arg0 context.Context, arg1 *logger.Logger, arg2, arg3, arg4 string, arg5 ...option.Option,
-) error {
+func (m *MockCluster) Stage(arg0 context.Context, arg1 *logger.Logger, arg2, arg3, arg4 string, arg5 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4}
 	for _, a := range arg5 {
@@ -1084,22 +966,14 @@ func (m *MockCluster) Stage(
 }
 
 // Stage indicates an expected call of Stage.
-func (mr *MockClusterMockRecorder) Stage(
-	arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Stage(arg0, arg1, arg2, arg3, arg4 interface{}, arg5 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3, arg4}, arg5...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stage", reflect.TypeOf((*MockCluster)(nil).Stage), varargs...)
 }
 
 // Start mocks base method.
-func (m *MockCluster) Start(
-	arg0 context.Context,
-	arg1 *logger.Logger,
-	arg2 option.StartOpts,
-	arg3 install.ClusterSettings,
-	arg4 ...option.Option,
-) {
+func (m *MockCluster) Start(arg0 context.Context, arg1 *logger.Logger, arg2 option.StartOpts, arg3 install.ClusterSettings, arg4 ...option.Option) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -1109,22 +983,14 @@ func (m *MockCluster) Start(
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockClusterMockRecorder) Start(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Start(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockCluster)(nil).Start), varargs...)
 }
 
 // StartE mocks base method.
-func (m *MockCluster) StartE(
-	arg0 context.Context,
-	arg1 *logger.Logger,
-	arg2 option.StartOpts,
-	arg3 install.ClusterSettings,
-	arg4 ...option.Option,
-) error {
+func (m *MockCluster) StartE(arg0 context.Context, arg1 *logger.Logger, arg2 option.StartOpts, arg3 install.ClusterSettings, arg4 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
@@ -1136,18 +1002,14 @@ func (m *MockCluster) StartE(
 }
 
 // StartE indicates an expected call of StartE.
-func (mr *MockClusterMockRecorder) StartE(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) StartE(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartE", reflect.TypeOf((*MockCluster)(nil).StartE), varargs...)
 }
 
 // StartGrafana mocks base method.
-func (m *MockCluster) StartGrafana(
-	arg0 context.Context, arg1 *logger.Logger, arg2 *prometheus.Config,
-) error {
+func (m *MockCluster) StartGrafana(arg0 context.Context, arg1 *logger.Logger, arg2 *prometheus.Config) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartGrafana", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -1161,25 +1023,19 @@ func (mr *MockClusterMockRecorder) StartGrafana(arg0, arg1, arg2 interface{}) *g
 }
 
 // StartServiceForVirtualCluster mocks base method.
-func (m *MockCluster) StartServiceForVirtualCluster(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.StartOpts, arg3 install.ClusterSettings,
-) {
+func (m *MockCluster) StartServiceForVirtualCluster(arg0 context.Context, arg1 *logger.Logger, arg2 option.StartOpts, arg3 install.ClusterSettings) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StartServiceForVirtualCluster", arg0, arg1, arg2, arg3)
 }
 
 // StartServiceForVirtualCluster indicates an expected call of StartServiceForVirtualCluster.
-func (mr *MockClusterMockRecorder) StartServiceForVirtualCluster(
-	arg0, arg1, arg2, arg3 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) StartServiceForVirtualCluster(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartServiceForVirtualCluster", reflect.TypeOf((*MockCluster)(nil).StartServiceForVirtualCluster), arg0, arg1, arg2, arg3)
 }
 
 // StartServiceForVirtualClusterE mocks base method.
-func (m *MockCluster) StartServiceForVirtualClusterE(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.StartOpts, arg3 install.ClusterSettings,
-) error {
+func (m *MockCluster) StartServiceForVirtualClusterE(arg0 context.Context, arg1 *logger.Logger, arg2 option.StartOpts, arg3 install.ClusterSettings) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartServiceForVirtualClusterE", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
@@ -1187,17 +1043,13 @@ func (m *MockCluster) StartServiceForVirtualClusterE(
 }
 
 // StartServiceForVirtualClusterE indicates an expected call of StartServiceForVirtualClusterE.
-func (mr *MockClusterMockRecorder) StartServiceForVirtualClusterE(
-	arg0, arg1, arg2, arg3 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) StartServiceForVirtualClusterE(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartServiceForVirtualClusterE", reflect.TypeOf((*MockCluster)(nil).StartServiceForVirtualClusterE), arg0, arg1, arg2, arg3)
 }
 
 // Stop mocks base method.
-func (m *MockCluster) Stop(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts, arg3 ...option.Option,
-) {
+func (m *MockCluster) Stop(arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts, arg3 ...option.Option) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -1207,18 +1059,14 @@ func (m *MockCluster) Stop(
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *MockClusterMockRecorder) Stop(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) Stop(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockCluster)(nil).Stop), varargs...)
 }
 
 // StopE mocks base method.
-func (m *MockCluster) StopE(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts, arg3 ...option.Option,
-) error {
+func (m *MockCluster) StopE(arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts, arg3 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -1230,9 +1078,7 @@ func (m *MockCluster) StopE(
 }
 
 // StopE indicates an expected call of StopE.
-func (mr *MockClusterMockRecorder) StopE(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) StopE(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopE", reflect.TypeOf((*MockCluster)(nil).StopE), varargs...)
@@ -1253,25 +1099,19 @@ func (mr *MockClusterMockRecorder) StopGrafana(arg0, arg1, arg2 interface{}) *go
 }
 
 // StopServiceForVirtualCluster mocks base method.
-func (m *MockCluster) StopServiceForVirtualCluster(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts,
-) {
+func (m *MockCluster) StopServiceForVirtualCluster(arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StopServiceForVirtualCluster", arg0, arg1, arg2)
 }
 
 // StopServiceForVirtualCluster indicates an expected call of StopServiceForVirtualCluster.
-func (mr *MockClusterMockRecorder) StopServiceForVirtualCluster(
-	arg0, arg1, arg2 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) StopServiceForVirtualCluster(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopServiceForVirtualCluster", reflect.TypeOf((*MockCluster)(nil).StopServiceForVirtualCluster), arg0, arg1, arg2)
 }
 
 // StopServiceForVirtualClusterE mocks base method.
-func (m *MockCluster) StopServiceForVirtualClusterE(
-	arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts,
-) error {
+func (m *MockCluster) StopServiceForVirtualClusterE(arg0 context.Context, arg1 *logger.Logger, arg2 option.StopOpts) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StopServiceForVirtualClusterE", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
@@ -1279,9 +1119,7 @@ func (m *MockCluster) StopServiceForVirtualClusterE(
 }
 
 // StopServiceForVirtualClusterE indicates an expected call of StopServiceForVirtualClusterE.
-func (mr *MockClusterMockRecorder) StopServiceForVirtualClusterE(
-	arg0, arg1, arg2 interface{},
-) *gomock.Call {
+func (mr *MockClusterMockRecorder) StopServiceForVirtualClusterE(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopServiceForVirtualClusterE", reflect.TypeOf((*MockCluster)(nil).StopServiceForVirtualClusterE), arg0, arg1, arg2)
 }
@@ -1304,9 +1142,7 @@ func (mr *MockClusterMockRecorder) Wipe(arg0 interface{}, arg1 ...interface{}) *
 }
 
 // WipeE mocks base method.
-func (m *MockCluster) WipeE(
-	arg0 context.Context, arg1 *logger.Logger, arg2 ...option.Option,
-) error {
+func (m *MockCluster) WipeE(arg0 context.Context, arg1 *logger.Logger, arg2 ...option.Option) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -1337,17 +1173,3 @@ func (mr *MockClusterMockRecorder) WorkloadNode() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkloadNode", reflect.TypeOf((*MockCluster)(nil).WorkloadNode))
 }
-
-//
-//// WorkloadNode indicates an expected call of WorkloadNode.
-//func (m *MockCluster) WorkloadNodeExists() bool {
-//	m.ctrl.T.Helper()
-//	ret := m.ctrl.Call(m, "WorkloadNodeExists")
-//	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkloadNode", reflect.TypeOf((*MockCluster)(nil).WorkloadNode))
-//}
-//
-//// WorkloadNode indicates an expected call of WorkloadNode.
-//func (mr *MockClusterMockRecorder) WorkloadNodeExists() *gomock.Call {
-//	mr.mock.ctrl.T.Helper()
-//	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkloadNode", reflect.TypeOf((*MockCluster)(nil).WorkloadNode))
-//}
