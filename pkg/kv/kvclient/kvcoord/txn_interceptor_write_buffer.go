@@ -1762,7 +1762,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
 
-	_, hasEndTxn := ba.GetArg(kvpb.EndTxn)
+	endTxnArg, hasEndTxn := ba.GetArg(kvpb.EndTxn)
 	if !hasEndTxn {
 		// We're flushing the buffer even though the batch doesn't contain an EndTxn
 		// request. That means we buffered some writes and decided to disable write
@@ -1771,7 +1771,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	}
 
 	midTxnFlush := !hasEndTxn
-	splitBatchRequired := separateBatchIsNeeded(ba)
+	splitBatchRequired := separateBatchIsNeeded(ba, endTxnArg)
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
@@ -1861,7 +1861,16 @@ func requireAllFlushedRequestsProcessed(responses []kvpb.ResponseUnion) error {
 //
 // NB: If you are updating this function, you need to update
 // clearBatchRequestOptions as well.
-func separateBatchIsNeeded(ba *kvpb.BatchRequest) bool {
+func separateBatchIsNeeded(ba *kvpb.BatchRequest, optEndTxn kvpb.Request) bool {
+	if optEndTxn != nil {
+		// TODO(#153513): This should really be fixed server-side. Currently, if we
+		// send an EndTxn with Prepare, it will be erroneously evaluated as a 1PC
+		// commit.
+		if optEndTxn.(*kvpb.EndTxnRequest).Prepare {
+			return true
+		}
+	}
+
 	return ba.MightStopEarly() ||
 		ba.ReadConsistency != 0 ||
 		ba.WaitPolicy != 0 ||
