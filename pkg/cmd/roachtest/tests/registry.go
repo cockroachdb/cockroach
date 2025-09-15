@@ -23,6 +23,7 @@ func RegisterTests(r registry.Registry) {
 	registerAsyncpg(r)
 	registerBackup(r)
 	registerBackupMixedVersion(r)
+	registerBackupMixedVersionWill(r)
 	registerBackupNodeShutdown(r)
 	registerBackupRestoreRoundTrip(r)
 	registerOnlineRestoreRecovery(r)

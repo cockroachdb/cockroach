@@ -16,7 +16,7 @@ import (
 
 // ClusterSettings contains various knobs that affect operations on a cluster.
 type ClusterSettings struct {
-	Binary         string // Need to change this to Cockroach Binary because I'm adding workload binary
+	Binary         string
 	WorkloadBinary string
 	Secure         bool
 	PGUrlCertsDir  string

@@ -2876,6 +2876,94 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 	return nil
 }
 
+func registerBackupMixedVersionWill(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:              "will",
+		Timeout:           8 * time.Hour,
+		Owner:             registry.OwnerDisasterRecovery,
+		Cluster:           r.MakeClusterSpec(5, spec.WorkloadNode()),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		NativeLibs:        registry.LibGEOS,
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
+		Suites:                    registry.Suites(registry.MixedVersion, registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
+		Randomized:                true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			enabledDeploymentModes := []mixedversion.DeploymentMode{
+				mixedversion.SystemOnlyDeployment,
+				mixedversion.SharedProcessDeployment,
+			}
+			// Separate process deployments do not have node local storage.
+			if !c.IsLocal() {
+				enabledDeploymentModes = append(enabledDeploymentModes, mixedversion.SeparateProcessDeployment)
+			}
+
+			mvt := mixedversion.NewTest(
+				ctx, t, t.L(), c, c.CRDBNodes(),
+				// We use a longer upgrade timeout in this test to give the
+				// migrations enough time to finish considering all the data
+				// that might exist in the cluster by the time the upgrade is
+				// attempted.
+				mixedversion.UpgradeTimeout(30*time.Minute),
+				mixedversion.AlwaysUseLatestPredecessors,
+				mixedversion.EnabledDeploymentModes(enabledDeploymentModes...),
+				// We disable cluster setting mutators because this test
+				// resets the cluster to older versions when verifying cluster
+				// backups. This makes the mixed-version context inaccurate
+				// and leads to flakes.
+				//
+				// TODO(renato): don't disable these mutators when the
+				// framework exposes some utility to provide mutual exclusion
+				// of concurrent steps.
+				mixedversion.DisableAllClusterSettingMutators(),
+			)
+			testRNG := mvt.RNG()
+
+			dbs := []string{"bank", "tpcc"}
+			backupTest, err := newMixedVersionBackup(t, c, c.CRDBNodes(), dbs)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			defer func() {
+				err := backupTest.cleanUp(ctx)
+				if err != nil {
+					t.L().Printf("encountered error while cleaning up: %v", err)
+				}
+			}()
+
+			// numWarehouses is picked as a number that provides enough work
+			// for the cluster used in this test without overloading it,
+			// which can make the backups take much longer to finish.
+			const numWarehouses = 100
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, c.CRDBNodes(), false)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, numWarehouses, c.CRDBNodes())
+
+			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
+			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
+			mvt.OnStartup("maybe set custom cluster settings", backupTest.setClusterSettings)
+
+			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, false /* overrideBinary */)
+			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
+			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
+
+			//mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)
+			//mvt.InMixedVersion("verify some backups", backupTest.verifySomeBackups)
+			//mvt.AfterUpgradeFinalized("maybe verify all backups", backupTest.verifyAllBackups)
+
+			backupTest.stopBackground = func() {
+				stopBank()
+				stopTPCC()
+				stopSystemWriter()
+			}
+			mvt.Run()
+		},
+	})
+}
+
 func registerBackupMixedVersion(r registry.Registry) {
 	// backup/mixed-version tests different states of backup in a mixed
 	// version cluster. The actual state of the cluster when a backup is
@@ -2959,18 +3047,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   the cluster relatively busy while the backup and restores
 			//   take place. Its schema is also more complex, and the
 			//   operations more closely resemble a customer workload.
-
-			// Use the same versioned workload binary as the cluster. The bank workload
-			// is no longer backwards compatible after #149374, so we need to use the same
-			// version as the cockroach cluster.
-			// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
-			// Background workload, arc over whole test, starts when tests start
-			// This one would need to be lowest compatible version (from version)
-
-			// What if someone wanted to use something fancy from a newer version
-			// No one will use a new workload feature in the background (Herko hopes)
-
-			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, true /* overrideBinary */)
+			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, false /* overrideBinary */)
 			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
 
