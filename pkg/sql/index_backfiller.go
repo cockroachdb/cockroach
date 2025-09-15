@@ -106,7 +106,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 
 		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
 		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
-			knobs.RunBeforeIndexBackfillProgressUpdate(ctx, progress.CompletedSpans)
+			knobs.RunBeforeIndexBackfillProgressUpdate(ctx, meta.BulkProcessorProgress.CompletedSpans)
 		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
