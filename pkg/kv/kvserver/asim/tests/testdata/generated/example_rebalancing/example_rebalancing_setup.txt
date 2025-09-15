@@ -11,3 +11,5 @@ Key Space
 Event
 Workload Set Up
 	[1,10000): 95%r large-block [128-256B/op, 7000ops/s]
+Changed Settings
+	StateExchangeDelay: 20s (default: 500ms)

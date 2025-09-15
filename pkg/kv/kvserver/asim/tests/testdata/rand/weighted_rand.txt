@@ -54,6 +54,7 @@ rand_ranges replication_factor=3 placement_type=weighted_rand weighted_rand=(0,0
 
 eval duration=5m num_iterations=3 verbose=(test_settings,initial_state,config_gen)
 ----
+----
 test settings
 	num_iterations=3 duration=5m0s
 ----------------------------------
@@ -70,7 +71,8 @@ sample1: start running
 configurations generated using seed 5571782338101878760
 	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], {563 0 160411 3 0 }
-	[0,200000): write-only [1B/op, 0ops/s]	
+	[0,200000): write-only [1B/op, 0ops/s]
+	
 initial state at 2022-03-21 11:00:00:
 stores(6)=[s1n1=(replicas(22)),s2n1=(replicas(23)),s3n2=(replicas(23)),s4n2=(replicas(529)),s5n3=(replicas(563)),s6n3=(replicas(529))]
 sample1: pass
@@ -79,7 +81,8 @@ sample2: start running
 configurations generated using seed 4299969443970870044
 	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], {299 0 9542 3 0 }
-	[0,200000): write-only [1B/op, 0ops/s]	
+	[0,200000): write-only [1B/op, 0ops/s]
+	
 initial state at 2022-03-21 11:00:00:
 stores(6)=[s1n1=(replicas(53)),s2n1=(replicas(52)),s3n2=(replicas(52)),s4n2=(replicas(299)),s5n3=(replicas(142)),s6n3=(replicas(299))]
 sample2: pass
@@ -88,8 +91,11 @@ sample3: start running
 configurations generated using seed 4157513341729910236
 	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], {521 0 82660 3 0 }
-	[0,200000): write-only [1B/op, 0ops/s]	
+	[0,200000): write-only [1B/op, 0ops/s]
+	
 initial state at 2022-03-21 11:00:00:
 stores(6)=[s1n1=(replicas(91)),s2n1=(replicas(91)),s3n2=(replicas(92)),s4n2=(replicas(521)),s5n3=(replicas(247)),s6n3=(replicas(521))]
 sample3: pass
 ----------------------------------
+----
+----
