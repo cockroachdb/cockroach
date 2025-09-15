@@ -178,11 +178,15 @@ type benchOptions struct {
 type engineMaker func(testing.TB, string, int64, fs.RWMode) storage.Engine
 
 func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, rw fs.RWMode) storage.Engine {
-	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{RW: rw}, nil /* statsCollector */)
+	settings := cluster.MakeTestingClusterSettings()
+	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{
+		RW:      rw,
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	if err != nil {
 		b.Fatalf("could not initialize fs env at %s: %+v", dir, err)
 	}
-	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), storage.LBaseMaxBytes(lBaseMaxBytes))
+	eng, err := storage.Open(context.Background(), env, settings, storage.LBaseMaxBytes(lBaseMaxBytes))
 	if err != nil {
 		env.Close()
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
