@@ -229,14 +229,14 @@ type BasicCluster struct {
 	StoreByteCapacity   int64
 	Region              []string
 	NodesPerRegion      []int
-	NodeCPURateCapacity int64
+	NodeCPURateCapacity state.NodeCPURateCapacities
 }
 
 func (bc BasicCluster) String() string {
 	var b strings.Builder
 	_, _ = fmt.Fprintf(&b,
-		"[nodes: %d, stores_per_node:%d, store_disk_capacity: %dGiB, node_capacity: %dcpu-sec/sec",
-		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity>>30, bc.NodeCPURateCapacity/time.Second.Nanoseconds())
+		"[nodes: %d, stores_per_node:%d, store_disk_capacity: %dGiB, node_capacity: %s",
+		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity>>30, bc.NodeCPURateCapacity)
 	if len(bc.Region) != 0 {
 		_, _ = fmt.Fprintf(&b, ", region: %v, nodes_per_region: %v", bc.Region, bc.NodesPerRegion)
 	}
