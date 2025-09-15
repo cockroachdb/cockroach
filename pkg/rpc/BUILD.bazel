@@ -151,7 +151,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
-        "//pkg/testutils/grpcutils",
+        "//pkg/testutils/rpcutils",
         "//pkg/testutils/skip",
         "//pkg/ts/tspb",
         "//pkg/util",
