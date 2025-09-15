@@ -1,7 +1,8 @@
 # LogicTest: !3node-tenant !local-mixed-25.2
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
-# TODO(#151895): investigate why setting it to 1B deadlocks the test.
+# We set the max_buffer_size to avoid unexpected buffer flush since this test expects certain writes to have been
+# buffered. If those writes are flushed, the attempts it makes to coordinate a lock-loss event are foiled.
 statement ok
 SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';
 
