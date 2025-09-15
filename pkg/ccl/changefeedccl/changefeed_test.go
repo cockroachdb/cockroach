@@ -6359,111 +6359,124 @@ func TestChangefeedMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+	testutils.RunTrueAndFalse(t, "schema_locked", func(t *testing.T, schemaLocked bool) {
+		testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
+			sqlDB.Exec(t, fmt.Sprintf(
+				`CREATE TABLE foo (a INT PRIMARY KEY) WITH (schema_locked=%t)`, schemaLocked))
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-		if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.flushes`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
-			t.Errorf(`expected %d got %d`, 0, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_metadata_nanos`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-		if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c != 0 {
-			t.Errorf(`expected 0 got %d`, c)
-		}
-
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
-		_, err := foo.Next()
-		require.NoError(t, err)
-
-		testutils.SucceedsSoon(t, func() error {
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
-				return errors.Errorf(`expected 1 got %d`, c)
+			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
 			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
-				return errors.Errorf(`expected 22 got %d`, c)
+			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
 			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 22 {
-				return errors.Errorf(`expected 22 got %d`, c)
+			if c := s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
 			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
+			if c := s.Server.MustGetSQLCounter(`changefeed.flushes`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
 			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.running`); c != 1 {
-				return errors.Errorf(`expected 1 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c <= 0 {
-				return errors.Errorf(`expected > 0 got %d`, c)
-			}
-			return nil
-		})
-
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
-
-		// Check that two changefeeds add correctly.
-		// Set cluster settings back so we don't interfere with schema changes.
-		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-		fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		_, _ = fooCopy.Next()
-		_, _ = fooCopy.Next()
-		testutils.SucceedsSoon(t, func() error {
-			// We can't assert exactly 4 or 88 in case we get (allowed) duplicates
-			// from RangeFeed.
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c < 4 {
-				return errors.Errorf(`expected >= 4 got %d`, c)
-			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c < 88 {
-				return errors.Errorf(`expected >= 88 got %d`, c)
-			}
-			return nil
-		})
-
-		// Cancel all the changefeeds and check that max_behind_nanos returns to 0
-		// and the number running returns to 0.
-		require.NoError(t, foo.Close())
-		require.NoError(t, fooCopy.Close())
-		testutils.SucceedsSoon(t, func() error {
 			if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
-				return errors.Errorf(`expected 0 got %d`, c)
+				t.Errorf(`expected %d got %d`, 0, c)
 			}
-			if c := s.Server.MustGetSQLCounter(`changefeed.running`); c != 0 {
-				return errors.Errorf(`expected 0 got %d`, c)
+			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
 			}
-			return nil
-		})
-	}
+			if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
+			}
+			if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_metadata_nanos`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
+			}
+			if c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
+			}
 
-	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"))
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
+			_, err := foo.Next()
+			require.NoError(t, err)
+
+			testutils.SucceedsSoon(t, func() error {
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
+					return errors.Errorf(`expected 1 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
+					return errors.Errorf(`expected 22 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.flushed_bytes`); c != 22 {
+					return errors.Errorf(`expected 22 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.flushes`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.running`); c != 1 {
+					return errors.Errorf(`expected 1 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
+					return errors.Errorf(`expected > 0 got %d`, c)
+				}
+				switch c := s.Server.MustGetSQLCounter(`changefeed.schemafeed.table_history_scans`); {
+				case schemaLocked:
+					// When the table is schema-locked, we permit this metric to be zero
+					// because we might not have done any table history scans depending
+					// on the relative timing of the schema feed and the kv feed.
+					if c < 0 {
+						return errors.Errorf(`expected >= 0 got %d`, c)
+					}
+				default:
+					if c <= 0 {
+						return errors.Errorf(`expected > 0 got %d`, c)
+					}
+				}
+				return nil
+			})
+
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+			// Check that two changefeeds add correctly.
+			// Set cluster settings back so we don't interfere with schema changes.
+			sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+			fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			_, _ = fooCopy.Next()
+			_, _ = fooCopy.Next()
+			testutils.SucceedsSoon(t, func() error {
+				// We can't assert exactly 4 or 88 in case we get (allowed) duplicates
+				// from RangeFeed.
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c < 4 {
+					return errors.Errorf(`expected >= 4 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c < 88 {
+					return errors.Errorf(`expected >= 88 got %d`, c)
+				}
+				return nil
+			})
+
+			// Cancel all the changefeeds and check that max_behind_nanos returns to 0
+			// and the number running returns to 0.
+			require.NoError(t, foo.Close())
+			require.NoError(t, fooCopy.Close())
+			testutils.SucceedsSoon(t, func() error {
+				if c := s.Server.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
+					return errors.Errorf(`expected 0 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.running`); c != 0 {
+					return errors.Errorf(`expected 0 got %d`, c)
+				}
+				return nil
+			})
+		}
+
+		cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"))
+	})
 }
 
 func TestChangefeedRetryableError(t *testing.T) {
