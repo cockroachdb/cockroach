@@ -1,0 +1,36 @@
+skip_under_ci
+----
+
+gen_cluster nodes=3 node_cpu_rate_capacity=(8000000000,8000000000,16000000000)
+----
+
+gen_ranges ranges=200 min_key=1 max_key=10000 placement_type=replica_placement
+{s1,s2,s3}:1
+----
+{s1:*,s2,s3}:1
+
+# Read-only workload on first 30 ranges. 5 cores.
+gen_load rate=1000000 rw_ratio=1 request_cpu_per_access=5000 min_key=1 max_key=10000
+----
+
+# TODO(tbg): it's not easy to write assertions for heterogeneous clusters. Adding a
+# (failing) assertion here to surface the actual distribution we get. We really want
+# n1 to roughly match n2, and n3 to be about double that. If we added a "%cpu" metric,
+# that one should be balanced. The current assertion erroneously passes for MMA, but
+# that's only because rebalancing is so slow that s1 still has most of the replicas.
+assertion stat=cpu type=balance ticks=6 lower_bound=1.8
+----
+asserting: max_{stores}(cpu)/mean_{stores}(cpu) ≥ 1.80 at each of last 6 ticks
+
+eval cfgs=(mma-only,sma-count) duration=10m
+----
+artifacts[mma-only]: 8abc4b0901fa82c8
+artifacts[sma-count]: b290cc8e3eb8e7d5
+failed assertion sample 1
+  balance stat=cpu threshold=(≥1.80) ticks=6
+	max/mean=1.08 tick=0
+	max/mean=1.08 tick=1
+	max/mean=1.08 tick=2
+	max/mean=1.08 tick=3
+	max/mean=1.08 tick=4
+	max/mean=1.08 tick=5

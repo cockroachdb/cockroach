@@ -198,7 +198,7 @@ type BasicCluster struct {
 	StoreByteCapacity   int64
 	Region              []string
 	NodesPerRegion      []int
-	NodeCPURateCapacity int64
+	NodeCPURateCapacity []uint64
 }
 
 func (bc BasicCluster) String() string {

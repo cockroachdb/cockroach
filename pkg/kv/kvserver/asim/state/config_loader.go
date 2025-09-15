@@ -278,7 +278,7 @@ type Region struct {
 type ClusterInfo struct {
 	Regions                  []Region
 	StoreDiskCapacityBytes   int64
-	NodeCPURateCapacityNanos int64
+	NodeCPURateCapacityNanos []uint64
 }
 
 func (c ClusterInfo) String() (s string) {
@@ -374,7 +374,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
 				s.SetNodeLocality(node.NodeID(), locality)
-				s.SetNodeCPURateCapacity(node.NodeID(), c.NodeCPURateCapacityNanos)
+				s.SetNodeCPURateCapacity(node.NodeID(), int64(c.NodeCPURateCapacityNanos[i]))
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))
