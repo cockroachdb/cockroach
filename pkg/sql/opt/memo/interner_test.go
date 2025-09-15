@@ -963,6 +963,16 @@ func TestInternerPhysProps(t *testing.T) {
 		LimitHint:    1,
 		Distribution: physical.Distribution{Regions: []string{"us-east", "us-west"}},
 	}
+	physProps10 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		RemoteBranch: true,
+	}
+	physProps11 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		RemoteBranch: true,
+	}
 
 	testCases := []struct {
 		phys    *physical.Required
@@ -978,6 +988,8 @@ func TestInternerPhysProps(t *testing.T) {
 		{phys: &physProps7, inCache: false},
 		{phys: &physProps8, inCache: false},
 		{phys: &physProps9, inCache: true},
+		{phys: &physProps10, inCache: false},
+		{phys: &physProps11, inCache: true},
 	}
 
 	inCache := make(map[*physical.Required]bool)
