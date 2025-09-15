@@ -135,7 +135,7 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
-	github.com/cockroachdb/crlib v0.0.0-20250718215705-7ff5051265b9
+	github.com/cockroachdb/crlib v0.0.0-20250914170308-eb2d55dbae2e
 	github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5
 	github.com/cockroachdb/errors v1.12.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
