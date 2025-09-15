@@ -581,12 +581,20 @@ func ResolveBackupManifests(
 	}
 	defer rootStore.Close()
 
+	if !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || isCustomIncLocation {
+		return legacyResolveBackupManifests(
+			ctx, execCfg, mem, defaultCollectionURI, mkStore,
+			resolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory,
+			endTime, encryption, kmsEnv, user, includeSkipped, includeCompacted,
+		)
+	}
+
 	exists, err := IndexExists(ctx, rootStore, resolvedSubdir)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
 
-	if !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || !exists || isCustomIncLocation {
+	if !exists {
 		return legacyResolveBackupManifests(
 			ctx, execCfg, mem, defaultCollectionURI, mkStore,
 			resolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory,
