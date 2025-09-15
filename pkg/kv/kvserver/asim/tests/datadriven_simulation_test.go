@@ -313,8 +313,8 @@ func TestDataDriven(t *testing.T) {
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
-				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
-				var nodeCPURateCapacity int64 = 8 * 1e9 // 8 vcpus
+				var storeByteCapacity int64 = 256 << 30     /* 256 GiB  */
+				var nodeCPURateCapacity = []uint64{8 * 1e9} // 8 vcpus
 				var region []string
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
@@ -323,6 +323,32 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "region", &region)
 				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
 				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+
+				var buf strings.Builder
+				require.NotEmpty(t, nodeCPURateCapacity)
+				{
+					n := len(nodeCPURateCapacity)
+					require.True(t, n == 1 || n == nodes, "need to specify node_cpu_rate_capacity for each node")
+					// If only one value was given, replicate it to all nodes.
+					for len(nodeCPURateCapacity) < nodes {
+						nodeCPURateCapacity = append(nodeCPURateCapacity, nodeCPURateCapacity[0])
+					}
+
+					for _, cpct := range nodeCPURateCapacity {
+						cores := float64(cpct) / 1e9
+						if cores >= 1 {
+							continue
+						}
+						// The load is very small, which is likely an accident.
+						// TODO(mma): fix up the tests that trigger this warning.
+						// TODO(mma): print a warning whenever the measured CPU utilization
+						// on a node exceeds this capacity, as that's likely not what the test
+						// intended.
+						_, _ = fmt.Fprintf(&buf, "WARNING: node CPU capacity of ≈%.2f cores is likely accidental\n", cores)
+						break
+					}
+				}
+
 				clusterGen = gen.BasicCluster{
 					Nodes:               nodes,
 					StoresPerNode:       storesPerNode,
@@ -330,15 +356,6 @@ func TestDataDriven(t *testing.T) {
 					Region:              region,
 					NodesPerRegion:      nodesPerRegion,
 					NodeCPURateCapacity: nodeCPURateCapacity,
-				}
-				var buf strings.Builder
-				if c := float64(nodeCPURateCapacity) / 1e9; c < 1 {
-					// The load is very small, which is likely an accident.
-					// TODO(mma): fix up the tests that trigger this warning.
-					// TODO(mma): print a warning whenever the measured CPU utilization
-					// on a node exceeds this capacity, as that's likely not what the test
-					// intended.
-					_, _ = fmt.Fprintf(&buf, "WARNING: node CPU capacity of ≈%.2f cores is likely accidental\n", c)
 				}
 				return buf.String()
 			case "load_cluster":

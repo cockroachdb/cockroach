@@ -1,0 +1,17 @@
+skip_under_ci
+----
+
+gen_cluster nodes=3 node_cpu_rate_capacity=(8000000000,8000000000,16000000000)
+----
+
+gen_ranges ranges=200
+----
+
+# Read-only workload on first 30 ranges. 5 cores.
+gen_load rate=1000000 rw_ratio=1 request_cpu_per_access=5000 min_key=1 max_key=10000
+----
+
+eval cfgs=(mma-only,sma-only) duration=10m
+----
+artifacts[mma-only]: 9a7e94898150ccf2
+artifacts[sma-only]: e454e87ada6b9e83
