@@ -228,3 +228,7 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 		}
 	}
 }
+
+func (as *AllocatorSync) IsCompatibleWithMMA() bool {
+	return false
+}

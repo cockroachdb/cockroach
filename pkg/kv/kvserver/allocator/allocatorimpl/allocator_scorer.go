@@ -730,12 +730,53 @@ func (o *LoadScorerOptions) removalMaximallyConvergesScore(
 	return 0
 }
 
-type LoadAndRangeCountScorerOptions struct {
+type LoadAwareRangeCountScorerOptions struct {
 	*RangeCountScorerOptions
 	*mmaintegration.AllocatorSync
 }
 
-var _ ScorerOptions = LoadAndRangeCountScorerOptions{}
+var _ ScorerOptions = LoadAwareRangeCountScorerOptions{}
+
+func (o LoadAwareRangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
+	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
+) bool {
+	if !o.RangeCountScorerOptions.shouldRebalanceBasedOnThresholds(ctx, eqClass, metrics) {
+		return false
+	}
+	// check if this decision is allowed by mma
+	return o.AllocatorSync.IsCompatibleWithMMA()
+}
+
+func (o LoadAwareRangeCountScorerOptions) rebalanceFromConvergesScore(
+	eqClass equivalenceClass,
+) int {
+	// If this store does not need to be rebalanced, giving a boost.
+	if !rebalanceConvergesRangeCountOnMean(
+		eqClass.candidateSL, eqClass.existing.Capacity, eqClass.existing.Capacity.RangeCount-1,
+	) {
+		return 1
+	}
+	// this can need a help to shed more ranges away, when this is being compared
+	// with another pair. mma can decide whether we should give it another boost
+	// to make this target less likely (if this store is underloaded, mma wants to
+	// make this less likely compared to another 1).
+	return 0
+}
+
+// TODO: is it okay for balanceScore and rebalanceFromConvergesScore to stay
+// unchanged
+
+// rebalanceToConvergesScore returns 1 if rebalancing a replica to `sd` will
+// converge its range count towards the mean of the candidate stores inside
+// `eqClass`.
+func (o LoadAwareRangeCountScorerOptions) rebalanceToConvergesScore(
+	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
+) int {
+	if rebalanceConvergesRangeCountOnMean(eqClass.candidateSL, candidate.Capacity, candidate.Capacity.RangeCount+1) {
+		return 1
+	}
+	return 0
+}
 
 // DiskCapacityOptions is the scorer options for disk fullness. It is used to
 // inform scoring based on the disk utilization of a store.
