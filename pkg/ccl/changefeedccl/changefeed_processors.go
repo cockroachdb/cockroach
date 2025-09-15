@@ -648,6 +648,25 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 
+	// Restore per-table resolved timestamps if we have them.
+	if ca.spec.ResolvedTables != nil {
+		for tableID, ts := range ca.spec.ResolvedTables.Tables {
+			if ts.IsEmpty() {
+				continue
+			}
+			if ts.Less(initialHighWater) {
+				return nil, errors.AssertionFailedf(
+					"table %d resolved timestamp %s is less than initial high water %s",
+					tableID, ts, initialHighWater)
+			}
+			// Create a span covering the entire table and forward it to the timestamp.
+			tableSpan := ca.FlowCtx.Codec().TableSpan(uint32(tableID))
+			if _, err := ca.frontier.Forward(tableSpan, ts); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
 	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
@@ -1465,6 +1484,32 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 
+	// Restore per-table resolved timestamps if we have them.
+	if cf.spec.ResolvedTables != nil {
+		for tableID, ts := range cf.spec.ResolvedTables.Tables {
+			if ts.IsEmpty() {
+				continue
+			}
+			if ts.Less(initialHighwater) {
+				err := errors.AssertionFailedf(
+					"table %d resolved timestamp %s is less than initial high water %s",
+					tableID, ts, initialHighwater)
+				log.Dev.Warningf(cf.Ctx(),
+					"moving to draining due to error restoring per-table resolved timestamps: %v", err)
+				cf.MoveToDraining(err)
+				return
+			}
+			// Create a span covering the entire table and forward it to the timestamp.
+			tableSpan := cf.FlowCtx.Codec().TableSpan(uint32(tableID))
+			if _, err := cf.frontier.Forward(tableSpan, ts); err != nil {
+				log.Dev.Warningf(cf.Ctx(),
+					"moving to draining due to error restoring per-table resolved timestamps: %v", err)
+				cf.MoveToDraining(err)
+				return
+			}
+		}
+	}
+
 	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
 		log.Changefeed.Warningf(cf.Ctx(),
 			"moving to draining due to error restoring span-level checkpoint: %v", err)
@@ -1694,6 +1739,12 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 		log.Changefeed.Infof(ctx, "progress update from aggregator: %#v", resolvedSpans)
 	}
 
+	if cf.knobs.ChangeFrontierKnobs.OnAggregatorProgress != nil {
+		if err := cf.knobs.ChangeFrontierKnobs.OnAggregatorProgress(&resolvedSpans); err != nil {
+			return err
+		}
+	}
+
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
@@ -1799,6 +1850,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	}
 
 	if updateCheckpoint || updateHighWater {
+		fmt.Printf("CHECKPOINT DEBUG: updateCheckpoint=%t, updateHighWater=%t, inBackfill=%t, frontierChanged=%t, atBoundary=%t\n",
+			updateCheckpoint, updateHighWater, inBackfill, frontierChanged, atBoundary)
 		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
 			return false, nil
 		}
@@ -1874,6 +1927,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 				for tableID, tableFrontier := range cf.frontier.Frontiers() {
 					resolvedTables.Tables[tableID] = tableFrontier.Frontier()
 				}
+
+				fmt.Printf("RESOLVED TABLES DEBUG: writing resolved tables to job info: %v\n", resolvedTables)
 
 				if err := writeChangefeedJobInfo(ctx, resolvedTablesFilename, resolvedTables, txn, cf.spec.JobID); err != nil {
 					return errors.Wrap(err, "error writing resolved tables to job info")
