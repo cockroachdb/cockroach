@@ -45,6 +45,10 @@ func TestDatadrivenVecIndex(t *testing.T) {
 
 	skip.UnderRace(t, "test is too slow under race")
 
+	// Skip on s390x due to floating point precision differences.
+	// See: https://github.com/cockroachdb/cockroach/issues/151766
+	skip.OnArch(t, "s390x", "data driven vector index tests disabled on s390x due to issue #151766")
+
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		if !strings.HasSuffix(path, ".ddt") {
 			// Skip files that are not data-driven tests.
