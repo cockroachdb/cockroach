@@ -149,7 +149,9 @@ func TestTransactionContentionEvents(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 

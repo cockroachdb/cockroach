@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -68,8 +69,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -2125,6 +2128,17 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			return err
 		}
 	}
+	var apiInternalServer http.Handler
+	if rpcbase.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
+		// Pass our own node ID to connect to local RPC servers
+		apiInternalServer, err = apiinternal.NewAPIInternalServer(
+			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings)
+		if err != nil {
+			return err
+		}
+	} else {
+		apiInternalServer = gwMux
+	}
 
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
@@ -2138,7 +2152,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* handleRequestsUnauthenticated */
+		gwMux,                        /* unauthenticatedGWMux */
+		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		s.inspectzServer,             /* handleInspectzUnauthenticated */
 		newAPIV2Server(ctx, &apiV2ServerOpts{
