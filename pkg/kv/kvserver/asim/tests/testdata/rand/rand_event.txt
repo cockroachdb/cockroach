@@ -30,7 +30,8 @@ region:US_West [zone=US_West_1(nodes=2,stores=1)]
 region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	[0,200000): 1(rf=3), 0MiB
-	[0,200000): write-only [1B/op, 0ops/s]		[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}]
+	[0,200000): write-only [1B/op, 0ops/s]
+		[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}]
 	assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:05:00
