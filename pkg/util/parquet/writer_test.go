@@ -119,6 +119,7 @@ func TestRandomDatums(t *testing.T) {
 	fileName := "TestRandomDatums.parquet"
 	f, err := os.CreateTemp("", fileName)
 	require.NoError(t, err)
+	defer removeFileUnlessFailed(t, f)
 
 	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 	require.NoError(t, err)
@@ -520,6 +521,7 @@ func TestBasicDatums(t *testing.T) {
 			fileName := "TestBasicDatums.parquet"
 			f, err := os.CreateTemp("", fileName)
 			require.NoError(t, err)
+			defer removeFileUnlessFailed(t, f)
 
 			schemaDef, err := NewSchema(tc.sch.columnNames, tc.sch.columnTypes)
 			require.NoError(t, err)
@@ -627,6 +629,7 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 	fileName := "OptionsTest.parquet"
 	f, err := os.CreateTemp("", fileName)
 	require.NoError(t, err)
+	defer removeFileUnlessFailed(t, f)
 
 	writer, err := NewWriter(schemaDef, f, opt)
 	require.NoError(t, err)
@@ -647,6 +650,16 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 
 	err = reader.Close()
 	require.NoError(t, err)
+}
+
+func removeFileUnlessFailed(t *testing.T, f *os.File) {
+	t.Helper()
+	if !t.Failed() {
+		return
+	}
+	if err := os.Remove(f.Name()); err != nil {
+		t.Logf("failed to remove file %s: %v", f.Name(), err)
+	}
 }
 
 func TestSquashTuples(t *testing.T) {
