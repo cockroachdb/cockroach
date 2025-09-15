@@ -162,9 +162,8 @@ func (ib *indexBackfiller) constructIndexEntries(
 
 			// Identify the Span for which we have constructed index entries. This is
 			// used for reporting progress and updating the job details.
-			completedSpan := ib.spec.Spans[i]
+			completedSpan := roachpb.Span{Key: startKey, EndKey: ib.spec.Spans[i].EndKey}
 			if todo.Key != nil {
-				completedSpan.Key = startKey
 				completedSpan.EndKey = todo.Key
 			}
 
