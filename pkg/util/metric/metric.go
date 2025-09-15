@@ -133,6 +133,17 @@ type PrometheusReinitialisable interface {
 	ReinitialiseChildMetrics(labelConfig LabelConfig)
 }
 
+// PrometheusEvictable is an extension of PrometheusIterable to indicate that
+// this metric uses cache as a storage and children metric can be evicted
+// based on eviction policy.
+// The InitializeMetrics method accepts a reference of LabelSliceCache which is
+// initialised at metric registry and settings values for configurable eviction policy.
+type PrometheusEvictable interface {
+	PrometheusIterable
+
+	InitializeMetrics(*LabelSliceCache)
+}
+
 // WindowedHistogram represents a histogram with data over recent window of
 // time. It's used primarily to record histogram data into CRDB's internal
 // time-series database, which does not know how to encode cumulative
