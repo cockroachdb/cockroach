@@ -65,6 +65,15 @@ message PutOperation {
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
+message CPutOperation {
+  bytes key = 1;
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bytes exp_val = 3;
+  bool allow_if_does_not_exist = 4;
+
+  Result result = 5 [(gogoproto.nullable) = false];
+}
+
 message DeleteOperation {
   bytes key = 1;
   uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
@@ -203,6 +212,7 @@ message Operation {
   BarrierOperation barrier = 23;
   FlushLockTableOperation flush_lock_table = 24;
   MutateBatchHeaderOperation mutate_batch_header = 25;
+  CPutOperation cput = 26 [(gogoproto.customname) = "CPut"];
 }
 
 enum ResultType {

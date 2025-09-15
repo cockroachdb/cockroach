@@ -26,6 +26,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *PutOperation:
 		return &o.Result
+	case *CPutOperation:
+		return &o.Result
 	case *ScanOperation:
 		return &o.Result
 	case *DeleteOperation:
@@ -137,6 +139,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *GetOperation:
 		o.format(w, fctx)
 	case *PutOperation:
+		o.format(w, fctx)
+	case *CPutOperation:
 		o.format(w, fctx)
 	case *ScanOperation:
 		o.format(w, fctx)
@@ -273,6 +277,15 @@ func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
 	op.Result.format(w)
 }
 
+func (op CPutOperation) format(w *strings.Builder, fctx formatCtx) {
+	verb := "CPut"
+	if op.AllowIfDoesNotExist {
+		verb = "CPutAllowIfDoesNotExist"
+	}
+	fmt.Fprintf(w, `%s.%s(%s%s, sv(%d), exp(%s))`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq, op.ExpVal)
+	op.Result.format(w)
+}
+
 // sv stands for sequence value, i.e. the value dictated by the given sequence number.
 func sv(seq kvnemesisutil.Seq) string {
 	return `v` + strconv.Itoa(int(seq))
@@ -281,6 +294,12 @@ func sv(seq kvnemesisutil.Seq) string {
 // Value returns the value written by this put. This is a function of the
 // sequence number.
 func (op PutOperation) Value() string {
+	return sv(op.Seq)
+}
+
+// Value returns the value written by this cput. This is a function of the
+// sequence number.
+func (op CPutOperation) Value() string {
 	return sv(op.Seq)
 }
 
