@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -582,7 +584,8 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 
 	ctx := context.Background()
 	backfillProgressCompletedCh := make(chan []roachpb.Span)
-	const numSpans = 100
+	const numRows = 100
+	const numSpans = 20
 	var isBlockingBackfillProgress atomic.Bool
 	isBlockingBackfillProgress.Store(true)
 
@@ -611,6 +614,14 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 					}
 					return nil
 				},
+				AfterStage: func(p scplan.Plan, stageIdx int) error {
+					if p.Stages[stageIdx].Type() != scop.BackfillType || !isBlockingBackfillProgress.Load() {
+						return nil
+					}
+					isBlockingBackfillProgress.Store(false)
+					close(backfillProgressCompletedCh)
+					return nil
+				},
 			},
 		},
 	})
@@ -618,15 +629,20 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 
 	_, err := db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = 10`)
 	require.NoError(t, err)
+	_, err = db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.ingest_concurrency=4`)
+	require.NoError(t, err)
 	// Ensure that we checkpoint our progress to the backfill job so that
 	// RESUMEs can get an up-to-date backfill progress.
 	_, err = db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = '10ms'`)
 	require.NoError(t, err)
 	_, err = db.Exec(`CREATE TABLE t(i INT PRIMARY KEY)`)
 	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO t SELECT generate_series(1, $1)`, numSpans)
+	// Have a 100 splits each containing a 100 rows.
+	_, err = db.Exec(`INSERT INTO t SELECT generate_series(1, $1)`, (numRows*numSpans)+1)
 	require.NoError(t, err)
-	_, err = db.Exec(`ALTER TABLE t SPLIT AT TABLE generate_series(1, $1)`, numSpans)
+	for split := 0; split < numSpans; split++ {
+		_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES ($1)`, numRows*numSpans)
+	}
 	require.NoError(t, err)
 	var descID catid.DescID
 	descIDRow := db.QueryRow(`SELECT 't'::regclass::oid`)
@@ -670,21 +686,28 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 	}
 
 	var completedSpans roachpb.SpanGroup
+	var observedSpans []roachpb.Span
 	receiveProgressUpdate := func() {
-		progressUpdate := <-backfillProgressCompletedCh
-
-		// Make sure the progress update does not contain overlapping spans.
-		for i, span1 := range progressUpdate {
-			for j, span2 := range progressUpdate {
-				if i <= j {
-					continue
-				}
-				if span1.Overlaps(span2) {
-					t.Fatalf("progress update contains overlapping spans: %s and %s", span1, span2)
+		updateCount := 2
+		for isBlockingBackfillProgress.Load() && updateCount > 0 {
+			progressUpdate := <-backfillProgressCompletedCh
+			// Make sure the progress update does not contain overlapping spans.
+			for i, span1 := range progressUpdate {
+				for j, span2 := range progressUpdate {
+					if i == j {
+						continue
+					}
+					if span1.Overlaps(span2) {
+						t.Fatalf("progress update contains overlapping spans: %s and %s", span1, span2)
+					}
 				}
 			}
+			hasMoreSpans := completedSpans.Add(progressUpdate...)
+			if hasMoreSpans {
+				updateCount -= 1
+			}
+			observedSpans = append(observedSpans, progressUpdate...)
 		}
-		completedSpans.Add(progressUpdate...)
 	}
 
 	ensureCompletedSpansAreCheckpointed := func() {
@@ -718,45 +741,35 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 		}, 5*time.Second)
 	}
 
-	// Let the backfill step forward a bit before we do our PAUSE/RESUME
-	// dance.
-	for i := 0; i < 2; i++ {
+	for isBlockingBackfillProgress.Load() {
 		receiveProgressUpdate()
+		ensureCompletedSpansAreCheckpointed()
+		t.Logf("pausing backfill")
+		_, err = db.Exec(`PAUSE JOB $1`, jobID)
+		require.NoError(t, err)
+		ensureJobState("paused")
+
+		t.Logf("resuming backfill")
+		_, err = db.Exec(`RESUME JOB $1`, jobID)
+		require.NoError(t, err)
+		ensureJobState("running")
 	}
-
-	ensureCompletedSpansAreCheckpointed()
-	t.Logf("pausing backfill")
-	_, err = db.Exec(`PAUSE JOB $1`, jobID)
-	require.NoError(t, err)
-	ensureJobState("paused")
-
-	t.Logf("resuming backfill")
-	_, err = db.Exec(`RESUME JOB $1`, jobID)
-	require.NoError(t, err)
-	ensureJobState("running")
-
-	// Step forward again before re-pausing.
-	for i := 0; i < 2; i++ {
-		receiveProgressUpdate()
-	}
-
-	ensureCompletedSpansAreCheckpointed()
-	isBlockingBackfillProgress.Store(false)
-
-	t.Logf("pausing backfill")
-	_, err = db.Exec(`PAUSE JOB $1`, jobID)
-	require.NoError(t, err)
-	ensureJobState("paused")
-
-	t.Logf("resuming backfill")
-	_, err = db.Exec(`RESUME JOB $1`, jobID)
-	require.NoError(t, err)
-	ensureJobState("running")
-
 	// Now we can wait for the job to succeed
 	ensureJobState("succeeded")
-
 	if err = g.Wait(); err != nil {
 		require.NoError(t, err)
+	}
+	// Make sure the spans we are adding do not overlap otherwise, this indicates
+	// a bug. Where we computed chunks incorrectly. Each chunk should be an independent
+	// piece of work.
+	for i, span1 := range observedSpans {
+		for j, span2 := range observedSpans {
+			if i == j {
+				continue
+			}
+			if span1.Overlaps(span2) {
+				t.Fatalf("progress update contains overlapping spans: %s and %s", span1, span2)
+			}
+		}
 	}
 }

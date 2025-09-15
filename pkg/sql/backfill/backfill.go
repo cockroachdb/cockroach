@@ -1010,6 +1010,9 @@ func (ib *IndexBackfiller) init(
 // that needs to be freed once the returned IndexEntry slice is freed. This is
 // returned for the successful and failure cases. It is the callers responsibility
 // to clear the associated bound account when appropriate.
+// A non-nil resumeKey is returned when there is still work to be done in this
+// span (sp.Key < resumeKey < sp.EndKey), which happens if the entire span does
+// not fit within the batch size.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -1017,12 +1020,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
-) ([]rowenc.IndexEntry, roachpb.Key, int64, error) {
+) (entries []rowenc.IndexEntry, resumeKey roachpb.Key, memUsedPerChunk int64, err error) {
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(rowenc.IndexEntry{}))
-	var memUsedPerChunk int64
 
 	indexEntriesInChunkInitialBufferSize :=
 		sizeOfIndexEntry * initBufferSize * int64(len(ib.added))
@@ -1031,7 +1033,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			"failed to initialize empty buffer to store the index entries of all rows in the chunk")
 	}
 	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
-	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
+	entries = make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	var fetcherCols []descpb.ColumnID
 	for i, c := range ib.cols {
@@ -1264,7 +1266,6 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ib.ShrinkBoundAccount(ctx, shrinkSize)
 	memUsedPerChunk -= shrinkSize
 
-	var resumeKey roachpb.Key
 	if fetcher.Key() != nil {
 		resumeKey = make(roachpb.Key, len(fetcher.Key()))
 		copy(resumeKey, fetcher.Key())
