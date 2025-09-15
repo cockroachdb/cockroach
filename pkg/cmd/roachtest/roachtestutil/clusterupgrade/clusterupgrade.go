@@ -263,17 +263,11 @@ func uploadBinaryVersion(
 ) (string, error) {
 	l.Printf("[uploadBinaryVersion] v.IsCurrent(): %t,", v.IsCurrent())
 	l.Printf("[uploadBinaryVersion] CurrentVersion(): %s,", CurrentVersion().String())
-	dstBinary := BinaryPathForVersion(t, v, binary)
-	// Top of function notes
 	l.Printf("[uploadBinaryVersion] Params binary: %s, nodes: %s, version: %s,", binary, nodes.String(), v.String())
-	// What if we have a dedicated workload binary instead of passing in "cockroach" as binary arg
-	exampleWorkloadBinaryDstPath := BinaryPathForVersion(t, v, "workload")
+	dstBinary := BinaryPathForVersion(t, v, binary)
 	l.Printf("[uploadBinaryVersion] dstBinary: %s", dstBinary)
-	// i.e. if the binary passed in was for "workload"
-	l.Printf("[uploadBinaryVersion] exampleWorkloadBinaryDstPath: %s", exampleWorkloadBinaryDstPath)
 	var defaultBinary string
 	var isOverridden bool
-	l.Printf("[uploadBinaryVersion] version: %s", v.String())
 	switch binary {
 	case "cockroach":
 		// If the --versions-binary-override option is set and version v is in the
@@ -286,8 +280,8 @@ func uploadBinaryVersion(
 			// are not currently available with crdb_test enabled.
 			// TODO(DarrylWong): Compile older versions with crdb_test flag.
 			// FIXME(WillChoe): in this code path, this value of defaultBinary is never used, delete this logic?
-			defaultBinary = t.StandardCockroach()
-			l.Printf("[uploadBinaryVersion] defaultBinary: %s", defaultBinary)
+			//defaultBinary = t.StandardCockroach()
+			//l.Printf("[uploadBinaryVersion] defaultBinary: %s", defaultBinary)
 		}
 	case "workload":
 		defaultBinary = t.DeprecatedWorkload()
@@ -296,8 +290,6 @@ func uploadBinaryVersion(
 	}
 
 	if isOverridden {
-		// FIXME(WillChoe)
-		// PutE puts a local file to all of the machines in a cluster.
 		if err := c.PutE(ctx, l, defaultBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}
@@ -306,9 +298,6 @@ func uploadBinaryVersion(
 		dir := filepath.Dir(dstBinary)
 		l.Printf("[uploadBinaryVersion] target dir: %s", dir)
 		// Avoid staging the binary if it already exists.
-		// TODO What happens if this fails on some nodes but succeeds on others, test this out
-		// can write a simple roachtest, touch a file on a node, then check existence on all nodes
-		// see what the return is
 		if err := c.RunE(ctx, option.WithNodes(nodes), "test -e", dstBinary); err == nil {
 			l.Printf("[uploadBinaryVersion] binary already exists: %s", dstBinary)
 			return dstBinary, nil
@@ -334,12 +323,9 @@ func uploadBinaryVersion(
 			// for the corresponding release branch, which is good enough in
 			// most cases.
 			stageVersion = v.Format("release-%X.%Y")
-			l.Printf("[uploadBinaryVersion] stageVersion: %s", stageVersion)
-
 		}
 
 		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
-			l.Printf("[uploadBinaryVersion] failed to stage binary: %s", err)
 			return "", err
 		}
 	}

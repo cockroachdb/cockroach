@@ -861,20 +861,6 @@ func (t *Test) Workload(
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 			l.Printf("[Workload][OnStartup][init] node: %v, h.System.FromVersion: %s", name, h.System.FromVersion.String())
 			l.Printf("[Workload][OnStartup][init] binary path passed in: %s", initCmd.Binary)
-
-			//if overrideBinary {
-			//	l.Printf("[Workload][OnStartup][init] 'overriding' binary i.e. not using default cluster version")
-			//	l.Printf("This command should never be downloading a binary")
-			//	binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
-			//	l.Printf("[Workload][OnStartup][init] new binary: %s", binary)
-			//	if err != nil {
-			//		t.rt.Fatal(err)
-			//	}
-			//	initCmd.Binary = binary
-			//}
-			//l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
-			//return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
-
 			if !overrideBinary {
 				initCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
 				l.Printf("[Workload][OnStartup][init] new binary: %s", initCmd.Binary)
@@ -886,19 +872,6 @@ func (t *Test) Workload(
 
 	addSeed(runCmd)
 	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-		//if overrideBinary {
-		//	l.Printf("[Workload][OnStartup][run] node: %v, h.System.FromVersion: %s", name, h.System.FromVersion.String())
-		//	binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
-		//	l.Printf("[Workload][OnStartup][run] prev binary: %s", runCmd.Binary)
-		//	l.Printf("[Workload][OnStartup][run] new binary: %s", binary)
-		//	if err != nil {
-		//		t.rt.Fatal(err)
-		//	}
-		//	runCmd.Binary = binary
-		//}
-		//l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
-		//return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
-
 		if !overrideBinary {
 			runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
 			l.Printf("[Workload][OnStartup][run] new binary: %s", runCmd.Binary)

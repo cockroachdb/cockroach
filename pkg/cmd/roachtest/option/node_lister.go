@@ -61,8 +61,3 @@ func (l NodeLister) WorkloadNode() NodeListOption {
 	}
 	return l.Range(l.NodeCount-l.WorkloadNodeCount+1, l.NodeCount)
 }
-
-//// WorkloadNodeExists returns True if there is at least one workload node
-//func (l NodeLister) WorkloadNodeExists() bool {
-//	return l.WorkloadNodeCount > 0
-//}

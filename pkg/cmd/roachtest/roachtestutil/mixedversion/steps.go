@@ -76,11 +76,11 @@ func (s installFixturesStep) ConcurrencyDisabled() bool {
 	return false
 }
 
-// stageWorkloadBinaryStep stages new workload binary on workload nodes after
-// cluster upgrade is finalized
+// stageWorkloadBinaryStep stages new binary on workload node(s) after cluster
+// upgrade is finalized
 type stageWorkloadBinaryStep struct {
-	version *clusterupgrade.Version // get this from System (tenant) Service struct?
-	rt      test.Test               // idk where this is gonna come from
+	version *clusterupgrade.Version
+	rt      test.Test
 }
 
 func (s stageWorkloadBinaryStep) Background() shouldStop { return nil }
@@ -91,53 +91,31 @@ func (s stageWorkloadBinaryStep) Description() string {
 
 // Run stages the cockroach binary associated with the current cluster version
 // on the workload node(s) to keep the workload binary version in sync with the
-// the cluster version because the workload binary is no longer backwards
+// cluster version because the workload binary is no longer backwards
 // compatible. This step is only intended to be run after a cluster version
 // change has finalized.
 func (s stageWorkloadBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	// can also get numClusterNodes by h.System.Descriptor.Nodes, but no support for workload nodes
-	// i guess i could add them so this is less hacky, actually that wouldn't make sense
-	// because ServiceDescriptor{} just describes the crdb cluster, not any outside nodes
 	numWorkloadNodes := len(h.runner.cluster.All()) - len(h.runner.cluster.CRDBNodes())
-	nodeIndexOffset := len(h.runner.cluster.CRDBNodes())
-	//workloadNodes := []int{}
 	// Check that these numbers make sense
 	l.Printf("[stageWorkloadBinaryStep][Run] numWorkloadNodes: %d", numWorkloadNodes)
-	l.Printf("[stageWorkloadBinaryStep][Run] nodeIndexOffset: %d", nodeIndexOffset)
 	if numWorkloadNodes > 0 {
-		//for i := 0; i < numWorkloadNodes; i++ {
-		//	workloadNodes = append(workloadNodes, nodeIndexOffset+i)
-		//}
-		// Actually should probably use Range instead
 		l.Printf(
 			"[stageWorkloadBinaryStep][Run] range params, begin: %d, end: %d, these"+
 				" are not indexes, but the 1 indexed vals of nodes....... expecting begin: 5, end:5",
 			len(h.runner.cluster.CRDBNodes())+1, len(h.runner.cluster.All()))
-		workloadNodes := h.runner.cluster.Range(len(h.runner.cluster.CRDBNodes())+1, len(h.runner.cluster.All()))
+		workloadNodes := h.runner.cluster.Range(
+			len(h.runner.cluster.CRDBNodes())+1, len(h.runner.cluster.All()))
 		l.Printf("[stageWorkloadBinaryStep][Run] expecting [5]... workloadNodes: %v", workloadNodes)
-		// can use s.version or h.System.FromVersion right? Print to verify
-		// They are the same
 		l.Printf(
 			"[stageWorkloadBinaryStep][Run] these vars should be the same, s.version: %s, h.System.FromVersion: %s", s.version.String(), h.System.FromVersion.String())
 
-		// Because Description uses s.version, I should probably use the same
-		// convenation here
-		// TODO after validating the print statements try this Upgrade call
 		_, err := clusterupgrade.UploadCockroach(
 			ctx, s.rt, l, h.runner.cluster, workloadNodes, s.version)
-
-		// backup call just incase the vars aren't the same like i'm expecting
-		//_, err := clusterupgrade.UploadCockroach(
-		//	ctx, s.rt, l, h.runner.cluster, workloadNodes, h.System.FromVersion)
 		if err != nil {
 			return err
 		}
-		// Don't need to explicitly set the binary path anywhere because we should
-		// be able to get the binary path given this version by calling
-		// clusterupgrade.UploadCockroach in Workload.
-		// Otherwise i can put the binary path in Helper{}
 	}
 	return nil
 }
