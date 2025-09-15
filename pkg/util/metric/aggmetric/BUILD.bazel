@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/cache",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
