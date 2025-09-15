@@ -1826,6 +1826,9 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		if err := requireAllFlushedRequestsProcessed(br.Responses); err != nil {
 			return nil, kvpb.NewError(err)
 		}
+
+		// We've written intents now, so this should be false.
+		ba.HasBufferedAllPrecedingWrites = false
 		ba.UpdateTxn(br.Txn)
 
 		return twb.wrapped.SendLocked(ctx, ba)
