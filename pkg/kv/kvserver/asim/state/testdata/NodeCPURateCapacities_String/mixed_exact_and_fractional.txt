@@ -1,0 +1,3 @@
+echo
+----
+(1 0.50 2) cpu-sec/sec

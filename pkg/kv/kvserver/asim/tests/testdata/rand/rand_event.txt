@@ -28,7 +28,7 @@ configurations generated using seed 7894140303635748408
 region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
 region:US_West [zone=US_West_1(nodes=2,stores=1)]
 region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
-store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=16000000000 cpu-ns/sec
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=16 cpu-sec/sec
 	[0,200000): 1(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
