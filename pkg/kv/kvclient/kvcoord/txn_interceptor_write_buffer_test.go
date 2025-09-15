@@ -2671,6 +2671,49 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
 	}
 }
 
+func TestTxnWriteBufferHasBufferedAllPrecedingWritesSplitFlush(t *testing.T) {
+	ctx := context.Background()
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+	txn := makeTxnProto()
+	txn.Sequence = 1
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	// This Put will be completely buffered.
+	ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+	putA := putArgs(keyA, "valA", txn.Sequence)
+	ba.Add(putA)
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Send a DeleteRange with MaxSpanRequestKeys set which will force a flush
+	// using two batches. The first should have HasBufferedAllPrecedingWrites, the
+	// next should not.
+	reqCount := 0
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Equal(t, reqCount == 0, ba.HasBufferedAllPrecedingWrites,
+			"HasBufferedAllPrecedingWrites expected on the first request (and only the first request")
+		reqCount++
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	txn.Sequence++
+	ba = &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+	ba.MaxSpanRequestKeys = 10
+	ba.Add(delRangeArgs(keyB, keyC, txn.Sequence))
+
+	beforeCallCount := mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 2, mockSender.NumCalled()-beforeCallCount)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.DeleteRangeResponse{}, br.Responses[0].GetInner())
+}
+
 // BenchmarkTxnWriteBuffer benchmarks the txnWriteBuffer. The test sets up a
 // transaction with an existing buffer and runs a single batch through
 // SendLocked and flushBufferAndSendBatch. The test varies the state of the
