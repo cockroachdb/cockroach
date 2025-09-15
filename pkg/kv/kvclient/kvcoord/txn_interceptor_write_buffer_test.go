@@ -2186,7 +2186,7 @@ func TestTxnWriteBufferSplitsBatchesWhenNecessary(t *testing.T) {
 			br.Txn = ba.Txn
 			if requestCount == 0 {
 				// The buffer flush should not have any problematic settings.
-				require.False(t, separateBatchIsNeeded(ba))
+				require.False(t, separateBatchIsNeeded(ba, nil))
 			}
 			requestCount++
 			return br, nil
@@ -4090,7 +4090,7 @@ needs to be accounted for in the following functions:
 				}
 			}
 			req := &kvpb.BatchRequest{Header: header}
-			require.True(t, separateBatchIsNeeded(req),
+			require.True(t, separateBatchIsNeeded(req, nil),
 				"non-zero value for %s not handled in separateBatchIsNeeded", fieldName)
 
 			clearBatchRequestOptions(req)
