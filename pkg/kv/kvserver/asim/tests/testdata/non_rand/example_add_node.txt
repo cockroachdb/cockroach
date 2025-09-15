@@ -19,6 +19,7 @@ add_node
 # Assert that the replica counts balance within 5% of each other among stores.
 assertion type=balance stat=replicas ticks=6 upper_bound=1.05
 ----
+asserting: max_{stores}(replicas)/mean_{stores}(replicas) < 1.05 at each of last 6 ticks
 
 # Update the replication factor for the keyspace to be 3, instead of the
 # initial replication factor of 1 set during generation.
