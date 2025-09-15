@@ -11,6 +11,7 @@ package aggmetric
 import (
 	"hash/fnv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -23,8 +24,10 @@ import (
 var delimiter = []byte{'_'}
 
 const (
-	dbLabel  = "database"
-	appLabel = "application_name"
+	dbLabel        = "database"
+	appLabel       = "application_name"
+	cacheSize      = 5000
+	childMetricTTL = 20 * time.Second
 )
 
 // Builder is used to ease constructing metrics with the same labels.
@@ -97,7 +100,6 @@ func (cs *childSet) initWithBTreeStorageType(labels []string) {
 }
 
 func getCacheStorage() *cache.UnorderedCache {
-	const cacheSize = 5000
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		//TODO (aa-joshi) : make cacheSize configurable in the future
@@ -311,6 +313,16 @@ type ChildMetric interface {
 	ToPrometheusMetric() *io_prometheus_client.Metric
 }
 
+// LabelSliceCachedChildMetric extends ChildMetric with label slice caching capabilities.
+// This interface is designed for child metrics that relies on label slice reference
+// counting system. Metrics implementing this interface can have their label values
+// cached and shared among multiple metrics with identical label combinations,
+// reducing memory usage and improving performance in scenarios with many similar metrics.
+type LabelSliceCachedChildMetric interface {
+	ChildMetric
+	CreatedAt() time.Time
+}
+
 type labelValuer interface {
 	labelValues() []string
 }
@@ -330,9 +342,10 @@ func metricKey(labels ...string) uint64 {
 
 type ChildrenStorage interface {
 	Get(labelVals ...string) (ChildMetric, bool)
+	GetValue(key uint64) (ChildMetric, bool)
 	Add(metric ChildMetric)
+	AddKey(key uint64, metric ChildMetric) error
 	Del(key ChildMetric)
-
 	// ForEach calls f for each child metric, in arbitrary order.
 	ForEach(f func(metric ChildMetric))
 	Clear()
@@ -343,6 +356,22 @@ var _ ChildrenStorage = &BtreeWrapper{}
 
 type UnorderedCacheWrapper struct {
 	cache *cache.UnorderedCache
+}
+
+func (ucw *UnorderedCacheWrapper) GetValue(key uint64) (ChildMetric, bool) {
+	value, ok := ucw.cache.Get(key)
+	if !ok {
+		return nil, false
+	}
+	return value.(ChildMetric), ok
+}
+
+func (ucw *UnorderedCacheWrapper) AddKey(key uint64, metric ChildMetric) error {
+	if _, ok := ucw.cache.Get(key); ok {
+		return errors.Newf("child %v already exists\n", metric.labelValues())
+	}
+	ucw.cache.Add(key, metric)
+	return nil
 }
 
 func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
@@ -382,6 +411,18 @@ func (ucw *UnorderedCacheWrapper) Clear() {
 
 type BtreeWrapper struct {
 	tree *btree.BTreeG[MetricItem]
+}
+
+func (b BtreeWrapper) GetValue(key uint64) (ChildMetric, bool) {
+	// GetValue method is not relevant for BtreeWrapper as it uses ChildMetric
+	// as an item in Btree. We are going to remove BtreeWrapper as ChildrenStorage.
+	panic("unimplemented")
+}
+
+func (b BtreeWrapper) AddKey(_ uint64, _ ChildMetric) error {
+	// AddKey method is not relevant for BtreeWrapper as it uses ChildMetric
+	// as an item in Btree. We are going to remove BtreeWrapper as ChildrenStorage.
+	panic("unimplemented")
 }
 
 func (b BtreeWrapper) Get(labelVals ...string) (ChildMetric, bool) {

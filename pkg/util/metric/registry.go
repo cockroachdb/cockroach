@@ -50,7 +50,8 @@ type Registry struct {
 	// computedLabels get filled in by GetLabels().
 	// We hold onto the slice to avoid a re-allocation every
 	// time the metrics get scraped.
-	computedLabels []*prometheusgo.LabelPair
+	computedLabels  []*prometheusgo.LabelPair
+	labelSliceCache *LabelSliceCache
 }
 
 type labelPair struct {
@@ -67,9 +68,10 @@ type Struct interface {
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		labels:         []labelPair{},
-		computedLabels: []*prometheusgo.LabelPair{},
-		tracked:        map[string]Iterable{},
+		labels:          []labelPair{},
+		computedLabels:  []*prometheusgo.LabelPair{},
+		tracked:         map[string]Iterable{},
+		labelSliceCache: NewLabelSliceCache(),
 	}
 }
 
@@ -96,6 +98,9 @@ func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName(false /* useStaticLabels */)] = metric
+	if m, ok := metric.(PrometheusEvictable); ok {
+		m.InitializeMetrics(r.labelSliceCache)
+	}
 	if log.V(2) {
 		log.Dev.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
 	}
