@@ -83,7 +83,7 @@ PROTOBUF_SRCS = [
     "//pkg/sql/vecindex/vecpb:vecpb_go_proto",
     "//pkg/sql/vecindex/vecstore/vecstorepb:vecstorepb_go_proto",
     "//pkg/storage/enginepb:enginepb_go_proto",
-    "//pkg/testutils/grpcutils:grpcutils_go_proto",
+    "//pkg/testutils/rpcutils:rpcutils_go_proto",
     "//pkg/ts/catalog:catalog_go_proto",
     "//pkg/ts/tspb:tspb_go_proto",
     "//pkg/util/admission/admissionpb:admissionpb_go_proto",

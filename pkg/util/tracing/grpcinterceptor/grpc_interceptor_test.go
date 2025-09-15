@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/grpcutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/rpcutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -52,18 +52,18 @@ func TestGRPCInterceptors(t *testing.T) {
 		return types.MarshalAny(&recs[0])
 	}
 
-	impl := &grpcutils.TestServerImpl{
+	impl := &rpcutils.TestServerImpl{
 		UU: func(ctx context.Context, any *types.Any) (*types.Any, error) {
 			return checkForSpanAndReturnRecording(ctx)
 		},
-		US: func(_ *types.Any, server grpcutils.GRPCTest_UnaryStreamServer) error {
+		US: func(_ *types.Any, server rpcutils.GRPCTest_UnaryStreamServer) error {
 			any, err := checkForSpanAndReturnRecording(server.Context())
 			if err != nil {
 				return err
 			}
 			return server.Send(any)
 		},
-		SU: func(server grpcutils.GRPCTest_StreamUnaryServer) error {
+		SU: func(server rpcutils.GRPCTest_StreamUnaryServer) error {
 			_, err := server.Recv()
 			if err != nil {
 				return err
@@ -74,7 +74,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			}
 			return server.SendAndClose(any)
 		},
-		SS: func(server grpcutils.GRPCTest_StreamStreamServer) error {
+		SS: func(server rpcutils.GRPCTest_StreamStreamServer) error {
 			_, err := server.Recv()
 			if err != nil {
 				return err
@@ -94,17 +94,17 @@ func TestGRPCInterceptors(t *testing.T) {
 		// expSpanName is the expected name of the RPC spans (client-side and
 		// server-side). If not specified, the test's name is used.
 		expSpanName string
-		do          func(context.Context, grpcutils.GRPCTestClient) (*types.Any, error)
+		do          func(context.Context, rpcutils.GRPCTestClient) (*types.Any, error)
 	}{
 		{
 			name: "UnaryUnary",
-			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+			do: func(ctx context.Context, c rpcutils.GRPCTestClient) (*types.Any, error) {
 				return c.UnaryUnary(ctx, unusedAny)
 			},
 		},
 		{
 			name: "UnaryStream",
-			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+			do: func(ctx context.Context, c rpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.UnaryStream(ctx, unusedAny)
 				if err != nil {
 					return nil, err
@@ -137,7 +137,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			// the ctx.
 			name:        "UnaryStream_ContextCancel",
 			expSpanName: "UnaryStream",
-			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+			do: func(ctx context.Context, c rpcutils.GRPCTestClient) (*types.Any, error) {
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
 				sc, err := c.UnaryStream(ctx, unusedAny)
@@ -152,7 +152,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 		{
 			name: "StreamUnary",
-			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+			do: func(ctx context.Context, c rpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.StreamUnary(ctx)
 				if err != nil {
 					return nil, err
@@ -165,7 +165,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		},
 		{
 			name: "StreamStream",
-			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+			do: func(ctx context.Context, c rpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.StreamStream(ctx)
 				if err != nil {
 					return nil, err
@@ -203,7 +203,7 @@ func TestGRPCInterceptors(t *testing.T) {
 				grpc.UnaryInterceptor(grpcinterceptor.ServerInterceptor(tr)),
 				grpc.StreamInterceptor(grpcinterceptor.StreamServerInterceptor(tr)),
 			)
-			grpcutils.RegisterGRPCTestServer(srv, impl)
+			rpcutils.RegisterGRPCTestServer(srv, impl)
 			defer srv.GracefulStop()
 			ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 			require.NoError(t, err)
@@ -223,7 +223,7 @@ func TestGRPCInterceptors(t *testing.T) {
 				_ = conn.Close() // nolint:grpcconnclose
 			}()
 
-			c := grpcutils.NewGRPCTestClient(conn)
+			c := rpcutils.NewGRPCTestClient(conn)
 			require.NoError(t, err)
 
 			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
@@ -270,9 +270,9 @@ func TestGRPCInterceptors(t *testing.T) {
 			}
 			exp := fmt.Sprintf(`
 				span: root
-					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
+					span: /cockroach.testutils.rpcutils.GRPCTest/%[1]s
 						tags: span.kind=client
-					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
+					span: /cockroach.testutils.rpcutils.GRPCTest/%[1]s
 						tags: span.kind=server
 						event: structured=magic-value`, expSpanName)
 			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
