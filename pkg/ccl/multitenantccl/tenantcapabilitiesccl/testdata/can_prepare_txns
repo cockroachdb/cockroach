@@ -28,7 +28,7 @@ ok
 exec-privileged-op-tenant
 PREPARE TRANSACTION 'txn1'
 ----
-pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(commit) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(prepare) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
 
 # Grant the capability.
@@ -78,7 +78,7 @@ ok
 exec-privileged-op-tenant
 PREPARE TRANSACTION 'txn3'
 ----
-pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(commit) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(prepare) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
 
 # However, transactions that have not acquired locks are able to be prepared,
