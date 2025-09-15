@@ -7,17 +7,15 @@ package sql
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,13 +48,14 @@ func (f *fingerprintResumer) Resume(ctx context.Context, execCtx interface{}) er
 	
 	log.Infof(ctx, "starting fingerprint job %d", f.job.ID())
 
-	if details.Table != nil {
-		return f.fingerprintTable(ctx, execCfg, details.Table)
-	} else if details.Tenant != nil {
-		return f.fingerprintTenant(ctx, execCfg, details.Tenant)
+	switch target := details.Target.(type) {
+	case *jobspb.FingerprintDetails_Table:
+		return f.fingerprintTable(ctx, execCfg, target.Table)
+	case *jobspb.FingerprintDetails_Tenant:
+		return f.fingerprintTenant(ctx, execCfg, target.Tenant)
+	default:
+		return errors.New("fingerprint job details must specify either table or tenant target")
 	}
-	
-	return errors.New("fingerprint job details must specify either table or tenant target")
 }
 
 // fingerprintTable performs fingerprinting for a table target.
@@ -64,15 +63,15 @@ func (f *fingerprintResumer) fingerprintTable(
 	ctx context.Context, execCfg *ExecutorConfig, target *jobspb.FingerprintDetails_FingerprintTableTarget,
 ) error {
 	// Get the table descriptor
-	tableID := descpb.ID(target.TableID)
+	tableID := target.TableID
 	
-	var tableDesc *tabledesc.Immutable
-	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	var tableDesc catalog.TableDescriptor
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		descsCol := execCfg.CollectionFactory.NewCollection(ctx)
 		defer descsCol.ReleaseAll(ctx)
 		
 		var err error
-		tableDesc, err = descsCol.ByID(txn).Get().Table(ctx, tableID)
+		tableDesc, err = descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		return errors.Wrapf(err, "failed to resolve table %d", tableID)
@@ -87,10 +86,7 @@ func (f *fingerprintResumer) fingerprintTable(
 	// Initialize progress if empty
 	if fingerprintProgress.TotalIndexes == 0 {
 		fingerprintProgress.TotalIndexes = int64(len(tableDesc.PublicNonPrimaryIndexes()) + 1) // +1 for primary
-		if err := f.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			ju.UpdateProgress(md.Progress)
-			return nil
-		}); err != nil {
+		if err := f.updateProgress(ctx, fingerprintProgress); err != nil {
 			return err
 		}
 	}
@@ -98,7 +94,7 @@ func (f *fingerprintResumer) fingerprintTable(
 	// Track completed indexes to avoid re-processing
 	completedIndexes := make(map[descpb.IndexID]bool)
 	for _, indexID := range fingerprintProgress.CompletedIndexes {
-		completedIndexes[descpb.IndexID(indexID)] = true
+		completedIndexes[indexID] = true
 	}
 
 	// Fingerprint primary index
@@ -110,9 +106,9 @@ func (f *fingerprintResumer) fingerprintTable(
 		}
 		
 		// Update progress
-		fingerprintProgress.CompletedIndexes = append(fingerprintProgress.CompletedIndexes, uint32(primaryIndex.GetID()))
+		fingerprintProgress.CompletedIndexes = append(fingerprintProgress.CompletedIndexes, primaryIndex.GetID())
 		fingerprintProgress.Results = append(fingerprintProgress.Results, &jobspb.FingerprintResult{
-			IndexId:     uint32(primaryIndex.GetID()),
+			IndexID:     primaryIndex.GetID(),
 			IndexName:   primaryIndex.GetName(),
 			Fingerprint: fp,
 		})
@@ -136,9 +132,9 @@ func (f *fingerprintResumer) fingerprintTable(
 		}
 		
 		// Update progress
-		fingerprintProgress.CompletedIndexes = append(fingerprintProgress.CompletedIndexes, uint32(index.GetID()))
+		fingerprintProgress.CompletedIndexes = append(fingerprintProgress.CompletedIndexes, index.GetID())
 		fingerprintProgress.Results = append(fingerprintProgress.Results, &jobspb.FingerprintResult{
-			IndexId:     uint32(index.GetID()),
+			IndexID:     index.GetID(),
 			IndexName:   index.GetName(),
 			Fingerprint: fp,
 		})
@@ -158,24 +154,23 @@ func (f *fingerprintResumer) fingerprintTable(
 func (f *fingerprintResumer) fingerprintTenant(
 	ctx context.Context, execCfg *ExecutorConfig, target *jobspb.FingerprintDetails_FingerprintTenantTarget,
 ) error {
-	log.Infof(ctx, "fingerprinting tenant %s (%s)", target.TenantName, target.TenantID.String())
+	log.Infof(ctx, "fingerprinting tenant %s (%s)", target.TenantName, target.TenantId.String())
 	
 	// Create a span for the entire tenant keyspace
 	tenantSpan := roachpb.Span{
-		Key:    roachpb.Key(target.TenantID.ToProto().InternalValue).AsRawKey(),
-		EndKey: roachpb.Key(target.TenantID.ToProto().InternalValue).AsRawKey().PrefixEnd(),
+		Key:    roachpb.Key("tenant_" + target.TenantId.String()),
+		EndKey: roachpb.Key("tenant_" + target.TenantId.String()).PrefixEnd(),
 	}
 	
 	// Use the existing fingerprint span functionality
-	ie := execCfg.InternalExecutor
-	p, cleanup := NewInternalPlanner("fingerprint-job", nil, sessiondata.AdminUserName(), &MemoryMetrics{}, execCfg, sessiondata.NewSessionData(execCfg.Settings))
+	p, cleanup := NewInternalPlanner("fingerprint-job", nil, username.MakeSQLUsernameFromPreNormalizedString("admin"), &MemoryMetrics{}, execCfg, &sessiondata.SessionData{})
 	defer cleanup()
 	
 	planner := p.(*planner)
 	
-	startTime := target.StartTimestamp
-	if startTime.IsEmpty() {
-		startTime = hlc.Timestamp{}
+	var startTime hlc.Timestamp
+	if target.StartTimestamp != nil && !target.StartTimestamp.IsEmpty() {
+		startTime = *target.StartTimestamp
 	}
 	
 	fp, err := planner.FingerprintSpan(ctx, tenantSpan, startTime, target.AllRevisions, target.Stripped)
@@ -187,7 +182,7 @@ func (f *fingerprintResumer) fingerprintTenant(
 	progress := f.job.Progress()
 	fingerprintProgress := progress.Details.(*jobspb.Progress_Fingerprint).Fingerprint
 	fingerprintProgress.Results = append(fingerprintProgress.Results, &jobspb.FingerprintResult{
-		IndexId:     0, // 0 for tenant fingerprints
+		IndexID:     0, // 0 for tenant fingerprints
 		IndexName:   "tenant_span",
 		Fingerprint: fp,
 	})
@@ -204,7 +199,7 @@ func (f *fingerprintResumer) fingerprintTenant(
 func (f *fingerprintResumer) fingerprintIndex(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
 	excludedColumns []string,
 ) (uint64, error) {
@@ -218,9 +213,9 @@ func (f *fingerprintResumer) fingerprintIndex(
 	
 	// Execute the query using InternalDB
 	var rows tree.Datums
-	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		fingerprintCols, err := execCfg.InternalDB.Executor().QueryRowEx(
-			ctx, "fingerprint-job", txn,
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		fingerprintCols, err := txn.QueryRowEx(
+			ctx, "fingerprint-job", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
 			query,
 		)
@@ -251,7 +246,7 @@ func (f *fingerprintResumer) fingerprintIndex(
 func (f *fingerprintResumer) updateProgress(
 	ctx context.Context, fingerprintProgress *jobspb.FingerprintProgress,
 ) error {
-	return f.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return f.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		prog := md.Progress
 		prog.Details.(*jobspb.Progress_Fingerprint).Fingerprint = fingerprintProgress
 		ju.UpdateProgress(prog)
@@ -272,7 +267,7 @@ func (f *fingerprintResumer) CollectProfile(ctx context.Context, execCtx interfa
 
 // Metrics implements the jobs.Resumer interface.
 func (f *fingerprintResumer) Metrics() metric.Struct {
-	return metric.Struct{}
+	return nil
 }
 
 // DumpTraceAfterRun implements the jobs.Resumer interface.
