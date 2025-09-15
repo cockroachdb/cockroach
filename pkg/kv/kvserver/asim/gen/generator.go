@@ -71,7 +71,7 @@ func GenerateSimulation(
 	s := clusterGen.Generate(seed, &settings)
 	s, rangeStateStr := rangeGen.Generate(seed, &settings, s)
 	eventExecutor := eventGen.Generate(seed, &settings)
-	generateClusterVisualization(buf, s, loadGen, eventGen, rangeStateStr)
+	generateClusterVisualization(buf, s, loadGen, eventGen, rangeStateStr, settings)
 	return asim.NewSimulator(
 		duration,
 		loadGen.Generate(seed, &settings),
@@ -104,10 +104,7 @@ var _ LoadGen = MultiLoad{}
 
 func (ml MultiLoad) String() string {
 	var str string
-	for i, load := range ml {
-		if i > 0 {
-			str += "\n"
-		}
+	for _, load := range ml {
 		str += load.String()
 	}
 	return str
@@ -164,7 +161,7 @@ func (bl BasicLoad) String() string {
 	} else {
 		_, _ = fmt.Fprintf(&buf, "%d-%dB/op, ", bl.MinBlockSize, bl.MaxBlockSize)
 	}
-	fmt.Fprintf(&buf, "%gops/s]", bl.Rate)
+	fmt.Fprintf(&buf, "%gops/s]\n", bl.Rate)
 	return buf.String()
 }
 
