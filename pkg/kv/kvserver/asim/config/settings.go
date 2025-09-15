@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 const (
@@ -116,6 +117,9 @@ type SimulationSettings struct {
 	// TODO(wenyihu6): Remove any non-simulation settings from this struct and
 	// instead override the settings below.
 	ST *cluster.Settings
+	// OnRecording is called with trace spans obtained by recording the allocator.
+	// NB: we can't use state.StoreID here since that causes an import cycle.
+	OnRecording func(storeID int64, rec tracingpb.Recording)
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.

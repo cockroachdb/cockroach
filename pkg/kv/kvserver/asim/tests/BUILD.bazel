@@ -58,8 +58,10 @@ go_test(
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

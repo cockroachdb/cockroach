@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -35,8 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,6 +168,12 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     random number generator that creates the seed used to generate each
 //     simulation sample. The default values are: duration=30m (30 minutes)
 //     samples=1 seed=random.
+//
+// To run all tests and rewrite the testdata files as well as generate the
+// artifacts in `testdata/generated`, you can use:
+/*
+./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env COCKROACH_ALWAYS_KEEP_TEST_LOGS=true
+*/
 func TestDataDriven(t *testing.T) {
 	skip.UnderDuressWithIssue(t, 149875)
 	leakTestAfter := leaktest.AfterTest(t)
@@ -531,7 +540,34 @@ func TestDataDriven(t *testing.T) {
 						require.NotNil(t, set, "unknown mode value: %s", mv)
 						set(&eventGen)
 
+						// TODO(tbg): need to decide whether multiple evals in a single file
+						// is a feature or an anti-pattern. If it's a feature, we should let
+						// the `name` part below be adjustable (but not the plotDir) via a
+						// parameter to the `eval` command.
+						testName := name + "_" + mv
+
 						for sample := 0; sample < samples; sample++ {
+							recIdx := map[int64]int{}
+							settingsGen.Settings.OnRecording = func(storeID int64, rec tracingpb.Recording) {
+								if !rewrite || len(rec[0].Logs) == 0 {
+									return
+								}
+								traceDir := filepath.Join(plotDir, "traces", fmt.Sprintf("s%d", storeID))
+								if recIdx[storeID] == 0 {
+									require.NoError(t, os.MkdirAll(traceDir, 0755))
+								}
+								re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
+								outName := fmt.Sprintf("%s_%s_s%d", mv, re.ReplaceAllString(rec[0].Operation, "_"), storeID)
+								if sample > 0 {
+									outName += fmt.Sprintf("_sample%d", sample+1)
+								}
+								outName += "_" + fmt.Sprintf("%03d.txt", recIdx[storeID])
+								assert.NoError(t, os.WriteFile(
+									filepath.Join(traceDir, outName),
+									[]byte(rec.String()), 0644))
+								recIdx[storeID] += 1
+							}
+
 							assertionFailures := []string{}
 							var tmpStrB *strings.Builder = nil
 							if stateStrForOnce == "" {
@@ -561,11 +597,7 @@ func TestDataDriven(t *testing.T) {
 						// Generate artifacts. Hash artifact input data to ensure they are
 						// up to date.
 						hasher := fnv.New64a()
-						// TODO(tbg): need to decide whether multiple evals in a single file
-						// is a feature or an anti-pattern. If it's a feature, we should let
-						// the `name` part below be adjustable (but not the plotDir) via a
-						// parameter to the `eval` command.
-						testName := name + "_" + mv
+
 						for sample, h := range run.hs {
 							printStatsAndGenerateJSON(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
 								settingsGen.Settings.TickInterval, metricsMap)
