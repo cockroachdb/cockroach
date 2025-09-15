@@ -1791,6 +1791,7 @@ type multiTablePTSBenchmarkParams struct {
 	numRows     int
 	duration    string
 	perTablePTS bool
+	runWorkload bool
 }
 
 // runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
@@ -1836,6 +1837,13 @@ func runCDCMultiTablePTSBenchmark(
 		defer ct.workloadWg.Done()
 		workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --tables=%d {pgurl%s}",
 			params.numRows, params.duration, params.numTables, ct.crdbNodes)
+		if !params.runWorkload {
+			t.L().Printf("not running workload")
+			t.L().Printf("skipped: %s", workloadCmd)
+			time.Sleep(2 * time.Minute)
+			t.L().Printf("workload finished")
+			return nil
+		}
 		return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
 	})
 
@@ -2935,12 +2943,53 @@ func registerCDC(r registry.Registry) {
 						numRows:     100,
 						duration:    "20m",
 						perTablePTS: perTablePTS,
+						runWorkload: true,
 					}
 					runCDCMultiTablePTSBenchmark(ctx, t, c, params)
 				},
 			})
 		}
 	}
+	r.Add(registry.TestSpec{
+		Name:             "cdc/pts-test/with-workload",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numTables:   1000,
+				numRanges:   1,
+				numRows:     10,
+				duration:    "2m",
+				perTablePTS: true,
+				runWorkload: true,
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/pts-test/no-workload",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numTables:   1000,
+				numRanges:   1,
+				numRows:     10,
+				duration:    "2m",
+				perTablePTS: true,
+				runWorkload: false,
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+		},
+	})
 }
 
 const (

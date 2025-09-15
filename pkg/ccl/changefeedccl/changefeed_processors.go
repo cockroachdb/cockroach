@@ -1986,6 +1986,8 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 	tableIDsToRelease := make([]descpb.ID, 0)
 	tableIDsToCreate := make(map[descpb.ID]hlc.Timestamp)
+	tableIDsToUpdate := make(map[descpb.ID]hlc.Timestamp)
+
 	for tableID, frontier := range cf.frontier.Frontiers() {
 		tableHighWater := func() hlc.Timestamp {
 			// If this table has not yet finished its initial scan, we use the highwater
@@ -2010,11 +2012,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 		}
 
 		if ptsEntries.ProtectedTimestampRecords[tableID] != nil {
-			if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, tableHighWater, pts); err != nil {
-				return hlc.Timestamp{}, false, err
-			} else if updated {
-				updatedPerTablePTS = true
-			}
+			tableIDsToUpdate[tableID] = tableHighWater
 		} else {
 			// TODO(#152448): Do not include system table protections in these records.
 			tableIDsToCreate[tableID] = tableHighWater
@@ -2040,6 +2038,13 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 		updatedPerTablePTS = true
 	}
 
+	if len(tableIDsToUpdate) > 0 {
+		if updated, err := cf.advancePerTableProtectedTimestampRecords(ctx, ptsEntries, tableIDsToUpdate, pts); err != nil {
+			return hlc.Timestamp{}, false, err
+		} else if updated {
+			updatedPerTablePTS = true
+		}
+	}
 	return newPTS, updatedPerTablePTS, nil
 }
 
@@ -2058,27 +2063,39 @@ func (cf *changeFrontier) releasePerTableProtectedTimestampRecords(
 	return nil
 }
 
-func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
+func (cf *changeFrontier) advancePerTableProtectedTimestampRecords(
 	ctx context.Context,
 	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
-	tableID descpb.ID,
-	tableHighWater hlc.Timestamp,
+	tableHighWaterByTableID map[descpb.ID]hlc.Timestamp,
 	pts protectedts.Storage,
 ) (updated bool, err error) {
-	rec, err := pts.GetRecord(ctx, *ptsEntries.ProtectedTimestampRecords[tableID])
+	recordIDs := make([]uuid.UUID, 0, len(tableHighWaterByTableID))
+	tableIDsByRecordID := make(map[uuid.UUID]descpb.ID)
+	for tableID := range tableHighWaterByTableID {
+		recordIDs = append(recordIDs, *ptsEntries.ProtectedTimestampRecords[tableID])
+
+		tableIDsByRecordID[*ptsEntries.ProtectedTimestampRecords[tableID]] = tableID
+	}
+	records, err := pts.GetRecords(ctx, recordIDs)
 	if err != nil {
 		return false, err
 	}
-
 	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
-	if rec.Timestamp.AddDuration(ptsUpdateLag).After(tableHighWater) {
-		return false, nil
-	}
 
-	if err := pts.UpdateTimestamp(ctx, *ptsEntries.ProtectedTimestampRecords[tableID], tableHighWater); err != nil {
+	recordsToUpdate := make(map[uuid.UUID]hlc.Timestamp)
+	for _, record := range records {
+		recordID := uuid.UUID(record.ID)
+		tableHighWater := tableHighWaterByTableID[tableIDsByRecordID[recordID]]
+		if record.Timestamp.AddDuration(ptsUpdateLag).After(tableHighWater) {
+			continue
+		}
+		recordsToUpdate[recordID] = tableHighWater
+		updated = true
+	}
+	if err = pts.UpdateTimestamps(ctx, recordsToUpdate); err != nil {
 		return false, err
 	}
-	return true, nil
+	return updated, nil
 }
 
 func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
