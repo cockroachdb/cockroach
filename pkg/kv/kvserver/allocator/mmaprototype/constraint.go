@@ -252,14 +252,12 @@ type internedLeasePreference struct {
 func makeNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
-	if conf.NumVoters == 0 {
-		conf.NumVoters = conf.NumReplicas
-	}
+	numVoters := conf.GetNumVoters()
 	var normalizedConstraints, normalizedVoterConstraints []internedConstraintsConjunction
 	var err error
 	if conf.VoterConstraints != nil {
 		normalizedVoterConstraints, err = normalizeConstraints(
-			conf.VoterConstraints, conf.NumVoters, interner)
+			conf.VoterConstraints, numVoters, interner)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +267,7 @@ func makeNormalizedSpanConfig(
 		if err != nil {
 			return nil, err
 		}
-	} else if (conf.NumReplicas-conf.NumVoters > 0) || len(normalizedVoterConstraints) == 0 {
+	} else if (conf.NumReplicas-numVoters > 0) || len(normalizedVoterConstraints) == 0 {
 		// - No constraints, but have some non-voters.
 		// - No voter constraints either.
 		// Need an empty constraints conjunction so that non-voters or voters have
@@ -287,7 +285,7 @@ func makeNormalizedSpanConfig(
 			constraints: interner.internConstraintsConj(conf.LeasePreferences[i].Constraints)})
 	}
 	nConf := &normalizedSpanConfig{
-		numVoters:        conf.NumVoters,
+		numVoters:        numVoters,
 		numReplicas:      conf.NumReplicas,
 		constraints:      normalizedConstraints,
 		voterConstraints: normalizedVoterConstraints,

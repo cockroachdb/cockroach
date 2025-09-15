@@ -97,7 +97,7 @@ func parseSpanConfig(t *testing.T, d *datadriven.TestData) roachpb.SpanConfig {
 }
 
 func printSpanConfig(b *strings.Builder, conf roachpb.SpanConfig) {
-	fmt.Fprintf(b, " num-replicas=%d num-voters=%d\n", conf.NumReplicas, conf.NumVoters)
+	fmt.Fprintf(b, " num-replicas=%d num-voters=%d\n", conf.NumReplicas, conf.GetNumVoters())
 	if len(conf.Constraints) > 0 {
 		fmt.Fprintf(b, " constraints:\n")
 		for _, cc := range conf.Constraints {
