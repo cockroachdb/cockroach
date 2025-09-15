@@ -8,10 +8,7 @@ package ycsb
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
-	"hash"
-	"hash/fnv"
 	"math"
 	"math/rand/v2"
 	"strings"
@@ -26,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
+	"github.com/cockroachdb/crlib/crrand"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -89,17 +87,17 @@ type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	timeString  bool
-	insertHash  bool
-	zeroPadding int
-	insertStart int
-	insertCount int
-	recordCount int
-	json        bool
-	families    bool
-	rmwInTxn    bool
-	sfu         bool
-	splits      int
+	timeString   bool
+	insertRandom bool
+	zeroPadding  int
+	insertStart  int
+	insertCount  int
+	recordCount  int
+	json         bool
+	families     bool
+	rmwInTxn     bool
+	sfu          bool
+	splits       int
 
 	workload                                                string
 	requestDistribution                                     string
@@ -131,9 +129,15 @@ var ycsbMeta = workload.Meta{
 			`scan-freq`:                {RuntimeOnly: true},
 			`read-modify-write-freq`:   {RuntimeOnly: true},
 		}
+		g.flags.SetNormalizeFunc(func(flags *pflag.FlagSet, name string) pflag.NormalizedName {
+			if name == `insert-hash` {
+				name = `insert-random`
+			}
+			return pflag.NormalizedName(name)
+		})
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
-		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
-		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
+		g.flags.BoolVar(&g.insertRandom, `insert-random`, true, `Key to be pseduorandom or ordered.`)
+		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key has zeros padded to left to make this length of digits.`)
 		g.flags.IntVar(&g.insertStart, `insert-start`, 0, `Key to start initial sequential insertions from. (default 0)`)
 		g.flags.IntVar(&g.insertCount, `insert-count`, 10000, `Number of rows to sequentially insert before beginning workload.`)
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
@@ -328,9 +332,13 @@ func (g *ycsb) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			g.splits,
 			func(splitIdx int) []interface{} {
+				w := ycsbWorker{
+					config:   g,
+					prngPerm: crrand.MakePerm64(RandomSeed.Seed()),
+				}
 				step := math.MaxUint64 / uint64(g.splits+1)
 				return []interface{}{
-					keyNameFromHash(step * uint64(splitIdx+1)),
+					w.buildKeyName(step * uint64(splitIdx+1)),
 				}
 			},
 		),
@@ -342,7 +350,7 @@ func (g *ycsb) Tables() []workload.Table {
 			func(rowIdx int) []interface{} {
 				w := ycsbWorker{
 					config:   g,
-					hashFunc: fnv.New64(),
+					prngPerm: crrand.MakePerm64(RandomSeed.Seed()),
 				}
 				key := w.buildKeyName(uint64(g.insertStart + rowIdx))
 				// TODO(peter): Need to fill in FIELD here, rather than an empty JSONB
@@ -359,12 +367,6 @@ func (g *ycsb) Tables() []workload.Table {
 		const batchSize = 1000
 		usertable.InitialRows = workload.BatchedTuples{
 			NumBatches: (g.insertCount + batchSize - 1) / batchSize,
-			// If the key sequence is hashed, duplicates are possible. Hash
-			// collisions are inevitable at large insert counts (they're at
-			// least inevitable at ~1b rows). Marking that the keys may contain
-			// duplicates will cause the data loader to use INSERT ... ON
-			// CONFLICT DO NOTHING statements.
-			MayContainDuplicates: !g.insertHash,
 			FillBatch: func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > g.insertCount {
@@ -385,7 +387,7 @@ func (g *ycsb) Tables() []workload.Table {
 
 				w := ycsbWorker{
 					config:   g,
-					hashFunc: fnv.New64(),
+					prngPerm: crrand.MakePerm64(RandomSeed.Seed()),
 				}
 				rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
 
@@ -577,7 +579,7 @@ func (g *ycsb) Ops(
 			requestGen:              requestGen,
 			scanLengthGen:           scanLengthGen,
 			rng:                     rng,
-			hashFunc:                fnv.New64(),
+			prngPerm:                crrand.MakePerm64(RandomSeed.Seed()),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -622,8 +624,7 @@ type ycsbWorker struct {
 	requestGen    randGenerator // used to generate random keys for requests
 	scanLengthGen randGenerator // used to generate length of scan operations
 	rng           *rand.Rand    // used to generate random strings for the values
-	hashFunc      hash.Hash64
-	hashBuf       [binary.MaxVarintLen64]byte
+	prngPerm      crrand.Perm64 // used to map the key index to a pseudorandom key
 }
 
 func (yw *ycsbWorker) run(ctx context.Context) error {
@@ -691,29 +692,12 @@ const (
 	readModifyWriteOp operation = `readModifyWrite`
 )
 
-func (yw *ycsbWorker) hashKey(key uint64) uint64 {
-	yw.hashBuf = [binary.MaxVarintLen64]byte{} // clear hashBuf
-	binary.PutUvarint(yw.hashBuf[:], key)
-	yw.hashFunc.Reset()
-	if _, err := yw.hashFunc.Write(yw.hashBuf[:]); err != nil {
-		panic(err)
-	}
-	return yw.hashFunc.Sum64()
-}
-
 func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
-	if yw.config.insertHash {
-		return keyNameFromHash(yw.hashKey(keynum))
+	if yw.config.insertRandom {
+		// Use prngPerm to map the key index to a pseudorandom key.
+		keynum = yw.prngPerm.At(keynum)
 	}
-	return keyNameFromOrder(keynum, yw.config.zeroPadding)
-}
-
-func keyNameFromHash(hashedKey uint64) string {
-	return fmt.Sprintf("user%d", hashedKey)
-}
-
-func keyNameFromOrder(keynum uint64, zeroPadding int) string {
-	return fmt.Sprintf("user%0*d", zeroPadding, keynum)
+	return fmt.Sprintf("user%0*d", yw.config.zeroPadding, keynum)
 }
 
 // Keys are chosen by first drawing from a Zipf distribution, hashing the drawn

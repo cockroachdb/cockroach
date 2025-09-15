@@ -21,6 +21,7 @@ go_library(
         "//pkg/workload/histogram",
         "//pkg/workload/workloadimpl",
         "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgxv5",
+        "@com_github_cockroachdb_crlib//crrand",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_jackc_pgx_v5//pgconn",
