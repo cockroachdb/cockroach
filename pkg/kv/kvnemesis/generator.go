@@ -541,9 +541,6 @@ func NewDefaultConfig() GeneratorConfig {
 	// Note also that at the time of writing `config.Ops.Batch` is cleared in its
 	// entirety below, so changing this line alonewon't have an effect.
 	config.Ops.Batch.Ops.DeleteRangeUsingTombstone = 0
-	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
-	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
-	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
 	// TODO(dan): This fails with a WriteTooOld error if the same key is Put twice
 	// in a single batch. However, if the same Batch is committed using txn.Run,
 	// then it works and only the last one is materialized. We could make the
@@ -1657,6 +1654,10 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 		// enclosing transaction here.
 		var addedPutOrCPut, addedBatchHeaderMutation bool
 
+		// TODO(sarkesian): Enable DeleteRange in co-mingled batches once #71236 is
+		// fixed.
+		var addedDeleteRange bool
+
 		for i := 0; i < numOps; i++ {
 			ops[i] = g.selectOp(rng, allowed)
 			if ops[i].Scan != nil {
@@ -1678,11 +1679,16 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 					addedReverseScan = true
 				}
 			} else if ops[i].Put != nil || ops[i].CPut != nil {
-				if addedBatchHeaderMutation {
+				if addedBatchHeaderMutation || addedDeleteRange {
 					i--
 					continue
 				}
 				addedPutOrCPut = true
+			} else if ops[i].Delete != nil {
+				if addedDeleteRange {
+					i--
+					continue
+				}
 			} else if ops[i].MutateBatchHeader != nil {
 				// In addition to avoiding batch mutations when we have Puts or CPuts,
 				// we also skip adding mutations if one is already added.
@@ -1691,6 +1697,14 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 					continue
 				}
 				addedBatchHeaderMutation = true
+			} else if ops[i].DeleteRange != nil {
+				// DeleteRange is considered a forward scan.
+				if addedReverseScan {
+					i--
+					continue
+				}
+				addedForwardScan = true
+				addedDeleteRange = true
 			}
 		}
 		return batch(ops...)
