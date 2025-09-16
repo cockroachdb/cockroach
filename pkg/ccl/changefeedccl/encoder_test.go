@@ -1284,7 +1284,7 @@ func TestJsonRountrip(t *testing.T) {
 			// In this case, we can just compare strings.
 			if isFloatOrDecimal(test.datum.ResolvedType()) {
 				require.Equal(t, d.String(), j.String())
-			} else if dArr, ok := tree.AsDArray(test.datum); ok && isFloatOrDecimal(dArr.ParamTyp) {
+			} else if dArr, ok := test.datum.(*tree.DArray); ok && isFloatOrDecimal(dArr.ParamTyp) {
 				require.Equal(t, d.String(), j.String())
 			} else {
 				cmp, err := d.Compare(j)

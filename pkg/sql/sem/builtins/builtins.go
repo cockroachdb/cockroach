@@ -2709,7 +2709,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "timestamp", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDFloat(args[0])
+				ts, ok := args[0].(*tree.DFloat)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected float argument for to_timestamp")
 				}
@@ -2854,7 +2854,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDTimestampTZ(args[0])
+				ts, ok := args[0].(*tree.DTimestampTZ)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2870,7 +2870,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDTimestampTZ(args[0])
+				ts, ok := args[0].(*tree.DTimestampTZ)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2889,7 +2889,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := tree.AsDInterval(args[0])
+				interval, ok := args[0].(*tree.DInterval)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -2905,7 +2905,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := tree.AsDInterval(args[0])
+				interval, ok := args[0].(*tree.DInterval)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -5628,7 +5628,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableID := catid.DescID(tree.MustBeDInt(args[0]))
 				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
-				rowDatums, ok := tree.AsDTuple(args[2])
+				rowDatums, ok := args[2].(*tree.DTuple)
 				if !ok {
 					return nil, pgerror.Newf(
 						pgcode.DatatypeMismatch,
@@ -5664,11 +5664,11 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types:      tree.ParamTypes{{Name: "descriptor", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := tree.AsDBytes(args[0])
+				s, ok := args[0].(*tree.DBytes)
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
-				ret, err := evalCtx.CatalogBuiltins.RedactDescriptor(ctx, []byte(s))
+				ret, err := evalCtx.CatalogBuiltins.RedactDescriptor(ctx, []byte(*s))
 				if err != nil {
 					return nil, err
 				}
@@ -5688,7 +5688,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types:      tree.ParamTypes{{Name: "descriptor", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := tree.AsDBytes(args[0])
+				s, ok := args[0].(*tree.DBytes)
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
@@ -5702,7 +5702,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
+					ctx, []byte(*s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
 				)
 				if err != nil {
 					return nil, err
@@ -5728,23 +5728,23 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := tree.AsDBytes(args[0])
+				s, ok := args[0].(*tree.DBytes)
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
 				descIDMightExist := func(id descpb.ID) bool { return true }
 				if args[1] != tree.DNull {
-					descIDs, ok := tree.AsDArray(args[1])
+					descIDs, ok := args[1].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[1])
 					}
 					descIDMap := make(map[descpb.ID]struct{}, descIDs.Len())
 					for i, n := 0, descIDs.Len(); i < n; i++ {
-						id, isInt := tree.AsDInt(descIDs.Array[i])
+						id, isInt := descIDs.Array[i].(*tree.DInt)
 						if !isInt {
 							return nil, errors.Newf("expected int value, got %T", descIDs.Array[i])
 						}
-						descIDMap[descpb.ID(id)] = struct{}{}
+						descIDMap[descpb.ID(*id)] = struct{}{}
 					}
 					descIDMightExist = func(id descpb.ID) bool {
 						_, found := descIDMap[id]
@@ -5753,17 +5753,17 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				}
 				nonTerminalJobIDMightExist := func(id jobspb.JobID) bool { return true }
 				if args[2] != tree.DNull {
-					jobIDs, ok := tree.AsDArray(args[2])
+					jobIDs, ok := args[2].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[2])
 					}
 					jobIDMap := make(map[jobspb.JobID]struct{}, jobIDs.Len())
 					for i, n := 0, jobIDs.Len(); i < n; i++ {
-						id, isInt := tree.AsDInt(jobIDs.Array[i])
+						id, isInt := jobIDs.Array[i].(*tree.DInt)
 						if !isInt {
 							return nil, errors.Newf("expected int value, got %T", jobIDs.Array[i])
 						}
-						jobIDMap[jobspb.JobID(id)] = struct{}{}
+						jobIDMap[jobspb.JobID(*id)] = struct{}{}
 					}
 					nonTerminalJobIDMightExist = func(id jobspb.JobID) bool {
 						_, found := jobIDMap[id]
@@ -5775,7 +5775,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				if args[3] != tree.DNull {
-					roles, ok := tree.AsDArray(args[3])
+					roles, ok := args[3].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[3])
 					}
@@ -5794,7 +5794,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					}
 				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
+					ctx, []byte(*s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
 				)
 				if err != nil {
 					return nil, err
@@ -10326,7 +10326,7 @@ func verboseFingerprint(
 
 	// The startTime can either be a timestampTZ or a decimal.
 	var startTimestamp hlc.Timestamp
-	if parsedDecimal, ok := tree.AsDDecimal(args[1]); ok {
+	if parsedDecimal, ok := args[1].(*tree.DDecimal); ok {
 		startTimestamp, err = hlc.DecimalToHLC(&parsedDecimal.Decimal)
 		if err != nil {
 			return nil, err
@@ -11410,7 +11410,7 @@ func arrayLength(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return tree.NewDInt(tree.DInt(arr.Len()))
 	}
-	a, ok := tree.AsDArray(arr.Array[0])
+	a, ok := arr.Array[0].(*tree.DArray)
 	if !ok {
 		return tree.DNull
 	}
@@ -11426,7 +11426,7 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return intOne
 	}
-	a, ok := tree.AsDArray(arr.Array[0])
+	a, ok := arr.Array[0].(*tree.DArray)
 	if !ok {
 		return tree.DNull
 	}

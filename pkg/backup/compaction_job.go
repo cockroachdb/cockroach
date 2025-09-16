@@ -161,11 +161,11 @@ func maybeStartCompactionJob(
 		if err != nil {
 			return err
 		}
-		idDatum, ok := tree.AsDInt(datums[0])
+		idDatum, ok := datums[0].(*tree.DInt)
 		if !ok {
 			return errors.Newf("expected job ID: unexpected result type %T", datums[0])
 		}
-		jobID = jobspb.JobID(idDatum)
+		jobID = jobspb.JobID(*idDatum)
 
 		scheduledJob := jobs.ScheduledJobTxn(txn)
 		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(

@@ -1867,7 +1867,7 @@ func mergeStatsMetadataHelper(
 		return nil
 	}
 
-	metadataJSON, ok := tree.AsDJSON(metadataDatum)
+	metadataJSON, ok := metadataDatum.(*tree.DJSON)
 	if !ok {
 		return nil
 	}
@@ -1899,7 +1899,7 @@ func mergeStatementStatsHelper(
 		return nil
 	}
 
-	statsJSON, ok := tree.AsDJSON(statsDatum)
+	statsJSON, ok := statsDatum.(*tree.DJSON)
 	if !ok {
 		return nil
 	}
@@ -1920,7 +1920,7 @@ func mergeTransactionStatsHelper(
 		return nil
 	}
 
-	statsJSON, ok := tree.AsDJSON(statsDatum)
+	statsJSON, ok := statsDatum.(*tree.DJSON)
 	if !ok {
 		return nil
 	}
@@ -1948,7 +1948,7 @@ func mergeAggregatedMetadataHelper(
 		return nil
 	}
 
-	metadataJSON, ok := tree.AsDJSON(datum)
+	metadataJSON, ok := datum.(*tree.DJSON)
 	if !ok {
 		return nil
 	}

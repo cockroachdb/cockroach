@@ -438,14 +438,32 @@ func newDiskQueue(
 	return d, d.rotateFile(ctx)
 }
 
+// CloseRead closes the read file descriptor.
+//
+// No-op if the read file is not open. readFile is guaranteed to be nil-ed out
+// on return.
 func (d *diskQueue) CloseRead() error {
-	if d.readFile != nil {
-		if err := d.readFile.Close(); err != nil {
-			return err
-		}
-		d.readFile = nil
+	if d.readFile == nil {
+		return nil
 	}
-	return nil
+	defer func() {
+		d.readFile = nil
+	}()
+	return d.readFile.Close()
+}
+
+// closeWriteFile closes the write file descriptor.
+//
+// No-op if the write file is not open. writeFile is guaranteed to be nil-ed out
+// on return.
+func (d *diskQueue) closeWriteFile() error {
+	if d.writeFile == nil {
+		return nil
+	}
+	defer func() {
+		d.writeFile = nil
+	}()
+	return d.writeFile.Close()
 }
 
 func (d *diskQueue) closeFileDeserializer(ctx context.Context) error {
@@ -460,12 +478,10 @@ func (d *diskQueue) closeFileDeserializer(ctx context.Context) error {
 
 func (d *diskQueue) Close(ctx context.Context) (retErr error) {
 	defer func() {
-		if d.writeFile != nil {
-			// Ensure that we always attempt to close the file in case we
-			// short-circuit the method due to an error.
-			if err := d.writeFile.Close(); err != nil {
-				retErr = errors.CombineErrors(retErr, err)
-			}
+		// Ensure that we always attempt to close the file in case we
+		// short-circuit the method due to an error.
+		if err := d.closeWriteFile(); err != nil {
+			retErr = errors.CombineErrors(retErr, err)
 		}
 		d.writer.memAcc.Shrink(ctx, d.writer.accountedFor.buffer+d.writer.accountedFor.compressedBuf)
 		d.memAcc.Shrink(ctx, d.scratchAccountedFor)
@@ -485,11 +501,8 @@ func (d *diskQueue) Close(ctx context.Context) (retErr error) {
 	if err := d.closeFileDeserializer(ctx); err != nil {
 		return err
 	}
-	if d.writeFile != nil {
-		if err := d.writeFile.Close(); err != nil {
-			return err
-		}
-		d.writeFile = nil
+	if err := d.closeWriteFile(); err != nil {
+		return err
 	}
 	// The readFile will be removed below in DeleteDirAndFiles.
 	if err := d.CloseRead(); err != nil {
@@ -559,7 +572,7 @@ func (d *diskQueue) rotateFile(ctx context.Context) (retErr error) {
 
 	if d.writeFile != nil {
 		d.files[d.writeFileIdx].finishedWriting = true
-		if err := d.writeFile.Close(); err != nil {
+		if err = d.closeWriteFile(); err != nil {
 			return err
 		}
 	}
@@ -638,11 +651,10 @@ func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return err
 		}
-		if err := d.writeFile.Close(); err != nil {
+		if err := d.closeWriteFile(); err != nil {
 			return err
 		}
 		d.files[d.writeFileIdx].finishedWriting = true
-		d.writeFile = nil
 		// Done with the serializer - close it and set it to nil. Not setting
 		// this will cause us to attempt to flush the serializer on Close.
 		d.serializer.Close(ctx)
@@ -713,7 +725,6 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 				}
 				d.diskAcc.Shrink(ctx, fileSize)
 			}
-			d.readFile = nil
 			// Read next file.
 			d.readFileIdx++
 			return d.maybeInitDeserializer(ctx)
@@ -876,7 +887,6 @@ func (d *diskQueue) Rewind(ctx context.Context) error {
 		return err
 	}
 	d.deserializerState.curBatch = 0
-	d.readFile = nil
 	d.readFileIdx = 0
 	for i := range d.files {
 		d.files[i].curOffsetIdx = 0

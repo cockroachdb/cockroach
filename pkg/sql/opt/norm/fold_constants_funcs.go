@@ -6,8 +6,6 @@
 package norm
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -338,7 +336,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			if err != nil {
 				return nil, false, err
 			}
-			oid, ok := tree.AsDOid(cDatum)
+			oid, ok := cDatum.(*tree.DOid)
 			if !ok {
 				return nil, false, nil
 			}
@@ -663,8 +661,10 @@ func (c *CustomFuncs) FoldFunction(
 	if c.f.evalCtx != nil && c.f.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(private.Name)
 		def, err := c.f.catalog.ResolveFunction(
-			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
-			&c.f.evalCtx.SessionData().SearchPath)
+			c.f.ctx,
+			tree.MakeUnresolvedFunctionName(&unresolved),
+			&c.f.evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
 			log.Dev.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
 			return nil, false

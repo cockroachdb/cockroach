@@ -485,6 +485,8 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (d
 		}
 		return result, nil
 	default:
+		// TODO(cdc): VECTOR, JSONPATH, TSQUERY, TSVECTOR types are missing
+		// here.
 		return result, pgerror.Newf(pgcode.FeatureNotSupported,
 			"parquet writer does not support the type family %v", typ.Family())
 	}
