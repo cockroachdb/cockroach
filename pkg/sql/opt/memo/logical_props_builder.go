@@ -1609,6 +1609,10 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// -----------
 	// Inherit cardinality from input.
 	rel.Cardinality = inputProps.Cardinality
+	if private.Swap {
+		// Swap mutations can return zero rows.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 
 	// Statistics
 	// ----------

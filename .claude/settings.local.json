@@ -1,0 +1,6 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "gopls-mcp"
+  ]
+}

@@ -239,19 +239,16 @@ func RandDatumWithNullChance(
 		}
 		return tree.NewDJsonpath(*jp.AST)
 	case types.TupleFamily:
-		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		if nullChance == 0 {
 			nullChance = 10
 		}
+		datums := make([]tree.Datum, len(typ.TupleContents()))
 		for i := range typ.TupleContents() {
-			tuple.D[i] = RandDatumWithNullChance(
+			datums[i] = RandDatumWithNullChance(
 				rng, typ.TupleContents()[i], nullChance, favorCommonData, targetColumnIsUnique,
 			)
 		}
-		// Calling ResolvedType causes the internal TupleContents types to be
-		// populated.
-		tuple.ResolvedType()
-		return &tuple
+		return tree.NewDTuple(typ, datums...)
 	case types.BitFamily:
 		width := typ.Width()
 		if width == 0 {
@@ -381,6 +378,9 @@ func RandArrayWithCommonDataChance(
 		contents = RandArrayContentsType(rng)
 	}
 	arr := tree.NewDArray(contents)
+	if err := arr.MaybeSetCustomOid(typ); err != nil {
+		panic(err)
+	}
 	for i := 0; i < rng.Intn(10); i++ {
 		if err :=
 			arr.Append(
@@ -451,6 +451,8 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 		}
 		return datum
 
+	case types.OidFamily:
+		return tree.NewDOidWithType(datum.(*tree.DOid).Oid, typ)
 	default:
 		return datum
 	}
