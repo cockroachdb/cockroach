@@ -396,8 +396,10 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	// Reduce the scan max idle time to speed up evacuation of node 1.
 	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=*=1"} // see #153441
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+	c.Start(ctx, t.L(), startOpts, settings)
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
@@ -551,7 +553,8 @@ SELECT count(replicas)
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(1))
 	// N.B. Since n1 was initially stripped of all the replicas, we must wait for full replication. Otherwise, the
 	// replica consistency checks may time out.
-	c.Start(ctx, t.L(), option.NewStartOpts(option.WaitForReplication()), install.MakeClusterSettings(), c.Node(1))
+	startOpts.WaitForReplicationFactor = 3
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
