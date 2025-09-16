@@ -32,7 +32,7 @@ asserting: max_{stores}(qps)/mean_{stores}(qps) < 1.15 at each of last 6 ticks
 # to take a duration, not ticks.
 assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
-asserting: qps stays < 1.05*mean_{ticks} at each store
+asserting: |qps(t)/mean_{T}(qps) - 1| < 0.05 ∀ t∈T and each store (T=last 6 ticks)
 
 # The generators are then called and 2 simulation runs, named samples are
 # created and evaluated. Each sample has a fixed duration of 3 minutes.

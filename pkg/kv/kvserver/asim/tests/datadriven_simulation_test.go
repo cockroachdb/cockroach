@@ -610,8 +610,9 @@ func TestDataDriven(t *testing.T) {
 						Stat:      stat,
 						Threshold: threshold,
 					})
-					_, _ = fmt.Fprintf(&buf, "asserting: %s stays %s %.2f*mean_{ticks} at each store",
-						stat, threshold.ThresholdType, 1+threshold.Value)
+					_, _ = fmt.Fprintf(&buf, "asserting: |%s(t)/mean_{T}(%s) - 1| %s %.2f ∀ t∈T and each store ("+
+						"T=last %d ticks)",
+						stat, stat, threshold.ThresholdType, threshold.Value, ticks)
 					// ^-- the mean is taken over the ticks (and the check runs for each store).
 					// These assertions are for "checking that change stops" (vs. balance
 					// assertions, which verify that stores are close together on some metric).
