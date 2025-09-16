@@ -581,7 +581,7 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			helper := baseHelper
 			helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(ts.InternalDB().(isql.DB), nil, nil, timeutil.DefaultTimeSource{})
 
-			err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, redacted)
+			_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, redacted)
 			require.NoError(t, err)
 
 			newCtx, started := helper.MaybeStartDiagnostics(ctx, 123, ts.Tracer())

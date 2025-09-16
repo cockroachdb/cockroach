@@ -35,8 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -991,7 +993,247 @@ LIMIT 1`)
 
 		require.Equal(t, 3, count)
 	})
+}
 
+func TestRequestTxnBundleBuiltin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.SynchronousSQLStats = true
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{Knobs: base.TestingKnobs{
+		SQLStatsKnobs: knobs,
+	}})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+
+	txnStatements := []string{"SELECT 'aaaaaa', 'bbbbbb'",
+		"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'"}
+	executeTransactions(t, runner, txnStatements)
+
+	// Get the fingerprint id and statement fingerprint ids for the transaction
+	// to make the txn diagnostics request
+	row := runner.QueryRow(t,
+		`
+SELECT 
+  encode(ts.fingerprint_id, 'hex') AS fingerprint_id,
+  ts.metadata->'stmtFingerprintIDs' as fingerprint_ids
+FROM crdb_internal.transaction_statistics ts
+JOIN crdb_internal.statement_statistics ss on ss.transaction_fingerprint_id = ts.fingerprint_id
+WHERE ss.metadata->>'query' LIKE 'SELECT _, _' 
+LIMIT 1`)
+	var expectedTxnFpId string
+	var fingerprintIdsBytes []byte
+
+	row.Scan(&expectedTxnFpId, &fingerprintIdsBytes)
+	var statementFingerprintIds []uint64
+	var statementFingerprintStrs []string
+	err := json.Unmarshal(fingerprintIdsBytes, &statementFingerprintStrs)
+	require.NoError(t, err)
+
+	for _, s := range statementFingerprintStrs {
+		value, err := strconv.ParseUint(s, 16, 64)
+		require.NoError(t, err)
+		statementFingerprintIds = append(statementFingerprintIds, value)
+	}
+
+	runner.Exec(t, "CREATE USER alloweduser")
+	runner.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO alloweduser")
+
+	runner.Exec(t, "CREATE USER alloweduserredacted")
+	runner.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO alloweduserredacted")
+
+	runner.Exec(t, "CREATE USER notalloweduser")
+
+	for _, tc := range []struct {
+		name                        string
+		expectedMinExecutionLatency string
+		expectedExpiresAt           string
+		expectedSampleProbability   float64
+		expectedRedacted            bool
+		expectedError               string
+		expectedUser                string
+	}{
+		{
+			name:                        "conditional",
+			expectedMinExecutionLatency: "00:00:00.1",
+			expectedSampleProbability:   0.5,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+		},
+		{
+			name:                        "conditional_no_min_latency",
+			expectedSampleProbability:   0.5,
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "got non-zero sampling probability",
+		},
+		{
+			name:                        "conditional_probability_out_of_bounds",
+			expectedSampleProbability:   1.5,
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "expected sampling probability in range",
+		},
+		{
+			name:                        "not_conditional",
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedSampleProbability:   0,
+			expectedRedacted:            false,
+		},
+		{
+			name:                        "with_expiration",
+			expectedExpiresAt:           "1h",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedRedacted:            false,
+		},
+		{
+			name:                        "redacted",
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedSampleProbability:   0,
+			expectedRedacted:            true,
+		},
+		{
+			name:                        "alloweduser",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedUser:                "alloweduser",
+		},
+		{
+			name:                        "alloweduserredacted",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            true,
+			expectedUser:                "alloweduserredacted",
+		},
+		{
+			name:                        "alloweduserredacted must be redacted",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles",
+			expectedUser:                "alloweduserredacted",
+		},
+		{
+			name:                        "notalloweduser",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "requesting statement bundle requires VIEWACTIVITY privilege",
+			expectedUser:                "notalloweduser",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				runner.Exec(t, "RESET ROLE")
+				runner.Exec(t, "DELETE FROM system.transaction_diagnostics_requests")
+			}()
+
+			if tc.expectedUser != "" {
+				runner.Exec(t, "SET ROLE "+tc.expectedUser)
+			} else {
+				tc.expectedUser = "root"
+			}
+			var requestId int
+			var created bool
+			if tc.expectedError != "" {
+				runner.ExpectErr(t, tc.expectedError, "SELECT crdb_internal.request_transaction_bundle($1, $2, $3, $4, $5)",
+					expectedTxnFpId,
+					tc.expectedSampleProbability,
+					tc.expectedMinExecutionLatency,
+					tc.expectedExpiresAt,
+					tc.expectedRedacted)
+			} else {
+				requestTime := timeutil.Now()
+				runner.QueryRow(t, "SELECT request_id, created FROM crdb_internal.request_transaction_bundle($1, $2, $3::INTERVAL, $4, $5)",
+					expectedTxnFpId,
+					tc.expectedSampleProbability,
+					tc.expectedMinExecutionLatency,
+					tc.expectedExpiresAt,
+					tc.expectedRedacted,
+				).Scan(&requestId, &created)
+				require.True(t, created)
+
+				var (
+					txnFpId             string
+					stmtFingerprintIds  [][]byte
+					minExecutionLatency gosql.NullString
+					expiresAt           gosql.NullTime
+					sampleProbability   *float64
+					redacted            bool
+					username            string
+				)
+
+				runner.Exec(t, "RESET ROLE")
+				runner.QueryRow(t, "SELECT "+
+					"encode(transaction_fingerprint_id, 'hex') as txn_fingerprint_id, "+
+					"statement_fingerprint_ids, "+
+					"min_execution_latency, "+
+					"expires_at, "+
+					"sampling_probability, "+
+					"redacted, "+
+					"username "+
+					"FROM system.transaction_diagnostics_requests "+
+					"WHERE id = $1", requestId).Scan(&txnFpId, pq.Array(&stmtFingerprintIds), &minExecutionLatency, &expiresAt, &sampleProbability, &redacted, &username)
+				var expectedSampleProbability *float64
+				if tc.expectedSampleProbability != 0 {
+					expectedSampleProbability = &tc.expectedSampleProbability
+				}
+
+				if tc.expectedMinExecutionLatency != "0" {
+					require.True(t, minExecutionLatency.Valid)
+					require.Equal(t, tc.expectedMinExecutionLatency, minExecutionLatency.String)
+				}
+
+				if tc.expectedExpiresAt != "0" {
+					require.True(t, expiresAt.Valid, "expiresAt should not be NULL when expectedExpiresAt is set")
+					expectedExpiresAt, err := time.ParseDuration(tc.expectedExpiresAt)
+					require.NoError(t, err)
+					require.WithinDuration(t, requestTime.Add(expectedExpiresAt), expiresAt.Time, time.Minute)
+				}
+
+				require.Equal(t, expectedTxnFpId, txnFpId)
+				require.Equal(t, statementFingerprintIds, stmtdiagnostics.ToUint64Slice(t, stmtFingerprintIds))
+				require.Equal(t, expectedSampleProbability, sampleProbability)
+				require.Equal(t, tc.expectedRedacted, redacted)
+				require.Equal(t, tc.expectedUser, username)
+			}
+		})
+	}
+
+	t.Run("non-existent transaction fingerprint id", func(t *testing.T) {
+		var found bool
+		runner.QueryRow(t, "SELECT created FROM crdb_internal.request_transaction_bundle($1, $2, $3, $4, $5)",
+			"ffffffffffffffff",
+			0,
+			"0",
+			0,
+			false).Scan(&found)
+		require.NoError(t, err)
+		require.False(t, found)
+	})
+
+	t.Run("non-hex encoded transaction fingerprint id", func(t *testing.T) {
+		runner.ExpectErr(t, "invalid transaction fingerprint id", "SELECT crdb_internal.request_transaction_bundle($1, $2, $3, $4, $5)",
+			"zzzz",
+			0,
+			"0",
+			0,
+			false)
+	})
 }
 
 func executeTransactions(t *testing.T, runner *sqlutils.SQLRunner, statements []string) {
