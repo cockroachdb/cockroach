@@ -147,6 +147,7 @@ func (r *Replica) executeReadOnlyBatch(
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
+				log.Eventf(ctx, "optimistic evaluation failed with %s", pErr)
 				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		}
