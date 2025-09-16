@@ -793,15 +793,13 @@ func concludeBackupCompaction(
 	backupID := uuid.MakeV4()
 	backupManifest.ID = backupID
 
-	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.BackupManifestName,
+	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.DeprecatedBackupManifestName,
 		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
 		return err
 	}
-	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&execCtx.ExecCfg().Settings.SV) {
-		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, store, details.EncryptionOptions,
-			kmsEnv, backupManifest); err != nil {
-			return err
-		}
+	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, store, details.EncryptionOptions,
+		kmsEnv, backupManifest); err != nil {
+		return err
 	}
 
 	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)

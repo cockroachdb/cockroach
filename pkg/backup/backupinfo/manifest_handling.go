@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -48,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -84,17 +82,6 @@ const (
 	// CHECKPOINT files will be stored as we no longer want to overwrite
 	// them.
 	BackupProgressDirectory = "progress"
-)
-
-// WriteMetadataWithExternalSSTsEnabled controls if we write a `BACKUP_METADATA`
-// file along with external SSTs containing lists of `BackupManifest_Files` and
-// descriptors. This new format of metadata is written in addition to the
-// `BACKUP_MANIFEST` file, and is expected to be its replacement in the future.
-var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"backup.write_metadata_with_external_ssts.enabled",
-	"write BACKUP metadata along with supporting SST files",
-	metamorphic.ConstantWithTestBool("backup.write_metadata_with_external_ssts.enabled", true),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check
@@ -169,38 +156,12 @@ func ReadBackupManifestFromStore(
 		// pre-23.1 node.
 		log.Dev.VInfof(ctx, 2, "could not find BACKUP_METADATA, falling back to BACKUP_MANIFEST")
 		backupManifest, backupManifestMemSize, backupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
-			backupbase.BackupManifestName, encryption, kmsEnv)
+			backupbase.DeprecatedBackupManifestName, encryption, kmsEnv)
 		if backupManifestErr != nil {
-			if !errors.Is(backupManifestErr, cloud.ErrFileDoesNotExist) {
-				return backuppb.BackupManifest{}, 0, backupManifestErr
-			}
-
-			// If we did not find a `BACKUP_MANIFEST` we look for a `BACKUP` file as
-			// it is possible the backup was created by a pre-20.1 node.
-			//
-			// TODO(adityamaru): Remove this logic once we disallow restores beyond
-			// the binary upgrade compatibility window.
-			log.Dev.VInfof(ctx, 2, "could not find BACKUP_MANIFEST, falling back to BACKUP")
-			oldBackupManifest, oldBackupManifestMemSize, oldBackupManifestErr := ReadBackupManifest(ctx, mem, exportStore,
-				backupbase.BackupOldManifestName, encryption, kmsEnv)
-			if oldBackupManifestErr != nil {
-				if errors.Is(oldBackupManifestErr, cloud.ErrFileDoesNotExist) {
-					log.Dev.VInfof(ctx, 2, "could not find any of the supported backup metadata files")
-					return backuppb.BackupManifest{}, 0,
-						errors.Wrapf(oldBackupManifestErr, "could not find BACKUP manifest file in any of the known locations: %s, %s, %s",
-							backupbase.BackupMetadataName, backupbase.BackupManifestName, backupbase.BackupOldManifestName)
-				}
-				return backuppb.BackupManifest{}, 0, oldBackupManifestErr
-			} else {
-				// We found a `BACKUP` manifest file.
-				manifest = oldBackupManifest
-				memSize = oldBackupManifestMemSize
-			}
-		} else {
-			// We found a `BACKUP_MANIFEST` file.
-			manifest = backupManifest
-			memSize = backupManifestMemSize
+			return backuppb.BackupManifest{}, 0, backupManifestErr
 		}
+		manifest = backupManifest
+		memSize = backupManifestMemSize
 	}
 	manifest.Dir = exportStore.Conf()
 	manifest.Dir.URI = storeURI
@@ -1344,18 +1305,18 @@ func CheckForPreviousBackup(
 	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, _, err := defaultStore.ReadFile(ctx, backupbase.BackupManifestName, cloud.ReadOptions{NoFileSize: true})
+	r, _, err := defaultStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			redactedURI, backupbase.BackupManifestName)
+			redactedURI, backupbase.DeprecatedBackupManifestName)
 	}
 
 	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			redactedURI, backupbase.BackupManifestName)
+			redactedURI, backupbase.DeprecatedBackupManifestName)
 	}
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from

@@ -458,7 +458,7 @@ func writeEmptyBackupManifest(
 	)
 	require.NoError(
 		t,
-		cloud.WriteFile(context.Background(), backupStore, backupbase.BackupManifestName, emptyReader),
+		cloud.WriteFile(context.Background(), backupStore, backupbase.DeprecatedBackupManifestName, emptyReader),
 	)
 
 	if !indexed {
@@ -504,18 +504,14 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	emptyReader := bytes.NewReader(nil)
 
-	writeManifest := func(t *testing.T, store cloud.ExternalStorage, path string, useOldBackup bool) {
-		manifestName := backupbase.BackupManifestName
-		if useOldBackup {
-			manifestName = backupbase.BackupOldManifestName
-		}
+	writeManifest := func(t *testing.T, store cloud.ExternalStorage, path string) {
+		manifestName := backupbase.DeprecatedBackupManifestName
 		err := cloud.WriteFile(ctx, store, backuputils.JoinURLPath(path, manifestName), emptyReader)
 		require.NoError(t, err)
 	}
 
 	type backupPath struct {
-		path         string
-		useOldBackup bool
+		path string
 	}
 	type testcase struct {
 		name          string
@@ -527,9 +523,9 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 		{
 			name: "all suffixed paths",
 			paths: []backupPath{
-				{path: "/20250320/001000.00-20250320-000000.00", useOldBackup: false},
-				{path: "/20250320/002000.00-20250320-001000.00", useOldBackup: false},
-				{path: "/20250320/003000.00-20250320-002000.00", useOldBackup: false},
+				{path: "/20250320/001000.00-20250320-000000.00"},
+				{path: "/20250320/002000.00-20250320-001000.00"},
+				{path: "/20250320/003000.00-20250320-002000.00"},
 			},
 			expectedPaths: []string{
 				"/20250320/001000.00-20250320-000000.00",
@@ -540,35 +536,9 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 		{
 			name: "all non-suffixed paths",
 			paths: []backupPath{
-				{path: "/20250320/001000.00", useOldBackup: false},
-				{path: "/20250320/002000.00", useOldBackup: false},
-				{path: "/20250320/003000.00", useOldBackup: false},
-			},
-			expectedPaths: []string{
-				"/20250320/001000.00",
-				"/20250320/002000.00",
-				"/20250320/003000.00",
-			},
-		},
-		{
-			name: "all old backup paths",
-			paths: []backupPath{
-				{path: "/20250320/001000.00", useOldBackup: true},
-				{path: "/20250320/002000.00", useOldBackup: true},
-				{path: "/20250320/003000.00", useOldBackup: true},
-			},
-			expectedPaths: []string{
-				"/20250320/001000.00",
-				"/20250320/002000.00",
-				"/20250320/003000.00",
-			},
-		},
-		{
-			name: "mixed new and old backup paths",
-			paths: []backupPath{
-				{path: "/20250320/001000.00", useOldBackup: false},
-				{path: "/20250320/002000.00", useOldBackup: true},
-				{path: "/20250320/003000.00", useOldBackup: false},
+				{path: "/20250320/001000.00"},
+				{path: "/20250320/002000.00"},
+				{path: "/20250320/003000.00"},
 			},
 			expectedPaths: []string{
 				"/20250320/001000.00",
@@ -579,9 +549,9 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 		{
 			name: "mixed suffixed and non-suffixed paths",
 			paths: []backupPath{
-				{path: "/20250320/001000.00-20250320-000000.00", useOldBackup: false},
-				{path: "/20250320/002000.00", useOldBackup: false},
-				{path: "/20250320/003000.00-20250320-002000.00", useOldBackup: false},
+				{path: "/20250320/001000.00-20250320-000000.00"},
+				{path: "/20250320/002000.00"},
+				{path: "/20250320/003000.00-20250320-002000.00"},
 			},
 			expectedPaths: []string{
 				"/20250320/001000.00-20250320-000000.00",
@@ -592,16 +562,14 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 		{
 			name: "invalid backup paths with valid backup paths",
 			paths: []backupPath{
-				{path: "/20250320/001000.00-20250320-000000.00", useOldBackup: false},
-				{path: "/20250320/001500.000", useOldBackup: false}, // invalid
-				{path: "/20250320/002000.00", useOldBackup: false},
-				{path: "/2025/03/20/002500.00", useOldBackup: false}, // invalid
-				{path: "/20250320/003000.00", useOldBackup: true},
+				{path: "/20250320/001000.00-20250320-000000.00"},
+				{path: "/20250320/001500.000"}, // invalid
+				{path: "/20250320/002000.00"},
+				{path: "/2025/03/20/002500.00"}, // invalid
 			},
 			expectedPaths: []string{
 				"/20250320/001000.00-20250320-000000.00",
 				"/20250320/002000.00",
-				"/20250320/003000.00",
 			},
 		},
 	} {
@@ -617,7 +585,7 @@ func TestLegacyFindPriorBackups(t *testing.T) {
 				tc.paths[i], tc.paths[j] = tc.paths[j], tc.paths[i]
 			})
 			for _, path := range tc.paths {
-				writeManifest(t, store, path.path, path.useOldBackup)
+				writeManifest(t, store, path.path)
 			}
 			prev, err := backupdest.LegacyFindPriorBackups(ctx, store, false)
 			require.NoError(t, err)
