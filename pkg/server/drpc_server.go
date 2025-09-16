@@ -10,7 +10,6 @@ import (
 	"crypto/tls"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
@@ -25,8 +24,6 @@ type drpcServer struct {
 	serveModeHandler
 	// Underlying DRPC server implementation.
 	rpc.DRPCServer
-	// Indicates if DRPC is enabled for this server.
-	enabled bool
 	// TLS configuration for secure connections.
 	tlsCfg *tls.Config
 }
@@ -34,17 +31,9 @@ type drpcServer struct {
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
 func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
-	drpcServer := &drpcServer{}
-	if rpcbase.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
-		d, err := rpc.NewDRPCServer(ctx, rpcCtx)
-		if err != nil {
-			return nil, err
-		}
-		drpcServer.DRPCServer = d
-		drpcServer.enabled = true
-	} else {
-		drpcServer.DRPCServer = rpc.NewDummyDRPCServer()
-		drpcServer.enabled = false
+	d, err := rpc.NewDRPCServer(ctx, rpcCtx)
+	if err != nil {
+		return nil, err
 	}
 
 	tlsCfg, err := rpcCtx.GetServerTLSConfig()
@@ -52,7 +41,11 @@ func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error
 		return nil, err
 	}
 
-	drpcServer.tlsCfg = tlsCfg
+	drpcServer := &drpcServer{
+		DRPCServer: d,
+		tlsCfg:     tlsCfg,
+	}
+
 	drpcServer.setMode(modeInitializing)
 
 	if err := rpc.DRPCRegisterHeartbeat(drpcServer, rpcCtx.NewHeartbeatService()); err != nil {
