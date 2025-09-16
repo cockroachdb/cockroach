@@ -384,7 +384,7 @@ func (p *kvRowProcessor) getWriter(
 		}
 	}
 
-	l, err := p.cfg.LeaseManager.(*lease.Manager).Acquire(ctx, ts, id)
+	l, err := p.cfg.LeaseManager.(*lease.Manager).Acquire(ctx, lease.TimestampToReadTimestamp(ts), id)
 	if err != nil {
 		return nil, err
 	}
