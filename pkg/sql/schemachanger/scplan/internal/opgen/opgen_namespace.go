@@ -34,6 +34,12 @@ func init() {
 						Namespace: *protoutil.Clone(this).(*scpb.Namespace),
 					}
 				}),
+				emit(func(this *scpb.Namespace) *scop.UpdateTTLScheduleMetadata {
+					return &scop.UpdateTTLScheduleMetadata{
+						TableID: this.DescriptorID,
+						NewName: this.Name,
+					}
+				}),
 			),
 		),
 		toAbsent(

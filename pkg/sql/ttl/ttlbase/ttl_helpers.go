@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -172,8 +172,8 @@ func GetProcessorConcurrency(settingsValues *settings.Values, defaultConcurrency
 
 // BuildScheduleLabel returns a string value intended for use as the
 // schedule_name/label column for the scheduled job created by row level TTL.
-func BuildScheduleLabel(tbl *tabledesc.Mutable) string {
-	return fmt.Sprintf("row-level-ttl: %s [%d]", tbl.GetName(), tbl.ID)
+func BuildScheduleLabel(tbl catalog.TableDescriptor) string {
+	return fmt.Sprintf("row-level-ttl: %s [%d]", tbl.GetName(), tbl.GetID())
 }
 
 func BuildSelectQuery(
