@@ -3890,8 +3890,6 @@ func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
 
-var minTSErr = kvpb.NewMinTimestampBoundUnsatisfiableError(hlc.Timestamp{}, hlc.Timestamp{})
-
 // resetEvalCtx initializes the fields of evalCtx that can change
 // during a session (i.e. the fields not set by initEvalCtx).
 //
@@ -3930,7 +3928,8 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
-	if err := ex.state.mu.autoRetryReason; err != nil && errors.Is(err, minTSErr) {
+	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
+	if err := ex.state.mu.autoRetryReason; err != nil && errors.HasType(err, minTSErr) {
 		evalCtx.AsOfSystemTime.MaxTimestampBound = ex.extraTxnState.descCollection.GetMaxTimestampBound()
 	} else if newTxn {
 		evalCtx.AsOfSystemTime = nil
