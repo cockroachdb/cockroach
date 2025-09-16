@@ -495,7 +495,7 @@ t  CREATE TABLE public.t (
    );
 
 query T nosort
-SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 1
 ----
 ·
 • insert fast path

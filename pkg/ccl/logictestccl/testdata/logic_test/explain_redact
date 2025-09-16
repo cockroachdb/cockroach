@@ -63,7 +63,6 @@ query T
 EXPLAIN (REDACT) INSERT INTO p VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: p(p, q)
@@ -74,7 +73,6 @@ query T
 EXPLAIN (VERBOSE, REDACT) INSERT INTO p VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   columns: ()
@@ -177,7 +175,6 @@ query T
 EXPLAIN (REDACT) SELECT * FROM p WHERE p = 11
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -188,7 +185,6 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM p WHERE p = 11
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   columns: (p, q)
@@ -263,7 +259,6 @@ query T
 EXPLAIN (REDACT) SELECT * FROM q WHERE q > 2
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -274,7 +269,6 @@ query T
 EXPLAIN (VERBOSE, REDACT) SELECT * FROM q WHERE q > 2
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   columns: (q, r)
