@@ -177,7 +177,7 @@ func (t *leaseTest) expectLeases(descID descpb.ID, expected string) {
 }
 
 func (t *leaseTest) acquire(nodeID uint32, descID descpb.ID) (lease.LeasedDescriptor, error) {
-	return t.node(nodeID).Acquire(context.Background(), t.server.Clock().Now(), descID)
+	return t.node(nodeID).Acquire(context.Background(), lease.TimestampToReadTimestamp(t.server.Clock().Now()), descID)
 }
 
 func (t *leaseTest) acquireMinVersion(
@@ -673,7 +673,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 func acquire(
 	ctx context.Context, s serverutils.ApplicationLayerInterface, descID descpb.ID,
 ) (lease.LeasedDescriptor, error) {
-	return s.LeaseManager().(*lease.Manager).Acquire(ctx, s.Clock().Now(), descID)
+	return s.LeaseManager().(*lease.Manager).Acquire(ctx, lease.TimestampToReadTimestamp(s.Clock().Now()), descID)
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0
@@ -1243,7 +1243,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Acquire the lease so it is put into the nameCache.
 	_, err := leaseManager.AcquireByName(
 		context.Background(),
-		t.server.Clock().Now(),
+		lease.TimestampToReadTimestamp(t.server.Clock().Now()),
 		dbID,
 		tableDesc.GetParentSchemaID(),
 		tableName,
@@ -1258,7 +1258,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		for pb.Next() {
 			_, err := leaseManager.AcquireByName(
 				context.Background(),
-				t.server.Clock().Now(),
+				lease.TimestampToReadTimestamp(t.server.Clock().Now()),
 				dbID,
 				tableDesc.GetParentSchemaID(),
 				tableName,
@@ -1908,7 +1908,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	// Acquire a lease on "before" by name.
 	beforeTable, err := t.node(1).AcquireByName(
 		ctx,
-		t.server.Clock().Now(),
+		lease.TimestampToReadTimestamp(t.server.Clock().Now()),
 		dbID,
 		beforeDesc.GetParentSchemaID(),
 		"before",
@@ -1926,7 +1926,7 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 	// Acquire a lease on "after" by name after server startup.
 	afterTable, err := t.node(1).AcquireByName(
 		ctx,
-		t.server.Clock().Now(),
+		lease.TimestampToReadTimestamp(t.server.Clock().Now()),
 		dbID,
 		afterDesc.GetParentSchemaID(),
 		"after",
@@ -1993,7 +1993,7 @@ func TestLeaseAcquisitionDoesntBlock(t *testing.T) {
 
 	require.NoError(t, <-schemaCh)
 
-	l, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, s.Clock().Now(), descID)
+	l, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, lease.TimestampToReadTimestamp(s.Clock().Now()), descID)
 	require.NoError(t, err)
 
 	// Release the lease so that the schema change can proceed.
@@ -2525,7 +2525,7 @@ func TestHistoricalDescriptorAcquire(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID.Load().(descpb.ID), cachedDatabaseRegions, base.DefaultRetryOptions())
 	require.NoError(t, err, "Failed to wait for one version of descriptor: %s", err)
-	acquiredDescriptor, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, ts1, tableID.Load().(descpb.ID))
+	acquiredDescriptor, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, lease.TimestampToReadTimestamp(ts1), tableID.Load().(descpb.ID))
 	assert.NoError(t, err)
 
 	// Ensure the modificationTime <= timestamp < expirationTime
@@ -3679,7 +3679,7 @@ func BenchmarkAcquireLeaseConcurrent(b *testing.B) {
 			b.ResetTimer()
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
-					l, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, s.Clock().Now(), tableID)
+					l, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, lease.TimestampToReadTimestamp(s.Clock().Now()), tableID)
 					if err != nil {
 						panic(err)
 					}
