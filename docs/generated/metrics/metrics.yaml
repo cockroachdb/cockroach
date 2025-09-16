@@ -1837,6 +1837,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: changefeed.stage.frontier_persistence.latency
+      exported_name: changefeed_stage_frontier_persistence_latency
+      description: 'Latency of the changefeed stage: persisting frontier to job info'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: changefeed.stage.kv_feed_buffer.latency
       exported_name: changefeed_stage_kv_feed_buffer_latency
       description: 'Latency of the changefeed stage: waiting to buffer kv events'

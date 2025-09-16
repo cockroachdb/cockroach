@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1055,6 +1057,9 @@ type changeFrontier struct {
 	// record was updated to the frontier's highwater mark
 	lastProtectedTimestampUpdate time.Time
 
+	// frontierPersistenceLimiter is a rate limiter for persisting the span frontier.
+	frontierPersistenceLimiter *saveRateLimiter
+
 	// js, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
 	js *jobState
@@ -1301,6 +1306,9 @@ func newChangeFrontierProcessor(
 	} else {
 		cf.freqEmitResolved = emitNoResolved
 	}
+
+	cf.frontierPersistenceLimiter = newSaveRateLimiter(
+		"frontier" /* name */, changefeedbase.FrontierPersistenceInterval)
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
@@ -1803,33 +1811,33 @@ func (cf *changeFrontier) maybeCheckpointJob(
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
-		updated, err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint, cf.evalCtx.Settings.Version)
-		if err != nil {
+		if err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint); err != nil {
 			return false, err
 		}
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
-		return updated, nil
 	}
 
-	return false, nil
+	if err := cf.maybePersistFrontier(ctx); err != nil {
+		return false, err
+	}
+
+	// TODO(#153462): Determine if this return value should return true
+	// only if the highwater was updated.
+	return updateCheckpoint || updateHighWater, nil
 }
 
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	ctx context.Context,
-	frontier hlc.Timestamp,
-	spanLevelCheckpoint *jobspb.TimestampSpansMap,
-	cv clusterversion.Handle,
-) (bool, error) {
+	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(
-				errors.New("cf.knobs.RaiseRetryableError"))
+			return changefeedbase.MarkRetryableError(errors.New("cf.knobs.RaiseRetryableError"))
 		}
 	}
 
@@ -1857,6 +1865,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
+			// TODO(#153299): Make sure we only updated per-table PTS if we persisted
+			// the span frontier. We'll probably want to move this code out of
+			// checkpointJobProgress and into maybeCheckpointJob.
 			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
 				log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
 				return err
@@ -1884,7 +1895,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			return nil
 		}); err != nil {
-			return false, err
+			return err
 		}
 		if ptsUpdated {
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
@@ -1898,7 +1909,28 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
-	return true, nil
+	return nil
+}
+
+func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
+	defer sp.Finish()
+
+	if cf.spec.JobID == 0 ||
+		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
+		!cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
+		return nil
+	}
+
+	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
+	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
+	}); err != nil {
+		return err
+	}
+	persistDuration := timer()
+	cf.frontierPersistenceLimiter.doneSave(persistDuration)
+	return nil
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
@@ -2314,4 +2346,71 @@ func shouldCountUsageError(err error) bool {
 		!errors.Is(err, cancelchecker.QueryCanceledError) &&
 		pgerror.GetPGCode(err) != pgcode.UndefinedTable &&
 		status.Code(err) != codes.Canceled
+}
+
+// durationSetting is a duration cluster setting.
+type durationSetting interface {
+	Name() settings.SettingName
+	Get(sv *settings.Values) time.Duration
+}
+
+// saveRateLimiter is a rate limiter for saving a piece of progress.
+// It uses a duration setting as the minimum interval between saves.
+// It also limits saving to not be more frequent than the average
+// duration it takes to save progress.
+type saveRateLimiter struct {
+	name         redact.SafeString
+	saveInterval durationSetting
+	warnEveryN   util.EveryN
+
+	lastSave        time.Time
+	avgSaveDuration time.Duration
+}
+
+// newSaveRateLimiter returns a new saveRateLimiter.
+func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *saveRateLimiter {
+	return &saveRateLimiter{
+		name:         name,
+		saveInterval: saveInterval,
+		warnEveryN:   util.Every(time.Minute),
+	}
+}
+
+// canSave returns whether enough time has passed to save progress again.
+func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool {
+	interval := l.saveInterval.Get(sv)
+	if interval == 0 {
+		return false
+	}
+	now := timeutil.Now()
+	elapsed := now.Sub(l.lastSave)
+	if elapsed < interval {
+		return false
+	}
+	if elapsed < l.avgSaveDuration {
+		if l.warnEveryN.ShouldProcess(now) {
+			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
+				"since last save and %s is set to %s because average duration to save was %s "+
+				"and further saving is disabled until that much time elapses",
+				l.name, elapsed, l.saveInterval.Name(),
+				interval, l.avgSaveDuration)
+		}
+		return false
+	}
+	return true
+}
+
+// doneSave must be called after each save is completed with the duration
+// it took to save progress.
+func (l *saveRateLimiter) doneSave(saveDuration time.Duration) {
+	l.lastSave = timeutil.Now()
+
+	// Update the average save duration using an exponential moving average.
+	if l.avgSaveDuration == 0 {
+		l.avgSaveDuration = saveDuration
+	} else {
+		const alpha = 0.1
+		l.avgSaveDuration = time.Duration(
+			alpha*float64(saveDuration) + (1-alpha)*float64(l.avgSaveDuration))
+	}
 }
