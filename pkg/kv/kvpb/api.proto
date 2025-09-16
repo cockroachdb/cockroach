@@ -2803,8 +2803,10 @@ message Header {
   // - QueryLocksRequest
   // - IsSpanEmptyRequest
   //
-  // The following requests types are also allowed in the batch, although the
-  // limit has no effect on them:
+  // The following request types are also allowed in the batch. These requests
+  // do not consume any keys from the limit; however, they may fail to be
+  // processed if the batch previously consumed the entire limit.
+  //
   // - ExportRequest
   // - QueryIntentRequest
   // - EndTxnRequest
