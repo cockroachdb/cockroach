@@ -1022,6 +1022,9 @@ message ActiveQuery {
 
   // The database the statement was executed on.
   string database = 14;
+
+  // The isolation level the query was run in.
+  string isolation_level = 15;
 }
 
 // Request object for ListSessions and ListLocalSessions.
