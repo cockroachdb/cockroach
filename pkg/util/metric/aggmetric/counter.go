@@ -7,6 +7,7 @@ package aggmetric
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gogo/protobuf/proto"
@@ -393,4 +394,167 @@ func (s *SQLChildCounter) Value() int64 {
 // Inc increments the SQLChildCounter's value.
 func (s *SQLChildCounter) Inc(i int64) {
 	s.value.Inc(i)
+}
+
+// BoundedCounter is similar to AggCounter but uses cache storage instead of B-tree,
+// allowing for automatic eviction of less frequently used child metrics.
+// This is useful when dealing with high cardinality metrics that might exceed resource limits.
+type BoundedCounter struct {
+	g metric.Counter
+	childSet
+	labelSliceCache *metric.LabelSliceCache
+}
+
+var _ metric.Iterable = (*BoundedCounter)(nil)
+var _ metric.PrometheusEvictable = (*BoundedCounter)(nil)
+
+// NewBoundedCounter constructs a new BoundedCounter that uses cache storage
+// with eviction for child metrics.
+func NewBoundedCounter(metadata metric.Metadata, childLabels ...string) *BoundedCounter {
+	c := &BoundedCounter{g: *metric.NewCounter(metadata)}
+	c.initWithCacheStorageType(childLabels, metadata.Name)
+	return c
+}
+
+// GetName is part of the metric.Iterable interface.
+func (c *BoundedCounter) GetName(useStaticLabels bool) string { return c.g.GetName(useStaticLabels) }
+
+// GetHelp is part of the metric.Iterable interface.
+func (c *BoundedCounter) GetHelp() string { return c.g.GetHelp() }
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (c *BoundedCounter) GetMeasurement() string { return c.g.GetMeasurement() }
+
+// GetUnit is part of the metric.Iterable interface.
+func (c *BoundedCounter) GetUnit() metric.Unit { return c.g.GetUnit() }
+
+// GetMetadata is part of the metric.Iterable interface.
+func (c *BoundedCounter) GetMetadata() metric.Metadata { return c.g.GetMetadata() }
+
+// Inspect is part of the metric.Iterable interface.
+func (c *BoundedCounter) Inspect(f func(interface{})) { f(c) }
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (c *BoundedCounter) GetType() *io_prometheus_client.MetricType {
+	return c.g.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (c *BoundedCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return c.g.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (c *BoundedCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return c.g.ToPrometheusMetric()
+}
+
+// Count returns the aggregate count of all of its current and past children.
+func (c *BoundedCounter) Count() int64 {
+	return c.g.Count()
+}
+
+// Inc increments the counter value by i for the given label values. If a
+// counter with the given label values doesn't exist yet, it creates a new
+// counter and increments it. Inc increments parent metrics as well.
+func (c *BoundedCounter) Inc(i int64, labelValues ...string) {
+	c.g.Inc(i)
+
+	childMetric := c.GetOrAddChild(labelValues...)
+
+	if childMetric != nil {
+		childMetric.Inc(i)
+	}
+
+}
+
+// Each is part of the metric.PrometheusIterable interface.
+func (c *BoundedCounter) Each(
+	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
+) {
+	c.EachWithLabels(labels, f, c.labelSliceCache)
+}
+
+// InitializeMetrics is part of the PrometheusEvictable interface.
+func (c *BoundedCounter) InitializeMetrics(labelCache *metric.LabelSliceCache) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.labelSliceCache = labelCache
+}
+
+// GetOrAddChild returns the existing child counter for the given label values,
+// or creates a new one if it doesn't exist. This is the preferred method for
+// cache-based storage to avoid panics on existing keys.
+func (c *BoundedCounter) GetOrAddChild(labelVals ...string) *BoundedChildCounter {
+
+	if len(labelVals) == 0 {
+		return nil
+	}
+
+	// Create a LabelSliceCacheKey from the tenantID.
+	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+
+	child := c.getOrAddWithLabelSliceCache(c.createBoundedChildCounter, c.labelSliceCache, labelVals...)
+
+	c.labelSliceCache.Upsert(key, &metric.LabelSliceCacheValue{
+		LabelValues: labelVals,
+	})
+
+	return child.(*BoundedChildCounter)
+}
+
+func (c *BoundedCounter) createBoundedChildCounter(
+	key uint64, cache *metric.LabelSliceCache,
+) TimestampedChildMetric {
+	return &BoundedChildCounter{
+		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
+		LabelSliceCache:    cache,
+		createdAt:          time.Now(),
+	}
+}
+
+// BoundedChildCounter is a child of a BoundedCounter. When metrics are
+// collected by prometheus, each of the children will appear with a distinct label,
+// however, when cockroach internally collects  metrics, only the parent is collected.
+type BoundedChildCounter struct {
+	metric.LabelSliceCacheKey
+	value metric.Counter
+	*metric.LabelSliceCache
+	createdAt time.Time
+}
+
+func (c *BoundedChildCounter) CreatedAt() time.Time {
+	return c.createdAt
+}
+
+func (c *BoundedChildCounter) DecrementLabelSliceCacheReference() {
+	c.LabelSliceCache.DecrementAndDeleteIfZero(c.LabelSliceCacheKey)
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this BoundedChildCounter.
+func (c *BoundedChildCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Counter: &io_prometheus_client.Counter{
+			Value: proto.Float64(float64(c.Value())),
+		},
+	}
+}
+
+func (c *BoundedChildCounter) labelValues() []string {
+	lv, ok := c.LabelSliceCache.Get(c.LabelSliceCacheKey)
+	if !ok {
+		return nil
+	}
+	return lv.LabelValues
+}
+
+// Value returns the BoundedChildCounter's current value.
+func (c *BoundedChildCounter) Value() int64 {
+	return c.value.Count()
+}
+
+// Inc increments the BoundedChildCounter's value.
+func (c *BoundedChildCounter) Inc(i int64) {
+	c.value.Inc(i)
 }
