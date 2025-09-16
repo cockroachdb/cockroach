@@ -323,14 +323,14 @@ type testLeaseAcquirer struct {
 }
 
 func (t *testLeaseAcquirer) Acquire(
-	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
+	ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID,
 ) (lease.LeasedDescriptor, error) {
 	if id != t.id {
 		return nil, errors.Newf("unknown id: %d", id)
 	}
 
-	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
-		return desc.timestamp.Compare(timestamp)
+	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp lease.ReadTimestamp) int {
+		return desc.timestamp.Compare(timestamp.GetTimestamp())
 	})
 	if ok {
 		return t.descs[i], nil
