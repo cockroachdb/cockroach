@@ -83,10 +83,7 @@ func generateClusterVisualization(
 		return
 	}
 	_, _ = fmt.Fprintf(buf, "Cluster Set Up\n")
-	for _, n := range s.Nodes() {
-		_, _ = fmt.Fprintf(buf, "%v", n)
-		_, _ = fmt.Fprintf(buf, "\n")
-	}
+	_, _ = fmt.Fprintf(buf, "%v", s.NodesString())
 	_, _ = fmt.Fprintf(buf, "Key Space\n%s", rangeStateStr)
 	_, _ = fmt.Fprintf(buf, "Event\n%s", eventGen.String())
 	_, _ = fmt.Fprintf(buf, "Workload Set Up\n%s", loadGen.String())
