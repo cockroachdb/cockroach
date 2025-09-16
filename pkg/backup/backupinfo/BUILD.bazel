@@ -18,7 +18,6 @@ go_library(
         "//pkg/backup/backuputils",
         "//pkg/ccl/storageccl",
         "//pkg/cloud",
-        "//pkg/cloud/cloudpb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
