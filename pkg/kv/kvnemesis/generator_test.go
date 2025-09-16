@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 )
 
 func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
@@ -84,6 +85,8 @@ func TestRandStep(t *testing.T) {
 	updateKeys = func(op Operation) {
 		switch o := op.GetValue().(type) {
 		case *PutOperation:
+			keys[string(o.Key)] = struct{}{}
+		case *CPutOperation:
 			keys[string(o.Key)] = struct{}{}
 		case *BatchOperation:
 			for _, op := range o.Ops {
@@ -177,6 +180,18 @@ func TestRandStep(t *testing.T) {
 						client.PutMustAcquireExclusiveLockMissing++
 					} else {
 						client.PutMissing++
+					}
+				}
+			case *CPutOperation:
+				if _, ok := keys[string(o.Key)]; ok {
+					client.CPutMatchExisting++
+				} else {
+					if o.AllowIfDoesNotExist {
+						client.CPutAllowIfDoesNotExist++
+					} else if o.ExpVal == nil {
+						client.CPutMatchMissing++
+					} else {
+						client.CPutNoMatch++
 					}
 				}
 			case *ScanOperation:
@@ -298,6 +313,7 @@ func TestRandStep(t *testing.T) {
 		switch o := step.Op.GetValue().(type) {
 		case *GetOperation,
 			*PutOperation,
+			*CPutOperation,
 			*ScanOperation,
 			*BatchOperation,
 			*DeleteOperation,
@@ -484,7 +500,9 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 
 	var numSingleRange, numCrossRange, numPoint int
 	for i := 0; i < num; i++ {
-		dr := randDelRangeUsingTombstoneImpl(splitPointMap, keysMap, nextSeq, rng).DeleteRangeUsingTombstone
+		dr := randDelRangeUsingTombstoneImpl(
+			maps.Keys(splitPointMap), maps.Keys(keysMap), nextSeq, rng,
+		).DeleteRangeUsingTombstone
 		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
 		nk, nek := fk(string(dr.Key)), fk(string(dr.EndKey))
 		s := fmt.Sprintf("[%d,%d)", nk, nek)

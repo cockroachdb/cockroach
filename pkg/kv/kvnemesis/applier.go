@@ -105,10 +105,15 @@ func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
 }
 
+func exceptConditionFailed(err error) bool {
+	return errors.HasType(err, (*kvpb.ConditionFailedError)(nil))
+}
+
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
 		*PutOperation,
+		*CPutOperation,
 		*ScanOperation,
 		*BatchOperation,
 		*DeleteOperation,
@@ -342,6 +347,23 @@ func applyClientOp(
 			return
 		}
 		o.Result.OptionalTimestamp = ts
+	case *CPutOperation:
+		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			expVal := roachpb.MakeValueFromBytes(o.ExpVal)
+			if o.AllowIfDoesNotExist {
+				b.CPutAllowingIfNotExists(o.Key, o.Value(), expVal.TagAndDataBytes())
+			} else {
+				b.CPut(o.Key, o.Value(), expVal.TagAndDataBytes())
+			}
+			setLastReqSeq(b, o.Seq)
+		})
+		o.Result = resultInit(ctx, err)
+		// If the CPut failed with ConditionFailedError, we still want to record the
+		// timestamp and do some validation later.
+		if err != nil && !exceptConditionFailed(err) {
+			return
+		}
+		o.Result.OptionalTimestamp = ts
 	case *ScanOperation:
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			if o.SkipLocked {
@@ -561,6 +583,14 @@ func applyBatchOp(
 				b.Put(subO.Key, subO.Value())
 			}
 			setLastReqSeq(b, subO.Seq)
+		case *CPutOperation:
+			expVal := roachpb.MakeValueFromBytes(subO.ExpVal)
+			if subO.AllowIfDoesNotExist {
+				b.CPutAllowingIfNotExists(subO.Key, subO.Value(), expVal.TagAndDataBytes())
+			} else {
+				b.CPut(subO.Key, subO.Value(), expVal.TagAndDataBytes())
+			}
+			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
 			if subO.SkipLocked {
 				panic(errors.AssertionFailedf(`SkipLocked cannot be used in batches`))
@@ -640,6 +670,10 @@ func applyBatchOp(
 			}
 			subO.Result.ResumeSpan = res.ResumeSpan
 		case *PutOperation:
+			res := b.Results[resultIdx]
+			subO.Result = resultInit(ctx, res.Err)
+			subO.Result.ResumeSpan = res.ResumeSpan
+		case *CPutOperation:
 			res := b.Results[resultIdx]
 			subO.Result = resultInit(ctx, res.Err)
 			subO.Result.ResumeSpan = res.ResumeSpan
