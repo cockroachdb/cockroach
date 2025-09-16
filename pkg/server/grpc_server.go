@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -30,12 +29,10 @@ type grpcServer struct {
 }
 
 func newGRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
+	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.RequestMetrics,
 ) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
-	requestMetrics := rpc.NewRequestMetrics()
-	metricsRegistry.AddMetricStruct(requestMetrics)
 	srv, interceptorInfo, err := rpc.NewServerEx(
 		ctx, rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
@@ -66,31 +63,6 @@ func (s *grpcServer) health(ctx context.Context) error {
 	default:
 		return srverrors.ServerError(ctx, errors.Newf("unknown mode: %v", sm))
 	}
-}
-
-var rpcsAllowedWhileBootstrapping = map[string]struct{}{
-	"/cockroach.rpc.Heartbeat/Ping":             {},
-	"/cockroach.gossip.Gossip/Gossip":           {},
-	"/cockroach.server.serverpb.Init/Bootstrap": {},
-	"/cockroach.server.serverpb.Admin/Health":   {},
-}
-
-// intercept implements filtering rules for each server state.
-func (s *grpcServer) intercept(fullName string) error {
-	if s.operational() {
-		return nil
-	}
-	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
-		return NewWaitingForInitError(fullName)
-	}
-	return nil
-}
-
-// NewWaitingForInitError creates an error indicating that the server cannot run
-// the specified method until the node has been initialized.
-func NewWaitingForInitError(methodName string) error {
-	// NB: this error string is sadly matched in grpcutil.IsWaitingForInit().
-	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
 }
 
 const (

@@ -8,6 +8,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc"
 	"reflect"
 	"testing"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"github.com/cockroachdb/errors"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -105,16 +105,17 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 	testcase := []struct {
 		methodName   string
 		statusCode   codes.Code
+		serverLabel  string
 		shouldRecord bool
 	}{
-		{"rpc/test/method", codes.OK, true},
-		{"rpc/test/method", codes.Internal, true},
-		{"rpc/test/method", codes.Aborted, true},
-		{"rpc/test/notRecorded", codes.OK, false},
+		{"rpc/test/method", codes.OK, "grpc", true},
+		{"rpc/test/method", codes.Internal, "grpc", true},
+		{"rpc/test/method", codes.Aborted, "grpc", true},
+		{"rpc/test/notRecorded", codes.OK, "grpc", false},
 	}
 
 	for _, tc := range testcase {
-		t.Run(fmt.Sprintf("%s %s", tc.methodName, tc.statusCode), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s %s %s", tc.methodName, tc.statusCode, tc.serverLabel), func(t *testing.T) {
 			info := &grpc.UnaryServerInfo{FullMethod: tc.methodName}
 			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 				if tc.statusCode == codes.OK {
@@ -134,8 +135,56 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 			if tc.shouldRecord {
 				expectedCount = 1
 			}
-			assertGrpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
-				fmt.Sprintf("%s %s", tc.methodName, tc.statusCode): expectedCount,
+			assertRpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
+				fmt.Sprintf("%s %s %s", tc.methodName, tc.statusCode, tc.serverLabel): expectedCount,
+			})
+		})
+	}
+}
+
+func TestDRPCServerRequestInstrumentInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	requestMetrics := NewRequestMetrics()
+
+	ctx := context.Background()
+	req := struct{}{}
+
+	testcase := []struct {
+		methodName   string
+		statusCode   codes.Code
+		serverLabel  string
+		shouldRecord bool
+	}{
+		{"rpc/test/method", codes.OK, "drpc", true},
+		{"rpc/test/method", codes.Internal, "drpc", true},
+		{"rpc/test/method", codes.Aborted, "drpc", true},
+		{"rpc/test/notRecorded", codes.OK, "drpc", false},
+	}
+
+	for _, tc := range testcase {
+		t.Run(fmt.Sprintf("%s %s %s", tc.methodName, tc.statusCode, tc.serverLabel), func(t *testing.T) {
+			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+				if tc.statusCode == codes.OK {
+					time.Sleep(time.Millisecond)
+					return struct{}{}, nil
+				}
+				return nil, status.Error(tc.statusCode, tc.statusCode.String())
+			}
+			interceptor := NewDRPCRequestMetricsInterceptor(requestMetrics, func(fullMethodName string) bool {
+				return tc.shouldRecord
+			})
+			_, err := interceptor(ctx, req, tc.methodName, handler)
+			if err != nil {
+				require.Equal(t, tc.statusCode, status.Code(err))
+			}
+			var expectedCount uint64
+			if tc.shouldRecord {
+				expectedCount = 1
+			}
+			assertRpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
+				fmt.Sprintf("%s %s %s", tc.methodName, tc.statusCode, tc.serverLabel): expectedCount,
 			})
 		})
 	}
@@ -209,24 +258,26 @@ func TestGatewayRequestRecoveryInterceptor(t *testing.T) {
 	})
 }
 
-func assertGrpcMetrics(
+func assertRpcMetrics(
 	t *testing.T, metrics []*io_prometheus_client.Metric, expected map[string]uint64,
 ) {
 	t.Helper()
 	actual := map[string]*io_prometheus_client.Histogram{}
 	for _, m := range metrics {
-		var method, statusCode string
+		var method, statusCode, rpcServer string
 		for _, l := range m.Label {
 			switch *l.Name {
 			case RpcMethodLabel:
 				method = *l.Value
 			case RpcStatusCodeLabel:
 				statusCode = *l.Value
+			case RpcServerLabel:
+				rpcServer = *l.Value
 			}
 		}
 		histogram := m.Histogram
 		require.NotNil(t, histogram, "expected histogram")
-		key := fmt.Sprintf("%s %s", method, statusCode)
+		key := fmt.Sprintf("%s %s %s", method, statusCode, rpcServer)
 		actual[key] = histogram
 	}
 

@@ -168,6 +168,10 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	var unaryInterceptors []drpcmux.UnaryServerInterceptor
 	var streamInterceptors []drpcmux.StreamServerInterceptor
 
+	if o.drpcMetricsInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, drpcmux.UnaryServerInterceptor(o.drpcMetricsInterceptor))
+	}
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
@@ -194,19 +198,6 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	})
 	d.Mux = mux
 
-	// NB: any server middleware (server interceptors in gRPC parlance) would go
-	// here:
-	//     dmux = whateverMiddleware1(dmux)
-	//     dmux = whateverMiddleware2(dmux)
-	//     ...
-	//
-	// Each middleware must implement the Handler interface:
-	//
-	//   HandleRPC(stream Stream, rpc string) error
-	//
-	// where Stream
-	// See here for an example:
-	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
 	return d, nil
 }
 
