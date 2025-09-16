@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -60,7 +61,17 @@ SELECT node_id
 			tBeforePing := timeutil.Now()
 			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
-			require.NoError(t, db.Ping())
+
+			testutils.SucceedsSoon(t, func() error {
+				// Having just shut down a node, the sql user table may be in the
+				// process of failing over, and if we're unlucky and try to open a new
+				// conn here, we can sometimes hit an internal 10s timeout should the
+				// failover take longer than usual.
+				//
+				// See https://github.com/cockroachdb/cockroach/issues/153403#issuecomment-3296381756.
+				return db.Ping()
+			})
+
 			tAfterPing := timeutil.Now()
 			if pingDur := tAfterPing.Sub(tBeforePing); pingDur > 20*time.Second {
 				t.L().Printf("sql connection ready after %.2fs", pingDur.Seconds())
