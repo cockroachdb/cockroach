@@ -111,33 +111,31 @@ func TestChangefeedFrontierRestore(t *testing.T) {
 		// Disable span-level checkpointing.
 		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
 
+		// Create a table and a changefeed on it.
 		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
-
 		foo := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no'")
 		defer closeFeed(t, foo)
 		jobFeed := foo.(cdctest.EnterpriseTestFeed)
 
+		// Pause the changefeed.
 		require.NoError(t, jobFeed.Pause())
 
+		// Insert a few rows into the table and save the insert time.
 		var tsStr string
 		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (1), (2), (3), (4), (5), (6)
 RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
 		ts := parseTimeToHLC(t, tsStr)
 
-		// Get the table descriptor to construct the key for row a=1
+		// Make function to create spans for single rows in the table.
 		codec := s.Server.Codec()
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			s.Server.DB(), codec, "d", "foo")
-
-		// Construct the key for row with a=1
-		// First get the index key prefix for the primary index
-		keyPrefix := rowenc.MakeIndexKeyPrefix(
-			codec, fooDesc.GetID(), fooDesc.GetPrimaryIndexID())
-
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.Server.DB(), codec, "d", "foo")
 		rowSpan := func(key int64) roachpb.Span {
+			keyPrefix := func() []byte {
+				return rowenc.MakeIndexKeyPrefix(codec, fooDesc.GetID(), fooDesc.GetPrimaryIndexID())
+			}
 			return roachpb.Span{
-				Key:    encoding.EncodeVarintAscending(append([]byte(nil), keyPrefix...), key),
-				EndKey: encoding.EncodeVarintAscending(append([]byte(nil), keyPrefix...), key+1),
+				Key:    encoding.EncodeVarintAscending(keyPrefix(), key),
+				EndKey: encoding.EncodeVarintAscending(keyPrefix(), key+1),
 			}
 		}
 
