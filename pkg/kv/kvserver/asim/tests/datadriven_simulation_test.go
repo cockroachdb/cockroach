@@ -463,7 +463,7 @@ func TestDataDriven(t *testing.T) {
 				if len(cfgs) == 0 {
 					// TODO(tbg): force each test to specify the configs it wants to run
 					// under.
-					cfgs = []string{"default"}
+					cfgs = []string{"sma-count"}
 				}
 
 				metricsMap := map[string]struct{}{}
@@ -475,9 +475,7 @@ func TestDataDriven(t *testing.T) {
 				require.NotZero(t, rangeGen)
 
 				knownConfigurations := map[string]func(eg *gen.StaticEvents){
-					// In default mode, the test manages its rebalancer-related settings
-					// manually.
-					"default": func(eg *gen.StaticEvents) {
+					"sma-count": func(eg *gen.StaticEvents) {
 						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,
@@ -487,14 +485,6 @@ func TestDataDriven(t *testing.T) {
 					},
 					// 'mma-only' runs with the multi-metric allocator and turns off the
 					// replicate and lease queues.
-					"sma-only": func(eg *gen.StaticEvents) {
-						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
-							event.SetSimulationSettingsEvent{
-								IsClusterSetting: true,
-								Key:              "LBRebalancingMode",
-								Value:            int64(kvserverbase.LBRebalancingLeasesAndReplicas),
-							})
-					},
 					"mma-only": func(eg *gen.StaticEvents) {
 						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
 							event.SetSimulationSettingsEvent{
