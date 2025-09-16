@@ -1,0 +1,43 @@
+package lease
+
+import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+
+// ReadTimestamp is a wrapper for the transaction timestamp
+// that allows us to support locked timestamps for leasing.
+type ReadTimestamp interface {
+	// GetTimestamp returns the modified timestamp, with timestamp
+	// potentially applied.
+	GetTimestamp() hlc.Timestamp
+	// GetBaseTimestamp returns the original read timestamp for
+	// the transaction.
+	GetBaseTimestamp() hlc.Timestamp
+}
+
+// TimestampToReadTimestamp converts a hlc.Timestamp into a ReadTimestamp,
+// without any timestamp locking applied.
+func TimestampToReadTimestamp(timestamp hlc.Timestamp) ReadTimestamp {
+	return LeaseTimestamp{
+		ReadTimestamp: timestamp,
+	}
+}
+
+// LeaseTimestamp implements a locked read timestamp.
+type LeaseTimestamp struct {
+	ReadTimestamp  hlc.Timestamp
+	LeaseTimestamp hlc.Timestamp
+}
+
+// GetTimestamp implements ReadTimestamp.
+func (ls LeaseTimestamp) GetTimestamp() hlc.Timestamp {
+	if !ls.LeaseTimestamp.IsEmpty() {
+		return ls.LeaseTimestamp
+	}
+	return ls.ReadTimestamp
+}
+
+// GetBaseTimestamp implements ReadTimestamp.
+func (ls LeaseTimestamp) GetBaseTimestamp() hlc.Timestamp {
+	return ls.ReadTimestamp
+}
+
+var _ ReadTimestamp = LeaseTimestamp{}
