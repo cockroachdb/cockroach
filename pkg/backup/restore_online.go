@@ -1061,6 +1061,6 @@ func getNumOnlineRestoreLinkWorkers(ctx context.Context, execCtx sql.JobExecCont
 	if err != nil {
 		return 0, err
 	}
-	numNodes := min(len(sqlInstanceIDs), 1)
+	numNodes := max(len(sqlInstanceIDs), 1)
 	return defaultLinkWorkersPerNode * numNodes, nil
 }
