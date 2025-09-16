@@ -1373,7 +1373,7 @@ func (tc *Collection) GetIndexComment(
 // MaybeSetReplicationSafeTS modifies a txn to apply the replication safe timestamp,
 // if we are executing against a PCR reader catalog.
 func (tc *Collection) MaybeSetReplicationSafeTS(ctx context.Context, txn *kv.Txn) error {
-	now := txn.DB().Clock().Now()
+	now := tc.leased.lm.GetReadTimestamp(txn.DB().Clock().Now())
 	desc, err := tc.leased.lm.Acquire(ctx, now, keys.SystemDatabaseID)
 	if err != nil {
 		return err
