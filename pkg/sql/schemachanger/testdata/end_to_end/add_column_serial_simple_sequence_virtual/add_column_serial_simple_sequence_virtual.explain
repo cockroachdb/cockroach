@@ -146,11 +146,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 106 (tbl)}
- │         └── 43 Mutation operations
+ │         └── 44 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":106}
  │              ├── CreateSequenceDescriptor {"SequenceID":107}
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"tbl_serial_id_se..."}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
+ │              ├── UpdateTTLScheduleMetadata {"NewName":"tbl_serial_id_se...","TableID":107}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
  │              ├── SetSequenceOptions {"Key":"VIRTUAL","SequenceID":107,"Value":"true"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}

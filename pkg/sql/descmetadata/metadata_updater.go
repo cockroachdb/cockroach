@@ -12,9 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -96,7 +96,7 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb.
 
 // UpdateTTLScheduleLabel implement scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) UpdateTTLScheduleLabel(
-	ctx context.Context, tbl *tabledesc.Mutable,
+	ctx context.Context, tbl catalog.TableDescriptor,
 ) error {
 	if !tbl.HasRowLevelTTL() {
 		return nil
@@ -109,7 +109,7 @@ func (mu metadataUpdater) UpdateTTLScheduleLabel(
 		sessiondata.NodeUserSessionDataOverride,
 		"UPDATE system.scheduled_jobs SET schedule_name = $1 WHERE schedule_id = $2",
 		ttlbase.BuildScheduleLabel(tbl),
-		tbl.RowLevelTTL.ScheduleID,
+		tbl.GetRowLevelTTL().ScheduleID,
 	)
 	return err
 }
