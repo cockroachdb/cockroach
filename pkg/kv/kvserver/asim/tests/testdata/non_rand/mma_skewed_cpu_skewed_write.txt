@@ -65,12 +65,10 @@ Key Space
 	[1,10000): 36(rf=3), 256MiB, [{s1*,s2,s3}:36]
 	[10001,20000): 36(rf=3), 256MiB, [{s4*,s5,s6}:36]
 Event
-	set LBRebalancingMode to 4
+	set LBRebalancingMode to 3
 Workload Set Up
 	[1,10000): read-only high-cpu [500.00cpu-us/op, 1B/op, 1000ops/s]
 	[10001,20000): write-only large-block [0.00cpu-us/write(raft), 1000B/op, 20000ops/s]
 Changed Settings
-	ReplicateQueueEnabled: false (default: true)
-	LeaseQueueEnabled: false (default: true)
 	SplitQueueEnabled: false (default: true)
 ==========================
