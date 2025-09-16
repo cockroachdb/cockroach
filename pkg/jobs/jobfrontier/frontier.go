@@ -28,6 +28,10 @@ const shardSep = "_"
 func Get(
 	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, name string,
 ) (span.Frontier, bool, error) {
+	if jobID == 0 {
+		return nil, false, errors.AssertionFailedf("job ID cannot be 0")
+	}
+
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
 
 	keyPrefix := frontierPrefix + name + shardSep
@@ -64,6 +68,10 @@ func Get(
 func GetResolvedSpans(
 	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, name string,
 ) ([]jobspb.ResolvedSpan, bool, error) {
+	if jobID == 0 {
+		return nil, false, errors.AssertionFailedf("job ID cannot be 0")
+	}
+
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
 
 	keyPrefix := frontierPrefix + name + shardSep
@@ -91,6 +99,10 @@ func GetResolvedSpans(
 func GetAllResolvedSpans(
 	ctx context.Context, txn isql.Txn, jobID jobspb.JobID,
 ) ([]jobspb.ResolvedSpan, bool, error) {
+	if jobID == 0 {
+		return nil, false, errors.AssertionFailedf("job ID cannot be 0")
+	}
+
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
 
 	var found bool
@@ -125,6 +137,10 @@ func Store(
 	name string,
 	frontier span.ReadOnlyFrontier,
 ) error {
+	if jobID == 0 {
+		return errors.AssertionFailedf("job ID cannot be 0")
+	}
+
 	return storeChunked(ctx, txn, jobID, name, frontier, 2<<20 /* 2mb */)
 }
 
@@ -200,6 +216,10 @@ func storeEntries(
 
 // Delete removes a persisted frontier by the given name for the given job.
 func Delete(ctx context.Context, txn isql.Txn, jobID jobspb.JobID, name string) error {
+	if jobID == 0 {
+		return errors.AssertionFailedf("job ID cannot be 0")
+	}
+
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
 	return deleteEntries(ctx, infoStorage, name)
 }
