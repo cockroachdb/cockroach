@@ -838,6 +838,25 @@ The last argument is a JSONB object containing the following optional fields:
 		makeInternallyExecutedQueryGeneratorOverload(false /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
 		makeInternallyExecutedQueryGeneratorOverload(true /* withSessionBound */, true /* withOverrides */, true /* withTxn */),
 	),
+	"crdb_internal.request_transaction_bundle": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "transaction_fingerprint_id", Typ: types.String},
+				{Name: "sampling_probability", Typ: types.Float},
+				{Name: "min_execution_latency", Typ: types.Interval},
+				{Name: "expires_after", Typ: types.Interval},
+				{Name: "redacted", Typ: types.Bool},
+			},
+			txnDiagnosticsRequestGeneratorType,
+			makeTxnDiagnosticsRequestGenerator,
+			"Starts a transaction diagnostic for the transaction fingerprint id",
+			volatility.Volatile,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String
@@ -4198,4 +4217,136 @@ func (qi *internallyExecutedQueryIterator) Close(context.Context) {
 // ResolvedType implements the eval.ValueGenerator interface.
 func (qi *internallyExecutedQueryIterator) ResolvedType() *types.T {
 	return internallyExecutedQueryGeneratorType
+}
+
+func makeTxnDiagnosticsRequestGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	txnFingerprintIdStr := string(tree.MustBeDString(args[0]))
+	samplingProbability := float64(tree.MustBeDFloat(args[1]))
+	minExecutionLatency := tree.MustBeDInterval(args[2])
+	expiresAfter := tree.MustBeDInterval(args[3])
+	redacted := bool(tree.MustBeDBool(args[4]))
+	txnFingerprintId, err := strconv.ParseUint(txnFingerprintIdStr, 16, 64)
+	if err != nil {
+		return nil, errors.New("invalid transaction fingerprint id: must be a hex encoded representation of a transaction fingerprint id")
+	}
+	query := `
+SELECT jsonb_array_elements_text(metadata->'stmtFingerprintIDs') as stmt_fingerprint_id
+FROM (
+	SELECT metadata from crdb_internal.transaction_statistics
+	WHERE fingerprint_id = decode($1, 'hex')
+	LIMIT 1
+) t
+`
+	it, err := evalCtx.Planner.QueryIteratorEx(ctx, "get_txn_fingerprint", sessiondata.NoSessionDataOverride, query, txnFingerprintIdStr)
+	if err != nil {
+		return &txnDiagnosticsRequestGenerator{requestId: 0, created: false}, err
+	}
+
+	var stmtFPs []uint64
+	var ok, found bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		found = true
+		id := string(tree.MustBeDString(it.Cur()[0]))
+		value, err := strconv.ParseUint(id, 16, 64)
+		if err != nil {
+			return nil, err
+		}
+		stmtFPs = append(stmtFPs, value)
+	}
+
+	if shouldRedact {
+		if !redacted {
+			return nil, pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				"users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles",
+			)
+		}
+	} else if !hasPriv {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"requesting statement bundle requires VIEWACTIVITY privilege",
+		)
+	}
+
+	var username string
+	if sd := evalCtx.SessionData(); sd != nil {
+		username = sd.User().Normalized()
+	}
+	reqId, err := evalCtx.TxnDiagnosticsRequestInserter(
+		ctx,
+		txnFingerprintId,
+		stmtFPs,
+		username,
+		samplingProbability,
+		time.Duration(minExecutionLatency.Duration.Nanos()),
+		time.Duration(expiresAfter.Duration.Nanos()),
+		redacted)
+	if err != nil {
+		return nil, err
+	}
+
+	if !found {
+		return &txnDiagnosticsRequestGenerator{created: false}, nil
+	}
+	return &txnDiagnosticsRequestGenerator{requestId: reqId, created: true}, nil
+}
+
+// txnDiagnosticsRequestGenerator supports the execution of request_transaction_bundle.
+var txnDiagnosticsRequestGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Bool},
+	[]string{"request_id", "created"},
+)
+
+type txnDiagnosticsRequestGenerator struct {
+	requestId int
+	created   bool
+	called    bool
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (g *txnDiagnosticsRequestGenerator) ResolvedType() *types.T {
+	return txnDiagnosticsRequestGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (g *txnDiagnosticsRequestGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (g *txnDiagnosticsRequestGenerator) Next(ctx context.Context) (bool, error) {
+	if g.called {
+		return false, nil
+	}
+	g.called = true
+	return true, nil
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (g *txnDiagnosticsRequestGenerator) Values() (tree.Datums, error) {
+	var requestIdDatum tree.Datum
+	if g.created {
+		requestIdDatum = tree.NewDInt(tree.DInt(g.requestId))
+	} else {
+		requestIdDatum = tree.DNull
+	}
+
+	return tree.Datums{
+		requestIdDatum,
+		tree.MakeDBool(tree.DBool(g.created)),
+	}, nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (g *txnDiagnosticsRequestGenerator) Close(ctx context.Context) {
 }
