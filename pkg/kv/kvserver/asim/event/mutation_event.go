@@ -169,7 +169,7 @@ func (sce SetCapacityOverrideEvent) Func() EventFunc {
 }
 
 func (sce SetCapacityOverrideEvent) String() string {
-	return fmt.Sprintf("set capacity override event with storeID=%d, capacity_override=%v", sce.StoreID, sce.CapacityOverride)
+	return fmt.Sprintf("override s%d capacity to %v", sce.StoreID, sce.CapacityOverride)
 }
 
 func (sne SetNodeLocalityEvent) Func() EventFunc {
