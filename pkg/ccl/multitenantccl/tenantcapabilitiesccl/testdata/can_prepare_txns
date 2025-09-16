@@ -3,14 +3,15 @@ SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_name = 'can_
 ----
 10 cluster-10 ready external can_prepare_txns false
 
-# TODO(#144252): remove this.
-exec-sql-tenant
-SET kv_transaction_buffered_writes_enabled = false
-----
-ok
 
 exec-sql-tenant
 CREATE TABLE t(a INT PRIMARY KEY)
+----
+ok
+
+# Disable buffered writes so that the failing batch has the same requests.
+exec-privileged-op-tenant
+SET kv_transaction_buffered_writes_enabled = false
 ----
 ok
 
@@ -28,8 +29,12 @@ ok
 exec-privileged-op-tenant
 PREPARE TRANSACTION 'txn1'
 ----
-pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(commit) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(prepare) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
+exec-privileged-op-tenant
+RESET kv_transaction_buffered_writes_enabled
+----
+ok
 
 # Grant the capability.
 update-capabilities
@@ -57,10 +62,15 @@ ROLLBACK PREPARED 'txn2'
 ----
 ok
 
-
 # Revoke the capability using REVOKE syntax.
 update-capabilities
 ALTER TENANT [10] REVOKE CAPABILITY can_prepare_txns
+----
+ok
+
+# Disable buffered writes so that the failing batch has the same requests.
+exec-privileged-op-tenant
+SET kv_transaction_buffered_writes_enabled = false
 ----
 ok
 
@@ -78,8 +88,12 @@ ok
 exec-privileged-op-tenant
 PREPARE TRANSACTION 'txn3'
 ----
-pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(commit) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(prepare) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
+exec-privileged-op-tenant
+RESET kv_transaction_buffered_writes_enabled
+----
+ok
 
 # However, transactions that have not acquired locks are able to be prepared,
 # since they don't actually prepare a transaction record in the KV layer. This
