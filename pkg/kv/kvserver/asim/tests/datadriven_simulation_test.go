@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -202,6 +203,20 @@ func TestDataDriven(t *testing.T) {
 					require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
 				}
 			}()
+
+			// Allow specifying max_key=max and min_key=min by replacing them with
+			// their numerical counterparts.
+			for _, arg := range d.CmdArgs {
+				for _, c := range []struct{ key, from, to string }{
+					{"min_key", "min", "0"},
+					{"max_key", "max", strconv.Itoa(int(state.MaxKey))},
+				} {
+					if arg.Key == c.key && len(arg.Vals) == 1 && arg.Vals[0] == c.from {
+						arg.Vals[0] = c.to
+					}
+				}
+			}
+
 			switch d.Cmd {
 			case "skip_under_ci":
 				if !runAsimTests {
@@ -278,6 +293,7 @@ func TestDataDriven(t *testing.T) {
 				var replace bool
 				var placementTypeStr = "even"
 				buf := strings.Builder{}
+
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
 				scanIfExists(t, d, "placement_type", &placementTypeStr)
@@ -584,13 +600,13 @@ func TestDataDriven(t *testing.T) {
 			case "assertion":
 				var stat string
 				var typ string
-				var ticks int
+				ticks := 5
 				scanMustExist(t, d, "type", &typ)
 
 				switch typ {
 				case "balance":
 					scanMustExist(t, d, "stat", &stat)
-					scanMustExist(t, d, "ticks", &ticks)
+					scanIfExists(t, d, "ticks", &ticks)
 					assertions = append(assertions, assertion.BalanceAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
@@ -598,7 +614,7 @@ func TestDataDriven(t *testing.T) {
 					})
 				case "steady":
 					scanMustExist(t, d, "stat", &stat)
-					scanMustExist(t, d, "ticks", &ticks)
+					scanIfExists(t, d, "ticks", &ticks)
 					assertions = append(assertions, assertion.SteadyStateAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
@@ -607,7 +623,7 @@ func TestDataDriven(t *testing.T) {
 				case "stat":
 					var stores []int
 					scanMustExist(t, d, "stat", &stat)
-					scanMustExist(t, d, "ticks", &ticks)
+					scanIfExists(t, d, "ticks", &ticks)
 					scanMustExist(t, d, "stores", &stores)
 					assertions = append(assertions, assertion.StoreStatAssertion{
 						Ticks:     ticks,

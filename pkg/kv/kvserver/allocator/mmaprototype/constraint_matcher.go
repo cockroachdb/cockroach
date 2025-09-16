@@ -6,7 +6,10 @@
 package mmaprototype
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,6 +69,8 @@ func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
 		cm.allStores.insert(sal.StoreID)
 	}
 	mc.sal = sal
+	log.Dev.Infof(context.Background(), "s%v: %s, %s",
+		sal.StoreID, sal.NodeAttrs.String(), sal.StoreAttrs.String())
 	// Update the matching info for the existing constraints.
 	for c, matchedSet := range cm.constraints {
 		matches := cm.storeMatchesConstraint(sal, c)

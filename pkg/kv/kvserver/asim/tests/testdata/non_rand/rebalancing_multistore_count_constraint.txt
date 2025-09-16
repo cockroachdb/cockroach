@@ -1,0 +1,37 @@
+# Six nodes, two stores per node.
+# Initially, all replicas are on the first store of n1-n3 (equally distributed).
+# A constraint prevents replicas from moving to n4-n6 at all.
+# Leases and replicas should even out by count on n1-n3.
+
+skip_under_ci
+----
+
+gen_cluster nodes=6 node_cpu_rate_capacity=16000000000 stores_per_node=2 region=(a,b) nodes_per_region=(3,3)
+----
+
+set_span_config
+[0,5000): constraints={'+region=a':3}
+[5000,10000): constraints={'+region=b':3}
+----
+
+# Odd stores are the nodes' first stores.
+gen_ranges ranges=200 min_key=min max_key=max placement_type=replica_placement bytes=268435456
+{s1,s3,s5}:1
+----
+{s1:*,s3,s5}:1
+
+# NB: see rebalancing_multistore_count_1.txt for explanation of the thresholds.
+
+assertion type=balance stat=leases upper_bound=1.32
+----
+
+assertion type=balance stat=replicas upper_bound=1.05
+----
+
+eval duration=30m cfgs=(sma-only) metrics=(replicas,leases)
+----
+leases#1: first: [s1=202, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=55.83, mean=16.83, sum=202)
+leases#1: last:  [s1=22, s2=13, s3=17, s4=18, s5=18, s6=18, s7=17, s8=17, s9=15, s10=18, s11=15, s12=14] (stddev=2.27, mean=16.83, sum=202)
+replicas#1: first: [s1=202, s2=0, s3=202, s4=0, s5=202, s6=0, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0] (stddev=87.47, mean=50.50, sum=606)
+replicas#1: last:  [s1=50, s2=52, s3=51, s4=50, s5=51, s6=51, s7=51, s8=51, s9=51, s10=51, s11=49, s12=48] (stddev=1.04, mean=50.50, sum=606)
+artifacts[sma-only]: 57298ec3603cf5bf
