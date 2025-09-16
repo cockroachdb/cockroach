@@ -10,6 +10,7 @@ go_library(
         "kv_writer.go",
         "lease.go",
         "lease_test_utils.go",
+        "lease_timestamp.go",
         "name_cache.go",
         "storage.go",
         "testutils.go",

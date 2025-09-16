@@ -58,10 +58,24 @@ func (e TableEvent) Timestamp() hlc.Timestamp {
 // leaseAcquirer is an interface containing the methods on *lease.Manager used
 // by the schema feed.
 type leaseAcquirer interface {
-	Acquire(ctx context.Context, timestamp hlc.Timestamp, id descpb.ID) (lease.LeasedDescriptor, error)
+	Acquire(ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID) (lease.LeasedDescriptor, error)
 	AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error
 	// TODO(yang): Investigate whether the codec can be stored in the schema feed itself.
 	Codec() keys.SQLCodec
+}
+
+// leaseTS is a wrapper around hlc.Timestamp which implements the lease.ReadTimestamp
+// interface.
+type leaseTS hlc.Timestamp
+
+// GetTimestamp implements lease.ReadTimestamp.
+func (l leaseTS) GetTimestamp() hlc.Timestamp {
+	return hlc.Timestamp(l)
+}
+
+// GetBaseTimestamp implements lease.ReadTimestamp.
+func (l leaseTS) GetBaseTimestamp() hlc.Timestamp {
+	return hlc.Timestamp(l)
 }
 
 // SchemaFeed is a stream of events corresponding the relevant set of
@@ -504,7 +518,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 
 	if canPausePolling, err := tf.targets.EachTableIDWithBool(func(id descpb.ID) (bool, error) {
 		// Check if target table is schema-locked at the current frontier.
-		ld1, err := tf.leaseMgr.Acquire(ctx, frontier, id)
+		ld1, err := tf.leaseMgr.Acquire(ctx, leaseTS(frontier), id)
 		if err != nil {
 			return false, err
 		}
@@ -522,7 +536,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		}
 
 		// Check if target table remains at the same version at atOrBefore.
-		ld2, err := tf.leaseMgr.Acquire(ctx, atOrBefore, id)
+		ld2, err := tf.leaseMgr.Acquire(ctx, leaseTS(atOrBefore), id)
 		if err != nil {
 			return false, err
 		}

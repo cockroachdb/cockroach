@@ -188,7 +188,7 @@ type fakeLeaseManager struct {
 
 func (f fakeLeaseManager) AcquireByName(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	timestamp lease.ReadTimestamp,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
@@ -197,7 +197,7 @@ func (f fakeLeaseManager) AcquireByName(
 }
 
 func (f fakeLeaseManager) Acquire(
-	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
+	ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID,
 ) (lease.LeasedDescriptor, error) {
 	if err, ok := f.errs[id]; ok {
 		return nil, err
@@ -216,6 +216,10 @@ func (f fakeLeaseManager) GetSafeReplicationTS() hlc.Timestamp {
 
 func (f fakeLeaseManager) GetLeaseGeneration() int64 {
 	return 0
+}
+
+func (f fakeLeaseManager) GetReadTimestamp(timestamp hlc.Timestamp) lease.ReadTimestamp {
+	return lease.TimestampToReadTimestamp(timestamp)
 }
 
 var _ descs.LeaseManager = (*fakeLeaseManager)(nil)
