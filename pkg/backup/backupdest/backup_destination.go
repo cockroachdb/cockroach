@@ -228,7 +228,7 @@ func ResolveDest(
 	defer rootStore.Close()
 	priors, err := FindAllIncrementalPaths(
 		ctx, execCfg, incrementalStore, rootStore,
-		chosenSuffix, OmitManifest, len(dest.IncrementalStorage) > 0,
+		chosenSuffix, len(dest.IncrementalStorage) > 0,
 	)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")

@@ -86,7 +86,6 @@ func FindAllIncrementalPaths(
 	incStore cloud.ExternalStorage,
 	rootStore cloud.ExternalStorage,
 	subdir string,
-	includeManifest bool,
 	customIncLocation bool,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindAllIncrementalPaths")
@@ -94,7 +93,7 @@ func FindAllIncrementalPaths(
 
 	// Backup indexes do not support custom incremental locations.
 	if customIncLocation || !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
-		return LegacyFindPriorBackups(ctx, incStore, includeManifest)
+		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 
 	indexes, err := ListIndexes(ctx, rootStore, subdir)
@@ -105,25 +104,15 @@ func FindAllIncrementalPaths(
 	// backup chain, we can assume the index is complete. So either an index has
 	// been written for every backup in the chain, or there are no indexes at all.
 	if len(indexes) == 0 {
-		return LegacyFindPriorBackups(ctx, incStore, includeManifest)
+		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 
-	paths, err := util.MapE(
+	return util.MapE(
 		indexes[1:], // We skip the full backup
 		func(indexFilename string) (string, error) {
 			return parseBackupFilePathFromIndexFileName(subdir, indexFilename)
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	if includeManifest {
-		paths = util.Map(paths, func(p string) string {
-			return path.Join(p, backupbase.DeprecatedBackupManifestName)
-		})
-	}
-	return paths, nil
 }
 
 // LegacyFindPriorBackups finds "appended" incremental backups via the legacy
@@ -194,7 +183,7 @@ func backupsFromLocation(
 	defer incStore.Close()
 
 	return FindAllIncrementalPaths(
-		ctx, execCfg, incStore, rootStore, subdir, false /* includeManifest */, customIncLocation,
+		ctx, execCfg, incStore, rootStore, subdir, customIncLocation,
 	)
 }
 
