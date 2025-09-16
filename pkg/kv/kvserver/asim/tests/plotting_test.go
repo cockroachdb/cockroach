@@ -12,12 +12,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ import (
 // TODO(tbg): rename to generateArtifacts.
 func generateAllPlots(
 	t *testing.T,
-	buf *strings.Builder,
+	out treeprinter.Node,
 	h history.History,
 	testName string,
 	sample int,
@@ -72,10 +72,10 @@ func generateAllPlots(
 			at0, ok0 := h.ShowRecordedValueAt(0, stat)
 			s, ok := h.ShowRecordedValueAt(len(h.Recorded)-1, stat)
 			if ok0 {
-				_, _ = fmt.Fprintf(buf, "%s#%d: first: %s\n", stat, sample, at0)
+				out.Childf("%s#%d: first: %s", stat, sample, at0)
 			}
 			if ok0 || ok {
-				_, _ = fmt.Fprintf(buf, "%s#%d: last:  %s\n", stat, sample, s)
+				out.Childf("%s#%d: last:  %s", stat, sample, s)
 			}
 		}
 	}

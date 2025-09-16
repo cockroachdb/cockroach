@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
@@ -513,6 +514,8 @@ func TestDataDriven(t *testing.T) {
 				var buf strings.Builder
 				for _, mv := range cfgs {
 					t.Run(mv, func(t *testing.T) {
+						tp := treeprinter.New()
+						out := tp.Child(mv)
 						ctx := logtags.AddTag(context.Background(), "name", name+"/"+mv)
 						sampleAssertFailures := make([]string, samples)
 						run := modeHistory{
@@ -561,7 +564,7 @@ func TestDataDriven(t *testing.T) {
 						// parameter to the `eval` command.
 						testName := name + "_" + mv
 						for sample, h := range run.hs {
-							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
+							generateAllPlots(t, out, h, testName, sample+1, plotDir, hasher, rewrite,
 								settingsGen.Settings.TickInterval, metricsMap)
 							generateTopology(t, h,
 								filepath.Join(plotDir, fmt.Sprintf("%s_%d_topology.txt", testName, sample+1)),
@@ -574,10 +577,13 @@ func TestDataDriven(t *testing.T) {
 						_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
 						for sample, failString := range sampleAssertFailures {
 							if failString != "" {
-								_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
-									sample+1, failString)
+								out.Childf("failed assertion sample %d\n%s",
+									sample+1, strings.TrimSpace(failString))
 							}
 						}
+
+						out.Childf("artifacts: %x", artifactsHash)
+						_, _ = fmt.Fprint(&buf, tp)
 					})
 				}
 				return buf.String()
