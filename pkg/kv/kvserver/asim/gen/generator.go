@@ -103,11 +103,14 @@ type MultiLoad []BasicLoad
 var _ LoadGen = MultiLoad{}
 
 func (ml MultiLoad) String() string {
-	var str string
-	for _, load := range ml {
-		str += load.String()
+	var buf strings.Builder
+	for i, load := range ml {
+		_, _ = fmt.Fprintf(&buf, "%s", load.String())
+		if i != len(ml)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
 	}
-	return str
+	return buf.String()
 }
 
 func (ml MultiLoad) Generate(seed int64, settings *config.SimulationSettings) []workload.Generator {
@@ -161,7 +164,7 @@ func (bl BasicLoad) String() string {
 	} else {
 		_, _ = fmt.Fprintf(&buf, "%d-%dB/op, ", bl.MinBlockSize, bl.MaxBlockSize)
 	}
-	fmt.Fprintf(&buf, "%gops/s]\n", bl.Rate)
+	fmt.Fprintf(&buf, "%gops/s]", bl.Rate)
 	return buf.String()
 }
 
@@ -420,11 +423,14 @@ type MultiRanges []BasicRanges
 var _ RangeGen = MultiRanges{}
 
 func (mr MultiRanges) String() string {
-	var str string
-	for _, ranges := range mr {
-		str += fmt.Sprintf("%s\n", ranges.String())
+	var buf strings.Builder
+	for i, ranges := range mr {
+		_, _ = fmt.Fprintf(&buf, "%s", ranges.String())
+		if i != len(mr)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
 	}
-	return str
+	return buf.String()
 }
 
 func (mr MultiRanges) Generate(
@@ -439,8 +445,11 @@ func (mr MultiRanges) Generate(
 	}
 	state.LoadRangeInfo(s, rangeInfos...)
 	var buf strings.Builder
-	for _, str := range rangeInfoStrings {
-		_, _ = fmt.Fprintf(&buf, "%s\n", str)
+	for i, str := range rangeInfoStrings {
+		_, _ = fmt.Fprintf(&buf, "%s", str)
+		if i != len(rangeInfoStrings)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
 	}
 	return s, buf.String()
 }

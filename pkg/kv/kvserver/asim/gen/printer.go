@@ -19,12 +19,11 @@ import (
 // Returns an empty string if no changes are found.
 func compareSettingsToDefault(settings config.SimulationSettings) string {
 	defaultSettings := config.DefaultSimulationSettings()
-	var changes []string
-
 	// Use reflection to compare all fields
 	settingsVal := reflect.ValueOf(settings)
 	defaultVal := reflect.ValueOf(*defaultSettings)
 	settingsType := reflect.TypeOf(settings)
+	var buf strings.Builder
 
 	for i := 0; i < settingsVal.NumField(); i++ {
 		field := settingsType.Field(i)
@@ -39,18 +38,17 @@ func compareSettingsToDefault(settings config.SimulationSettings) string {
 		}
 
 		if !reflect.DeepEqual(settingsFieldVal.Interface(), defaultFieldVal.Interface()) {
-			changes = append(changes, fmt.Sprintf("\t%s: %v (default: %v)",
+			if buf.Len() != 0 {
+				_, _ = fmt.Fprintf(&buf, "\n")
+			}
+			_, _ = fmt.Fprintf(&buf, "\t%s: %v (default: %v)",
 				field.Name,
 				settingsFieldVal.Interface(),
-				defaultFieldVal.Interface()))
+				defaultFieldVal.Interface())
 		}
 	}
 
-	if len(changes) == 0 {
-		return ""
-	}
-
-	return strings.Join(changes, "\n")
+	return buf.String()
 }
 
 // generateClusterVisualization generates a visualization of the cluster state.
@@ -82,14 +80,21 @@ func generateClusterVisualization(
 	if buf == nil {
 		return
 	}
-	_, _ = fmt.Fprintf(buf, "Cluster Set Up\n")
-	_, _ = fmt.Fprintf(buf, "%v", s.NodesString())
-	_, _ = fmt.Fprintf(buf, "Key Space\n%s", rangeStateStr)
-	_, _ = fmt.Fprintf(buf, "Event\n%s", eventGen.String())
-	_, _ = fmt.Fprintf(buf, "Workload Set Up\n%s", loadGen.String())
-
-	// Only print settings section if there are changes from defaults.
-	if settingsChanges := compareSettingsToDefault(settings); settingsChanges != "" {
-		_, _ = fmt.Fprintf(buf, "Changed Settings\n%s\n", settingsChanges)
+	// Helper function to return "empty" if string is empty, otherwise return the string
+	emptyIfBlank := func(s string) string {
+		if s == "" {
+			return "\tempty"
+		}
+		return s
 	}
+	clusterSetUp := emptyIfBlank(s.NodesString())
+	rangeState := emptyIfBlank(rangeStateStr)
+	event := emptyIfBlank(eventGen.String())
+	workloadSetUp := emptyIfBlank(loadGen.String())
+	settingsChanges := emptyIfBlank(compareSettingsToDefault(settings))
+	_, _ = fmt.Fprintf(buf, "Cluster Set Up\n%s\n", clusterSetUp)
+	_, _ = fmt.Fprintf(buf, "Key Space\n%s\n", rangeState)
+	_, _ = fmt.Fprintf(buf, "Event\n%s\n", event)
+	_, _ = fmt.Fprintf(buf, "Workload Set Up\n%s\n", workloadSetUp)
+	_, _ = fmt.Fprintf(buf, "Changed Settings\n%s", settingsChanges)
 }
