@@ -444,6 +444,7 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "eval":
 				samples := 1
+				full := false
 				// We use a fixed seed to ensure determinism in the simulated data.
 				// Multiple samples can be used for more coverage.
 				seed := int64(42)
@@ -460,6 +461,7 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "seed", &seed)
 				scanIfExists(t, d, "cfgs", &cfgs)
 				scanIfExists(t, d, "metrics", &metrics)
+				scanIfExists(t, d, "full", &full)
 
 				t.Logf("running eval for %s", name)
 
@@ -586,6 +588,10 @@ func TestDataDriven(t *testing.T) {
 					})
 				}
 				writeStateStrToFile(t, filepath.Join(plotDir, fmt.Sprintf("%s_setup.txt", name)), stateStrForOnce, rewrite)
+				if full {
+					_, _ = fmt.Fprintf(&buf, stateStrForOnce)
+					_, _ = fmt.Fprintf(&buf, "==========================\n")
+				}
 				return buf.String()
 			case "assertion":
 				var stat string
