@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -224,11 +225,16 @@ func writeTuple(
 	d tree.Datum, w []file.ColumnChunkWriter, a *batchAlloc, wFns []writeFn,
 ) (int64, error) {
 	var dt *tree.DTuple
+	var bytesEst int64
 	if d != tree.DNull {
 		if tup, ok := tree.AsDTuple(d); ok {
 			dt = tup
+		} else if dd, ok := tree.AsDDecimal(d); ok {
+			tupType := types.MakeLabeledTuple([]*types.T{types.Decimal, types.String},
+				[]string{"decimal", "string"})
+			dt = tree.NewDTuple(tupType, dd, dd)
 		} else {
-			return 0, pgerror.Newf(pgcode.DatatypeMismatch, "expected DTuple, found %T", d)
+			return 0, pgerror.Newf(pgcode.DatatypeMismatch, "expected DTuple or DDecimal, found %T", d)
 		}
 	}
 	tupleDatumAndDefLevel := func(i int) (tree.Datum, []int16) {
@@ -241,7 +247,6 @@ func writeTuple(
 		return dt.D[i], tupleFieldNonNilDefLevel
 	}
 
-	var bytesEst int64
 	for i, wFn := range wFns {
 		tupleDatum, defLevel := tupleDatumAndDefLevel(i)
 		if err := wFn(tupleDatum, w[i], a, defLevel, newEntryRepLevel); err != nil {
@@ -275,6 +280,64 @@ func formatDatum(d tree.Datum, a *batchAlloc) error {
 		return err
 	}
 	a.byteArrayBatch[0] = b
+	return nil
+}
+
+func formatDecimalString(dd *tree.DDecimal, a *batchAlloc) error {
+	str := dd.String()
+	var b parquet.ByteArray
+	b, err := unsafeGetBytes(str)
+	if err != nil {
+		return err
+	}
+	a.byteArrayBatch[0] = b
+	return nil
+}
+
+func twosComplement(width int, input []byte) []byte {
+	out := make([]byte, width)
+	copy(out[width-len(input):], input)
+
+	// Invert bits
+	for i := range out {
+		out[i] = ^out[i]
+	}
+
+	// Add 1
+	for i := width - 1; i >= 0; i-- {
+		out[i]++
+		if out[i] != 0 {
+			break
+		}
+	}
+
+	return out
+}
+func formatDecimal(dd *tree.DDecimal, a *batchAlloc) error {
+	var raw []byte
+	if dd.Form != 0 {
+		a.byteArrayBatch[0] = nil
+		return nil
+	} else if dd.Coeff.Int64() == 0 {
+		a.byteArrayBatch[0] = dd.Coeff.Bytes()
+		return nil
+	}
+	mag := dd.Coeff.MathBigInt().Bytes()
+	width := len(mag)
+	if dd.Negative || mag[0]&0x80 == 0 {
+		width++ // always pad for negative or MSB set
+	}
+	if dd.Negative {
+		raw = twosComplement(width, mag)
+	} else {
+		raw = mag
+		// if top bit is 1, we must prepend a 0x00 so we know it's a
+		// positive number when decoding for tests
+		if len(raw) > 0 && raw[0]&0x80 != 0 {
+			raw = append([]byte{0x00}, raw...)
+		}
+	}
+	a.byteArrayBatch[0] = parquet.ByteArray(raw)
 	return nil
 }
 
@@ -334,6 +397,17 @@ func writeBool(
 	return writeBatch[bool](w, a.boolBatch[:], defLevels, repLevels)
 }
 
+func writeDecimalString(dd *tree.DDecimal, a *batchAlloc) error {
+	if dd.Form != 0 {
+		if err := formatDecimalString(dd, a); err != nil {
+			return err
+		}
+	} else {
+		a.byteArrayBatch[0] = nil
+	}
+	return nil
+}
+
 func writeString(
 	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
 ) error {
@@ -342,14 +416,24 @@ func writeString(
 	}
 	di, ok := tree.AsDString(d)
 	if !ok {
-		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DString, found %T", d)
+		if dd, ok := tree.AsDDecimal(d); ok {
+			if err := writeDecimalString(dd, a); err != nil {
+				return err
+			}
+			if a.byteArrayBatch[0] == nil {
+				defLevels = nilDefLevel
+			}
+		} else {
+			return pgerror.Newf(pgcode.DatatypeMismatch, "expected DString or DDecimal, found %T", d)
+		}
+	} else {
+		var b parquet.ByteArray
+		b, err := unsafeGetBytes(string(di))
+		if err != nil {
+			return err
+		}
+		a.byteArrayBatch[0] = b
 	}
-	var b parquet.ByteArray
-	b, err := unsafeGetBytes(string(di))
-	if err != nil {
-		return err
-	}
-	a.byteArrayBatch[0] = b
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 }
 
@@ -442,12 +526,15 @@ func writeDecimal(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDDecimal(d)
+	dd, ok := tree.AsDDecimal(d)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DDecimal, found %T", d)
 	}
-	if err := formatDatum(d, a); err != nil {
+	if err := formatDecimal(dd, a); err != nil {
 		return err
+	}
+	if a.byteArrayBatch[0] == nil {
+		defLevels = nonNilDefLevel
 	}
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 }
