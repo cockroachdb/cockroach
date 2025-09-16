@@ -3830,6 +3830,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ConsistencyChecker:               p.execCfg.ConsistencyChecker,
 			RangeProber:                      p.execCfg.RangeProber,
 			StmtDiagnosticsRequestInserter:   ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
+			TxnDiagnosticsRequestInserter:    ex.server.cfg.TxnDiagnosticsRecorder.InsertTxnRequest,
 			CatalogBuiltins:                  &p.evalCatalogBuiltins,
 			QueryCancelKey:                   ex.queryCancelKey,
 			DescIDGenerator:                  ex.getDescIDGenerator(),
