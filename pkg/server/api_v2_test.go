@@ -444,7 +444,11 @@ func updateAllReplicaCounts(
 ) {
 	_, err := testCluster.ServerConn(0).Exec("ALTER RANGE default CONFIGURE ZONE USING num_replicas=$1", desiredVoters)
 	require.NoError(t, err)
-	require.NoError(t, testCluster.WaitForFullReplication())
+	if desiredVoters == 5 {
+		require.NoError(t, testCluster.WaitFor5NodeReplication())
+	} else {
+		require.NoError(t, testCluster.WaitForFullReplication())
+	}
 
 	ts0 := testCluster.Server(0)
 	stores := ts0.GetStores().(storeVisitor)
