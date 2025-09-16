@@ -301,9 +301,8 @@ func readManifest(
 		}
 	}
 
-	var encryptionKey []byte
 	if encryption != nil {
-		encryptionKey, err = backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return backuppb.BackupManifest{}, 0, err
 		}
