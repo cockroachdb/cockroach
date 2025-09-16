@@ -11,14 +11,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -86,6 +92,79 @@ func TestChangefeedFrontierPersistence(t *testing.T) {
 			require.Greater(t, count, int64(0))
 			require.Greater(t, avgLatency, time.Duration(0))
 			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestChangefeedFrontierRestore verifies that changefeeds will correctly
+// restore progress from persisted span frontiers.
+func TestChangefeedFrontierRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		ctx := context.Background()
+
+		// Disable span-level checkpointing.
+		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+
+		foo := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no'")
+		defer closeFeed(t, foo)
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+
+		require.NoError(t, jobFeed.Pause())
+
+		var tsStr string
+		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (1), (2), (3), (4), (5), (6)
+RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
+		ts := parseTimeToHLC(t, tsStr)
+
+		// Get the table descriptor to construct the key for row a=1
+		codec := s.Server.Codec()
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			s.Server.DB(), codec, "d", "foo")
+
+		// Construct the key for row with a=1
+		// First get the index key prefix for the primary index
+		keyPrefix := rowenc.MakeIndexKeyPrefix(
+			codec, fooDesc.GetID(), fooDesc.GetPrimaryIndexID())
+
+		rowSpan := func(key int64) roachpb.Span {
+			return roachpb.Span{
+				Key:    encoding.EncodeVarintAscending(append([]byte(nil), keyPrefix...), key),
+				EndKey: encoding.EncodeVarintAscending(append([]byte(nil), keyPrefix...), key+1),
+			}
+		}
+
+		// Manually persist a span frontier that manually marks some of the
+		// inserted rows as resolved already.
+		hw, err := jobFeed.HighWaterMark()
+		require.NoError(t, err)
+		frontier, err := span.MakeFrontierAt(hw, fooDesc.PrimaryIndexSpan(codec))
+		require.NoError(t, err)
+		for _, id := range []int64{2, 5} {
+			_, err := frontier.Forward(rowSpan(id), ts)
+			require.NoError(t, err)
+		}
+		err = s.Server.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobfrontier.Store(ctx, txn, jobFeed.JobID(), "test frontier", frontier)
+		})
+		require.NoError(t, err)
+
+		// Resume the changefeed.
+		require.NoError(t, jobFeed.Resume())
+
+		// We should receive rows 1, 3, 4, 6 (rows 2 and 5 were marked as resolved).
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+			`foo: [4]->{"after": {"a": 4}}`,
+			`foo: [6]->{"after": {"a": 6}}`,
 		})
 	}
 
