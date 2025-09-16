@@ -698,9 +698,8 @@ func TestDataDriven(t *testing.T) {
 }
 
 type modeHistory struct {
-	mode                  string
-	hs                    []history.History
-	stateStrAcrossSamples []string
+	mode string
+	hs   []history.History
 }
 
 func generateTopology(
