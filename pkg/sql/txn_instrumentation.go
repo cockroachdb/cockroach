@@ -182,11 +182,9 @@ func (h *txnInstrumentationHelper) Finalize(ctx context.Context, txnID uuid.UUID
 			b = buf.Bytes()
 		}
 		txnDiag := stmtdiagnostics.NewTxnDiagnostic(collector.stmtBundles, b)
-		id, err := h.TxnDiagnosticsRecorder.InsertTxnDiagnostic(ctx, collector.requestId, collector.request, txnDiag)
+		_, err = h.TxnDiagnosticsRecorder.InsertTxnDiagnostic(ctx, collector.requestId, collector.request, txnDiag)
 		if err != nil {
 			log.Ops.Errorf(ctx, "Error inserting diagnostics for request: %d. err: %s", collector.requestId, err.Error())
-		} else {
-			log.Dev.Infof(ctx, "Inserted transaction diagnostics with id %d", id)
 		}
 	}
 }
