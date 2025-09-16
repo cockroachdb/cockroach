@@ -570,3 +570,71 @@ func checkSpanFrontierEquality(t *testing.T, expected span.Frontier, actual span
 		require.True(t, found, "span %d should be found in loaded frontier", eSp)
 	}
 }
+
+func TestRejectZeroJobID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
+	const zeroJobID = jobspb.JobID(0)
+	const name = "test-frontier"
+
+	t.Run("Get", func(t *testing.T) {
+		require.NoError(t, s.InternalDB().(isql.DB).
+			Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, _, err := Get(ctx, txn, zeroJobID, name)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "job ID cannot be 0")
+				return nil
+			}))
+	})
+
+	t.Run("GetResolvedSpans", func(t *testing.T) {
+		require.NoError(t, s.InternalDB().(isql.DB).
+			Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, _, err := GetResolvedSpans(ctx, txn, zeroJobID, name)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "job ID cannot be 0")
+				return nil
+			}))
+	})
+
+	t.Run("GetAllResolvedSpans", func(t *testing.T) {
+		require.NoError(t, s.InternalDB().(isql.DB).
+			Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, _, err := GetAllResolvedSpans(ctx, txn, zeroJobID)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "job ID cannot be 0")
+				return nil
+			}))
+	})
+
+	t.Run("Store", func(t *testing.T) {
+		require.NoError(t, s.InternalDB().(isql.DB).
+			Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				testSpan := roachpb.Span{Key: []byte{0}, EndKey: []byte{1}}
+				frontier, err := span.MakeFrontier(testSpan)
+				require.NoError(t, err)
+
+				err = Store(ctx, txn, zeroJobID, name, frontier)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "job ID cannot be 0")
+				return nil
+			}))
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		require.NoError(t, s.InternalDB().(isql.DB).
+			Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				err := Delete(ctx, txn, zeroJobID, name)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "job ID cannot be 0")
+				return nil
+			}))
+	})
+}
