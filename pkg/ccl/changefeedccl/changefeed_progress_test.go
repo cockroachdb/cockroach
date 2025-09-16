@@ -60,9 +60,9 @@ func TestChangefeedFrontierPersistence(t *testing.T) {
 
 		// Make sure frontier gets persisted to job_info table.
 		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+		var allSpans []jobspb.ResolvedSpan
 		testutils.SucceedsSoon(t, func() error {
 			var found bool
-			var allSpans []jobspb.ResolvedSpan
 			if err := s.Server.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				var err error
 				allSpans, found, err = jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
@@ -79,6 +79,17 @@ func TestChangefeedFrontierPersistence(t *testing.T) {
 			t.Logf("found resolved spans in job_info table: %+v", allSpans)
 			return nil
 		})
+
+		// Make sure the persisted spans cover the entire table.
+		fooTableSpan := desctestutils.
+			TestingGetPublicTableDescriptor(s.Server.DB(), s.Codec, "d", "foo").
+			PrimaryIndexSpan(s.Codec)
+		var spanGroup roachpb.SpanGroup
+		spanGroup.Add(fooTableSpan)
+		for _, rs := range allSpans {
+			spanGroup.Sub(rs.Span)
+		}
+		require.Zero(t, spanGroup.Len())
 
 		// Verify metric count and average latency have sensible values.
 		testutils.SucceedsSoon(t, func() error {
