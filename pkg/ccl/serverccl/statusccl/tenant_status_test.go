@@ -474,7 +474,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	}
 
 	conn = sqlutils.MakeSQLRunner(systemLayer.SQLConn(t))
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(testCaseTenant), sqlstatstestutil.StatementFilter{
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(testCaseNonTenant), sqlstatstestutil.StatementFilter{
 		App: appName,
 	})
 
@@ -520,11 +520,6 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 		var actualStatements []string
 		for _, respStatement := range actual.Statements {
-			if respStatement.Stats.FailureCount > 0 {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
 			if respStatement.Key.KeyData.App != appName {
 				continue
 			}
