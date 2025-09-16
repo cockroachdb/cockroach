@@ -1,11 +1,11 @@
 Cluster Set Up
-	n1(AU_EAST,AU_EAST_1,8vcpu): {s1}
-	n2(AU_EAST,AU_EAST_1,8vcpu): {s2}
-	n3(AU_EAST,AU_EAST_1,8vcpu): {s3}
-	n4(AU_EAST,AU_EAST_1,8vcpu): {s4}
-	n5(AU_EAST,AU_EAST_1,8vcpu): {s5}
-	n6(AU_EAST,AU_EAST_1,8vcpu): {s6}
-	n7(AU_EAST,AU_EAST_1,8vcpu): {s7}
+	n1(AU_EAST,AU_EAST_1,8vcpu): {s1:(256GiB)}
+	n2(AU_EAST,AU_EAST_1,8vcpu): {s2:(256GiB)}
+	n3(AU_EAST,AU_EAST_1,8vcpu): {s3:(256GiB)}
+	n4(AU_EAST,AU_EAST_1,8vcpu): {s4:(256GiB)}
+	n5(AU_EAST,AU_EAST_1,8vcpu): {s5:(256GiB)}
+	n6(AU_EAST,AU_EAST_1,8vcpu): {s6:(256GiB)}
+	n7(AU_EAST,AU_EAST_1,8vcpu): {s7:(256GiB)}
 Key Space
 	[0,10000): 7(rf=3), 0MiB, [s1:(10,3*),s2:(5,1*),s3:(2,0*),s4:(1,0*),s5:(0,0*),s6:(0,0*),s7:(0,0*)]
 Event

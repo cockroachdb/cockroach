@@ -1425,6 +1425,44 @@ func (s *state) SetSimulationSettings(Key string, Value interface{}) {
 	}
 }
 
+func (s *state) NodesString() string {
+	var buf strings.Builder
+
+	nodes := make([]*node, 0, len(s.nodes))
+	for _, node := range s.nodes {
+		nodes = append(nodes, node)
+	}
+	slices.SortFunc(nodes, func(a, b *node) int {
+		return cmp.Compare(a.nodeID, b.nodeID)
+	})
+
+	for _, n := range nodes {
+		_, _ = fmt.Fprintf(&buf, "\tn%d(", n.nodeID)
+		for _, locality := range n.desc.Locality.Tiers {
+			_, _ = fmt.Fprintf(&buf, "%s,", locality.Value)
+		}
+		_, _ = fmt.Fprintf(&buf, "%dvcpu): {",
+			n.cpuRateCapacity/time.Second.Nanoseconds())
+		for i, store := range n.Stores() {
+			s, ok := s.Store(store)
+			if ok {
+				attrStr := ""
+				if attrs := s.Descriptor().Attrs; attrs.Size() != 0 {
+					attrStr = fmt.Sprintf("%v,", attrs)
+				}
+				_, _ = fmt.Fprintf(&buf, "s%d:(%s%vGiB)", store, attrStr, s.Descriptor().Capacity.Capacity>>30)
+			} else {
+				_, _ = fmt.Fprintf(&buf, "s%d:notfound", store)
+			}
+			if i < len(n.Stores())-1 {
+				_, _ = fmt.Fprintf(&buf, ",")
+			}
+		}
+		_, _ = fmt.Fprintf(&buf, "}\n")
+	}
+	return buf.String()
+}
+
 // node is an implementation of the Node interface.
 type node struct {
 	nodeID          NodeID
@@ -1435,24 +1473,6 @@ type node struct {
 	storepool   *storepool.StorePool
 	mmAllocator mmaprototype.Allocator
 	as          *mmaintegration.AllocatorSync
-}
-
-func (n *node) String() string {
-	var buf strings.Builder
-	_, _ = fmt.Fprintf(&buf, "\tn%d(", n.nodeID)
-	for _, locality := range n.desc.Locality.Tiers {
-		_, _ = fmt.Fprintf(&buf, "%s,", locality.Value)
-	}
-	_, _ = fmt.Fprintf(&buf, "%dvcpu): {",
-		n.cpuRateCapacity/time.Second.Nanoseconds())
-	for i, s := range n.Stores() {
-		_, _ = fmt.Fprintf(&buf, "s%d", s)
-		if i < len(n.Stores())-1 {
-			_, _ = fmt.Fprintf(&buf, ",")
-		}
-	}
-	_, _ = fmt.Fprintf(&buf, "}")
-	return buf.String()
 }
 
 // NodeID returns the ID of this node.
