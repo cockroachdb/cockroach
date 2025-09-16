@@ -192,6 +192,9 @@ CREATE TABLE data2.foo (a int);
 		sqlDB.Exec(t, `CREATE SCHEDULE FOR BACKUP data.bank INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS first_run = $2`, localFoo, firstRun)
 		sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR BACKUP]`)
 
+		// Populate system.statement_hints with a dummy row.
+		sqlDB.Exec(t, `INSERT INTO system.statement_hints (fingerprint, hint) VALUES ('FOO BAR _', '0xDEADBEEF'::BYTES)`)
+
 		injectStats(t, sqlDB, "data.bank", "id")
 		sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
@@ -294,6 +297,7 @@ CREATE TABLE data2.foo (a int);
 				systemschema.UITable.GetName(),
 				systemschema.UsersTable.GetName(),
 				systemschema.ScheduledJobsTable.GetName(),
+				systemschema.StatementHintsTable.GetName(),
 			}
 
 			verificationQueries := make([]string, len(systemTablesToVerify))
@@ -713,6 +717,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"role_options"},
 				{"scheduled_jobs"},
 				{"settings"},
+				{"statement_hints"},
 				{"tenant_settings"},
 				{"ui"},
 				{"users"},
@@ -807,6 +812,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				{"role_options"},
 				{"scheduled_jobs"},
 				{"settings"},
+				{"statement_hints"},
 				{"tenant_settings"},
 				{"ui"},
 				{"users"},

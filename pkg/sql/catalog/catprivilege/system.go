@@ -82,6 +82,7 @@ var (
 		catconstants.JobsMessageTableName,
 		catconstants.TransactionDiagnosticsRequestsTableName,
 		catconstants.TransactionDiagnosticsTableName,
+		catconstants.StatementHintsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
