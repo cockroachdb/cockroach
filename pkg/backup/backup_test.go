@@ -3518,8 +3518,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 				equalDir,
 				beforeTs))
 
-		sqlDB.ExpectErr(t, "A full backup already exists in .* Consider running an incremental backup"+
-			" to this full backup via `BACKUP INTO ",
+		sqlDB.ExpectErr(t, "pq: a full backup already exists in .*",
 			fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir,
 				equalTs))
 	}
