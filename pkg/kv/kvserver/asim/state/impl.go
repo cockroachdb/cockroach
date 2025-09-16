@@ -1436,7 +1436,7 @@ func (s *state) NodesString() string {
 		return cmp.Compare(a.nodeID, b.nodeID)
 	})
 
-	for _, n := range nodes {
+	for nID, n := range nodes {
 		_, _ = fmt.Fprintf(&buf, "\tn%d(", n.nodeID)
 		for _, locality := range n.desc.Locality.Tiers {
 			_, _ = fmt.Fprintf(&buf, "%s,", locality.Value)
@@ -1458,7 +1458,10 @@ func (s *state) NodesString() string {
 				_, _ = fmt.Fprintf(&buf, ",")
 			}
 		}
-		_, _ = fmt.Fprintf(&buf, "}\n")
+		_, _ = fmt.Fprintf(&buf, "}")
+		if nID != len(nodes)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
 	}
 	return buf.String()
 }

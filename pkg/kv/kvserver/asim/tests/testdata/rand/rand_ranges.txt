@@ -25,7 +25,6 @@ rand_ranges placement_type=random replication_factor=3 range_gen_type=uniform ke
 
 eval duration=5m num_iterations=10 verbose=(test_settings,config_gen)
 ----
-----
 test settings
 	num_iterations=10 duration=5m0s
 ----------------------------------
@@ -44,7 +43,7 @@ configurations generated using seed 1926012586526624009
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {305 0 1015 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -53,7 +52,7 @@ configurations generated using seed 2643318057788968173
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {944 0 1357 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -62,7 +61,7 @@ configurations generated using seed 6972490225919430754
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {479 0 1003 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample3: pass
 ----------------------------------
 sample4: start running
@@ -71,7 +70,7 @@ configurations generated using seed 8427801741804500990
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {487 0 2171 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample4: pass
 ----------------------------------
 sample5: start running
@@ -80,7 +79,7 @@ configurations generated using seed 8063729658764635782
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {285 0 1060 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample5: pass
 ----------------------------------
 sample6: start running
@@ -89,7 +88,7 @@ configurations generated using seed 3814222400681984302
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {611 0 1000 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample6: pass
 ----------------------------------
 sample7: start running
@@ -98,7 +97,7 @@ configurations generated using seed 13013938835543503
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {271 0 1439 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample7: pass
 ----------------------------------
 sample8: start running
@@ -107,7 +106,7 @@ configurations generated using seed 2207144605302255518
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {502 0 1198 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample8: pass
 ----------------------------------
 sample9: start running
@@ -116,7 +115,7 @@ configurations generated using seed 5888461606762344739
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {865 0 1427 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample9: pass
 ----------------------------------
 sample10: start running
@@ -125,11 +124,9 @@ configurations generated using seed 6738330972202035110
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {787 0 1001 3 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample10: pass
 ----------------------------------
-----
-----
 
 clear
 ----
@@ -143,7 +140,6 @@ rand_ranges placement_type=random replication_factor=1
 ----
 
 eval duration=20m num_iterations=3 verbose=(test_settings,config_gen)
-----
 ----
 test settings
 	num_iterations=3 duration=20m0s
@@ -163,7 +159,7 @@ configurations generated using seed 1926012586526624009
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {305 0 96760 1 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -172,7 +168,7 @@ configurations generated using seed 2643318057788968173
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {944 0 150098 1 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -181,8 +177,6 @@ configurations generated using seed 6972490225919430754
 store_disk_capacity=1099511627776 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	randomized ranges with placement_type=random, {479 0 199954 1 0 }
 	[0,200000): write-only [1B/op, 0ops/s]
-	
+	empty
 sample3: pass
 ----------------------------------
-----
-----
