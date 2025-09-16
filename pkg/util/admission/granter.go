@@ -53,7 +53,7 @@ func (sg *slotGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (sg *slotGranter) tryGet(count int64) bool {
+func (sg *slotGranter) tryGet(_ burstQualification, count int64) bool {
 	return sg.coord.tryGet(sg.workKind, count, 0 /*arbitrary*/)
 }
 
@@ -122,7 +122,8 @@ func (sg *slotGranter) continueGrantChain(grantChainID grantChainID) {
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
 func (sg *slotGranter) requesterHasWaitingRequests() bool {
-	return sg.requester.hasWaitingRequests()
+	hasWaiting, _ := sg.requester.hasWaitingRequests()
+	return hasWaiting
 }
 
 // tryGrantLocked implements granterWithLockedCalls.
@@ -193,7 +194,7 @@ func (tg *tokenGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (tg *tokenGranter) tryGet(count int64) bool {
+func (tg *tokenGranter) tryGet(_ burstQualification, count int64) bool {
 	return tg.coord.tryGet(tg.workKind, count, 0 /*arbitrary*/)
 }
 
@@ -239,7 +240,8 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
 func (tg *tokenGranter) requesterHasWaitingRequests() bool {
-	return tg.requester.hasWaitingRequests()
+	hasWaiting, _ := tg.requester.hasWaitingRequests()
+	return hasWaiting
 }
 
 // tryGrantLocked implements granterWithLockedCalls.
@@ -340,7 +342,7 @@ func (cg *kvStoreTokenChildGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (cg *kvStoreTokenChildGranter) tryGet(count int64) bool {
+func (cg *kvStoreTokenChildGranter) tryGet(_ burstQualification, count int64) bool {
 	return cg.parent.tryGet(cg.workType, count)
 }
 
@@ -604,14 +606,6 @@ func (sg *kvStoreTokenGranter) subtractTokensLockedForWorkClass(
 	}
 }
 
-// requesterHasWaitingRequests returns whether some requester associated with
-// the granter has waiting requests. Used by storeGrantCoordinator.
-func (sg *kvStoreTokenGranter) requesterHasWaitingRequests() bool {
-	return sg.regularRequester.hasWaitingRequests() ||
-		sg.elasticRequester.hasWaitingRequests() ||
-		sg.snapshotRequester.hasWaitingRequests()
-}
-
 func (sg *kvStoreTokenGranter) tryGrant() {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
@@ -620,13 +614,14 @@ func (sg *kvStoreTokenGranter) tryGrant() {
 
 // tryGrantLocked attempts to grant to as many requests as possible.
 func (sg *kvStoreTokenGranter) tryGrantLocked() {
-	for sg.requesterHasWaitingRequests() && sg.tryGrantLockedOne() {
+	for sg.tryGrantLockedOne() {
 	}
 }
 
 // tryGrantLocked is used to attempt to grant to waiting requests. Used by
 // storeGrantCoordinator. It successfully grants to at most one waiting
-// request.
+// request. If there are no waiting requests, or all waiters reject the grant,
+// it returns false.
 func (sg *kvStoreTokenGranter) tryGrantLockedOne() bool {
 	// NB: We grant work in the following priority order: regular, snapshot
 	// ingest, elastic work. Snapshot ingests are a special type of elastic work.
@@ -640,7 +635,8 @@ func (sg *kvStoreTokenGranter) tryGrantLockedOne() bool {
 		} else if wt == admissionpb.SnapshotIngestStoreWorkType {
 			req = sg.snapshotRequester
 		}
-		if req.hasWaitingRequests() {
+		hasWaiting, _ := req.hasWaitingRequests()
+		if hasWaiting {
 			res := sg.tryGetLocked(1, wt)
 			if res {
 				tookTokenCount := req.granted(noGrantChain)
