@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -60,7 +61,17 @@ SELECT node_id
 			tBeforePing := timeutil.Now()
 			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
-			require.NoError(t, db.Ping())
+
+			testutils.SucceedsSoon(t, func() error {
+				// Having just shut down a node, the sql user table may be in the
+				// process of failing over, and if we're unlucky and try to open a new
+				// conn here, we can sometimes hit an internal 10s timeout should the
+				// failover take longer than usual.
+				//
+				// See https://github.com/cockroachdb/cockroach/issues/153403#issuecomment-3296381756.
+				return db.Ping()
+			})
+
 			tAfterPing := timeutil.Now()
 			if pingDur := tAfterPing.Sub(tBeforePing); pingDur > 20*time.Second {
 				t.L().Printf("sql connection ready after %.2fs", pingDur.Seconds())
@@ -387,8 +398,10 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	// Reduce the scan max idle time to speed up evacuation of node 1.
 	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=*=1"} // see #153441
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+	c.Start(ctx, t.L(), startOpts, settings)
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
@@ -542,7 +555,8 @@ SELECT count(replicas)
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(1))
 	// N.B. Since n1 was initially stripped of all the replicas, we must wait for full replication. Otherwise, the
 	// replica consistency checks may time out.
-	c.Start(ctx, t.L(), option.NewStartOpts(option.WaitForReplication()), install.MakeClusterSettings(), c.Node(1))
+	startOpts.WaitForReplicationFactor = 3
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {

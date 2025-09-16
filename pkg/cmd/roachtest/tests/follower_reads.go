@@ -792,7 +792,8 @@ func verifySQLLatency(
 		}
 	}
 	if permitted := int(.2 * float64(len(perTenSeconds))); len(above) > permitted {
-		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted",
+		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted "+
+			`(search the cluster logs for 'SELECT v FROM "".mr_db.test WHERE k = $1' to look at the traces)`,
 			len(above), above, targetLatency, permitted)
 	}
 }
