@@ -640,18 +640,17 @@ func applyBatchOp(
 			}
 			subO.Result.ResumeSpan = res.ResumeSpan
 		case *PutOperation:
-			err := b.Results[resultIdx].Err
-			subO.Result = resultInit(ctx, err)
-			subO.Result.ResumeSpan = b.Results[resultIdx].ResumeSpan
+			res := b.Results[resultIdx]
+			subO.Result = resultInit(ctx, res.Err)
+			subO.Result.ResumeSpan = res.ResumeSpan
 		case *ScanOperation:
 			res := b.Results[resultIdx]
-			kvs, err := res.Rows, res.Err
-			if err != nil {
-				subO.Result = resultInit(ctx, err)
+			if res.Err != nil {
+				subO.Result = resultInit(ctx, res.Err)
 			} else {
 				subO.Result.Type = ResultType_Values
-				subO.Result.Values = make([]KeyValue, len(kvs))
-				for j, kv := range kvs {
+				subO.Result.Values = make([]KeyValue, len(res.Rows))
+				for j, kv := range res.Rows {
 					subO.Result.Values[j] = KeyValue{
 						Key:   []byte(kv.Key),
 						Value: kv.Value.RawBytes,
@@ -660,26 +659,27 @@ func applyBatchOp(
 			}
 			subO.Result.ResumeSpan = res.ResumeSpan
 		case *DeleteOperation:
-			err := b.Results[resultIdx].Err
-			subO.Result = resultInit(ctx, err)
-			subO.Result.ResumeSpan = b.Results[resultIdx].ResumeSpan
+			res := b.Results[resultIdx]
+			subO.Result = resultInit(ctx, res.Err)
+			subO.Result.ResumeSpan = res.ResumeSpan
 		case *DeleteRangeOperation:
 			res := b.Results[resultIdx]
-			keys, err := res.Keys, res.Err
-			if err != nil {
-				subO.Result = resultInit(ctx, err)
+			if res.Err != nil {
+				subO.Result = resultInit(ctx, res.Err)
 			} else {
 				subO.Result.Type = ResultType_Keys
-				subO.Result.Keys = make([][]byte, len(keys))
-				for j, key := range keys {
+				subO.Result.Keys = make([][]byte, len(res.Keys))
+				for j, key := range res.Keys {
 					subO.Result.Keys[j] = key
 				}
 			}
 			subO.Result.ResumeSpan = res.ResumeSpan
 		case *DeleteRangeUsingTombstoneOperation:
-			subO.Result = resultInit(ctx, err)
-			subO.Result.ResumeSpan = b.Results[resultIdx].ResumeSpan
+			res := b.Results[resultIdx]
+			subO.Result = resultInit(ctx, res.Err)
+			subO.Result.ResumeSpan = res.ResumeSpan
 		case *MutateBatchHeaderOperation:
+			// NB: MutateBatchHeaderOperation cannot fail.
 			subO.Result = resultInit(ctx, nil)
 		case *AddSSTableOperation:
 			panic(errors.AssertionFailedf(`AddSSTable cannot be used in batches`))
