@@ -162,9 +162,8 @@ func (ib *indexBackfiller) constructIndexEntries(
 
 			// Identify the Span for which we have constructed index entries. This is
 			// used for reporting progress and updating the job details.
-			completedSpan := ib.spec.Spans[i]
+			completedSpan := roachpb.Span{Key: startKey, EndKey: ib.spec.Spans[i].EndKey}
 			if todo.Key != nil {
-				completedSpan.Key = startKey
 				completedSpan.EndKey = todo.Key
 			}
 
@@ -529,20 +528,19 @@ func (ib *indexBackfiller) getProgressReportInterval() time.Duration {
 	return indexBackfillProgressReportInterval
 }
 
-// buildIndexEntryBatch constructs the index entries for a single indexBatch.
+// buildIndexEntryBatch constructs the index entries for a single indexBatch for
+// the given span. A non-nil resumeKey is returned when there is still work to
+// be done in this span (sp.Key < resumeKey < sp.EndKey), which happens if the
+// entire span does not fit within the batch size.
 func (ib *indexBackfiller) buildIndexEntryBatch(
 	tctx context.Context, sp roachpb.Span, readAsOf hlc.Timestamp,
-) (roachpb.Key, []rowenc.IndexEntry, int64, error) {
+) (resumeKey roachpb.Key, entries []rowenc.IndexEntry, memUsedBuildingBatch int64, err error) {
 	knobs := &ib.flowCtx.Cfg.TestingKnobs
 	if knobs.RunBeforeBackfillChunk != nil {
 		if err := knobs.RunBeforeBackfillChunk(sp); err != nil {
 			return nil, nil, 0, err
 		}
 	}
-
-	var memUsedBuildingBatch int64
-	var key roachpb.Key
-	var entries []rowenc.IndexEntry
 
 	br := indexBatchRetry{
 		nextChunkSize: ib.spec.ChunkSize,
@@ -582,7 +580,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
-		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
+		entries, resumeKey, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
 			ctx, txn.KV(), ib.desc, sp, br.nextChunkSize, false, /* traceKV */
 		)
 		return err
@@ -598,7 +596,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	log.VEventf(ctx, 3, "index backfill stats: entries %d, prepare %+v",
 		len(entries), prepTime)
 
-	return key, entries, memUsedBuildingBatch, nil
+	return resumeKey, entries, memUsedBuildingBatch, nil
 }
 
 // Resume is part of the execinfra.Processor interface.
