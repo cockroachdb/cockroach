@@ -1349,6 +1349,16 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 		return plan, nil
 	}
 
+	// Build the stringified representation of the unoptimized right side for
+	// EXPLAIN purposes on demand.
+	rightSideForExplainFn := func(redactableValues bool) string {
+		f := memo.MakeExprFmtCtx(
+			b.ctx, memo.ExprFmtHideAll, redactableValues, b.mem, b.catalog,
+		)
+		f.FormatExpr(rightExpr)
+		return f.Buffer.String()
+	}
+
 	// The right plan will always produce the columns in the presentation, in
 	// the same order. This map is only used for the lifetime of this function,
 	// so free the map afterward.
@@ -1391,6 +1401,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 		b.presentationToResultColumns(rightRequiredProps.Presentation),
 		onExpr,
 		planRightSideFn,
+		rightSideForExplainFn,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

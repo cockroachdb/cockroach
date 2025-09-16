@@ -82,6 +82,7 @@ define ApplyJoin {
     RightColumns colinfo.ResultColumns
     OnCond tree.TypedExpr
     PlanRightSideFn exec.ApplyJoinPlanRightSideFn
+    RightSideForExplainFn exec.ApplyJoinRightSideForExplainFn
 }
 
 # HashJoin runs a hash-join between the results of two input nodes.
