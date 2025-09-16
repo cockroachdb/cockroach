@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
 
 go_library(
     name = "mixedversion",
@@ -54,6 +54,7 @@ go_test(
         "mutators_test.go",
         "planner_test.go",
         "runner_test.go",
+        ":mock_cluster",  #keep
     ],
     data = glob(["testdata/**"]),
     embed = [":mixedversion"],
@@ -82,4 +83,13 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
+)
+
+gomock(
+    name = "mock_cluster",  # Target name
+    out = "mock_cluster_generated_test.go",  # Output Go file
+    interfaces = ["Cluster"],  # Name of the interface in cluster_interface.go
+    library = "//pkg/cmd/roachtest/cluster",  # ✅ actual interface source
+    package = "mixedversion",  # ✅ generate into your own package for direct use
+    visibility = ["//visibility:public"],  # ✅ fine if you reuse it in multiple tests
 )

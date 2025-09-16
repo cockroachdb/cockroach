@@ -7,6 +7,7 @@ GOMOCK_SRCS = [
     "//pkg/cmd/roachtest/clusterstats:mock_client_generated_test.go",
     "//pkg/cmd/roachtest/clusterstats:mock_cluster_generated_test.go",
     "//pkg/cmd/roachtest/clusterstats:mock_test_generated_test.go",
+    "//pkg/cmd/roachtest/roachtestutil/mixedversion:mock_cluster_generated_test.go",
     "//pkg/cmd/roachtest/tests:drt_generated_test.go",
     "//pkg/kv/kvclient/kvcoord:mocks_generated_test.go",
     "//pkg/kv/kvclient/rangecache/rangecachemock:mocks_generated.go",

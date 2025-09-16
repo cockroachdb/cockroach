@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,9 +24,12 @@ import (
 // when `Generate` is called. This mutator is also tested as part of
 // the planner test suite, with a datadriven test.
 func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 	numUpgrades := 3
-	mvt := newBasicUpgradeTest(NumUpgrades(numUpgrades))
-	plan, err := mvt.plan()
+	mvt := newBasicUpgradeTest(ctrl, NumUpgrades(numUpgrades))
+
+	plan, err := mvt.plan() // panic here
 	require.NoError(t, err)
 
 	var mut preserveDowngradeOptionRandomizerMutator
@@ -58,6 +62,8 @@ func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
 // same value, etc. This is done for different configurations of the
 // mutator.
 func TestClusterSettingMutator(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 	currentVersion := "v24.2.12"
 	defer withTestBuildVersion(currentVersion)()
 
@@ -91,7 +97,7 @@ func TestClusterSettingMutator(t *testing.T) {
 	verifyMutations := func(
 		numUpgrades int, possibleValues []interface{}, options []clusterSettingMutatorOption,
 	) bool {
-		mvt := newBasicUpgradeTest(NumUpgrades(numUpgrades))
+		mvt := newBasicUpgradeTest(ctrl, NumUpgrades(numUpgrades))
 
 		plan, err := mvt.plan()
 		require.NoError(t, err)

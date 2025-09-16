@@ -806,7 +806,7 @@ func (p *testPlanner) afterUpgradeSteps(
 	p.setStage(service, AfterUpgradeFinalizedStage)
 
 	p.logger.Printf("[testPlanner][afterUpgradeSteps] p.cluster.All(): %d, len(p.cluster.CRDBNodes()): %d",
-		len(p.cluster.All()), len(p.cluster.CRDBNodes()))
+		len(p.cluster.All()), len(p.cluster.CRDBNodes())) // panics here, hm p.cluster is nil
 	if len(p.cluster.All()) != len(p.cluster.CRDBNodes()) {
 		// Add step for staging binary on workload node(s) that matches the current version
 		p.logger.Printf("[testPlanner][afterUpgradeSteps] Adding new step for workload node binary")
