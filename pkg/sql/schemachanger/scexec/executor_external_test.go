@@ -440,7 +440,10 @@ var _ scexec.IndexSpanSplitter = (*noopIndexSpanSplitter)(nil)
 
 // MaybeSplitIndexSpans will attempt to split the backfilled index span.
 func (n noopIndexSpanSplitter) MaybeSplitIndexSpans(
-	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	indexToBackfill catalog.Index,
+	copyIndexSource catalog.Index,
 ) error {
 	return nil
 }

@@ -239,6 +239,11 @@ type TestClusterInterface interface {
 	// have no ranges with replication pending.
 	WaitForFullReplication() error
 
+	// WaitFor5NodeReplication ensures that zone configs are applied and
+	// up-replication is performed with new zone configs. This is the case for 5+
+	// node clusters.
+	WaitFor5NodeReplication() error
+
 	// StartedDefaultTestTenant returns whether this cluster started a
 	// default tenant for testing.
 	StartedDefaultTestTenant() bool
