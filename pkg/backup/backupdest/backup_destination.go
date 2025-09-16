@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -54,17 +53,6 @@ const (
 // omit a leading slash. However, backups in a subdirectory of a base bucket
 // will contain one.
 var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
-
-// featureFullBackupUserSubdir, when true, will create a full backup at a user
-// specified subdirectory if no backup already exists at that subdirectory. As
-// of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
-var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
-	"when true, a backup command with a user specified subdirectory will create a full backup at"+
-		" the subdirectory if no backup already exists at that subdirectory",
-	false,
-	settings.WithPublic)
 
 // TODO(adityamaru): Move this to the soon to be `backupinfo` package.
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
@@ -165,30 +153,13 @@ func ResolveDest(
 		return ResolvedDestination{}, err
 	}
 	if exists && !dest.Exists {
-		// We disallow a user from writing a full backup to a path in a collection containing an
-		// existing backup iff we're 99.9% confident this backup was planned on a 22.1 node.
 		return ResolvedDestination{},
-			errors.Newf("A full backup already exists in %s. "+
-				"Consider running an incremental backup to this full backup via `BACKUP INTO '%s' IN '%s'`",
-				plannedBackupDefaultURI, chosenSuffix, dest.To[0])
+			errors.Newf("a full backup already exists in %s", plannedBackupDefaultURI)
 
 	} else if !exists {
 		if dest.Exists {
-			// Implies the user passed a subdirectory in their backup command, either
-			// explicitly or using LATEST; however, we could not find an existing
-			// backup in that subdirectory.
-			// - Pre 22.1: this was fine. we created a full backup in their specified subdirectory.
-			// - 22.1: throw an error: full backups with an explicit subdirectory are deprecated.
-			// User can use old behavior by switching the 'bulkio.backup.full_backup_with_subdir.
-			// enabled' to true.
-			// - 22.2+: the backup will fail unconditionally.
-			// TODO (msbutler): throw error in 22.2
-			if !featureFullBackupUserSubdir.Get(execCfg.SV()) {
-				return ResolvedDestination{},
-					errors.Errorf("No full backup exists in %q to append an incremental backup to. "+
-						"To take a full backup, remove the subdirectory from the backup command "+
-						"(i.e. run 'BACKUP ... INTO <collectionURI>'). ", chosenSuffix)
-			}
+			return ResolvedDestination{},
+				errors.Errorf("No full backup exists in %q to append an incremental backup to", chosenSuffix)
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
 		return ResolvedDestination{
