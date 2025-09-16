@@ -8523,6 +8523,102 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, true /* redacted */),
 		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, true /* redacted */),
 	),
+	"crdb_internal.request_transaction_bundle": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "transaction_fingerprint_id", Typ: types.String},
+				{Name: "sampling_probability", Typ: types.Float},
+				{Name: "min_execution_latency", Typ: types.Interval},
+				{Name: "expires_after", Typ: types.Interval},
+				{Name: "redacted", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+
+				txnFingerprintIdStr := string(tree.MustBeDString(args[0]))
+				samplingProbability := float64(tree.MustBeDFloat(args[1]))
+				minExecutionLatency := tree.MustBeDInterval(args[2])
+				expiresAfter := tree.MustBeDInterval(args[3])
+				redacted := bool(tree.MustBeDBool(args[4]))
+				txnFingerprintId, err := strconv.ParseUint(txnFingerprintIdStr, 16, 64)
+				if err != nil {
+					return nil, errors.New("invalid transaction fingerprint id: must be a hex encoded representation of a transaction fingerprint id")
+				}
+				query := `
+SELECT jsonb_array_elements_text(metadata->'stmtFingerprintIDs') as stmt_fingerprint_id
+FROM (
+	SELECT metadata from crdb_internal.transaction_statistics
+	WHERE fingerprint_id = decode($1, 'hex')
+	LIMIT 1
+) t
+`
+				it, err := evalCtx.Planner.QueryIteratorEx(ctx, "get_txn_fingerprint", sessiondata.NoSessionDataOverride, query, txnFingerprintIdStr)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+
+				var stmtFPs []uint64
+				var ok, found bool
+				for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+					if err != nil {
+						return nil, err
+					}
+					found = true
+					id := string(tree.MustBeDString(it.Cur()[0]))
+					value, err := strconv.ParseUint(id, 16, 64)
+					if err != nil {
+						return nil, err
+					}
+					stmtFPs = append(stmtFPs, value)
+				}
+
+				if shouldRedact {
+					if !redacted {
+						return nil, pgerror.Newf(
+							pgcode.InsufficientPrivilege,
+							"users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles",
+						)
+					}
+				} else if !hasPriv {
+					return nil, pgerror.Newf(
+						pgcode.InsufficientPrivilege,
+						"requesting statement bundle requires VIEWACTIVITY privilege",
+					)
+				}
+
+				var username string
+				if sd := evalCtx.SessionData(); sd != nil {
+					username = sd.User().Normalized()
+				}
+				if err = evalCtx.TxnDiagnosticsRequestInserter(
+					ctx,
+					txnFingerprintId,
+					stmtFPs,
+					username,
+					samplingProbability,
+					time.Duration(minExecutionLatency.Duration.Nanos()),
+					time.Duration(expiresAfter.Duration.Nanos()),
+					redacted); err != nil {
+					return nil, err
+				}
+				if !found {
+					return tree.DBoolFalse, nil
+				}
+				return tree.DBoolTrue, nil
+
+			},
+			Volatility: volatility.Volatile,
+			Info:       `Starts a transaction diagnostic for the transaction fingerprint id`,
+		},
+	),
 
 	"crdb_internal.set_compaction_concurrency": makeBuiltin(
 		tree.FunctionProperties{

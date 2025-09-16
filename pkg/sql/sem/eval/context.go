@@ -246,6 +246,11 @@ type Context struct {
 	// bundle request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 
+	// TxnDiagnosticsRequestInsertFunc is used by the
+	// crdb_internal.request_transaction_bundle builtin to insert a transaction
+	// bundle request.
+	TxnDiagnosticsRequestInserter TxnDiagnosticsRequestInsertFunc
+
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.
 	CatalogBuiltins CatalogBuiltins
