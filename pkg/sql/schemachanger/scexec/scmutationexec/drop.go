@@ -139,3 +139,9 @@ func (d *deferredVisitor) DeleteSchedule(_ context.Context, op scop.DeleteSchedu
 	}
 	return nil
 }
+
+func (d *deferredVisitor) UpdateTTLScheduleMetadata(
+	ctx context.Context, op scop.UpdateTTLScheduleMetadata,
+) error {
+	return d.DeferredMutationStateUpdater.UpdateTTLScheduleMetadata(ctx, op.TableID, op.NewName)
+}
