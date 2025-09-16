@@ -63,6 +63,7 @@ go_test(
         "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_golang//prometheus",

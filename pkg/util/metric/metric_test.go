@@ -18,6 +18,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -97,6 +98,15 @@ func TestFunctionalGauge(t *testing.T) {
 	if v := g.Value(); v != 15 {
 		t.Fatalf("unexpected value: %d", v)
 	}
+}
+
+func TestAgeGauge(t *testing.T) {
+	ts := timeutil.NewManualTime(timeutil.FromUnixNanos(100))
+	g := NewAgeGauge(emptyMetadata, timeutil.FromUnixNanos(0), ts)
+	require.Equal(t, int64(100), g.Value())
+
+	ts.AdvanceTo(timeutil.FromUnixNanos(200))
+	require.Equal(t, int64(200), g.Value())
 }
 
 func TestGaugeFloat64(t *testing.T) {

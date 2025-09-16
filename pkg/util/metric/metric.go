@@ -1006,8 +1006,9 @@ func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
 // A Gauge atomically stores a single integer value.
 type Gauge struct {
 	Metadata
-	value atomic.Int64
-	fn    func() int64
+	value   atomic.Int64
+	fn      func() int64
+	valueFn func(int64) int64
 }
 
 // NewGauge creates a Gauge.
@@ -1023,6 +1024,20 @@ func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
 	return &Gauge{Metadata: metadata, fn: f}
 }
 
+// NewAgeGauge takes a nanosecond timestamp as input and constructs
+// a gauge that reports the nanoseconds since that timestamp when
+// evaluated.
+func NewAgeGauge(metadata Metadata, t time.Time, ts timeutil.TimeSource) *Gauge {
+	g := &Gauge{
+		Metadata: metadata,
+		valueFn: func(v int64) int64 {
+			return ts.Since(timeutil.FromUnixNanos(v)).Nanoseconds()
+		},
+	}
+	g.value.Store(t.UnixNano())
+	return g
+}
+
 // Update updates the gauge's value.
 func (g *Gauge) Update(v int64) {
 	g.value.Store(v)
@@ -1032,6 +1047,9 @@ func (g *Gauge) Update(v int64) {
 func (g *Gauge) Value() int64 {
 	if g.fn != nil {
 		return g.fn()
+	}
+	if g.valueFn != nil {
+		return g.valueFn(g.value.Load())
 	}
 	return g.value.Load()
 }
