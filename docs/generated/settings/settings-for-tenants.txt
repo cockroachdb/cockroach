@@ -5,7 +5,6 @@ admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for
 admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering	application
 admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control	application
 admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control	application
-bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory	application
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application

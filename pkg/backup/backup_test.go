@@ -730,7 +730,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.ExpectErr(
 		t,
 		fmt.Sprintf(
-			`No full backup exists in "%s" to append an incremental backup to. To take a full backup, remove the subdirectory from the backup command`,
+			`No full backup exists in "%s" to append an incremental backup to`,
 			nonExistentFullDir,
 		),
 		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, nonExistentFullDir)...,
@@ -3518,8 +3518,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 				equalDir,
 				beforeTs))
 
-		sqlDB.ExpectErr(t, "A full backup already exists in .* Consider running an incremental backup"+
-			" to this full backup via `BACKUP INTO ",
+		sqlDB.ExpectErr(t, "pq: a full backup already exists in .*",
 			fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir,
 				equalTs))
 	}
