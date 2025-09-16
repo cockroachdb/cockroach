@@ -28,6 +28,7 @@ type deferredState struct {
 	scheduleIDsToDelete          []jobspb.ScheduleID
 	statsToRefresh               catalog.DescriptorIDSet
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
+	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
 	gcJobs
 }
 
@@ -39,6 +40,11 @@ type indexesToSplitAndScatter struct {
 	tableID     catid.DescID
 	indexID     catid.IndexID
 	copyIndexID catid.IndexID
+}
+
+type ttlScheduleMetadataUpdate struct {
+	tableID descpb.ID
+	newName string
 }
 
 type schemaChangerJobUpdate struct {
@@ -74,6 +80,16 @@ func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
 
 func (s *deferredState) RefreshStats(descriptorID descpb.ID) {
 	s.statsToRefresh.Add(descriptorID)
+}
+
+func (s *deferredState) UpdateTTLScheduleMetadata(
+	ctx context.Context, tableID descpb.ID, newName string,
+) error {
+	s.ttlScheduleMetadataUpdates = append(s.ttlScheduleMetadataUpdates, ttlScheduleMetadataUpdate{
+		tableID: tableID,
+		newName: newName,
+	})
+	return nil
 }
 
 func (s *deferredState) AddNewSchemaChangerJob(
@@ -187,6 +203,21 @@ func (s *deferredState) exec(
 	}
 	for _, scheduleID := range s.scheduleIDsToDelete {
 		if err := m.DeleteSchedule(ctx, scheduleID); err != nil {
+			return err
+		}
+	}
+	for _, ttlUpdate := range s.ttlScheduleMetadataUpdates {
+		descs, err := c.MustReadImmutableDescriptors(ctx, ttlUpdate.tableID)
+		if err != nil {
+			return err
+		}
+		desc := descs[0]
+		// Skip if this isn't a table descriptor
+		tableDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		if err := m.UpdateTTLScheduleLabel(ctx, tableDesc); err != nil {
 			return err
 		}
 	}

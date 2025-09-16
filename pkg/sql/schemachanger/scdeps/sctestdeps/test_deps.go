@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -692,6 +691,8 @@ func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descripto
 // mustReadMutableDescriptor looks up a descriptor and returns a mutable
 // deep copy.
 func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
+	//
+
 	u := s.uncommittedInMemory.LookupDescriptor(id)
 	if u == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
@@ -1332,8 +1333,8 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) er
 }
 
 // UpdateTTLScheduleLabel implements scexec.DescriptorMetadataUpdater
-func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error {
-	s.LogSideEffectf("update ttl schedule label #%d", tbl.ID)
+func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error {
+	s.LogSideEffectf("update ttl schedule label #%d", tbl.GetID())
 	return nil
 }
 
