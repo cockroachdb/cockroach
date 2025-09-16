@@ -227,6 +227,11 @@ const (
 	// to reduce frequent automatic statistics collection.
 	V25_4_SystemStatsTablesAutostatsFraction
 
+	// V25_4_DRPCSupport indicates that all nodes in the cluster support DRPC.
+	// This version gate allows nodes to safely send DRPC requests knowing that
+	// all cluster nodes can handle them.
+	V25_4_DRPCSupport
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -287,6 +292,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_4_TransactionDiagnosticsSupport: {Major: 25, Minor: 3, Internal: 10},
 
 	V25_4_SystemStatsTablesAutostatsFraction: {Major: 25, Minor: 3, Internal: 12},
+
+	V25_4_DRPCSupport: {Major: 25, Minor: 3, Internal: 14},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

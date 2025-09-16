@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -102,7 +103,7 @@ func (c *client) startLocked(
 		}()
 
 		stream, err := func() (RPCGossip_GossipClient, error) {
-			gc, err := c.dialGossipClient(ctx, rpcCtx)
+			gc, err := c.dialGossipClient(ctx, rpcCtx, rpcCtx.Settings)
 			if err != nil {
 				return nil, err
 			}
@@ -435,9 +436,9 @@ func (c *client) drpcDial(ctx context.Context, rpcCtx *rpc.Context) (drpc.Conn, 
 // it falls back to gRPC. The established connection is used to create a
 // RPCGossipClient.
 func (c *client) dialGossipClient(
-	ctx context.Context, rpcCtx *rpc.Context,
+	ctx context.Context, rpcCtx *rpc.Context, st *cluster.Settings,
 ) (RPCGossipClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && !rpcbase.DRPCEnabled(ctx, st) {
 		conn, err := c.dial(ctx, rpcCtx)
 		if err != nil {
 			return nil, err
