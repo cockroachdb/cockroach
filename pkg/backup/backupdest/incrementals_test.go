@@ -243,7 +243,7 @@ func TestFindAllIncrementalPaths(t *testing.T) {
 
 			incs, err := backupdest.FindAllIncrementalPaths(
 				ctx, &execCfg, incStore, store,
-				targetSubdir, false /* includeManifest */, false, /* customIncLocation */
+				targetSubdir, false, /* customIncLocation */
 			)
 			require.NoError(t, err)
 			require.Len(t, incs, len(targetChain)-1)
@@ -324,7 +324,7 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 
 		incs, err := backupdest.FindAllIncrementalPaths(
 			ctx, &execCfg, stores.inc, stores.root,
-			subdir, false /* includeManifest */, false, /* customIncLocation */
+			subdir, false, /* customIncLocation */
 		)
 		require.NoError(t, err)
 		require.Len(t, incs, numBackups-1)
@@ -348,7 +348,7 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 
 		incs, err := backupdest.FindAllIncrementalPaths(
 			ctx, &execCfg, stores.customInc, stores.root,
-			subdir, false /* includeManifest */, true, /* customIncLocation */
+			subdir, true, /* customIncLocation */
 		)
 		require.NoError(t, err)
 		require.Len(t, incs, numBackups-1)
@@ -390,14 +390,14 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 		// List from both default and custom incremental locations.
 		incs, err := backupdest.FindAllIncrementalPaths(
 			ctx, &execCfg, stores.inc, stores.root,
-			subdir, false /* includeManifest */, false, /* customIncLocation */
+			subdir, false, /* customIncLocation */
 		)
 		require.NoError(t, err)
 		require.Len(t, incs, numDefaultIncs)
 
 		incs, err = backupdest.FindAllIncrementalPaths(
 			ctx, &execCfg, stores.customInc, stores.root,
-			subdir, false /* includeManifest */, true, /* customIncLocation */
+			subdir, true, /* customIncLocation */
 		)
 		require.NoError(t, err)
 		require.Len(t, incs, numCustomIncs)
