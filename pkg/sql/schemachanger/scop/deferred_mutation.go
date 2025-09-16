@@ -96,3 +96,12 @@ type MaybeAddSplitForIndex struct {
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
+
+// UpdateTTLScheduleMetadata updates the TTL schedule metadata for a table
+// when its name changes. This ensures TTL jobs continue to work properly
+// after table renames.
+type UpdateTTLScheduleMetadata struct {
+	deferredMutationOp
+	TableID descpb.ID
+	NewName string
+}
