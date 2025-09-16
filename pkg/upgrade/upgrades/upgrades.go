@@ -111,6 +111,16 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore table storage parameters"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"create statement_hints table",
+		clusterversion.V25_4_AddSystemStatementHintsTable.Version(),
+		upgrade.NoPrecondition,
+		createStatementHintsTable,
+		upgrade.RestoreActionNotRequired(
+			"restore for a cluster predating this table can leave it empty",
+		),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

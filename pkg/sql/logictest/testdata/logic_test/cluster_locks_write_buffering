@@ -33,7 +33,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/75>  …/1/"d"       {1}       1
+<before:/Table/76>  …/1/"d"       {1}       1
 …/1/"d"             …/1/"r"       {1}       1
 …/1/"r"             <after:/Max>  {1}       1
 
@@ -97,15 +97,15 @@ user testuser
 query TT async,rowsort readReq
 SELECT * FROM t
 ----
-a   val1
-b   _updated
-c   _updated
-l   _updated
-m   _updated
-p   _updated
-s   _updated
-t   _updated
-z   val9
+a  val1
+b  val2
+c  val3
+l  val4
+m  val5
+p  val6
+s  val7
+t  val8
+z  val9
 
 user root
 
