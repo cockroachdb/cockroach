@@ -148,4 +148,7 @@ type DeferredMutationStateUpdater interface {
 	AddIndexForMaybeSplitAndScatter(
 		tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
 	)
+
+	// UpdateTTLScheduleMetadata updates the TTL schedule metadata for a table.
+	UpdateTTLScheduleMetadata(ctx context.Context, tableID descpb.ID, newName string) error
 }

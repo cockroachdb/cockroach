@@ -1,5 +1,5 @@
 /* setup */
-CREATE TABLE t1 (id INT PRIMARY KEY, data TEXT);
+CREATE TABLE t1 (id INT PRIMARY KEY, data TEXT, expired_at TIMESTAMPTZ) WITH (ttl_expiration_expression='expired_at');
 ----
 ...
 +object {100 101 t1} -> 104
@@ -10,6 +10,14 @@ ALTER TABLE t1 RENAME TO t1_renamed;
 begin transaction #1
 # begin StatementPhase
 checking for feature: ALTER TABLE
+write *eventpb.RenameTable to event log:
+  newTableName: defaultdb.public.t1_renamed
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹t1› RENAME TO ‹t1_renamed›
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t1
 ## StatementPhase stage 1 of 1 with 3 MutationType ops
 delete object namespace entry {100 101 t1} -> 104
 add object namespace entry {100 101 t1_renamed} -> 104
@@ -19,7 +27,7 @@ upsert descriptor #104
      modificationTime: {}
   -  name: t1
   +  name: t1_renamed
-     nextColumnId: 3
+     nextColumnId: 4
      nextConstraintId: 2
   ...
      schemaLocked: true
@@ -40,7 +48,7 @@ upsert descriptor #104
      modificationTime: {}
   -  name: t1
   +  name: t1_renamed
-     nextColumnId: 3
+     nextColumnId: 4
      nextConstraintId: 2
   ...
      schemaLocked: true

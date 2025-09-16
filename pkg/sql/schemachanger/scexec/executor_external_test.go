@@ -526,7 +526,7 @@ func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb
 
 // UpdateTTLScheduleLabel implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpdateTTLScheduleLabel(
-	ctx context.Context, tbl *tabledesc.Mutable,
+	ctx context.Context, tbl catalog.TableDescriptor,
 ) error {
 	return nil
 }
