@@ -52,7 +52,7 @@ type scanNode struct {
 	// if non-zero, softLimit is an estimation that only this many rows might be
 	// needed. It is a (potentially optimistic) "hint". If hardLimit is set
 	// (non-zero), softLimit must be unset (zero).
-	softLimit int64
+	softLimit uint64
 
 	// See exec.Factory.ConstructScan.
 	parallelize bool

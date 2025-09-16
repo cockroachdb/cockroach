@@ -726,7 +726,7 @@ func checkSupportForPlanNode(
 			var suffix string
 			estimate := n.estimatedRowCount
 			if n.softLimit != 0 && sd.UseSoftLimitForDistributeScan {
-				estimate = uint64(n.softLimit)
+				estimate = n.softLimit
 				suffix = " (using soft limit)"
 			}
 			if estimate >= sd.DistributeScanRowCountThreshold {
@@ -2205,8 +2205,8 @@ func initTableReaderSpecTemplate(
 	var post execinfrapb.PostProcessSpec
 	if n.hardLimit != 0 {
 		post.Limit = uint64(n.hardLimit)
-	} else if n.softLimit != 0 {
-		s.LimitHint = n.softLimit
+	} else if softLimit := int64(n.softLimit); softLimit > 0 {
+		s.LimitHint = softLimit
 	}
 	return s, post, nil
 }

@@ -337,8 +337,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	post := execinfrapb.PostProcessSpec{}
 	if params.HardLimit != 0 {
 		post.Limit = uint64(params.HardLimit)
-	} else if params.SoftLimit != 0 {
-		trSpec.LimitHint = params.SoftLimit
+	} else if softLimit := int64(params.SoftLimit); softLimit > 0 {
+		trSpec.LimitHint = softLimit
 	}
 
 	err = e.dsp.planTableReaders(

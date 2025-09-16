@@ -118,12 +118,17 @@ type ScanParams struct {
 	InvertedConstraint inverted.Spans
 
 	// If non-zero, the scan returns this many rows.
+	//
+	// Additionally, in plan-gist decoding path, this will be set to -1 to
+	// indicate presence of a limit, regardless of its value.
+	// TODO(yuzefovich): we could refactor this special case by adding an
+	// additional boolean that would allow us to switch to using uint64.
 	HardLimit int64
 
 	// If non-zero, the scan may still be required to return up to all its rows
 	// (or up to the HardLimit if it is set, but can be optimized under the
 	// assumption that only SoftLimit rows will be needed.
-	SoftLimit int64
+	SoftLimit uint64
 
 	Reverse bool
 

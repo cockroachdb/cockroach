@@ -1319,7 +1319,7 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		if scanParams.HardLimit != 0 {
 			return "LIMITED SCAN"
 		}
-		if scanParams.SoftLimit > 0 {
+		if scanParams.SoftLimit != 0 {
 			return "FULL SCAN (SOFT LIMIT)"
 		}
 		return "FULL SCAN"
