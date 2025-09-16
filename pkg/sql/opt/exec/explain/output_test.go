@@ -251,104 +251,130 @@ func TestContentionTimeOnWrites(t *testing.T) {
 	//   will be blocked until worker 1 commits its txn, so it should see
 	//   contention time reported in the output.
 
-	sem := make(chan struct{})
-	errCh := make(chan error, 1)
-	commitCh := make(chan struct{})
-	go func() {
-		defer close(errCh)
-		// Ensure that sem is always closed (in case we encounter an error
-		// before the mutation is performed).
-		var closedSem bool
-		defer func() {
-			if !closedSem {
-				close(sem)
-			}
-		}()
-		txn, err := conn.Begin()
-		if err != nil {
-			errCh <- err
-			return
-		}
-		_, err = txn.Exec("INSERT INTO t VALUES (1, 1)")
-		if err != nil {
-			errCh <- err
-			return
-		}
-		// Notify the main goroutine that the mutation has been performed.
-		close(sem)
-		closedSem = true
-		// Block until the main goroutine tells us that we're good to commit.
-		<-commitCh
-		if err = txn.Commit(); err != nil {
-			errCh <- err
-			return
-		}
-	}()
-
-	// Block until the mutation of worker 1 is done.
-	<-sem
-	// Check that no error was encountered before that.
-	select {
-	case err := <-errCh:
-		t.Fatal(err)
-	default:
-	}
-
-	var foundContention, foundLockWait, foundLatchWait bool
-	errCh2 := make(chan error, 1)
-	go func() {
-		defer close(errCh2)
-		// Execute the mutation via EXPLAIN ANALYZE and check whether the
-		// contention is reported.
-		contentionRE := regexp.MustCompile(`cumulative time spent due to contention.*`)
-		lockRE := regexp.MustCompile(`cumulative time spent in the lock table`)
-		latchRE := regexp.MustCompile(`cumulative time spent waiting to acquire latches`)
-		rows := runner.Query(t, "EXPLAIN ANALYZE UPSERT INTO t VALUES (1, 2)")
-		for rows.Next() {
-			var line string
-			if err := rows.Scan(&line); err != nil {
-				errCh2 <- err
+	// Retry the entire test if the first worker encounters a retryable error.
+	for {
+		sem := make(chan struct{})
+		errCh := make(chan error, 1)
+		commitCh := make(chan struct{})
+		go func() {
+			defer close(errCh)
+			// Ensure that sem is always closed (in case we encounter an error
+			// before the mutation is performed).
+			var closedSem bool
+			defer func() {
+				if !closedSem {
+					close(sem)
+				}
+			}()
+			txn, err := conn.Begin()
+			if err != nil {
+				errCh <- err
 				return
 			}
-			foundContention = foundContention || contentionRE.MatchString(line)
-			foundLockWait = foundLockWait || lockRE.MatchString(line)
-			foundLatchWait = foundLatchWait || latchRE.MatchString(line)
-		}
-	}()
+			_, err = txn.Exec("INSERT INTO t VALUES (1, 1)")
+			if err != nil {
+				errCh <- err
+				return
+			}
+			// Notify the main goroutine that the mutation has been performed.
+			close(sem)
+			closedSem = true
+			// Block until the main goroutine tells us that we're good to commit.
+			<-commitCh
+			if err = txn.Commit(); err != nil {
+				errCh <- err
+				return
+			}
+		}()
 
-	// Continuously poll the cluster queries until we see that the query that
-	// should be experiencing contention has started executing.
-	for {
-		row := runner.QueryRow(t, "SELECT count(*) FROM [SHOW CLUSTER QUERIES] WHERE query LIKE '%EXPLAIN ANALYZE UPSERT%'")
-		var count int
-		row.Scan(&count)
-		// Sleep for non-trivial amount of time to allow for worker 2 to start
-		// (if it hasn't already) and to experience the contention (if it has
-		// started).
-		time.Sleep(time.Second)
-		if count == 2 {
-			// We stop polling once we see 2 queries matching the LIKE pattern:
-			// the mutation query from worker 2 and the polling query itself.
-			break
+		// Block until the mutation of worker 1 is done.
+		<-sem
+		// Check that no error was encountered before that.
+		var worker1Err error
+		select {
+		case err := <-errCh:
+			worker1Err = err
+		default:
 		}
+
+		// If worker 1 encountered a retryable error, restart the test from the beginning.
+		if worker1Err != nil {
+			// Check if this is a retryable transaction error by examining the error message.
+			// Retryable errors typically contain specific patterns.
+			errStr := worker1Err.Error()
+			isRetryable := strings.Contains(errStr, "restart transaction") ||
+				strings.Contains(errStr, "retry transaction") ||
+				strings.Contains(errStr, "RETRY_WRITE_TOO_OLD") ||
+				strings.Contains(errStr, "RETRY_SERIALIZABLE")
+
+			if isRetryable {
+				// Clean up any existing data and retry
+				runner.Exec(t, "DELETE FROM t WHERE k = 1")
+				continue
+			}
+			// If it's not retryable, fail the test
+			t.Fatal(worker1Err)
+		}
+
+		var foundContention, foundLockWait, foundLatchWait bool
+		errCh2 := make(chan error, 1)
+		go func() {
+			defer close(errCh2)
+			// Execute the mutation via EXPLAIN ANALYZE and check whether the
+			// contention is reported.
+			contentionRE := regexp.MustCompile(`cumulative time spent due to contention.*`)
+			lockRE := regexp.MustCompile(`cumulative time spent in the lock table`)
+			latchRE := regexp.MustCompile(`cumulative time spent waiting to acquire latches`)
+			rows := runner.Query(t, "EXPLAIN ANALYZE UPSERT INTO t VALUES (1, 2)")
+			for rows.Next() {
+				var line string
+				if err := rows.Scan(&line); err != nil {
+					errCh2 <- err
+					return
+				}
+				foundContention = foundContention || contentionRE.MatchString(line)
+				foundLockWait = foundLockWait || lockRE.MatchString(line)
+				foundLatchWait = foundLatchWait || latchRE.MatchString(line)
+			}
+		}()
+
+		// Continuously poll the cluster queries until we see that the query that
+		// should be experiencing contention has started executing.
+		for {
+			row := runner.QueryRow(t, "SELECT count(*) FROM [SHOW CLUSTER QUERIES] WHERE query LIKE '%EXPLAIN ANALYZE UPSERT%'")
+			var count int
+			row.Scan(&count)
+			// Sleep for non-trivial amount of time to allow for worker 2 to start
+			// (if it hasn't already) and to experience the contention (if it has
+			// started).
+			time.Sleep(time.Second)
+			if count == 2 {
+				// We stop polling once we see 2 queries matching the LIKE pattern:
+				// the mutation query from worker 2 and the polling query itself.
+				break
+			}
+		}
+
+		// Allow worker 1 to commit which should unblock both workers.
+		close(commitCh)
+
+		// Wait for both workers to exit. Also perform sanity checks that the
+		// workers didn't run into any errors.
+		err := <-errCh
+		require.NoError(t, err)
+		err = <-errCh2
+		require.NoError(t, err)
+
+		// Meat of the test - verify that the contention was reported.
+		require.True(t, foundContention)
+
+		// Verify that either lock or latch wait time was reported. The contention
+		// time is (usually) the sum of these two.
+		require.True(t, foundLockWait || foundLatchWait)
+
+		// Test completed successfully, break out of retry loop
+		break
 	}
-
-	// Allow worker 1 to commit which should unblock both workers.
-	close(commitCh)
-
-	// Wait for both workers to exit. Also perform sanity checks that the
-	// workers didn't run into any errors.
-	err := <-errCh
-	require.NoError(t, err)
-	err = <-errCh2
-	require.NoError(t, err)
-
-	// Meat of the test - verify that the contention was reported.
-	require.True(t, foundContention)
-
-	// Verify that either lock or latch wait time was reported. The contention
-	// time is (usually) the sum of these two.
-	require.True(t, foundLockWait || foundLatchWait)
 }
 
 func TestRetryFields(t *testing.T) {
