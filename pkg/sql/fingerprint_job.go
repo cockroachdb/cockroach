@@ -60,7 +60,9 @@ func (f *fingerprintResumer) Resume(ctx context.Context, execCtx interface{}) er
 
 // fingerprintTable performs fingerprinting for a table target.
 func (f *fingerprintResumer) fingerprintTable(
-	ctx context.Context, execCfg *ExecutorConfig, target *jobspb.FingerprintDetails_FingerprintTableTarget,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	target *jobspb.FingerprintDetails_FingerprintTableTarget,
 ) error {
 	// Get the table descriptor
 	tableID := target.TableID
@@ -152,7 +154,9 @@ func (f *fingerprintResumer) fingerprintTable(
 
 // fingerprintTenant performs fingerprinting for a tenant target.
 func (f *fingerprintResumer) fingerprintTenant(
-	ctx context.Context, execCfg *ExecutorConfig, target *jobspb.FingerprintDetails_FingerprintTenantTarget,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	target *jobspb.FingerprintDetails_FingerprintTenantTarget,
 ) error {
 	log.Infof(ctx, "fingerprinting tenant %s (%s)", target.TenantName, target.TenantId.String())
 	
@@ -255,7 +259,9 @@ func (f *fingerprintResumer) updateProgress(
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (f *fingerprintResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
+func (f *fingerprintResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	log.Infof(ctx, "fingerprint job %d failed or canceled: %v", f.job.ID(), jobErr)
 	return nil
 }
