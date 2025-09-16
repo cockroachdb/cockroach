@@ -512,8 +512,8 @@ type testRequester struct {
 
 var _ requester = &testRequester{}
 
-func (tr *testRequester) hasWaitingRequests() bool {
-	return tr.waitingRequests
+func (tr *testRequester) hasWaitingRequests() (bool, getterQualification) {
+	return tr.waitingRequests, burstableQualification /*arbitrary*/
 }
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
@@ -527,7 +527,7 @@ func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 func (tr *testRequester) close() {}
 
 func (tr *testRequester) tryGet(count int64) {
-	rv := tr.granter.tryGet(count)
+	rv := tr.granter.tryGet(burstableQualification /*arbitrary*/, count)
 	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", tr.workKind,
 		tr.additionalID, count, rv)
 }
