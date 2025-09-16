@@ -8,6 +8,7 @@ package aggmetric
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -78,5 +79,65 @@ func TestSQLGaugeMethods(t *testing.T) {
 	g.Dec(2, "2", "2")
 
 	testFile := "SQLGauge.txt"
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+}
+
+func TestBoundedGauge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const cacheSize = 10
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	g := NewBoundedGauge(metric.Metadata{
+		Name: "foo_gauge",
+	}, "database", "application_name")
+	g.mu.children = &UnorderedCacheWrapper{
+		cache: initialiseCacheStorageForTesting(),
+	}
+
+	r.AddMetric(g)
+
+	for i := 0; i < cacheSize+5; i++ {
+		g.Update(int64(i+1), "1", strconv.Itoa(i))
+	}
+
+	// wait more than cache eviction time to make sure that keys are not evicted based on only cache size.
+	time.Sleep(6 * time.Second)
+
+	testFile := "boundedGauge_pre_eviction.txt"
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+	for i := 0 + cacheSize; i < cacheSize+5; i++ {
+		g.Inc(5, "2", strconv.Itoa(i))
+	}
+
+	testFile = "boundedGauge_post_eviction.txt"
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+}
+
+func TestBoundedGaugeMethods(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	g := NewBoundedGauge(metric.Metadata{
+		Name: "foo_gauge",
+	}, "database", "application_name")
+	g.mu.children = &UnorderedCacheWrapper{
+		cache: initialiseCacheStorageForTesting(),
+	}
+
+	r.AddMetric(g)
+
+	// Test Update operation
+	g.Update(10, "1", "1")
+	g.Update(20, "2", "2")
+
+	// Test Inc operation
+	g.Inc(5, "1", "1")
+	g.Dec(3, "2", "2")
+
+	testFile := "boundedGauge.txt"
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 }
