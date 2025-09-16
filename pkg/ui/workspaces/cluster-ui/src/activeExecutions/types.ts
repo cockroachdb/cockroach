@@ -37,6 +37,7 @@ export interface ActiveExecution {
   database?: string;
   query?: string; // For transactions, this is the latest query executed.
   timeSpentWaiting?: moment.Duration;
+  isolationLevel?: string; 
 }
 
 export type ActiveStatement = ActiveExecution &
@@ -44,7 +45,7 @@ export type ActiveStatement = ActiveExecution &
     user: string;
     clientAddress: string;
     isFullScan: boolean;
-    planGist?: string;
+    planGist?: string; 
   };
 
 export type ActiveTransaction = ActiveExecution & {
