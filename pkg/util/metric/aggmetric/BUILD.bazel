@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/cache",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
@@ -43,6 +44,7 @@ go_test(
         "//pkg/util/cache",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_crlib//testutils/require",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
