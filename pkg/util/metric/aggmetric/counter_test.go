@@ -12,14 +12,16 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
+	"time"
+	
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/crlib/testutils/require"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAggCounter(t *testing.T) {
@@ -71,4 +73,60 @@ func TestAggCounter(t *testing.T) {
 
 	testFile = "SQLCounter_post_eviction.txt"
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+}
+
+func TestBoundedCounter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const cacheSize = 10
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	c := NewBoundedCounter(metric.Metadata{
+		Name: "foo_counter",
+	}, "database", "application_name")
+	c.mu.children = &UnorderedCacheWrapper{
+		cache: initialiseCacheStorageForTesting(),
+	}
+
+	r.AddMetric(c)
+
+	for i := 0; i < cacheSize+5; i++ {
+		c.Inc(1, "1", strconv.Itoa(i))
+	}
+
+	//wait more than cache eviction time to make sure that keys are not evicted based on only cache size.
+	time.Sleep(6 * time.Second)
+
+	testFile := "boundedCounter_pre_eviction.txt"
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+	for i := 0 + cacheSize; i < cacheSize+5; i++ {
+		c.Inc(1, "2", strconv.Itoa(i))
+	}
+
+	testFile = "boundedCounter_post_eviction.txt"
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+}
+
+func initialiseCacheStorageForTesting() *cache.UnorderedCache {
+	return cache.NewUnorderedCache(cache.Config{
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			childMetric, _ := value.(ChildMetric)
+
+			// Check if the child metric has exceeded 20 seconds and cache size is greater than 5000
+			if labelSliceCachedChildMetric, ok := childMetric.(LabelSliceCachedChildMetric); ok {
+				currentTime := timeutil.Now()
+				age := currentTime.Sub(labelSliceCachedChildMetric.CreatedAt())
+				return size > 10 && age > 5*time.Second
+			}
+			return size > cacheSize
+		},
+		OnEvictedEntry: func(entry *cache.Entry) {
+			if childMetric, ok := entry.Value.(LabelSliceCachedChildMetric); ok {
+				childMetric.DecrementLabelSliceCacheReference()
+			}
+		},
+	})
 }
