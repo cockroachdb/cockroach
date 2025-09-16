@@ -213,22 +213,28 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 			sqlDB.QueryRow(t, createStmt).Scan(&jobID)
 			var sinkURI, description string
 			sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+			sqlDB.Query(t, "CANCEL ALL CHANGEFEED JOBS")
+			testutils.SucceedsWithin(t, func() error {
+				var status string
+				sqlDB.QueryRow(t, "SELECT status FROM [SHOW CHANGEFEED JOB $1]", jobID).Scan(&status)
+				if status != "canceled" {
+					return errors.Newf("expected job status canceled, got %s", status)
+				}
+				return nil
+			}, 1*time.Minute)
 			replacer := strings.NewReplacer(apiSecret, "redacted", certSecret, "redacted")
 			expectedSinkURI := replacer.Replace(tc.uri)
 			expectedDescription := replacer.Replace(createStmt)
 			require.Equal(t, expectedSinkURI, sinkURI)
 			require.Equal(t, expectedDescription, description)
+			queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
+			require.NotContains(t, queryStr, apiSecret)
+			require.NotContains(t, queryStr, certSecret)
+			queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
+			require.NotContains(t, queryStr, apiSecret)
+			require.NotContains(t, queryStr, certSecret)
 		})
 	}
-
-	t.Run("jobs", func(t *testing.T) {
-		queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
-		require.NotContains(t, queryStr, apiSecret)
-		require.NotContains(t, queryStr, certSecret)
-		queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
-		require.NotContains(t, queryStr, apiSecret)
-		require.NotContains(t, queryStr, certSecret)
-	})
 }
 
 func TestShowChangefeedJobs(t *testing.T) {
