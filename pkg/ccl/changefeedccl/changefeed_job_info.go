@@ -23,8 +23,6 @@ const (
 )
 
 const (
-	// resolvedTablesFilename: ~changefeed/resolved-tables.binpb
-	resolvedTablesFilename = jobInfoFilenamePrefix + "resolved-tables" + jobInfoFilenameExtension
 	// perTableProtectedTimestampsFilename: ~changefeed/per-table-protected-timestamps.binpb
 	perTableProtectedTimestampsFilename = jobInfoFilenamePrefix + "per-table-protected-timestamps" + jobInfoFilenameExtension
 )
@@ -49,7 +47,6 @@ func writeChangefeedJobInfo(
 
 // readChangefeedJobInfo reads a changefeed job info protobuf from the
 // job_info table. A changefeed-specific filename is required.
-// TODO(#148119): Use this function to read.
 func readChangefeedJobInfo(
 	ctx context.Context, filename string, info protoutil.Message, txn isql.Txn, jobID jobspb.JobID,
 ) error {

@@ -8,19 +8,6 @@ package cockroach.ccl.changefeedccl.cdcprogresspb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb";
 
 import "gogoproto/gogo.proto";
-import "jobs/jobspb/jobs.proto";
-import "util/hlc/timestamp.proto";
-
-// ResolvedTables contains per-table resolved timestamp information.
-message ResolvedTables {
-  map<uint32, util.hlc.Timestamp> tables = 1 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
-    (gogoproto.nullable) = false
-  ];
-
-  // TODO(#148124): Write to this field for aggregator-to-frontier messages.
-  cockroach.sql.jobs.jobspb.ResolvedSpan.BoundaryType boundary_type = 2;
-}
 
 // ProtectedTimestampRecords is a map from table descriptor IDs to protected timestamp record IDs.
 message ProtectedTimestampRecords {
