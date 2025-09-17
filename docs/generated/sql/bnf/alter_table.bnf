@@ -5,6 +5,7 @@ alter_table_stmt ::=
 	| 'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt 'WITH' 'EXPIRATION' a_expr
 	| 'ALTER' 'TABLE' table_name 'UNSPLIT' 'AT' select_stmt
 	| 'ALTER' 'TABLE' table_name 'UNSPLIT' 'ALL'
+	| alter_scatter_stmt
 	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
 	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
 	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'DISCARD'
