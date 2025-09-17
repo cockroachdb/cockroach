@@ -232,3 +232,7 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 func (as *AllocatorSync) IsCompatibleWithMMA() bool {
 	return false
 }
+
+func (as *AllocatorSync) HasOverloadedDim() bool {
+	return false
+}

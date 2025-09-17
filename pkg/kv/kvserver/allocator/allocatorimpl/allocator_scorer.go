@@ -747,20 +747,36 @@ func (o LoadAwareRangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	return o.AllocatorSync.IsCompatibleWithMMA()
 }
 
+// rebalance from source:
+// 1. if the range count converges, give 0 (more likely to be picked).
+// 2. if the range count does not converge, give 1 (more to boost, less likely
+// to be picked).
+// - if this store is underloaded, less likely to be rebalanced, give 1.
+// - if this store is overloaded, more likely to be rebalanced, give 0.
+//
+// rebalance to target:
+// 1. if the range count converges, give 1 (more likely to be picked).
+// 2. if the range count does not converge, give 0.
+// - if this store is underloaded, more likely to be rebalanced to, give 1.
+// - if this store is overloaded, less likely to be rebalanced to, give 0.
 func (o LoadAwareRangeCountScorerOptions) rebalanceFromConvergesScore(
 	eqClass equivalenceClass,
 ) int {
 	// If this store does not need to be rebalanced, giving a boost.
+	rangeCountScore := 0
 	if !rebalanceConvergesRangeCountOnMean(
 		eqClass.candidateSL, eqClass.existing.Capacity, eqClass.existing.Capacity.RangeCount-1,
 	) {
-		return 1
+		rangeCountScore = 1
+	}
+	if !o.AllocatorSync.HasOverloadedDim() {
+		rangeCountScore += 1
 	}
 	// this can need a help to shed more ranges away, when this is being compared
 	// with another pair. mma can decide whether we should give it another boost
 	// to make this target less likely (if this store is underloaded, mma wants to
 	// make this less likely compared to another 1).
-	return 0
+	return rangeCountScore
 }
 
 // TODO: is it okay for balanceScore and rebalanceFromConvergesScore to stay
@@ -772,10 +788,14 @@ func (o LoadAwareRangeCountScorerOptions) rebalanceFromConvergesScore(
 func (o LoadAwareRangeCountScorerOptions) rebalanceToConvergesScore(
 	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
 ) int {
+	rangeCountScore := 0
 	if rebalanceConvergesRangeCountOnMean(eqClass.candidateSL, candidate.Capacity, candidate.Capacity.RangeCount+1) {
-		return 1
+		rangeCountScore = 1
 	}
-	return 0
+	if !o.AllocatorSync.HasOverloadedDim() {
+		rangeCountScore += 1
+	}
+	return rangeCountScore
 }
 
 // DiskCapacityOptions is the scorer options for disk fullness. It is used to
