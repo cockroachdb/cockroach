@@ -55,19 +55,19 @@ write_bytes_per_second#1: last:  [s1=2600, s2=3001, s3=3199, s4=3002, s5=3200] (
 write_bytes_per_second#1: thrash_pct: [s1=14%, s2=10%, s3=11%, s4=13%, s5=12%]  (sum=60%)
 artifacts[mma-only]: 3334492f2bf1a359
 ==========================
-cpu#1: last:  [s1=2601030000, s2=3200356666, s3=3000668666, s4=3001334000, s5=3201610666] (stddev=219072564.16, mean=3000999999.60, sum=15004999998)
-cpu#1: thrash_pct: [s1=26%, s2=21%, s3=23%, s4=21%, s5=18%]  (sum=109%)
-cpu_util#1: last:  [s1=0.29, s2=0.36, s3=0.33, s4=0.33, s5=0.36] (stddev=0.02, mean=0.33, sum=2)
-cpu_util#1: thrash_pct: [s1=26%, s2=21%, s3=23%, s4=21%, s5=18%]  (sum=109%)
+cpu#1: last:  [s1=2600261333, s2=3200356666, s3=3201182666, s4=3001334000, s5=3001865333] (stddev=219275406.57, mean=3000999999.60, sum=15004999998)
+cpu#1: thrash_pct: [s1=25%, s2=21%, s3=24%, s4=21%, s5=17%]  (sum=107%)
+cpu_util#1: last:  [s1=0.29, s2=0.36, s3=0.36, s4=0.33, s5=0.33] (stddev=0.02, mean=0.33, sum=2)
+cpu_util#1: thrash_pct: [s1=25%, s2=21%, s3=24%, s4=21%, s5=17%]  (sum=107%)
 leases#1: first: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
 leases#1: last:  [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
 leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 replicas#1: first: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
-replicas#1: last:  [s1=13, s2=16, s3=15, s4=15, s5=16] (stddev=1.10, mean=15.00, sum=75)
+replicas#1: last:  [s1=13, s2=16, s3=16, s4=15, s5=15] (stddev=1.10, mean=15.00, sum=75)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
-write_bytes_per_second#1: last:  [s1=2601, s2=3200, s3=3000, s4=3001, s5=3201] (stddev=218.91, mean=3000.60, sum=15003)
-write_bytes_per_second#1: thrash_pct: [s1=25%, s2=21%, s3=21%, s4=22%, s5=13%]  (sum=102%)
-artifacts[mma-count]: 28319483179a695f
+write_bytes_per_second#1: last:  [s1=2600, s2=3200, s3=3201, s4=3001, s5=3001] (stddev=219.27, mean=3000.60, sum=15003)
+write_bytes_per_second#1: thrash_pct: [s1=26%, s2=21%, s3=28%, s4=22%, s5=15%]  (sum=113%)
+artifacts[mma-count]: ee0f38e1cccdb06b
 ==========================
 
 # TODO(kvoli): Case (2)

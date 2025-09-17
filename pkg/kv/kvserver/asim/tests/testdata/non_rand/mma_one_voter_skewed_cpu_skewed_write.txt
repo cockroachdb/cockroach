@@ -54,7 +54,7 @@ leases#1: thrash_pct: [s1=1470%, s2=1470%]  (sum=2940%)
 replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 replicas#1: last:  [s1=99, s2=101] (stddev=1.00, mean=100.00, sum=200)
 replicas#1: thrash_pct: [s1=1470%, s2=1470%]  (sum=2940%)
-write_bytes_per_second#1: last:  [s1=2250561, s2=2751082] (stddev=250260.50, mean=2500821.50, sum=5001643)
+write_bytes_per_second#1: last:  [s1=2250923, s2=2750949] (stddev=250013.00, mean=2500936.00, sum=5001872)
 write_bytes_per_second#1: thrash_pct: [s1=26%, s2=4%]  (sum=30%)
-artifacts[mma-count]: 8e90dc5eb7e0e643
+artifacts[mma-count]: 3743b5c1bdb01f62
 ==========================

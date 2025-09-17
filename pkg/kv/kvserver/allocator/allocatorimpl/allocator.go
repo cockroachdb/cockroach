@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -619,6 +620,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
+	as            *mmaintegration.AllocatorSync
 	deterministic bool
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -658,6 +660,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 // close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
+	as *mmaintegration.AllocatorSync,
 	deterministic bool,
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -670,6 +673,7 @@ func MakeAllocator(
 	}
 	allocator := Allocator{
 		st:            st,
+		as:            as,
 		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
@@ -1848,6 +1852,7 @@ func (a Allocator) RebalanceTarget(
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	results := rankedCandidateListForRebalancing(
 		ctx,
+		rangeUsageInfo,
 		sl,
 		removalConstraintsChecker,
 		rebalanceConstraintsChecker,
@@ -2109,8 +2114,10 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 // method is not the Raft leader (meaning that it doesn't know whether follower
 // replicas need a snapshot or not), produces no results.
 // - It excludes replicas that are on stores which are IO overloaded.
+// - It excludes replicas that are cpu-overloaded.
 func (a *Allocator) ValidLeaseTargets(
 	ctx context.Context,
+	rangeUsageInfo allocator.RangeUsageInfo,
 	storePool storepool.AllocatorStorePool,
 	desc *roachpb.RangeDescriptor,
 	conf *roachpb.SpanConfig,
@@ -2194,40 +2201,42 @@ func (a *Allocator) ValidLeaseTargets(
 		candidates = preferred
 	}
 
-	// Filter the candidate list to only those stores which are not IO
-	// overloaded.
-	nonIOOverloadedPreferred := a.nonIOOverloadedLeaseTargets(
+	// Filter the candidate list to only those stores which are not IO overloaded
+	// or overloaded from mma's perspective.
+	nonOverloadedPreferred := a.nonOverloadedLeaseTargets(
 		ctx,
+		rangeUsageInfo,
 		storePool,
 		candidates,
 		leaseRepl.StoreID(),
 		a.IOOverloadOptions(),
 	)
 
-	return nonIOOverloadedPreferred
+	return nonOverloadedPreferred
 }
 
-// nonIOOverloadedLeaseTargets returns a list of non IO overloaded lease
+// nonOverloadedLeaseTargets returns a list of non IO overloaded lease
 // replica targets and whether the leaseholder replica should be replaced,
 // given the existing replicas, IO overload  options and IO overload of
 // existing replica stores.
-func (a *Allocator) nonIOOverloadedLeaseTargets(
+func (a *Allocator) nonOverloadedLeaseTargets(
 	ctx context.Context,
+	rangeUsageInfo allocator.RangeUsageInfo,
 	storePool storepool.AllocatorStorePool,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	ioOverloadOptions IOOverloadOptions,
 ) (candidates []roachpb.ReplicaDescriptor) {
-	// We return early to avoid unnecessary work when IO overload is set to be
-	// ignored anyway.
-	if ioOverloadOptions.LeaseEnforcementLevel == IOOverloadThresholdIgnore {
-		return existingReplicas
-	}
-
 	sl, _, _ := storePool.GetStoreListFromIDs(replDescsToStoreIDs(existingReplicas), storepool.StoreFilterSuspect)
 
-	for _, replDesc := range existingReplicas {
-		store, ok := sl.FindStoreByID(replDesc.StoreID)
+	excludedDueToOverload := func(rangeInfo allocator.RangeUsageInfo, candStoreID roachpb.StoreID) bool {
+		if a.as.IsInConflictWithMMA(rangeInfo, leaseStoreID, candStoreID, sl, true) {
+			return true
+		}
+		// Should we exclude the candidate if it is suspect regardless?
+		if ioOverloadOptions.LeaseEnforcementLevel == IOOverloadThresholdIgnore {
+			return false
+		}
 		// If the replica is the current leaseholder, don't include it as a
 		// candidate and if it is filtered out of the store list due to being
 		// suspect; or the leaseholder store doesn't pass the leaseholder IO
@@ -2238,22 +2247,27 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 		// same point a candidate becomes ineligible as it could lead to thrashing.
 		// Instead, we create a buffer between the two to avoid leases moving back
 		// and forth.
-		if (replDesc.StoreID == leaseStoreID) &&
+		store, ok := sl.FindStoreByID(candStoreID)
+		if (candStoreID == leaseStoreID) &&
 			(!ok || !ioOverloadOptions.ExistingLeaseCheck(ctx, store, sl)) {
-			continue
+			return true
 		}
-
 		// If the replica is not the leaseholder, don't include it as a candidate
 		// if it is filtered out similar to above, or the replica store doesn't
 		// pass the lease transfer IO overload check.
-		if replDesc.StoreID != leaseStoreID &&
+		if candStoreID != leaseStoreID &&
 			(!ok || !ioOverloadOptions.transferLeaseToCheck(ctx, store, sl)) {
-			continue
+			return true
 		}
-
-		candidates = append(candidates, replDesc)
+		return false
 	}
 
+	for _, replDesc := range existingReplicas {
+		if excludedDueToOverload(rangeUsageInfo, replDesc.StoreID) {
+			continue
+		}
+		candidates = append(candidates, replDesc)
+	}
 	return candidates
 }
 
@@ -2419,7 +2433,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	validTargets := a.ValidLeaseTargets(ctx, storePool, desc, conf, existing, leaseRepl, opts)
+	validTargets := a.ValidLeaseTargets(ctx, usageInfo, storePool, desc, conf, existing, leaseRepl, opts)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(validTargets) == 0 || (len(validTargets) == 1 && validTargets[0].StoreID == leaseRepl.StoreID()) {
@@ -2752,6 +2766,10 @@ func (a *Allocator) CountBasedRebalancingDisabled() bool {
 	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
+func (a *Allocator) LoadAware() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricAndCount
+}
+
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
@@ -2781,6 +2799,7 @@ func (a *Allocator) ShouldTransferLease(
 
 	existing = a.ValidLeaseTargets(
 		ctx,
+		usageInfo,
 		storePool,
 		desc,
 		conf,

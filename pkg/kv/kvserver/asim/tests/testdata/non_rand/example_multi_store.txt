@@ -40,9 +40,9 @@ failed assertion sample 1
 	max/mean=4.00 tick=5
 ==========================
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
-leases#1: last:  [s1=3, s2=1, s3=0, s4=0, s5=0, s6=1, s7=0, s8=0, s9=1, s10=2, s11=1, s12=1, s13=1, s14=3] (stddev=1.00, mean=1.00, sum=14)
-leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=25%, s10=27%, s11=0%, s12=0%, s13=50%, s14=28%]  (sum=130%)
-artifacts[mma-count]: 244e528808f042b8
+leases#1: last:  [s1=3, s2=1, s3=0, s4=0, s5=0, s6=1, s7=0, s8=0, s9=1, s10=3, s11=1, s12=1, s13=1, s14=2] (stddev=1.00, mean=1.00, sum=14)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=25%, s10=28%, s11=0%, s12=0%, s13=50%, s14=27%]  (sum=130%)
+artifacts[mma-count]: 80321d64459a0213
 failed assertion sample 1
   balance stat=leases threshold=(≤1.00) ticks=6
 	max/mean=3.00 tick=0

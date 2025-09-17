@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"reflect"
 	"sort"
@@ -22,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -41,12 +44,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func MakeAllocatorSync(
+	sp *storepool.StorePool, st *cluster.Settings,
+) *mmaintegration.AllocatorSync {
+	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st)
+}
 
 var simpleSpanConfig = &roachpb.SpanConfig{
 	NumReplicas: 1,
@@ -2561,7 +2573,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(ctx)
@@ -2952,7 +2964,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -3021,7 +3033,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -6063,7 +6075,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+			a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 				return c.latency[id], true
 			}, nil)
 			localitySummary := c.stats.SnapshotRatedSummary(now)
@@ -8070,7 +8082,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(sp, st), false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 
@@ -8176,7 +8188,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil, false, nil, nil)
+	a := MakeAllocator(nil, MakeAllocatorSync(nil, nil), false, nil, nil)
 	action, priority := a.ComputeAction(context.Background(), nil, &roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -9125,7 +9137,7 @@ func exampleRebalancing(
 		storepool.NewMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).NodeLivenessFunc,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	alloc := MakeAllocator(st, MakeAllocatorSync(sp, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, false
 	}, nil)
 

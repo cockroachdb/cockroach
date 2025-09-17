@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -45,6 +46,7 @@ type mmaState interface {
 	// AdjustPendingChangesDisposition is called by the allocator sync to adjust
 	// the disposition of pending changes.
 	AdjustPendingChangesDisposition(changeIDs []mmaprototype.ChangeID, success bool)
+	IsInConflictWithMMA(rangeUsageInfo allocator.RangeUsageInfo, existing roachpb.StoreID, cand roachpb.StoreID, cands []roachpb.StoreID, cpuOnly bool) bool
 }
 
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
@@ -227,4 +229,21 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 				chg.Target.StoreID, trackedChange.usage, chg.ChangeType)
 		}
 	}
+}
+
+func (as *AllocatorSync) IsInConflictWithMMA(
+	rangeUsageInfo allocator.RangeUsageInfo,
+	existing roachpb.StoreID,
+	cand roachpb.StoreID,
+	cands storepool.StoreList,
+	cpuOnly bool,
+) bool {
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) != kvserverbase.LBRebalancingMultiMetricAndCount {
+		return false
+	}
+	storeIDs := make([]roachpb.StoreID, 0, len(cands.Stores))
+	for _, s := range cands.Stores {
+		storeIDs = append(storeIDs, s.StoreID)
+	}
+	return as.mmaAllocator.IsInConflictWithMMA(rangeUsageInfo, existing, cand, storeIDs, cpuOnly)
 }
