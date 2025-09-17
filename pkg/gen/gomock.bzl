@@ -4,6 +4,7 @@ GOMOCK_SRCS = [
     "//pkg/ccl/changefeedccl/mocks:kafka_admin_v2_generated.go",
     "//pkg/ccl/changefeedccl/mocks:kafka_client_v2_generated.go",
     "//pkg/ccl/changefeedccl/mocks:tenant_status_server_generated.go",
+    "//pkg/cmd/roachtest/cluster/mock:mock_cluster_generated.go",
     "//pkg/cmd/roachtest/clusterstats:mock_client_generated_test.go",
     "//pkg/cmd/roachtest/clusterstats:mock_cluster_generated_test.go",
     "//pkg/cmd/roachtest/clusterstats:mock_test_generated_test.go",

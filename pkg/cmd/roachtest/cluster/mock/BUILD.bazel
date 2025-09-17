@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "gomock")
+
+# gomock rule generates mock_cluster_generated.go from the Cluster interface
+gomock(
+    name = "mock_cluster",  # Target name
+    testonly = True,
+    out = "mock_cluster_generated.go",  # Output file (not _test.go, to avoid Gazelle confusion)
+    interfaces = ["Cluster"],
+    library = "//pkg/cmd/roachtest/cluster",  # Points to the interface
+    package = "mockcluster",  # Go package name (can be anything that's legal Go)
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock",
+    # visibility = ["//pkg/cmd/roachtest/mixedversion:__pkg__"],  # or wider, e.g., //visibility:public
+    visibility = ["//visibility:public"],
+)
+
+# go_library wraps the generated mock for consumption in tests
+go_library(
+    name = "mockcluster",
+    srcs = ["mock_cluster_generated.go"],  # Must match output of gomock
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock",
+    #visibility = ["//pkg/cmd/roachtest/mixedversion:__pkg__"],  # Or more open as needed
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",  # Cluster interface
+        "@com_github_golang_mock//gomock",  # gomock.Controller, etc.
+    ],
+)

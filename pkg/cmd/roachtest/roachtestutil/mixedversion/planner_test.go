@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	mockcluster "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -490,7 +491,7 @@ func newTest(ctrl *gomock.Controller, options ...CustomOption) *Test {
 	// separate process to use latestPredecessor. This is intentional as it
 	// prevents flaking whenever new versions are added.
 	testOptions.predecessorFunc = testPredecessorFunc
-	mc := NewMockCluster(ctrl)
+	mc := mockcluster.NewMockCluster(ctrl)
 	//mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 1)) // similuates having a workload node
 	mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
@@ -1038,7 +1039,7 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 	for _, fn := range testOverrides {
 		fn(&testOptions)
 	}
-	mc := NewMockCluster(ctrl)
+	mc := mockcluster.NewMockCluster(ctrl)
 	mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	mvt := &Test{
