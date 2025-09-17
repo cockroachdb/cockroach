@@ -79,28 +79,29 @@ func computeThrashing(values []float64) thrashing {
 // in the dominant direction (if there is one). If no direction is dominant, the
 // result roughly matches the total variation.
 //
-// The inputs tu and td are the upwards and (positive) downwards total
-// variations, respectively.
+// The inputs u and d are the upwards and (positive) downwards total variations,
+// respectively.
 //
 // Properties:
-// - symmetric in tu, td
-// - min(u,d) <= tdtv(tu,td) <= tu+td
+// - tdtv(u,d) = tdtv(d,u) (symmetry)
+// - min(u,d) <= tdtv(u,d) <= u+d
 // - tdtv(u,0) = tdtv(0,u) = 0
-// - tdtv(u,u) = 2t
-// - tdtv(ku,kd) = k*tdtv(u,d) for k>=0
-// - tdtv(l*ku, kd) > tdtv(ku) for l>1 (same for kd)
-func tdtv(tu, td float64) float64 {
-	tmin := min(tu, td)
+// - tdtv(u,u) = 2⋅u
+// - tdtv(k⋅u,k⋅d) = k⋅tdtv(u,d) for k≥0
+// - tdtv(l⋅u, d) > tdtv(u) for l>1 (same in second argument)
+func tdtv(u, d float64) float64 {
+	tmin := min(u, d)
 	if tmin == 0 {
 		// There's only one direction of movement, so we discount all variation.
 		return 0
 	}
-	frac := tmin / max(tu, td) // in [0, 1]
+	frac := tmin / max(u, d) // in [0, 1]
 	// The exponent can't exceed 1 because that would violate the scaling property
-	// (last property above). For the endpoint 1, tdtv=2min(tu,td). The choice of
-	// 0.8 is somewhat arbitrary, but gives a reasonable trade-off.
+	// (last property above). For the endpoint exponent 1, tdtv=2⋅min(u,d), and for
+	// the endpoint exponent 0, we get the (vanilla) total variation u+d.
+	// The choice of 0.8 is somewhat arbitrary, but gives a reasonable trade-off.
 	alpha := math.Pow(frac, 0.8)
-	return alpha*(tu+td) + (1-alpha)*tmin
+	return alpha*(u+d) + (1-alpha)*tmin
 }
 
 func extrema(vs []float64) (vmin, vmax, vrange float64) {
