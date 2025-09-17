@@ -778,50 +778,6 @@ func getBackupChain(
 	return manifests, localityInfo, baseEncryptionInfo, allIters, nil
 }
 
-// concludeBackupCompaction completes the backup compaction process after the backup has been
-// completed by writing the manifest and associated metadata to the backup destination.
-//
-// TODO (kev-cao): Can move this helper to the backup code at some point.
-func concludeBackupCompaction(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	store cloud.ExternalStorage,
-	details jobspb.BackupDetails,
-	kmsEnv cloud.KMSEnv,
-	backupManifest *backuppb.BackupManifest,
-) error {
-	backupID := uuid.MakeV4()
-	backupManifest.ID = backupID
-
-	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.DeprecatedBackupManifestName,
-		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
-		return err
-	}
-	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, store, details.EncryptionOptions,
-		kmsEnv, backupManifest); err != nil {
-		return err
-	}
-
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
-	if err := backupinfo.WriteTableStatistics(
-		ctx, store, details.EncryptionOptions, kmsEnv, &statsTable,
-	); err != nil {
-		return errors.Wrapf(err, "writing table statistics")
-	}
-
-	return errors.Wrapf(
-		backupdest.WriteBackupIndexMetadata(
-			ctx,
-			execCtx.ExecCfg(),
-			execCtx.User(),
-			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
-			details,
-			backupManifest.RevisionStartTime,
-		),
-		"writing backup index metadata",
-	)
-}
-
 // processProgress processes progress updates from the bulk processor for a backup and updates
 // the associated manifest.
 func processProgress(
@@ -923,7 +879,7 @@ func doCompaction(
 		return err
 	}
 
-	return concludeBackupCompaction(
+	return WriteBackupMetadata(
 		ctx, execCtx, defaultStore, details, kmsEnv, manifest,
 	)
 }

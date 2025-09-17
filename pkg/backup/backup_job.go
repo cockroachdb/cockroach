@@ -127,10 +127,8 @@ func backup(
 	details jobspb.BackupDetails,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
-	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 	resumer *backupResumer,
 	backupManifest *backuppb.BackupManifest,
-	makeExternalStorage cloud.ExternalStorageFactory,
 ) (_ roachpb.RowCount, numBackupInstances int, _ error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
@@ -387,72 +385,8 @@ func backup(
 		}
 	}
 
-	backupID := uuid.MakeV4()
-	backupManifest.ID = backupID
-	// Write additional partial descriptors to each node for partitioned backups.
-	if len(storageByLocalityKV) > 0 {
-		resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
-		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
-		for _, file := range backupManifest.Files {
-			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
-		}
-
-		nextPartitionedDescFilenameID := 1
-		for kv, conf := range storageByLocalityKV {
-			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, kv)
-			// Set a unique filename for each partition backup descriptor. The ID
-			// ensures uniqueness, and the kv string appended to the end is for
-			// readability.
-			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
-				nextPartitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
-			nextPartitionedDescFilenameID++
-			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
-			desc := backuppb.BackupPartitionDescriptor{
-				LocalityKV: kv,
-				Files:      filesByLocalityKV[kv],
-				BackupID:   backupID,
-			}
-
-			if err := func() error {
-				store, err := makeExternalStorage(ctx, *conf)
-				if err != nil {
-					return err
-				}
-				defer store.Close()
-				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename,
-					encryption, &kmsEnv, &desc)
-			}(); err != nil {
-				return roachpb.RowCount{}, 0, err
-			}
-		}
-	}
-
-	// TODO(msbutler): version gate writing the old manifest once we can guarantee
-	// a cluster version that will not read the old manifest.
-	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.DeprecatedBackupManifestName,
-		encryption, &kmsEnv, backupManifest); err != nil {
+	if err := WriteBackupMetadata(ctx, execCtx, defaultStore, details, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, 0, err
-	}
-
-	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
-		&kmsEnv, backupManifest); err != nil {
-		return roachpb.RowCount{}, 0, err
-	}
-
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
-	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
-		return roachpb.RowCount{}, 0, err
-	}
-
-	if err := backupdest.WriteBackupIndexMetadata(
-		ctx,
-		execCtx.ExecCfg(),
-		execCtx.User(),
-		execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
-		details,
-		backupManifest.RevisionStartTime,
-	); err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrapf(err, "writing backup index metadata")
 	}
 
 	return backupManifest.EntryCounts, numBackupInstances, nil
@@ -692,15 +626,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
-	for kv, uri := range details.URIsByLocalityKV {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
-		if err != nil {
-			return err
-		}
-		storageByLocalityKV[kv] = &conf
-	}
-
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 	var memSize int64
@@ -742,10 +667,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			details,
 			p.ExecCfg().Settings,
 			defaultStore,
-			storageByLocalityKV,
 			b,
 			backupManifest,
-			p.ExecCfg().DistSQLSrv.ExternalStorage,
 		)
 		if err == nil {
 			break
@@ -892,6 +815,96 @@ func (b *backupResumer) ensureClusterIDMatches(clusterID uuid.UUID) error {
 		return errors.Newf("cannot resume backup started on another cluster (%s != %s)", createdBy, clusterID)
 	}
 	return nil
+}
+
+// WriteBackupMetadata completes the backup compaction process after the backup has been
+// completed by writing the manifest and associated metadata to the backup destination.
+func WriteBackupMetadata(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	store cloud.ExternalStorage,
+	details jobspb.BackupDetails,
+	kmsEnv cloud.KMSEnv,
+	backupManifest *backuppb.BackupManifest,
+) error {
+	backupID := uuid.MakeV4()
+	backupManifest.ID = backupID
+
+	// Write additional partial descriptors to each node for partitioned backups.
+	if len(details.URIsByLocalityKV) > 0 {
+
+		storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
+		for kv, uri := range details.URIsByLocalityKV {
+			conf, err := cloud.ExternalStorageConfFromURI(uri, execCtx.User())
+			if err != nil {
+				return err
+			}
+			storageByLocalityKV[kv] = &conf
+		}
+
+		//resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
+		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
+		for _, file := range backupManifest.Files {
+			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
+		}
+
+		nextPartitionedDescFilenameID := 1
+		for kv, conf := range storageByLocalityKV {
+			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, kv)
+			// Set a unique filename for each partition backup descriptor. The ID
+			// ensures uniqueness, and the kv string appended to the end is for
+			// readability.
+			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
+				nextPartitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
+			nextPartitionedDescFilenameID++
+			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
+			desc := backuppb.BackupPartitionDescriptor{
+				LocalityKV: kv,
+				Files:      filesByLocalityKV[kv],
+				BackupID:   backupID,
+			}
+
+			if err := func() error {
+				store, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, *conf)
+				if err != nil {
+					return err
+				}
+				defer store.Close()
+				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename,
+					details.EncryptionOptions, kmsEnv, &desc)
+			}(); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.DeprecatedBackupManifestName,
+		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
+		return err
+	}
+	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, store, details.EncryptionOptions,
+		kmsEnv, backupManifest); err != nil {
+		return err
+	}
+
+	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
+	if err := backupinfo.WriteTableStatistics(
+		ctx, store, details.EncryptionOptions, kmsEnv, &statsTable,
+	); err != nil {
+		return errors.Wrapf(err, "writing table statistics")
+	}
+
+	return errors.Wrapf(
+		backupdest.WriteBackupIndexMetadata(
+			ctx,
+			execCtx.ExecCfg(),
+			execCtx.User(),
+			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+			details,
+			backupManifest.RevisionStartTime,
+		),
+		"writing backup index metadata",
+	)
 }
 
 func prepBackupMeta(
@@ -1845,32 +1858,10 @@ func (b *backupResumer) readManifestOnResume(
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
-		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions, kmsEnv)
+	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore, details.EncryptionOptions, kmsEnv)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
-		}
-		// Try reading temp checkpoint.
-		tmpCheckpoint := backupinfo.TempCheckpointFileNameForJob(b.job.ID())
-		desc, memSize, err = backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
-			tmpCheckpoint, details.EncryptionOptions, kmsEnv)
-		if err != nil {
-			return nil, 0, err
-		}
-		// "Rename" temp checkpoint.
-		if err := backupinfo.WriteBackupManifestCheckpoint(
-			ctx, details.URI, details.EncryptionOptions, kmsEnv, &desc, cfg, user,
-		); err != nil {
-			mem.Shrink(ctx, memSize)
-			return nil, 0, errors.Wrapf(err, "renaming temp checkpoint file")
-		}
-		// Best effort remove temp checkpoint.
-		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
-			log.Dev.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
-		}
-		if err := defaultStore.Delete(ctx, backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint); err != nil {
-			log.Dev.Errorf(ctx, "error removing temporary checkpoint %s", backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint)
 		}
 	}
 
@@ -2009,16 +2000,6 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		// We first attempt to delete from base directory to account for older
-		// backups, and then from the progress directory.
-		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName)
-		if err != nil {
-			log.Dev.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
-		}
-		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName+backupinfo.BackupManifestChecksumSuffix)
-		if err != nil {
-			log.Dev.Warningf(ctx, "unable to delete checkpoint checksum file in base directory: %+v", err)
-		}
 		// Delete will not delete a nonempty directory, so we have to go through
 		// all files and delete each file one by one.
 		return exportStore.List(ctx, backupinfo.BackupProgressDirectory, "", func(p string) error {
