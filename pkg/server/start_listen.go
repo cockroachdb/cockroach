@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -135,22 +134,10 @@ func startListenRPCAndSQL(
 		}
 	}
 
-	// Host drpc only if it's _possible_ to turn it on (this requires a test build
-	// or env var). If the setting _is_ on, then it was overridden in testing and
-	// we want to host the server too.
-	hostDRPC := rpcbase.ExperimentalDRPCEnabled.Validate(nil /* not used */, true) == nil ||
-		rpcbase.ExperimentalDRPCEnabled.Get(&cfg.Settings.SV)
-
-	// If we're not hosting drpc, make a listener that never accepts anything.
-	// We will start the dRPC server all the same; it barely consumes any
-	// resources.
-	var drpcL net.Listener = &noopListener{make(chan struct{})}
-	if hostDRPC {
-		// Throw away the header before passing the conn to the drpc server. This
-		// would not be required explicitly if we used `drpcmigrate.ListenMux` but
-		// cmux keeps the prefix.
-		drpcL = &dropDRPCHeaderListener{wrapped: m.Match(drpcMatcher)}
-	}
+	// dropDRPCHeaderListener discards the header before passing the connection
+	// to the drpc server. This would not be required if we used
+	// `drpcmigrate.ListenMux`, but cmux keeps the prefix.
+	var drpcL net.Listener = &dropDRPCHeaderListener{wrapped: m.Match(drpcMatcher)}
 
 	grpcL := m.Match(cmux.Any())
 	if serverTestKnobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok {
