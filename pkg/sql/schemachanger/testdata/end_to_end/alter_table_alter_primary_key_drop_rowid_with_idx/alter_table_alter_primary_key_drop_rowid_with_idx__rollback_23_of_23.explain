@@ -42,7 +42,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN m 
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (m-), IndexID: 9}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (m-), IndexID: 10 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (m-), IndexID: 11}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx-), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx-), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 4 (t_a_idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 4 (t_a_idx-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 3, SourceIndexID: 8 (t_pkey-)}
@@ -96,7 +96,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN m 
       │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 104 (t), IndexID: 8 (t_pkey-), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 6 (t_pkey-)}
       │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey-), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (m-), IndexID: 6 (t_pkey-)}
-      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx-), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2}
+      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx-), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
       │    └── 10 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":8,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":104}

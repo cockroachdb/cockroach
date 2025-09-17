@@ -81,7 +81,7 @@ ALTER TABLE defaultdb.foo_index_zone_cfg DROP COLUMN k
   {columnId: 3, indexId: 3, ordinalInKind: 1, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 3, kind: KEY_SUFFIX, tableId: 105}
-- [[SecondaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 3, isCreatedExplicitly: true, tableId: 105}
 - [[IndexName:{DescID: 105, Name: idx, IndexID: 3}, ABSENT], PUBLIC]
   {indexId: 3, name: idx, tableId: 105}
@@ -137,7 +137,7 @@ DROP INDEX defaultdb.foo_index_zone_cfg@idx
   {columnId: 3, indexId: 3, ordinalInKind: 1, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 3, kind: KEY_SUFFIX, tableId: 105}
-- [[SecondaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
+- [[SecondaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC]
   {indexId: 3, isCreatedExplicitly: true, tableId: 105}
 - [[IndexName:{DescID: 105, Name: idx, IndexID: 3}, ABSENT], PUBLIC]
   {indexId: 3, name: idx, tableId: 105}

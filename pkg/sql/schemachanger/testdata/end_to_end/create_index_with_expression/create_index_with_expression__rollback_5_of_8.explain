@@ -12,7 +12,7 @@ Schema change plan for rolling back CREATE INDEX idx1 ON defaultdb.public.t (low
       │    │    ├── TRANSIENT_VALIDATED → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
       │    │    ├── WRITE_ONLY          → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
       │    │    ├── PUBLIC              → ABSENT      ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
-      │    │    ├── DELETE_ONLY         → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx1-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+      │    │    ├── DELETE_ONLY         → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx1-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC              → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-), IndexID: 2 (idx1-)}
       │    │    ├── PUBLIC              → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (idx1-)}
       │    │    ├── PUBLIC              → ABSENT      IndexName:{DescID: 104 (t), Name: "idx1", IndexID: 2 (idx1-)}
