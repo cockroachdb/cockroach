@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -239,7 +240,7 @@ func GetBackupTreeIndexMetadata(
 			if err != nil {
 				return err
 			}
-			reader, size, err := store.ReadFile(
+			reader, _, err := store.ReadFile(
 				ctx, path.Join(indexDir, basename), cloud.ReadOptions{},
 			)
 			if err != nil {
@@ -247,9 +248,9 @@ func GetBackupTreeIndexMetadata(
 			}
 			defer reader.Close(ctx)
 
-			bytes := make([]byte, size)
-			if _, err := reader.Read(ctx, bytes); err != nil {
-				return errors.Wrapf(err, "reading index file %s bytes", basename)
+			bytes, err := ioctx.ReadAll(ctx, reader)
+			if err != nil {
+				return errors.Wrapf(err, "reading index file %s", basename)
 			}
 
 			index := backuppb.BackupIndexMetadata{}
