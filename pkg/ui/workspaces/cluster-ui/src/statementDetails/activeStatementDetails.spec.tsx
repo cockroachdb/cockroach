@@ -45,6 +45,7 @@ describe("ActiveStatementDetails page", () => {
     screen.getByText("127.0.0.1", { exact: false });
     screen.getByText("123456789", { exact: false });
     screen.getByText("fac8885a-f40a-4666-b746-a45061faad74", { exact: false });
+    screen.getByText("SERIALIZABLE", { exact: false });
   });
 
   it("switches to the Explain Plan tab and shows the plan", async () => {
