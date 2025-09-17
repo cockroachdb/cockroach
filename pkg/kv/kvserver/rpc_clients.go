@@ -8,6 +8,7 @@ package kvserver
 import (
 	context "context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -38,4 +39,10 @@ func DialPerStoreClient(
 	nd *nodedialer.Dialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCPerStoreClient, error) {
 	return nodedialer.DialRPCClient(nd, ctx, nodeID, class, NewGRPCPerStoreClientAdapter, NewDRPCPerStoreClientAdapter)
+}
+
+func DialInternalClient(
+	nd *nodedialer.Dialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) (kvpb.RPCInternalClient, error) {
+	return nodedialer.DialRPCClient(nd, ctx, nodeID, class, kvpb.NewGRPCInternalClientAdapter, kvpb.NewDRPCInternalClientAdapter)
 }

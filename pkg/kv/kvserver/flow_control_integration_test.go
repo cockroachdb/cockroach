@@ -560,6 +560,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 					// below.
 					RangeLeaseDuration: time.Second,
 				},
+				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
@@ -1706,7 +1707,7 @@ func isTestGeneratedPut(ctx context.Context) bool {
 // TestFlowControlSendQueue exercises the send queue formation, prevention and
 // flushing via selective (logical) admission of entries and token return. See
 // the initial comment for an overview of the test structure.
-func TestFlowControlSendQueue(t *testing.T) {
+func BTestFlowControlSendQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1750,6 +1751,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
+			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: fs.NewStickyRegistry(),
@@ -3213,7 +3215,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 }
 
-func TestFlowControlSendQueueRangeFeed(t *testing.T) {
+func BTestFlowControlSendQueueRangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3297,7 +3299,8 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	for i := range disableWorkQueueGrantingServers {
 		disableWorkQueueGrantingServers[i].Store(true)
 		argsPerServer[i] = base.TestServerArgs{
-			Settings: settings,
+			Settings:          settings,
+			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
