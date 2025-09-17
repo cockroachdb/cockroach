@@ -28,14 +28,12 @@ type thrashing struct {
 	uptv, dntv float64 // upwards and downwards total variations (both nonnegative)
 	// normTV is a normalization factor for the total variation. By default, it is
 	// initialized to the range of the input values, i.e. max - min (or 1 if max
-	// == min). `tv/normTV` then measures how many times thrashing has "swept out"
-	// the effective range of values the time series has taken on. This measure
-	// can be misleading if the time series has early outliers that are not
-	// accounted for in the total variation, but for the applications at hand it
-	// generally makes sense. `tv/normTV` can grow arbitrarily large if the time
-	// series oscillates frequently (and enough datapoints are present). To get
-	// a sense of a "thrashing rate", `tv/(normTV*T)` or `tv/(normTV*runs) could
-	// be of interest.
+	// == min). `tdtv/normTV` then measures how many times thrashing has "swept out"
+	// the effective range of values the time series has taken on.
+	// `tdtv/normTV` can grow arbitrarily large if the time series oscillates
+	// frequently (and enough datapoints are present). To get a sense of a
+	// "thrashing rate", `tdtv/(normTV*T)` or `tdtv/(normTV*runs) could be of
+	// interest.
 	normTV float64
 }
 
