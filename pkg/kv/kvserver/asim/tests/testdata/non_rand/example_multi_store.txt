@@ -15,10 +15,11 @@ assertion stat=leases type=balance ticks=6 upper_bound=1
 ----
 asserting: max_{stores}(leases)/mean_{stores}(leases) ≤ 1.00 at each of last 6 ticks
 
-assertion stat=leases type=steady ticks=6 upper_bound=0
+assertion stat=leases type=steady ticks=6 exact_bound=0
 ----
-asserting: |leases(t)/mean_{T}(leases) - 1| ≤ 0.00 ∀ t∈T and each store (T=last 6 ticks)
+asserting: |leases(t)/mean_{T}(leases) - 1| = 0.00 ∀ t∈T and each store (T=last 6 ticks)
 
+# TODO(tbg): fix the NaN issue here.
 eval duration=5m seed=42 metrics=(leases) cfgs=(sma-count,mma-only)
 ----
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
@@ -35,3 +36,9 @@ failed assertion sample 1
 	max/mean=4.00 tick=3
 	max/mean=4.00 tick=4
 	max/mean=4.00 tick=5
+  steady state stat=leases threshold=(=0.00) ticks=6
+	store=3 min/mean=NaN max/mean=NaN
+	store=4 min/mean=NaN max/mean=NaN
+	store=5 min/mean=NaN max/mean=NaN
+	store=7 min/mean=NaN max/mean=NaN
+	store=8 min/mean=NaN max/mean=NaN
