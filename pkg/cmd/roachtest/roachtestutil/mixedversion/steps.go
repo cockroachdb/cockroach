@@ -97,9 +97,6 @@ func (s startStep) Description() string {
 // binary on the cluster nodes.
 func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	systemNodes := h.System.Descriptor.Nodes
-	l.Printf("[startStep][Run] starting cluster at version %s", s.version.String())
-	l.Printf("[startStep][Run] system nodes: %v", systemNodes)
-	l.Printf("[startStep][Run] all(?) nodes: %v", h.runner.cluster.All())
 	binaryPath, err := clusterupgrade.UploadCockroach(
 		ctx, s.rt, l, h.runner.cluster, h.runner.cluster.All(), s.version,
 	)
@@ -1036,19 +1033,9 @@ func (s stageWorkloadBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	numWorkloadNodes := len(h.runner.cluster.All()) - len(h.runner.cluster.CRDBNodes())
-	// Check that these numbers make sense
-	l.Printf("[stageWorkloadBinaryStep][Run] numWorkloadNodes: %d", numWorkloadNodes)
 	if numWorkloadNodes > 0 {
-		l.Printf(
-			"[stageWorkloadBinaryStep][Run] range params, begin: %d, end: %d, these"+
-				" are not indexes, but the 1 indexed vals of nodes....... expecting begin: 5, end:5",
-			len(h.runner.cluster.CRDBNodes())+1, len(h.runner.cluster.All()))
 		workloadNodes := h.runner.cluster.Range(
 			len(h.runner.cluster.CRDBNodes())+1, len(h.runner.cluster.All()))
-		l.Printf("[stageWorkloadBinaryStep][Run] expecting [5]... workloadNodes: %v", workloadNodes)
-		l.Printf(
-			"[stageWorkloadBinaryStep][Run] these vars should be the same, s.version: %s, h.System.FromVersion: %s", s.version.String(), h.System.FromVersion.String())
-
 		_, err := clusterupgrade.UploadCockroach(
 			ctx, s.rt, l, h.runner.cluster, workloadNodes, s.version)
 		if err != nil {

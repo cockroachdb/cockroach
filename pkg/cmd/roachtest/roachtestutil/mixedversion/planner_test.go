@@ -494,7 +494,6 @@ func newTest(ctrl *gomock.Controller, options ...CustomOption) *Test {
 	// prevents flaking whenever new versions are added.
 	testOptions.predecessorFunc = testPredecessorFunc
 	mc := mockcluster.NewMockCluster(ctrl)
-	//mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 1)) // similuates having a workload node
 	mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	return &Test{

@@ -357,9 +357,7 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		addSteps(p.finalizeUpgradeSteps(service, to, scheduleHooks, virtualClusterRunning))
 
 		// run after upgrade steps, if any,
-		p.logger.Printf("[testPlanner][Plan] before p.afterUpgradeSteps len(steps): %d", len(steps))
 		addSteps(p.afterUpgradeSteps(service, scheduleHooks))
-		p.logger.Printf("[testPlanner][Plan] after p.afterUpgradeSteps len(steps): %d", len(steps))
 
 		return steps
 	}
@@ -805,11 +803,9 @@ func (p *testPlanner) afterUpgradeSteps(
 	p.setFinalizing(service, false)
 	p.setStage(service, AfterUpgradeFinalizedStage)
 
-	p.logger.Printf("[testPlanner][afterUpgradeSteps] p.cluster.All(): %d, len(p.cluster.CRDBNodes()): %d",
-		len(p.cluster.All()), len(p.cluster.CRDBNodes())) // panics here, hm p.cluster is nil
 	if len(p.cluster.All()) != len(p.cluster.CRDBNodes()) {
-		// Add step for staging binary on workload node(s) that matches the current version
-		p.logger.Printf("[testPlanner][afterUpgradeSteps] Adding new step for workload node binary")
+		// Add step for staging binary on workload node(s) that matches the
+		// current cluster version
 		steps = append(steps,
 			p.newSingleStep(stageWorkloadBinaryStep{
 				version: service.FromVersion,
@@ -817,13 +813,10 @@ func (p *testPlanner) afterUpgradeSteps(
 			}))
 	}
 	if scheduleHooks {
-		p.logger.Printf("[testPlanner][afterUpgradeSteps] scheduleHooks: %t", scheduleHooks)
 		steps = append(steps,
 			p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))...)
-		p.logger.Printf("[testPlanner][afterUpgradeSteps] after appending scheduleHooks steps len(steps): %d", len(steps))
 	}
 	// if we are not scheduling hooks, return a nil slice.
-	p.logger.Printf("[testPlanner][afterUpgradeSteps] len(steps) to return: %d", len(steps))
 	return steps
 }
 

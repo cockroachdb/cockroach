@@ -83,16 +83,6 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
         # Required for generated mocks
-        "//pkg/roachprod/prometheus",  #keep
         "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
     ],
 )
-
-#gomock(
-#    name = "mock_cluster",  # Target name
-#    out = "mock_cluster_generated_test.go",  # Output Go file
-#    interfaces = ["Cluster"],  # Name of the interface in cluster_interface.go
-#    library = "//pkg/cmd/roachtest/cluster",  # ✅ actual interface source
-#    package = "mixedversion",  # ✅ generate into your own package for direct use
-#    visibility = ["//visibility:public"],  # ✅ fine if you reuse it in multiple tests
-#)
