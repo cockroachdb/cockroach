@@ -1329,11 +1329,14 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	grpcServer, err := newGRPCServer(startupCtx, rpcContext, registry)
+	requestMetrics := rpc.NewRequestMetrics()
+	registry.AddMetricStruct(requestMetrics)
+
+	grpcServer, err := newGRPCServer(startupCtx, rpcContext, requestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext)
+	drpcServer, err := newDRPCServer(startupCtx, rpcContext, requestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
