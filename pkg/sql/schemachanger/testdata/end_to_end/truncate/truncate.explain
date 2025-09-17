@@ -14,7 +14,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC    IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey+)}
- │         │    ├── ABSENT → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_key+), ConstraintID: 4, RecreateSourceIndexID: 2}
+ │         │    ├── ABSENT → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_key+), ConstraintID: 4, RecreateSourceIndexID: 2, RecreateTargetIndexID: 3}
  │         │    ├── ABSENT → PUBLIC    IndexName:{DescID: 104 (t), Name: "t_j_key", IndexID: 4 (t_j_key+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_j_key+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_j_key+)}
@@ -22,7 +22,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
  │         │    ├── PUBLIC → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0}
+ │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 21 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
@@ -53,7 +53,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │    │    │    ├── PUBLIC    → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey+)}
  │    │    │    ├── PUBLIC    → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (t_pkey+)}
  │    │    │    ├── PUBLIC    → ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey+)}
- │    │    │    ├── PUBLIC    → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_key+), ConstraintID: 4, RecreateSourceIndexID: 2}
+ │    │    │    ├── PUBLIC    → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_key+), ConstraintID: 4, RecreateSourceIndexID: 2, RecreateTargetIndexID: 3}
  │    │    │    ├── PUBLIC    → ABSENT IndexName:{DescID: 104 (t), Name: "t_j_key", IndexID: 4 (t_j_key+)}
  │    │    │    ├── PUBLIC    → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_j_key+)}
  │    │    │    ├── PUBLIC    → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_j_key+)}
@@ -61,7 +61,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │    │    ├── 3 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
  │    │    │    ├── ABSENT    → PUBLIC IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │    │    │    └── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0}
+ │    │    │    └── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -71,7 +71,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC    IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey+)}
- │         │    ├── ABSENT → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_key+), ConstraintID: 4, RecreateSourceIndexID: 2}
+ │         │    ├── ABSENT → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_key+), ConstraintID: 4, RecreateSourceIndexID: 2, RecreateTargetIndexID: 3}
  │         │    ├── ABSENT → PUBLIC    IndexName:{DescID: 104 (t), Name: "t_j_key", IndexID: 4 (t_j_key+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_j_key+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_j_key+)}
@@ -79,7 +79,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
  │         │    ├── PUBLIC → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0}
+ │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 26 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── MaybeAddSplitForIndex {"CopyIndexID":1,"IndexID":3,"TableID":104}
@@ -115,7 +115,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
       │    │    ├── VALIDATED → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (t_j_key-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_j_key-)}
-      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC    → ABSENT      IndexName:{DescID: 104 (t), Name: "t_j_key", IndexID: 2 (t_j_key-)}
       │    └── 9 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
@@ -131,7 +131,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
            ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_j_key-)}
            └── 6 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
