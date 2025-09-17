@@ -868,6 +868,18 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 	}
 }
 
+func (a *allocatorState) ShouldNotRebalanceForMMA(
+	cand roachpb.StoreDescriptor, cands []roachpb.StoreID,
+) bool {
+	var means meansForStoreSet
+	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
+	storeIDs := makeStoreIDPostingList(cands)
+	means.stores = storeIDs
+	computeMeansForStoreSet(a.cs, &means, scratchNodes)
+	sls := a.cs.computeLoadSummary(cand.StoreID, &means.storeLoad, &means.nodeLoad)
+	return sls.sls >= overloadSlow
+}
+
 // RegisterExternalChanges implements the Allocator interface. All changes should
 // correspond to the same range, panic otherwise.
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
