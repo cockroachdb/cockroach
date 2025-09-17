@@ -2172,7 +2172,8 @@ func computeLoadSummary(
 	var worstDim LoadDimension
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
-		ls := loadSummaryForDimension(ctx, ss.StoreID, 0, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
+		const nodeIDForLogging = 0
+		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
 			msl.load[i], msl.util[i])
 		if ls > sls {
 			sls = ls
@@ -2184,7 +2185,8 @@ func computeLoadSummary(
 			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
 		}
 	}
-	nls := loadSummaryForDimension(ctx, 0, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
+	const storeIDForLogging = 0
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,
