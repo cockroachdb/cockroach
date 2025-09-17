@@ -291,7 +291,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    │         └── ValidateIndex {"IndexID":8,"TableID":104}
  │    ├── Stage 16 of 23 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
- │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 4 (t_a_idx+)}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 4 (t_a_idx+)}
  │    │    │    └── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 4 (t_a_idx+)}
@@ -333,14 +333,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    ├── Stage 18 of 23 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey+), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey~)}
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    └── 2 Backfill operations
  │    │         ├── BackfillIndex {"IndexID":10,"SourceIndexID":8,"TableID":104}
  │    │         └── BackfillIndex {"IndexID":4,"SourceIndexID":8,"TableID":104}
  │    ├── Stage 19 of 23 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILLED → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey+), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey~)}
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    └── 4 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":10,"TableID":104}
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":4,"TableID":104}
@@ -349,7 +349,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    ├── Stage 20 of 23 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey+), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey~)}
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    └── 4 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":10,"TableID":104}
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":4,"TableID":104}
@@ -358,14 +358,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    ├── Stage 21 of 23 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey+), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey~)}
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    └── 2 Backfill operations
  │    │         ├── MergeIndex {"BackfilledIndexID":10,"TableID":104,"TemporaryIndexID":11}
  │    │         └── MergeIndex {"BackfilledIndexID":4,"TableID":104,"TemporaryIndexID":5}
  │    ├── Stage 22 of 23 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── MERGED     → WRITE_ONLY            PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey+), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey~)}
- │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 11, ConstraintID: 9, SourceIndexID: 8 (t_pkey~)}
  │    │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 3, SourceIndexID: 8 (t_pkey~)}
@@ -379,14 +379,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    └── Stage 23 of 23 in PostCommitPhase
  │         ├── 2 elements transitioning toward PUBLIC
  │         │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey+), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey~)}
- │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+ │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │         └── 2 Validation operations
  │              ├── ValidateIndex {"IndexID":10,"TableID":104}
  │              └── ValidateIndex {"IndexID":4,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 5 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
-      │    │    ├── VALIDATED             → PUBLIC              SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2}
+      │    │    ├── VALIDATED             → PUBLIC              SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_a_idx+), ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
       │    │    └── ABSENT                → PUBLIC              IndexName:{DescID: 104 (t), Name: "t_a_idx", IndexID: 4 (t_a_idx+)}
       │    ├── 21 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── PUBLIC                → TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 6 (t_pkey~), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey-)}
@@ -418,7 +418,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── PUBLIC                → ABSENT              IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT              IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 1 (t_pkey-)}
       │    │    ├── VALIDATED             → DELETE_ONLY         PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
-      │    │    └── PUBLIC                → VALIDATED           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0}
+      │    │    └── PUBLIC                → VALIDATED           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    └── 36 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":6,"TableID":104}
@@ -474,7 +474,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── DELETE_ONLY         → ABSENT                PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 2 (t_a_idx-)}
       │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 2 (t_a_idx-)}
-      │    │    ├── VALIDATED           → DELETE_ONLY           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0}
+      │    │    ├── VALIDATED           → DELETE_ONLY           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC              → ABSENT                IndexName:{DescID: 104 (t), Name: "t_a_idx", IndexID: 2 (t_a_idx-)}
       │    └── 19 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
@@ -505,7 +505,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 8 (t_pkey~)}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (m+), IndexID: 8 (t_pkey~)}
       │    ├── 1 element transitioning toward ABSENT
-      │    │    └── DELETE_ONLY           → ABSENT                SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0}
+      │    │    └── DELETE_ONLY           → ABSENT                SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    └── 9 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":6,"TableID":104}

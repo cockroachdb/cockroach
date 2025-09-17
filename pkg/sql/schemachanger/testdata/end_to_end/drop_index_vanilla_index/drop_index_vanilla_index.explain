@@ -11,7 +11,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+ │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 2 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              └── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
@@ -20,14 +20,14 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │    │    │    └── ABSENT    → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    ├── 1 element transitioning toward ABSENT
- │    │    │    └── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+ │    │    │    └── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+ │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 4 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
@@ -38,7 +38,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
-      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC    → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
       │    └── 6 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
@@ -49,7 +49,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward ABSENT
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
       │    └── 4 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
