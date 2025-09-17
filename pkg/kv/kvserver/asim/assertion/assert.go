@@ -34,9 +34,9 @@ func (tht ThresholdType) String() string {
 	case ExactBound:
 		return "="
 	case UpperBound:
-		return "<"
+		return "≤"
 	case LowerBound:
-		return ">"
+		return "≥"
 	default:
 		panic("unknown threshold type")
 	}
@@ -128,10 +128,28 @@ func (sa SteadyStateAssertion) Assert(
 		max, _ := stats.Max(trimmedStoreStats)
 		min, _ := stats.Min(trimmedStoreStats)
 
-		maxMean := math.Abs(max/mean - 1)
-		minMean := math.Abs(min/mean - 1)
+		var maxMean, minMean float64
+		if mean == 0 {
+			if min == 0 || max == 0 {
+				// If the min is zero, all datapoints are nonnegative, so for the mean
+				// to be zero, they must all be zero. If the max is zero, vice versa.
+				// Define 0/0=1 to capture that they're equal, which is what matters
+				// here (0/0 defaults to NaN in Go, but we don't want that here).
+				maxMean = 0
+				minMean = 0
+			} else {
+				// The datapoints cross zero, and their mean is zero, for example
+				// [-1, 1]. The values here would also result from the "regular"
+				// computation below, but it doesn't hurt to be explicit.
+				minMean = math.Inf(1)
+				maxMean = math.Inf(1)
+			}
+		} else {
+			maxMean = math.Abs(max/mean - 1)
+			minMean = math.Abs(min/mean - 1)
+		}
 
-		if sa.Threshold.isViolated(maxMean) || sa.Threshold.isViolated(minMean) {
+		if sa.Threshold.isViolated(maxMean) || sa.Threshold.isViolated(minMean) || math.IsNaN(maxMean) || math.IsNaN(minMean) {
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", sa)
 				holds = false

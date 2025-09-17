@@ -580,23 +580,35 @@ func TestDataDriven(t *testing.T) {
 				var ticks int
 				scanMustExist(t, d, "type", &typ)
 
+				var buf strings.Builder
 				switch typ {
 				case "balance":
 					scanMustExist(t, d, "stat", &stat)
 					scanMustExist(t, d, "ticks", &ticks)
+					threshold := scanThreshold(t, d)
 					assertions = append(assertions, assertion.BalanceAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
-						Threshold: scanThreshold(t, d),
+						Threshold: threshold,
 					})
+					_, _ = fmt.Fprintf(&buf, "asserting: max_{stores}(%s)/mean_{stores}(%s) %s %.2f at each of last %d ticks",
+						stat, stat, threshold.ThresholdType, threshold.Value, ticks)
+					// ^-- the max and mean are taken over the stores (with the tick fixed).
 				case "steady":
 					scanMustExist(t, d, "stat", &stat)
 					scanMustExist(t, d, "ticks", &ticks)
+					threshold := scanThreshold(t, d)
 					assertions = append(assertions, assertion.SteadyStateAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
-						Threshold: scanThreshold(t, d),
+						Threshold: threshold,
 					})
+					_, _ = fmt.Fprintf(&buf, "asserting: |%s(t)/mean_{T}(%s) - 1| %s %.2f ∀ t∈T and each store ("+
+						"T=last %d ticks)",
+						stat, stat, threshold.ThresholdType, threshold.Value, ticks)
+					// ^-- the mean is taken over the ticks (and the check runs for each store).
+					// These assertions are for "checking that change stops" (vs. balance
+					// assertions, which verify that stores are close together on some metric).
 				case "stat":
 					var stores []int
 					scanMustExist(t, d, "stat", &stat)
@@ -633,7 +645,7 @@ func TestDataDriven(t *testing.T) {
 				default:
 					panic("unknown assertion: " + typ)
 				}
-				return ""
+				return buf.String()
 			case "setting":
 				// NB: delay could be supported for the below settings,
 				// but it hasn't been needed yet.

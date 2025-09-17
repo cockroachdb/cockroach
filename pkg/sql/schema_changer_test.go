@@ -6367,9 +6367,11 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.t2 (a INT)`)
 	tdb.Exec(t, `SET use_declarative_schema_changer = off`)
 
+	const alterTableSQL = `ALTER TABLE db.public.t2 ADD FOREIGN KEY (a) REFERENCES db.public.t`
+
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := sqlDB.ExecContext(ctx, `ALTER TABLE db.t2 ADD FOREIGN KEY (a) REFERENCES db.t`)
+		_, err := sqlDB.ExecContext(ctx, alterTableSQL)
 		require.Regexp(t, "job canceled by user", err)
 		return nil
 	})
@@ -6378,9 +6380,54 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 
 	var jobID jobspb.JobID
 
-	// We filter by running because there's a bug where we create an extra
-	// no-op job for the referenced table (#57624).
-	require.NoError(t, sqlDB.QueryRow(`SELECT job_id FROM crdb_internal.jobs WHERE description LIKE '%ALTER TABLE%' AND status = 'running'`).Scan(&jobID))
+	// The ALTER creates two jobs, but we only end up pausing one with the
+	// RunBeforeBackfill callback. Capture the job ID of the one that is paused
+	// and allow the other one to complete.
+	testutils.SucceedsSoon(t, func() error {
+		rows, err := sqlDB.Query(`SELECT job_id, status FROM crdb_internal.jobs WHERE description = $1 ORDER BY job_id`, alterTableSQL)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		var jobs []struct {
+			id     jobspb.JobID
+			status string
+		}
+
+		for rows.Next() {
+			var id jobspb.JobID
+			var status string
+			if err := rows.Scan(&id, &status); err != nil {
+				return err
+			}
+			jobs = append(jobs, struct {
+				id     jobspb.JobID
+				status string
+			}{id, status})
+		}
+
+		if len(jobs) != 2 {
+			return errors.Errorf("expected 2 jobs, found %d", len(jobs))
+		}
+
+		var runningCount, succeededCount int
+		for _, job := range jobs {
+			switch job.status {
+			case "running":
+				runningCount++
+				jobID = job.id
+			case "succeeded":
+				succeededCount++
+			}
+		}
+
+		if runningCount != 1 || succeededCount != 1 {
+			return errors.Errorf("expected 1 running and 1 succeeded job, found %d running, %d succeeded", runningCount, succeededCount)
+		}
+
+		return nil
+	})
 	tdb.Exec(t, "CANCEL JOB $1", jobID)
 
 	close(continueNotification)
@@ -6392,6 +6439,15 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 		Scan(&status, &error)
 	require.Equal(t, status, jobs.StateCanceled)
 	require.Equal(t, error, "job canceled by user")
+
+	// Verify that descriptors are valid after job cancellation
+	rows, err := sqlDB.Query(`SELECT * FROM "".crdb_internal.invalid_objects`)
+	require.NoError(t, err)
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("found catalog corruptions after job cancellation")
+	}
+	require.NoError(t, rows.Err())
 }
 
 // TestRevertingJobsOnDatabasesAndSchemas tests that schema change jobs on

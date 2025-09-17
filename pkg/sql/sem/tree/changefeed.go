@@ -21,8 +21,24 @@ const (
 	ChangefeedLevelDatabase
 )
 
+type FilterType int
+
+// Needs to be the same as
+const (
+	ExcludeFilter FilterType = iota
+)
+
+type ChangefeedFilterOption struct {
+	Tables     TableNames
+	FilterType FilterType
+}
+
 func (l ChangefeedLevel) String() string {
 	return []string{"TABLE", "DATABASE"}[l]
+}
+
+func (l FilterType) String() string {
+	return []string{"EXCLUDE"}[l]
 }
 
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
@@ -30,6 +46,7 @@ type CreateChangefeed struct {
 	TableTargets   ChangefeedTableTargets
 	DatabaseTarget ChangefeedDatabaseTarget
 	Level          ChangefeedLevel
+	FilterOption   *ChangefeedFilterOption
 	SinkURI        Expr
 	Options        KVOptions
 	Select         *SelectClause
@@ -56,6 +73,12 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.TableTargets)
 	} else {
 		ctx.FormatNode(&node.DatabaseTarget)
+		if node.FilterOption != nil {
+			ctx.WriteString(" ")
+			ctx.WriteString(node.FilterOption.FilterType.String())
+			ctx.WriteString(" TABLES ")
+			ctx.FormatNode(&node.FilterOption.Tables)
+		}
 	}
 	if node.SinkURI != nil {
 		ctx.WriteString(" INTO ")
