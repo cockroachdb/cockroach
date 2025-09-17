@@ -380,7 +380,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := prepared != nil
-	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
 
 	var stmt Statement
 	if isExtendedProtocol {
@@ -905,7 +905,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				NumAnnotations:  stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 		)
 		var rawTypeHints []oid.Oid
 
@@ -1256,7 +1256,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := portal != nil && portal.Stmt != nil
-	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
 
 	if isExtendedProtocol {
 		vars.stmt = makeStatementFromPrepared(portal.Stmt, queryID)
@@ -1867,7 +1867,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				NumAnnotations:  vars.stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 		)
 		var rawTypeHints []oid.Oid
 
@@ -3453,7 +3453,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 
 		p := &ex.planner
 		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID(),
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)))
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)))
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
