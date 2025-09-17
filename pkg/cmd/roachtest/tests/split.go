@@ -208,9 +208,10 @@ func registerLoadSplits(r registry.Registry) {
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// There should be at least 13 splits, in practice there are on average
-				// 20.
+				// 20 we never see 60 splits here, but we've seen as high as 36 and don't
+				// want to see flakes.
 				minimumRanges: 14,
-				maximumRanges: 25,
+				maximumRanges: 60,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
 					readPercent:  95, // 95% reads
