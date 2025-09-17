@@ -86,7 +86,6 @@ go_test(
         # Required for generated mocks
         "//pkg/roachprod/prometheus",  #keep
         "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
-        "//pkg/cmd/roachtest/cluster",
     ],
 )
 

@@ -45,7 +45,6 @@ go_test(
         "exporter_test.go",
         "streamer_test.go",
         ":mock_client",  # keep
-        ":mock_cluster",  # keep
         ":mock_test",  # keep
     ],
     embed = [":clusterstats"],
@@ -65,6 +64,7 @@ go_test(
         "@com_github_stretchr_testify//require",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
     ],
 )
 
@@ -85,18 +85,6 @@ gomock(
     out = "mock_test_generated_test.go",
     interfaces = ["Test"],
     library = "//pkg/cmd/roachtest/test",
-    package = "clusterstats",
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
-    ],
-)
-
-gomock(
-    name = "mock_cluster",
-    out = "mock_cluster_generated_test.go",
-    interfaces = ["Cluster"],
-    library = "//pkg/cmd/roachtest/cluster",
     package = "clusterstats",
     visibility = [
         ":__pkg__",
