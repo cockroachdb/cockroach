@@ -218,6 +218,12 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	unaryInterceptors = append(unaryInterceptors, stopUnary)
 	streamInterceptors = append(streamInterceptors, stopStream)
 
+	// If the metrics interceptor is set, it should be registered second so
+	// that all other interceptors are included in the response time durations.
+	if o.drpcMetricsInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, drpcmux.UnaryServerInterceptor(o.drpcMetricsInterceptor))
+	}
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
