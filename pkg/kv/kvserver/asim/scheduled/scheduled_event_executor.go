@@ -105,7 +105,7 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 		panic("unexpected")
 	}
 	if len(e.scheduledEvents) == 0 {
-		return fmt.Sprint("no events were scheduled")
+		return "no events were scheduled"
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
