@@ -855,15 +855,11 @@ func (t *Test) Workload(
 			cmd.Flag("seed", seed)
 		}
 	}
-	t.logger.Printf("[Workload] name: %s, node: %v, initCmd: %s, runCmd: %s, overrideBinary: %t", name, node, initCmd.String(), runCmd.String(), overrideBinary)
 	if initCmd != nil {
 		addSeed(initCmd)
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-			l.Printf("[Workload][OnStartup][init] node: %v, h.System.FromVersion: %s", name, h.System.FromVersion.String())
-			l.Printf("[Workload][OnStartup][init] binary path passed in: %s", initCmd.Binary)
 			if !overrideBinary {
 				initCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
-				l.Printf("[Workload][OnStartup][init] new binary: %s", initCmd.Binary)
 			}
 			l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
 			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
@@ -874,9 +870,8 @@ func (t *Test) Workload(
 	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 		if !overrideBinary {
 			runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
-			l.Printf("[Workload][OnStartup][run] new binary: %s", runCmd.Binary)
 		}
-		l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
+		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
 		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
 	})
 }
