@@ -31,3 +31,5 @@ assertion type=conformance lease-violating=1 lease-less-preferred=1
 eval duration=10m
 ----
 artifacts[default]: aff3a3eeb0838864
+default
+ └── artifacts: aff3a3eeb0838864
