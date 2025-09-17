@@ -34,9 +34,9 @@ func (tht ThresholdType) String() string {
 	case ExactBound:
 		return "="
 	case UpperBound:
-		return "<"
+		return "≤"
 	case LowerBound:
-		return ">"
+		return "≥"
 	default:
 		panic("unknown threshold type")
 	}

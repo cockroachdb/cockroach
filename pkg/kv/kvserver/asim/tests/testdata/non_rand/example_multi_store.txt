@@ -13,11 +13,11 @@ gen_load rate=7000 min_block=512 max_block=512
 
 assertion stat=leases type=balance ticks=6 upper_bound=1
 ----
-asserting: max_{stores}(leases)/mean_{stores}(leases) < 1.00 at each of last 6 ticks
+asserting: max_{stores}(leases)/mean_{stores}(leases) ≤ 1.00 at each of last 6 ticks
 
 assertion stat=leases type=steady ticks=6 upper_bound=0
 ----
-asserting: |leases(t)/mean_{T}(leases) - 1| < 0.00 ∀ t∈T and each store (T=last 6 ticks)
+asserting: |leases(t)/mean_{T}(leases) - 1| ≤ 0.00 ∀ t∈T and each store (T=last 6 ticks)
 
 eval duration=5m seed=42 metrics=(leases) cfgs=(sma-count,mma-only)
 ----
@@ -28,7 +28,7 @@ leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s
 leases#1: last:  [s1=4, s2=1, s3=0, s4=0, s5=0, s6=1, s7=0, s8=0, s9=1, s10=1, s11=1, s12=1, s13=2, s14=2] (stddev=1.07, mean=1.00, sum=14)
 artifacts[mma-only]: 3c31149bdddfe022
 failed assertion sample 1
-  balance stat=leases threshold=(<1.00) ticks=6
+  balance stat=leases threshold=(≤1.00) ticks=6
 	max/mean=4.00 tick=0
 	max/mean=4.00 tick=1
 	max/mean=4.00 tick=2

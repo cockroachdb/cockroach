@@ -21,7 +21,7 @@ gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 # seconds) the max/mean QPS of the cluster does not exceed 1.15.
 assertion stat=qps type=balance ticks=6 upper_bound=1.15
 ----
-asserting: max_{stores}(qps)/mean_{stores}(qps) < 1.15 at each of last 6 ticks
+asserting: max_{stores}(qps)/mean_{stores}(qps) ≤ 1.15 at each of last 6 ticks
 
 # The second is a steady state assertion. The steady state assertion requires
 # that during the last 6 ticks (60 seconds), the value of QPS per-store doesn't
@@ -32,7 +32,7 @@ asserting: max_{stores}(qps)/mean_{stores}(qps) < 1.15 at each of last 6 ticks
 # to take a duration, not ticks.
 assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
-asserting: |qps(t)/mean_{T}(qps) - 1| < 0.05 ∀ t∈T and each store (T=last 6 ticks)
+asserting: |qps(t)/mean_{T}(qps) - 1| ≤ 0.05 ∀ t∈T and each store (T=last 6 ticks)
 
 # The generators are then called and 2 simulation runs, named samples are
 # created and evaluated. Each sample has a fixed duration of 3 minutes.
@@ -50,7 +50,7 @@ qps#1: last:  [s1=3999, s2=1997, s3=0, s4=0, s5=0, s6=1003, s7=0] (stddev=1413.6
 qps#2: last:  [s1=3996, s2=1996, s3=0, s4=0, s5=0, s6=1006, s7=0] (stddev=1412.60, mean=999.71, sum=6998)
 artifacts[mma-only]: c48e80aec15208d6
 failed assertion sample 1
-  balance stat=qps threshold=(<1.15) ticks=6
+  balance stat=qps threshold=(≤1.15) ticks=6
 	max/mean=4.00 tick=0
 	max/mean=4.00 tick=1
 	max/mean=4.00 tick=2
@@ -58,7 +58,7 @@ failed assertion sample 1
 	max/mean=4.00 tick=4
 	max/mean=4.00 tick=5
 failed assertion sample 2
-  balance stat=qps threshold=(<1.15) ticks=6
+  balance stat=qps threshold=(≤1.15) ticks=6
 	max/mean=4.00 tick=0
 	max/mean=4.00 tick=1
 	max/mean=4.00 tick=2
@@ -90,7 +90,7 @@ qps#1: last:  [s1=3995, s2=1998, s3=0, s4=0, s5=0, s6=1005, s7=0] (stddev=1412.5
 qps#2: last:  [s1=4000, s2=1995, s3=0, s4=0, s5=0, s6=1004, s7=0] (stddev=1413.71, mean=999.86, sum=6999)
 artifacts[mma-only]: fc6f065395b9a390
 failed assertion sample 1
-  balance stat=qps threshold=(<1.15) ticks=6
+  balance stat=qps threshold=(≤1.15) ticks=6
 	max/mean=4.00 tick=0
 	max/mean=4.00 tick=1
 	max/mean=4.00 tick=2
@@ -98,7 +98,7 @@ failed assertion sample 1
 	max/mean=4.00 tick=4
 	max/mean=4.00 tick=5
 failed assertion sample 2
-  balance stat=qps threshold=(<1.15) ticks=6
+  balance stat=qps threshold=(≤1.15) ticks=6
 	max/mean=4.00 tick=0
 	max/mean=4.00 tick=1
 	max/mean=4.00 tick=2
