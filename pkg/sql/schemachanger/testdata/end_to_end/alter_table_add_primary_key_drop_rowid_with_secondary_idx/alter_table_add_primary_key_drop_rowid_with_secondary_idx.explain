@@ -193,12 +193,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │         └── ValidateIndex {"IndexID":10,"TableID":104}
  │    ├── Stage 8 of 16 in PostCommitPhase
  │    │    ├── 11 elements transitioning toward PUBLIC
- │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
+ │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 6 (idx_b+)}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 6 (idx_b+)}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 6 (idx_b+)}
  │    │    │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 6 (idx_b+)}
- │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_b_shard_16), IndexID: 8 (idx_c+)}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 8 (idx_c+)}
  │    │    │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 8 (idx_c+)}
@@ -265,8 +265,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    ├── Stage 10 of 16 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
- │    │    │    ├── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    └── 3 Backfill operations
  │    │         ├── BackfillIndex {"IndexID":12,"SourceIndexID":10,"TableID":104}
  │    │         ├── BackfillIndex {"IndexID":6,"SourceIndexID":10,"TableID":104}
@@ -274,8 +274,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    ├── Stage 11 of 16 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILLED → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
- │    │    │    ├── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    └── 5 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":12,"TableID":104}
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":6,"TableID":104}
@@ -285,8 +285,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    ├── Stage 12 of 16 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
  │    │    │    ├── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
- │    │    │    ├── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    └── 5 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":12,"TableID":104}
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":6,"TableID":104}
@@ -296,8 +296,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    ├── Stage 13 of 16 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
  │    │    │    ├── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
- │    │    │    ├── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    └── 3 Backfill operations
  │    │         ├── MergeIndex {"BackfilledIndexID":12,"TableID":104,"TemporaryIndexID":13}
  │    │         ├── MergeIndex {"BackfilledIndexID":6,"TableID":104,"TemporaryIndexID":7}
@@ -305,8 +305,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    ├── Stage 14 of 16 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
  │    │    │    ├── MERGED     → WRITE_ONLY            PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
- │    │    │    ├── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
- │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
+ │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 13, ConstraintID: 11, SourceIndexID: 10 (t_pkey~)}
  │    │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 7, ConstraintID: 5, SourceIndexID: 10 (t_pkey~)}
@@ -324,8 +324,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
  │    │    │    ├── WRITE_ONLY → VALIDATED ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 12 (t_pkey+)}
- │    │    │    ├── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
- │    │    │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │    │    │    ├── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
+ │    │    │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │    │    └── 4 Validation operations
  │    │         ├── ValidateIndex {"IndexID":12,"TableID":104}
  │    │         ├── ValidateColumnNotNull {"ColumnID":5,"IndexIDForValidation":12,"TableID":104}
@@ -334,19 +334,17 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    └── Stage 16 of 16 in PostCommitPhase
  │         ├── 5 elements transitioning toward PUBLIC
  │         │    ├── VALIDATED → PUBLIC    ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 12 (t_pkey+)}
- │         │    ├── VALIDATED → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2}
+ │         │    ├── VALIDATED → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 2, RecreateTargetIndexID: 12}
  │         │    ├── ABSENT    → PUBLIC    IndexName:{DescID: 104 (t), Name: "idx_b", IndexID: 6 (idx_b+)}
- │         │    ├── VALIDATED → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4}
+ │         │    ├── VALIDATED → PUBLIC    SecondaryIndex:{DescID: 104 (t), IndexID: 8 (idx_c+), ConstraintID: 6, TemporaryIndexID: 9, SourceIndexID: 10 (t_pkey~), RecreateSourceIndexID: 4, RecreateTargetIndexID: 12}
  │         │    └── ABSENT    → PUBLIC    IndexName:{DescID: 104 (t), Name: "idx_c", IndexID: 8 (idx_c+)}
  │         ├── 2 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── VALIDATED → PUBLIC    PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey~), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-)}
  │         │    └── ABSENT    → PUBLIC    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 10 (t_pkey~)}
- │         ├── 4 elements transitioning toward ABSENT
+ │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC    → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
- │         │    ├── PUBLIC    → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
- │         │    ├── PUBLIC    → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
- │         │    └── PUBLIC    → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0}
- │         └── 19 Mutation operations
+ │         │    └── PUBLIC    → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │         └── 15 Mutation operations
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── SetIndexName {"IndexID":10,"Name":"t_pkey","TableID":104}
@@ -360,17 +358,11 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │              ├── MarkRecreatedIndexAsInvisible {"IndexID":8,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":12}
  │              ├── MakeValidatedSecondaryIndexPublic {"IndexID":8,"TableID":104}
  │              ├── RefreshStats {"TableID":104}
- │              ├── MarkRecreatedIndexAsVisible {"IndexID":6,"TableID":104}
- │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
- │              ├── MarkRecreatedIndexAsVisible {"IndexID":8,"TableID":104}
- │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":4,"TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 6 in PostCommitNonRevertiblePhase
-      │    ├── 18 elements transitioning toward TRANSIENT_ABSENT
-      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 11, ConstraintID: 9, SourceIndexID: 1 (t_pkey-)}
-      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 11}
+      │    ├── 16 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 11}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 11}
       │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 13, ConstraintID: 11, SourceIndexID: 10 (t_pkey~)}
@@ -387,24 +379,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 9}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 9}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 9}
-      │    ├── 16 elements transitioning toward ABSENT
-      │    │    ├── PUBLIC                → WRITE_ONLY       Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
-      │    │    ├── PUBLIC                → ABSENT           ColumnName:{DescID: 104 (t), Name: "rowid", ColumnID: 3 (rowid-)}
+      │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── VALIDATED             → ABSENT           ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
-      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 1 (t_pkey-)}
-      │    │    ├── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
-      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx_b-)}
-      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 2 (idx_b-)}
-      │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
-      │    │    ├── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "idx_b", IndexID: 2 (idx_b-)}
-      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_b_shard_16), IndexID: 4 (idx_c-)}
-      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 4 (idx_c-)}
-      │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 4 (idx_c-)}
-      │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0}
-      │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "idx_c", IndexID: 4 (idx_c-)}
-      │    └── 36 Mutation operations
+      │    │    └── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+      │    └── 22 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":11,"Ordinal":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":11,"Kind":2,"Ordinal":1,"TableID":104}
@@ -419,56 +399,52 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":9,"Ordinal":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":9,"Kind":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":9,"Kind":1,"Ordinal":1,"TableID":104}
-      │         ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
-      │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
-      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
-      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":11,"Kind":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":13,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":7,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":4,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Ordinal":1,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"Kind":1,"TableID":104}
-      │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 6 in PostCommitNonRevertiblePhase
       │    ├── 5 elements transitioning toward PUBLIC
-      │    │    ├── VALIDATED   → PUBLIC              PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
-      │    │    ├── ABSENT      → PUBLIC              IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 12 (t_pkey+)}
-      │    │    ├── WRITE_ONLY  → PUBLIC              Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+)}
-      │    │    ├── ABSENT      → WRITE_ONLY          CheckConstraint:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 3 (check_crdb_internal_a_shard_10+), ReferencedColumnIDs: [5]}
-      │    │    └── ABSENT      → PUBLIC              ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_a_shard_10", ConstraintID: 3 (check_crdb_internal_a_shard_10+)}
-      │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
-      │    │    ├── PUBLIC      → TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey~), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-)}
-      │    │    └── PUBLIC      → TRANSIENT_ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 10 (t_pkey~)}
-      │    ├── 4 elements transitioning toward ABSENT
-      │    │    ├── WRITE_ONLY  → DELETE_ONLY         Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
-      │    │    ├── DELETE_ONLY → ABSENT              PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
-      │    │    ├── DELETE_ONLY → ABSENT              SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
-      │    │    └── DELETE_ONLY → ABSENT              SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0}
-      │    └── 14 Mutation operations
-      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
-      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
-      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
-      │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
+      │    │    ├── VALIDATED             → PUBLIC              PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
+      │    │    ├── ABSENT                → PUBLIC              IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 12 (t_pkey+)}
+      │    │    ├── WRITE_ONLY            → PUBLIC              Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+)}
+      │    │    ├── ABSENT                → WRITE_ONLY          CheckConstraint:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 3 (check_crdb_internal_a_shard_10+), ReferencedColumnIDs: [5]}
+      │    │    └── ABSENT                → PUBLIC              ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_a_shard_10", ConstraintID: 3 (check_crdb_internal_a_shard_10+)}
+      │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── PUBLIC                → TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey~), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 10 (t_pkey~)}
+      │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT    TemporaryIndex:{DescID: 104 (t), IndexID: 11, ConstraintID: 9, SourceIndexID: 1 (t_pkey-)}
+      │    │    └── PUBLIC                → TRANSIENT_ABSENT    IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 11}
+      │    ├── 6 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC                → WRITE_ONLY          Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
+      │    │    ├── PUBLIC                → ABSENT              ColumnName:{DescID: 104 (t), Name: "rowid", ColumnID: 3 (rowid-)}
+      │    │    ├── PUBLIC                → ABSENT              IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
+      │    │    ├── DELETE_ONLY           → ABSENT              PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
+      │    │    ├── PUBLIC                → VALIDATED           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    │    └── PUBLIC                → VALIDATED           SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    └── 20 Mutation operations
+      │         ├── MarkRecreatedIndexAsVisible {"IndexID":6,"TableID":104}
+      │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
+      │         ├── MarkRecreatedIndexAsVisible {"IndexID":8,"TableID":104}
+      │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":4,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":10,"TableID":104}
       │         ├── SetIndexName {"IndexID":10,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":12,"Name":"t_pkey","TableID":104}
+      │         ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
+      │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":11,"Kind":2,"TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":12,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":5,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── AddCheckConstraint {"CheckExpr":"crdb_internal_a_...","ConstraintID":3,"FromHashShardedColumn":true,"TableID":104,"Validity":2}
       │         ├── SetConstraintName {"ConstraintID":3,"Name":"check_crdb_inter...","TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Validat..."}
       ├── Stage 3 of 6 in PostCommitNonRevertiblePhase
@@ -485,13 +461,34 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── PUBLIC              → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 10 (t_pkey~)}
       │    │    ├── PUBLIC              → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 10 (t_pkey~)}
       │    │    └── PUBLIC              → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 10 (t_pkey~)}
-      │    └── 8 Mutation operations
+      │    ├── 10 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY          → DELETE_ONLY           Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
+      │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx_b-)}
+      │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 2 (idx_b-)}
+      │    │    ├── VALIDATED           → DELETE_ONLY           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    │    ├── PUBLIC              → ABSENT                IndexName:{DescID: 104 (t), Name: "idx_b", IndexID: 2 (idx_b-)}
+      │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_b_shard_16), IndexID: 4 (idx_c-)}
+      │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 4 (idx_c-)}
+      │    │    ├── PUBLIC              → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 4 (idx_c-)}
+      │    │    ├── VALIDATED           → DELETE_ONLY           SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    │    └── PUBLIC              → ABSENT                IndexName:{DescID: 104 (t), Name: "idx_c", IndexID: 4 (idx_c-)}
+      │    └── 18 Mutation operations
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":3,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
+      │         ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":10,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":10,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":10,"Ordinal":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":10,"Kind":2,"Ordinal":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":10,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":4,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 5 of 6 in PostCommitNonRevertiblePhase
@@ -502,17 +499,21 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 13}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 7}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 9}
-      │    ├── 6 elements transitioning toward ABSENT
+      │    ├── 8 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY           → ABSENT           Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── PUBLIC                → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (rowid-), TypeName: "INT8"}
       │    │    ├── PUBLIC                → ABSENT           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (rowid-), Expr: unique_rowid()}
       │    │    ├── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
+      │    │    ├── DELETE_ONLY           → ABSENT           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 2 (idx_b-)}
+      │    │    ├── DELETE_ONLY           → ABSENT           SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexData:{DescID: 104 (t), IndexID: 4 (idx_c-)}
-      │    └── 13 Mutation operations
+      │    └── 15 Mutation operations
       │         ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":7,"TableID":104}
