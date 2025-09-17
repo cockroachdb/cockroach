@@ -207,7 +207,7 @@ over this connection.
 	}
 	metaRequestDuration = metric.Metadata{
 		Name:        "rpc.server.request.duration.nanos",
-		Help:        "Duration of an grpc request in nanoseconds.",
+		Help:        "Duration of an RPC request in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
@@ -449,6 +449,7 @@ func NewRequestMetrics() *RequestMetrics {
 }
 
 type RequestMetricsInterceptor grpc.UnaryServerInterceptor
+type DRPCRequestMetricsInterceptor drpcmux.UnaryServerInterceptor
 
 // NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
 // the duration of each RPC. The metric is labeled by the method name and the
@@ -479,6 +480,41 @@ func NewRequestMetricsInterceptor(
 
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
+			RpcStatusCodeLabel: code.String(),
+		}, float64(duration.Nanoseconds()))
+		return resp, err
+	}
+}
+
+// NewDRPCRequestMetricsInterceptor creates a new DRPC server interceptor that records
+// the duration of each RPC. The metric is labeled by the method name and the
+// status code of the RPC. The interceptor will only record durations if
+// shouldRecord returns true. Otherwise, this interceptor will be a no-op.
+func NewDRPCRequestMetricsInterceptor(
+	requestMetrics *RequestMetrics, shouldRecord func(rpc string) bool,
+) DRPCRequestMetricsInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		rpc string,
+		handler drpcmux.UnaryHandler,
+	) (any, error) {
+		if !shouldRecord(rpc) {
+			return handler(ctx, req)
+		}
+		startTime := timeutil.Now()
+		resp, err := handler(ctx, req)
+		duration := timeutil.Since(startTime)
+		var code codes.Code
+		if err != nil {
+			// TODO(server): use drpc status code
+			code = status.Code(err)
+		} else {
+			code = codes.OK
+		}
+
+		requestMetrics.Duration.Observe(map[string]string{
+			RpcMethodLabel:     rpc,
 			RpcStatusCodeLabel: code.String(),
 		}, float64(duration.Nanoseconds()))
 		return resp, err
