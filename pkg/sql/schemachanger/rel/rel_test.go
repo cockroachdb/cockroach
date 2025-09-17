@@ -241,7 +241,8 @@ func (sa stringAttr) String() string { return string(sa) }
 // so.
 func TestTooManyAttributesInValues(t *testing.T) {
 	type tooManyAttrs struct {
-		F1, F2, F3, F4, F5, F6, F7, F8 *uint32
+		F1, F2, F3, F4, F5, F6, F7, F8        *uint32
+		F9, F10, F11, F12, F13, F14, F15, F16 *uint32
 	}
 	sc := rel.MustSchema("too_many",
 		rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
@@ -253,6 +254,14 @@ func TestTooManyAttributesInValues(t *testing.T) {
 			rel.EntityAttr(stringAttr("A6"), "F6"),
 			rel.EntityAttr(stringAttr("A7"), "F7"),
 			rel.EntityAttr(stringAttr("A8"), "F8"),
+			rel.EntityAttr(stringAttr("A9"), "F9"),
+			rel.EntityAttr(stringAttr("A10"), "F10"),
+			rel.EntityAttr(stringAttr("A11"), "F11"),
+			rel.EntityAttr(stringAttr("A12"), "F12"),
+			rel.EntityAttr(stringAttr("A13"), "F13"),
+			rel.EntityAttr(stringAttr("A14"), "F14"),
+			rel.EntityAttr(stringAttr("A15"), "F15"),
+			rel.EntityAttr(stringAttr("A16"), "F16"),
 		),
 	)
 	one := uint32(1)
@@ -275,15 +284,23 @@ func TestTooManyAttributesInValues(t *testing.T) {
 	db, err := rel.NewDatabase(sc, rel.Index{})
 	require.NoError(t, err)
 	t.Run("index predicate too large", func(t *testing.T) {
-		require.Regexp(t, `invalid entity \*rel_test.tooManyAttrs has too many attributes: maximum allowed is 8, have at least \[A1 A2 A3 A4 A5 A6 Self Type A7\]`, db.Insert(&tooManyAttrs{
-			F1: &one,
-			F2: &one,
-			F3: &one,
-			F4: &one,
-			F5: &one,
-			F6: &one,
-			F7: &one,
-			F8: &one,
+		require.Regexp(t, `invalid entity \*rel_test.tooManyAttrs has too many attributes: maximum allowed is 8, have at least \[A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 Self Type A15\]`, db.Insert(&tooManyAttrs{
+			F1:  &one,
+			F2:  &one,
+			F3:  &one,
+			F4:  &one,
+			F5:  &one,
+			F6:  &one,
+			F7:  &one,
+			F8:  &one,
+			F9:  &one,
+			F10: &one,
+			F11: &one,
+			F12: &one,
+			F13: &one,
+			F14: &one,
+			F15: &one,
+			F16: &one,
 		}))
 
 	})

@@ -137,10 +137,38 @@ func init() {
 			// PRIMARY KEY, and require that the new index should be public,
 			// before the old index can be hidden (i.e. they are swapped
 			// an atomic manner).
-			return append(IsPotentialSecondaryIndexSwap("index-id", "table-id"),
+			return append(IsPotentialSecondaryIndexSwapWithNodeVars(to, from, "index-id", "table-id"),
 				from.CurrentStatus(scpb.Status_PUBLIC),
 				to.CurrentStatus(scpb.Status_VALIDATED),
 			)
+		},
+	)
+
+	registerDepRule(
+		"old secondary indexes that have been recreated should be removed"+
+			" when their replacement is usable.",
+		scgraph.SameStagePrecedence,
+		"new-primary-index", "old-secondary-index",
+		func(from, to NodeVars) rel.Clauses {
+			newIndex := MkNodeVars("new-index")
+			return append(rel.Clauses{
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_VALIDATED),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+				newIndex.El.AttrEqVar(screl.RecreateTargetIndexID, "new-primary-index-id"),
+				to.El.AttrEqVar(screl.IndexID, "new-primary-index-id"),
+				// Only active this rule on secondary indexes created after 25.4
+				FilterElements("only apply to secondary indexes created after 25.4",
+					from, to,
+					func(from *scpb.PrimaryIndex, to *scpb.SecondaryIndex) bool {
+						return to.HideForPrimaryKeyRecreated
+					}),
+			},
+				IsPotentialSecondaryIndexSwapWithNodeVars(from, newIndex, "index-id", "table-id")...)
 		},
 	)
 }

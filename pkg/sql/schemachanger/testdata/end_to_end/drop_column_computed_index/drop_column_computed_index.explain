@@ -19,7 +19,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
- │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
+ │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 8 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
@@ -43,7 +43,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    ├── 3 elements transitioning toward ABSENT
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
- │    │    │    └── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
+ │    │    │    └── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -59,7 +59,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 3 (crdb_internal_idx_expr-)}
- │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
+ │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 12 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
@@ -130,7 +130,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── WRITE_ONLY            → DELETE_ONLY      Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-), IndexID: 2 (t_expr_idx-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_expr_idx-)}
-      │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
+      │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_expr_idx", IndexID: 2 (t_expr_idx-)}
       │    └── 9 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
@@ -154,7 +154,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_idx_expr-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → VALIDATED  PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC      → ABSENT     IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
-      │    │    └── DELETE_ONLY → ABSENT     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0}
+      │    │    └── DELETE_ONLY → ABSENT     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    └── 11 Mutation operations
       │         ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
