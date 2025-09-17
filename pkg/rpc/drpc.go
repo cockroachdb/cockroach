@@ -222,6 +222,12 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	// Recover from any uncaught panics caused by DB Console requests.
 	unaryInterceptors = append(unaryInterceptors, DRPCGatewayRequestRecoveryInterceptor)
 
+	// If the metrics interceptor is set, it should be registered second so
+	// that all other interceptors are included in the response time durations.
+	if o.drpcRequestMetricsInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, drpcmux.UnaryServerInterceptor(o.drpcRequestMetricsInterceptor))
+	}
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,
