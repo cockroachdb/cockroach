@@ -1504,6 +1504,7 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						DisableRaftSnapshotQueue: true,
@@ -5034,7 +5035,10 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ReplicationMode:     base.ReplicationManual,
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+			},
 			ReusableListenerReg: lisReg,
 			ServerArgsPerNode:   stickyServerArgs,
 		})
