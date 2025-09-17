@@ -1,0 +1,12 @@
+# Tests that workload node get's upgraded after a version upgrade
+mixed-version-test predecessors=(22.1.8, 22.2.3, 23.1.4) num_upgrades=3
+----
+ok
+
+in-mixed-version name=(mixed-version 1)
+----
+ok
+
+workload name=bank
+----
+ok

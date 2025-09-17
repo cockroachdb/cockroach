@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "mixedversion",
@@ -54,7 +54,6 @@ go_test(
         "mutators_test.go",
         "planner_test.go",
         "runner_test.go",
-        ":mock_cluster",  #keep
     ],
     data = glob(["testdata/**"]),
     embed = [":mixedversion"],
