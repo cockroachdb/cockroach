@@ -13,7 +13,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.bittab ADD COLU
       │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 104 (bittab), Name: "vb", ColumnID: 3 (vb-)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 1 (bittab_pkey)}
       │    │    ├── PUBLIC     → VALIDATED   ColumnNotNull:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 1 (bittab_pkey)}
-      │    │    ├── MERGE_ONLY → DELETE_ONLY SecondaryIndex:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (bittab_pkey), RecreateSourceIndexID: 0}
+      │    │    ├── MERGE_ONLY → DELETE_ONLY SecondaryIndex:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (bittab_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 2 (bittab_vb_key-)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 2 (rowid), IndexID: 2 (bittab_vb_key-)}
       │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 104 (bittab), Name: "bittab_vb_key", IndexID: 2 (bittab_vb_key-)}
@@ -47,7 +47,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.bittab ADD COLU
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (bittab), ColumnID: 3 (vb-)}
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (bittab), ColumnFamilyID: 0 (primary), ColumnID: 3 (vb-), TypeName: "VARBIT(25)"}
       │    │    ├── VALIDATED   → ABSENT ColumnNotNull:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 1 (bittab_pkey)}
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (bittab_pkey), RecreateSourceIndexID: 0}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (bittab_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-)}
       │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (bittab), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (bittab_pkey)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (bittab), IndexID: 3}
