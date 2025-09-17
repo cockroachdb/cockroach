@@ -82,7 +82,7 @@ func PlanCDCExpression(
 		AST: cdcExpr,
 		SQL: tree.AsString(cdcExpr),
 	}, clusterunique.ID{}, /* queryID */
-		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
+		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
 	)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)

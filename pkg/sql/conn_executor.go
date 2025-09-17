@@ -3643,23 +3643,6 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 
 var logIsolationLevelLimiter = log.Every(10 * time.Second)
 
-// Bitmask for enabling various query fingerprint formatting styles.
-// We don't publish this setting because most users should not need
-// to tweak the fingerprint generation.
-var queryFormattingForFingerprintsMask = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.stats.statement_fingerprint.format_mask",
-	"enables setting additional fmt flags for statement fingerprint formatting. "+
-		"Flags set here will be applied in addition to FmtHideConstants",
-	int64(tree.FmtCollapseLists|tree.FmtConstantsAsUnderscores),
-	settings.WithValidateInt(func(i int64) error {
-		if i == 0 || int64(tree.FmtCollapseLists|tree.FmtConstantsAsUnderscores)&i == i {
-			return nil
-		}
-		return errors.Newf("invalid value %d", i)
-	}),
-)
-
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,
 ) isolation.Level {
