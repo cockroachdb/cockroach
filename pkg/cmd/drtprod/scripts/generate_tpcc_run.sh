@@ -65,6 +65,11 @@ if [ -z "${PARTITION_TYPE}" ]; then
 fi
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
+# Clusters created via drtprod default to secure mode. This script is intended to
+# run on secure clusters. In the past we have run into compatibility issues
+# between roachprod and drtprod. To make this script resilient to incompatibility
+# and allow use with insecure clusters, we can configure this env variable.
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
 
 get_partitions_in_range() {
     local start=$(($1 - 1))
@@ -122,6 +127,7 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
 export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
 ./drtprod sync
 
 PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
