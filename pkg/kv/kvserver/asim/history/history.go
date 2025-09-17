@@ -67,7 +67,7 @@ func (h *History) ThrashingForStat(stat string) ThrashingSlice {
 
 	ths := make(ThrashingSlice, numStores)
 	for storeIdx := range vsByStore {
-		// HACK: we remove leading zeroes before computing the thrashin This works
+		// HACK: we remove leading zeroes before computeThrasing. This works
 		// around the fact that some timeseries only show sensible values after an
 		// initial period of inactivity. For example, CPU usage is zero until the
 		// first stats tick. Without this hack, the large initial jump from zero to
