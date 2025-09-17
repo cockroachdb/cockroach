@@ -9,10 +9,10 @@ gomock(
     package = "mockcluster",
     self_package = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock",
     visibility = [
-        "//pkg/gen:__pkg__",
-        "//pkg/cmd/roachtest/roachtestutil/mixedversion:__pkg__",
         "//pkg/cmd/roachtest/clusterstats:__pkg__",
-        ],
+        "//pkg/cmd/roachtest/roachtestutil/mixedversion:__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_library(
@@ -20,10 +20,10 @@ go_library(
     srcs = ["mock_cluster_generated.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock",
     visibility = [
-        "//pkg/gen:__pkg__",
-        "//pkg/cmd/roachtest/roachtestutil/mixedversion:__pkg__",
         "//pkg/cmd/roachtest/clusterstats:__pkg__",
-        ],
+        "//pkg/cmd/roachtest/roachtestutil/mixedversion:__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
     deps = [
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
