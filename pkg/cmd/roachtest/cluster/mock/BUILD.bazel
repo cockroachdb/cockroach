@@ -21,7 +21,16 @@ go_library(
     #visibility = ["//pkg/cmd/roachtest/mixedversion:__pkg__"],  # Or more open as needed
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",  # Cluster interface
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/roachprod",
+        "//pkg/roachprod/failureinjection/failures",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/prometheus",
+        "//pkg/roachprod/vm",
         "@com_github_golang_mock//gomock",  # gomock.Controller, etc.
     ],
 )

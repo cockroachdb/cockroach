@@ -120,6 +120,8 @@ func TestTestPlanner(t *testing.T) {
 				}
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
+			case "mixed-version-test-with-workload":
+				mvt = newTestWithWorkloadNode(ctrl)
 			case "before-cluster-start":
 				mvt.BeforeClusterStart(d.CmdArgs[0].Vals[0], dummyHook)
 			case "on-startup":
@@ -507,6 +509,17 @@ func newTest(ctrl *gomock.Controller, options ...CustomOption) *Test {
 		seed:      seed,
 		cluster:   mc,
 	}
+}
+
+// newTestWithWorkloadNode override the mockcluster.ALL and
+// mockcluster.CRDBNodes to simulate the existence of a workload node
+func newTestWithWorkloadNode(ctrl *gomock.Controller, options ...CustomOption) *Test {
+	t := newTest(ctrl, options...)
+	mc := mockcluster.NewMockCluster(ctrl)
+	mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 1))
+	mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
+	t.cluster = mc
+	return t
 }
 
 func newBasicUpgradeTest(ctrl *gomock.Controller, options ...CustomOption) *Test {
