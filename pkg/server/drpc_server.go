@@ -30,8 +30,24 @@ type drpcServer struct {
 
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
-func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
-	d, err := rpc.NewDRPCServer(ctx, rpcCtx)
+func newDRPCServer(
+	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.RequestMetrics,
+) (*drpcServer, error) {
+	d := &drpcServer{}
+	d.setMode(modeInitializing)
+
+	dsrv, err := rpc.NewDRPCServer(
+		ctx,
+		rpcCtx,
+		rpc.WithInterceptor(
+			func(path string) error {
+				return d.intercept(path)
+			}),
+		rpc.WithDRPCMetricsServerInterceptor(
+			rpc.NewDRPCRequestMetricsInterceptor(requestMetrics, func(method string) bool {
+				return shouldRecordRequestDuration(rpcCtx.Settings, method)
+			}),
+		))
 	if err != nil {
 		return nil, err
 	}
@@ -41,18 +57,14 @@ func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error
 		return nil, err
 	}
 
-	drpcServer := &drpcServer{
-		DRPCServer: d,
-		tlsCfg:     tlsCfg,
-	}
+	d.DRPCServer = dsrv
+	d.tlsCfg = tlsCfg
 
-	drpcServer.setMode(modeInitializing)
-
-	if err := rpc.DRPCRegisterHeartbeat(drpcServer, rpcCtx.NewHeartbeatService()); err != nil {
+	if err := rpc.DRPCRegisterHeartbeat(d, rpcCtx.NewHeartbeatService()); err != nil {
 		return nil, err
 	}
 
-	return drpcServer, nil
+	return d, nil
 }
 
 // health returns an error if the server is not operational, encoding the error
