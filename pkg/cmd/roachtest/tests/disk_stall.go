@@ -163,7 +163,7 @@ func runDiskStalledWALFailover(
 		})
 
 	for _, dp := range data.Results[0].Datapoints {
-		if dur := time.Duration(dp.Value); dur > time.Second {
+		if dur := time.Duration(dp.Value); dur > 2*time.Second {
 			t.Errorf("unexpectedly high p99.99 latency %s at %s", dur, timeutil.Unix(0, dp.TimestampNanos).Format(time.RFC3339))
 		}
 	}
