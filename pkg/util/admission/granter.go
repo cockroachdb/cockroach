@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -258,6 +259,180 @@ func (tg *tokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
 		}
 	}
 	return res
+}
+
+// See cpuTimeTokenGranter docs for an explanation of the approach. This
+// struct just stores wc & proxies to cpuTimeTokenGranter.
+type cpuTimeTokenChildGranter struct {
+	// NB: The ElasticWorkClass here is not the same as the one that uses the
+	// ElasticCPUGrantCoordinator. The one here falls below the RegularWorkClass
+	// in priority, but above the ones that use the ElasticCPUGrantCoordinator.
+	wc     admissionpb.WorkClass
+	parent *cpuTimeTokenGranter
+}
+
+var _ granter = &cpuTimeTokenChildGranter{}
+
+// grantKind implements granter.
+func (cg *cpuTimeTokenChildGranter) grantKind() grantKind {
+	// TODO(josh): Sumeer, this is a change from you had in POC. If I should be
+	// returning slot here, can you say why in the PR review?
+	return token
+}
+
+// tryGet implements granter.
+func (cg *cpuTimeTokenChildGranter) tryGet(qual burstQualification, count int64) bool {
+	return cg.parent.tryGet(cg.wc, qual, count)
+}
+
+// returnGrant implements granter.
+func (cg *cpuTimeTokenChildGranter) returnGrant(count int64) {
+	cg.parent.returnGrant(count)
+}
+
+// tookWithoutPermission implements granter.
+func (cg *cpuTimeTokenChildGranter) tookWithoutPermission(count int64) {
+	cg.parent.tookWithoutPermission(count)
+}
+
+// continueGrantChain implements granter.
+func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID) {
+	// Ignore since grant chains are not used.
+}
+
+// cpuTimeTokenGranter uses token buckets to limit CPU usage. There is one
+// token bucket per type of request. Requests are only admitted (tryGet
+// only returns true), if the bucket for the type of request to be done has
+// positive tokens. Before a request is admitted, tokens are deducated from all
+// buckets, not just the bucket that was checked initially. This enables
+// setting up a hierarchy of types of requests, where some types can use more
+// CPU than others.
+//
+// For example, on an 8 vCPU machine, it might be set up like this:
+//
+// - Burstable regular work -> 6 seconds of CPU time per second
+// - Non-burstable regular work -> 5 seconds of CPU time per second
+// - Elastic work -> 2 seconds of CPU time per second
+//
+// Note that cpuTimeTokenGranter does not handle replinishing the buckets;
+// see CPUTimeTokenGrantCoordinator for that, and for more docs about the
+// overall approach.
+type cpuTimeTokenGranter struct {
+	requester [admissionpb.NumWorkClasses]requester
+	mu        struct {
+		// TODO(josh): I suspect putting the mutex here is better than in
+		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
+		// Think better to decice when I put up a PR that introduces
+		// CPUTimeTokenGrantCoordinator & cpuTimeTokenAdjusterNew.
+		syncutil.Mutex
+		buckets [admissionpb.NumWorkClasses][numBurstQualifications]tokenBucket
+	}
+}
+
+type tokenBucket struct {
+	tokens int64
+}
+
+func newCPUTimeTokenGranter() *cpuTimeTokenGranter {
+	stg := &cpuTimeTokenGranter{}
+	for wc := admissionpb.RegularWorkClass; wc < admissionpb.NumWorkClasses; wc++ {
+		for gk := canBurst; gk < numBurstQualifications; gk++ {
+			stg.mu.buckets[wc][gk] = tokenBucket{}
+		}
+	}
+	return stg
+}
+
+func (stg *cpuTimeTokenGranter) String() string {
+	var str string
+	for wc := admissionpb.RegularWorkClass; wc < admissionpb.NumWorkClasses; wc++ {
+		for gk := canBurst; gk < numBurstQualifications; gk++ {
+			str += fmt.Sprintf("%s %d %d / ", wc, gk, stg.mu.buckets[wc][gk])
+		}
+	}
+	return str
+}
+
+// See granter docs.
+func (stg *cpuTimeTokenGranter) tryGet(
+	wc admissionpb.WorkClass, qual burstQualification, count int64,
+) bool {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	if stg.mu.buckets[wc][qual].tokens <= 0 {
+		return false
+	}
+	stg.tookWithoutPermissionLocked(count)
+	return true
+}
+
+// See granter docs.
+// TODO(josh): Sumeer, I don't understand why we need to allow count to
+// be negative, as you have in the prototype. There is tookWithoutPermission
+// for negative counts. Was that a temporary hack, or do you suspect I will
+// need to change the granter contract to allow for negative counts being
+// passed to returnGrant?
+func (stg *cpuTimeTokenGranter) returnGrant(count int64) {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	stg.tookWithoutPermissionLocked(-count)
+	// count must be positive. Thus we need to check the buckets
+	// to see if they have positive tokens.
+	stg.grantUntilNoWaitingRequestsLocked()
+}
+
+// See granter docs.
+func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	stg.tookWithoutPermissionLocked(count)
+}
+
+// See granter docs.
+func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
+	for i := range stg.mu.buckets {
+		for j := range stg.mu.buckets[i] {
+			stg.mu.buckets[i][j].tokens -= count
+		}
+	}
+}
+
+// grantUntilNoWaitingRequestsLocked grants admission to all queued requests
+// that can be granted, given the current state of the token buckets, etc.
+// It prioritizes requesters from higher class work in the sense of
+// admissionpb.WorkClass. That is, multiple waiting requests of class
+// RegularWorkClass will be granted before a single one is from ElasticWorkClass.
+func (stg *cpuTimeTokenGranter) grantUntilNoWaitingRequestsLocked() {
+	// TODO(josh): Think over risk of infinite loop here.
+	for stg.tryGrantLocked() {
+	}
+}
+
+// tryGrantLocked attempts to grant admission to a single queued request.
+// It prioritizes requesters from higher class work, in the sense of
+// admissionpb.WorkClass.
+func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
+	for i := range stg.requester {
+		hasWaitingRequests, qual := stg.requester[i].hasWaitingRequests()
+		if !hasWaitingRequests {
+			continue
+		}
+		if stg.mu.buckets[i][qual].tokens <= 0 {
+			// This is correct, since:
+			// 1. stg.requester is in priority order.
+			// 2. There are always more tokens in buckets from higher priority
+			//    stg.requesters.
+			return false
+		}
+		tokens := stg.requester[i].granted(0)
+		if tokens == 0 {
+			// Did not accept grant.
+			continue
+		}
+		stg.tookWithoutPermissionLocked(tokens)
+		return true
+	}
+	return false
 }
 
 // kvStoreTokenGranter is used for grants to KVWork to a store, that is
