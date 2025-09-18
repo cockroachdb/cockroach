@@ -1106,6 +1106,11 @@ func createImportingDescriptors(
 
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
+			if desc.TableDesc().Temporary {
+				// TODO(jeffswenson): replace this with an assertion once we no longer
+				// need to restore from backups that possibly contain temporary tables.
+				continue
+			}
 			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
 			if shouldPreRestore(mut) {
 				preRestoreTables = append(preRestoreTables, mut)
