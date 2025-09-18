@@ -239,7 +239,7 @@ func DecodeWriteBatch(writeBatch []byte) (string, error) {
 	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
 	// compilation will fail if it's not. Unfortunately, this doesn't protect
 	// against reusing a currently unused RocksDB key kind.
-	const _ = uint(pebble.InternalKeyKindExcise - pebble.InternalKeyKindMax)
+	const _ = uint(pebble.InternalKeyKindSyntheticKey - pebble.InternalKeyKindMax)
 
 	if writeBatch == nil {
 		return "<nil>\n", nil
