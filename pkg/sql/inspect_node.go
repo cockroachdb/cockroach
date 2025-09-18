@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -22,30 +21,25 @@ type inspectNode struct {
 }
 
 // Inspect checks the database.
-// Privileges: INSPECT on table or database.
+// Privileges: INSPECT.
 func (p *planner) Inspect(ctx context.Context, n *tree.Inspect) (planNode, error) {
-	var desc catalog.Descriptor
 	switch n.Typ {
 	case tree.InspectTable:
 		tableName := n.Table.ToTableName()
-		_, tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
+		_, _, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true /* required */, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
-
-		desc = tableDesc
 	case tree.InspectDatabase:
-		dbDesc, err := p.Descriptors().ByName(p.txn).Get().Database(ctx, n.Database.ToUnresolvedName().String())
+		_, err := p.Descriptors().ByName(p.txn).Get().Database(ctx, n.Database.ToUnresolvedName().String())
 		if err != nil {
 			return nil, err
 		}
-
-		desc = dbDesc
 	default:
 		return nil, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", n.Typ)
 	}
 
-	if err := p.CheckPrivilege(ctx, desc, privilege.INSPECT); err != nil {
+	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.INSPECT); err != nil {
 		return nil, err
 	}
 
