@@ -104,8 +104,8 @@ func registerCDCMixedVersions(r registry.Registry) {
 // after upgrade.
 type cdcMixedVersionTester struct {
 	ctx context.Context
-
-	c cluster.Cluster
+	t   test.Test
+	c   cluster.Cluster
 
 	crdbNodes     option.NodeListOption
 	workloadNodes option.NodeListOption
@@ -144,9 +144,12 @@ type cdcMixedVersionTester struct {
 	jobID int
 }
 
-func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
+func newCDCMixedVersionTester(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) cdcMixedVersionTester {
 	return cdcMixedVersionTester{
 		ctx:           ctx,
+		t:             t,
 		c:             c,
 		crdbNodes:     c.CRDBNodes(),
 		workloadNodes: c.WorkloadNode(),
@@ -448,8 +451,8 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 	if err := enableTenantSplitScatter(l, r, h); err != nil {
 		return err
 	}
-
-	bankInit := roachtestutil.NewCommand("%s workload init bank", test.DefaultCockroachPath).
+	binPath := clusterupgrade.BinaryPathForVersion(cmvt.t, h.System.FromVersion, "cockroach")
+	bankInit := roachtestutil.NewCommand("%s workload init bank", binPath).
 		Flag("ranges", targetTableRanges).
 		Flag("rows", targetTableRows).
 		Flag("seed", r.Int63()).
@@ -539,7 +542,7 @@ func canMixedVersionUseDeletedClusterSetting(
 }
 
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, c)
+	tester := newCDCMixedVersionTester(ctx, t, c)
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,
@@ -594,7 +597,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.OnStartup("init workload", tester.initWorkload)
 
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
-	_ = mvt.BackgroundCommand("run workload", tester.workloadNodes, runWorkloadCmd)
+	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd, false)
 	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
 
 	// NB: mvt.InMixedVersion will run these hooks multiple times at various points during the rolling upgrade, but
@@ -618,7 +621,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 // restoring the checkpoint implicitly happens following each of the rolling
 // restarts during the mixed-version test run.
 func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, c)
+	tester := newCDCMixedVersionTester(ctx, t, c)
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,

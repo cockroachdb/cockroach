@@ -50,7 +50,10 @@ go_test(
     embed = [":clusterstats"],
     embedsrcs = ["openmetrics_expected.txt"],
     deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
         "//pkg/cmd/roachtest/registry",
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/task",  #keep
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
@@ -61,9 +64,6 @@ go_test(
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
-        "//pkg/cmd/roachtest/roachtestutil",
-        "//pkg/cmd/roachtest/cluster",
-        "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
     ],
 )
 
