@@ -466,10 +466,9 @@ func (s *initServer) attemptJoinTo(
 		BinaryVersion: &latestVersion,
 	}
 
+	// TODO(chandrat): fix this later
 	var initClient kvpb.RPCNodeClient
-	if !rpcbase.TODODRPC {
-		initClient = kvpb.NewGRPCInternalClientAdapter(conn)
-	}
+	initClient = kvpb.NewGRPCInternalClientAdapter(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
