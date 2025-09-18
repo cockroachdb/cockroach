@@ -115,7 +115,7 @@ func TestCPUGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanCPUWorkKind(t, d)].tryGet(int64(v))
+			requesters[scanCPUWorkKind(t, d)].tryGet(noBurst /* arbitary */, int64(v))
 			return flushAndReset()
 
 		case "return-grant":
@@ -301,7 +301,7 @@ func TestStoreGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanStoreWorkType(t, d)].tryGet(int64(v))
+			requesters[scanStoreWorkType(t, d)].tryGet(noBurst /* arbitrary */, int64(v))
 			return flushAndReset()
 
 		case "return-grant":
@@ -489,7 +489,7 @@ func TestStoreCoordinators(t *testing.T) {
 	// point in time, so will return true.
 	requesters = requesters[1:]
 	for i := range requesters {
-		requesters[i].tryGet(1)
+		requesters[i].tryGet(noBurst /* arbitrary */, 1)
 	}
 	require.Equal(t,
 		"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n"+
@@ -505,15 +505,22 @@ type testRequester struct {
 	usesTokens   bool
 	buf          *strings.Builder
 
-	waitingRequests        bool
-	returnValueFromGranted int64
-	grantChainID           grantChainID
+	waitingRequests                   bool
+	returnValueFromHasWaitingRequests burstQualification
+	returnValueFromGranted            int64
+	grantChainID                      grantChainID
 }
 
 var _ requester = &testRequester{}
 
+func (tr *testRequester) String() string {
+	return fmt.Sprintf(
+		"waitingRequests: %t, returnValueFromHasWaitingRequests: %s, returnValueFromGranted: %d",
+		tr.waitingRequests, tr.returnValueFromHasWaitingRequests, tr.returnValueFromGranted)
+}
+
 func (tr *testRequester) hasWaitingRequests() (bool, burstQualification) {
-	return tr.waitingRequests, canBurst /*arbitrary*/
+	return tr.waitingRequests, tr.returnValueFromHasWaitingRequests
 }
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
@@ -526,8 +533,8 @@ func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 
 func (tr *testRequester) close() {}
 
-func (tr *testRequester) tryGet(count int64) {
-	rv := tr.granter.tryGet(canBurst /*arbitrary*/, count)
+func (tr *testRequester) tryGet(qual burstQualification, count int64) {
+	rv := tr.granter.tryGet(qual, count)
 	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", tr.workKind,
 		tr.additionalID, count, rv)
 }

@@ -1,0 +1,207 @@
+# Simple tryGet calls.
+init tier0=1
+----
+cpuTTG canBurst noBurst
+tier0  0        1
+tier1  0        0
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+
+try-get tier=tier1 v=1
+----
+kvtier1: tryGet(1) returned false
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned true
+cpuTTG canBurst noBurst
+tier0  -1       0
+tier1  -1       -1
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned false
+
+# More simple tryGet calls. This time, tier1 work is admitted.
+init tier0=2 tier1=1
+----
+cpuTTG canBurst noBurst
+tier0  0        2
+tier1  0        1
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+
+# For cpuTimeTokenChildGranter, this is a NOP. Still, it will be
+# called in production. So best to test it doesn't panic, or similar.
+continue-grant-chain tier=tier0
+----
+kvtier0: continueGrantChain
+
+try-get tier=tier1 v=1
+----
+kvtier1: tryGet(1) returned true
+cpuTTG canBurst noBurst
+tier0  -1       1
+tier1  -1       0
+
+try-get tier=tier1 v=1
+----
+kvtier1: tryGet(1) returned false
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned true
+cpuTTG canBurst noBurst
+tier0  -2       0
+tier1  -2       -1
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned false
+
+# returnGrant adds tokens to the buckets, when a positive count is used.
+init tier0=1 tier1=1
+----
+cpuTTG canBurst noBurst
+tier0  0        1
+tier1  0        1
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+
+return-grant tier=tier0 v=1
+----
+kvtier0: returnGrant(1)
+cpuTTG canBurst noBurst
+tier0  1        2
+tier1  1        2
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned true
+cpuTTG canBurst noBurst
+tier0  0        1
+tier1  0        1
+
+try-get tier=tier1 v=1
+----
+kvtier1: tryGet(1) returned true
+cpuTTG canBurst noBurst
+tier0  -1       0
+tier1  -1       0
+
+# Simple tookWithoutPermission test.
+init tier0=3 tier1=3
+----
+cpuTTG canBurst noBurst
+tier0  0        3
+tier1  0        3
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+
+took-without-permission tier=tier1 v=3
+----
+kvtier1: tookWithoutPermission(3)
+cpuTTG canBurst noBurst
+tier0  -3       0
+tier1  -3       0
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned false
+
+try-get tier=tier1 v=1
+----
+kvtier1: tryGet(1) returned false
+
+# Test granting. A single tier0 request will be admitted.
+init tier0waiter=2 tier1waiter=1
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+tier0requester: waitingRequests: true, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 2
+tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 1
+
+return-grant tier=tier0 v=2
+----
+kvtier0: returnGrant(2)
+kvtier0: granted in chain 0, and returning 2
+
+# Test granting. Two tier1 requests will be admitted.
+init tier0=-1 tier0burst=-1 tier1=-1 tier1burst=-1 tier1waiter=1
+----
+cpuTTG canBurst noBurst
+tier0  -1       -1
+tier1  -1       -1
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 1
+
+# With three returned, tier1 burst will have two tokens. Thus two tier1
+# requests can be granted admission. Note that the test requester is not
+# stateful. In init, tier1water=1 means the tier1 requester always has a waiting
+# request, and the ret value from granted is always 1. Thus, after two tier1 requests
+# are granted admission, the bucket is empty again.
+return-grant tier=tier0 v=3
+----
+kvtier0: returnGrant(3)
+kvtier1: granted in chain 0, and returning 1
+kvtier1: granted in chain 0, and returning 1
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# Simple tryGet calls, with burst this time.
+init tier0burst=1
+----
+cpuTTG canBurst noBurst
+tier0  1        0
+tier1  0        0
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+
+try-get tier=tier0 v=1
+----
+kvtier0: tryGet(1) returned false
+
+try-get tier=tier0 burst v=1
+----
+kvtier0: tryGet(1) returned true
+cpuTTG canBurst noBurst
+tier0  0        -1
+tier1  -1       -1
+
+try-get tier=tier0 burst v=1
+----
+kvtier0: tryGet(1) returned false
+
+# Test granting, with burst. After the call to return-grant, only tier1 burst will
+# have enough tokens to grant. So grant a tier1 request.
+init tier0burst=-1 tier0=-1 tier1burst=0 tier1=-1 tier1waiter=1 tier1burstwaiter
+----
+cpuTTG canBurst noBurst
+tier0  -1       -1
+tier1  0        -1
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: canBurst, returnValueFromGranted: 1
+
+return-grant tier=tier0 v=1
+----
+kvtier0: returnGrant(1)
+kvtier1: granted in chain 0, and returning 1
+
+# Test granting, with burst. After the call to return-grant, only tier1 no-burst will
+# have enough tokens to grant. So no grant, since the tier1 waiting request is a burst request.
+init tier0burst=-1 tier0=-1 tier1burst=-1 tier1=0 tier1waiter=1 tier1burstwaiter
+----
+cpuTTG canBurst noBurst
+tier0  -1       -1
+tier1  -1       0
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: canBurst, returnValueFromGranted: 1
+
+return-grant tier=tier0 v=1
+----
+kvtier0: returnGrant(1)
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        1
