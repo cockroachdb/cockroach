@@ -4,6 +4,9 @@
 !*/
 
 # Except this specific directory (relative to .gitignore)
+# Note that this intentionally does not include subdirectories (such as traces)
+# which are not deterministic.
 !example_rebalancing/**
+**/traces
 # And the readme file.
 !README.md
