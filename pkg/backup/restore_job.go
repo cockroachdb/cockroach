@@ -2897,10 +2897,6 @@ func (r *restoreResumer) dropDescriptors(
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
 
-		if err := descsCol.DeleteTableComments(ctx, kvTrace, b, tableToDrop.ID); err != nil {
-			return err
-		}
-
 		// Drop any schedules we may have implicitly created.
 		if tableToDrop.HasRowLevelTTL() {
 			scheduleID := tableToDrop.RowLevelTTL.ScheduleID
@@ -2943,6 +2939,21 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 		descsCol.NotifyOfDeletedDescriptor(tableToDrop.GetID())
+	}
+
+	// DeleteTableComments uses a DeleteRange request. Because of #71236 we want
+	// to avoid DeleteRange requests that might be followed by a write in the same
+	// batch. As a result, we delete these comments in their own batch.
+	if len(tablesToGC) > 0 {
+		delCommentsBatch := txn.KV().NewBatch()
+		for _, tabID := range tablesToGC {
+			if err := descsCol.DeleteTableComments(ctx, kvTrace, delCommentsBatch, tabID); err != nil {
+				return err
+			}
+		}
+		if err := txn.KV().Run(ctx, delCommentsBatch); err != nil {
+			return err
+		}
 	}
 
 	// Drop the type descriptors that this restore created.
