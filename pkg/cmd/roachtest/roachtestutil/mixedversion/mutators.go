@@ -61,7 +61,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
 		removeExistingStep := upgradeSelector.
 			Filter(func(s *singleStep) bool {
-				step, ok := s.impl.(allowUpgradeStep)
+				step, ok := s.Impl.(allowUpgradeStep)
 				return ok && step.virtualClusterName == install.SystemInterfaceName
 			}).
 			Remove()
@@ -71,11 +71,11 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 				// It is valid to reset the cluster setting when we are
 				// performing a rollback (as we know the next upgrade will be
 				// the final one); or during the final upgrade itself.
-				return (s.context.System.Stage == LastUpgradeStage || s.context.System.Stage == RollbackUpgradeStage) &&
+				return (s.Context.System.Stage == LastUpgradeStage || s.Context.System.Stage == RollbackUpgradeStage) &&
 					// We also don't want all nodes to be running the latest
 					// binary, as that would be equivalent to the test plan
 					// without this mutator.
-					len(s.context.System.NodesInNextVersion()) < len(s.context.System.Descriptor.Nodes)
+					len(s.Context.System.NodesInNextVersion()) < len(s.Context.System.Descriptor.Nodes)
 			}).
 			RandomStep(rng).
 			// Note that we don't attempt a concurrent insert because the
@@ -91,10 +91,10 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 		// next version.
 		for _, step := range upgradeSelector.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage == LastUpgradeStage &&
-					len(s.context.System.NodesInNextVersion()) == len(s.context.System.Descriptor.Nodes)
+				return s.Context.System.Stage == LastUpgradeStage &&
+					len(s.Context.System.NodesInNextVersion()) == len(s.Context.System.Descriptor.Nodes)
 			}) {
-			step.context.System.Finalizing = true
+			step.Context.System.Finalizing = true
 		}
 
 		mutations = append(mutations, removeExistingStep...)
@@ -118,7 +118,7 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 
 	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
 		return func(s *singleStep) bool {
-			return s.context.System.FromVersion.Equal(upgrade.from)
+			return s.Context.System.FromVersion.Equal(upgrade.from)
 		}
 	}
 
@@ -237,7 +237,7 @@ func (m clusterSettingMutator) Generate(
 			if m.minVersion != nil {
 				// If we have a minimum version set, we need to make sure we
 				// are upgrading to a supported version.
-				if !s.context.System.ToVersion.AtLeast(m.minVersion) {
+				if !s.Context.System.ToVersion.AtLeast(m.minVersion) {
 					return false
 				}
 
@@ -245,13 +245,13 @@ func (m clusterSettingMutator) Generate(
 				// minimum supported version, then only upgraded nodes are
 				// able to service the cluster setting change request. In that
 				// case, we ensure there is at least one such node.
-				if !s.context.System.FromVersion.AtLeast(m.minVersion) && len(s.context.System.NodesInNextVersion()) == 0 {
+				if !s.Context.System.FromVersion.AtLeast(m.minVersion) && len(s.Context.System.NodesInNextVersion()) == 0 {
 					return false
 				}
 			}
 			// Cluster setting changes can be inserted concurrently, so we want to avoid
 			// inserting into any steps that cannot run concurrently with other steps.
-			return s.context.System.Stage >= OnStartupStage && !s.impl.ConcurrencyDisabled()
+			return s.Context.System.Stage >= OnStartupStage && !s.Impl.ConcurrencyDisabled()
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
@@ -420,7 +420,7 @@ func (m panicNodeMutator) Generate(
 			// We don't want to panic the system on a node while a system node is already down, as that could cause
 			// the cluster to lose quorum, so we filter out any steps with unavailable system nodes.
 			Filter(func(s *singleStep) bool {
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.context.System.hasUnavailableNodes
+				return s.Context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.Context.System.hasUnavailableNodes
 			})
 
 		targetNode := nodeList.SeededRandNode(rng)
@@ -433,7 +433,7 @@ func (m panicNodeMutator) Generate(
 			// cause the cluster to lose quorum, so we avoid any system restarts. If
 			// the cluster has a high enough node count however, we can upreplicate
 			// to 5X before panicking, allowing us to safely restart other nodes.
-			restartImpl, restart := s.impl.(restartWithNewBinaryStep)
+			restartImpl, restart := s.Impl.(restartWithNewBinaryStep)
 			if supportsUpReplication {
 				// We can restart other nodes, but we do not want to restart the
 				// node that is being panicked, as the panic recover step expects
@@ -442,10 +442,10 @@ func (m panicNodeMutator) Generate(
 			}
 			// Waiting for stable cluster version targets every node in
 			// the cluster, so a node cannot be dead during this step.
-			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			_, waitForStable := s.Impl.(waitForStableClusterVersionStep)
 			// Many hook steps do not support running with a dead node,
 			// so we avoid inserting after an incompatible hook step.
-			_, runHook := s.impl.(runHookStep)
+			_, runHook := s.Impl.(runHookStep)
 
 			if idx.IsConcurrent(s) {
 				if firstStepInConcurrentBlock == nil {
@@ -457,7 +457,7 @@ func (m panicNodeMutator) Generate(
 				firstStepInConcurrentBlock = nil
 			}
 
-			return restart || waitForStable || (runHook && !planner.options.hooksSupportFailureInjection) || s.context.System.hasUnavailableNodes
+			return restart || waitForStable || (runHook && !planner.options.hooksSupportFailureInjection) || s.Context.System.hasUnavailableNodes
 		}
 
 		// The node should be restarted after the panic, but before any steps that are
@@ -569,11 +569,11 @@ func (m networkPartitionMutator) Generate(
 				//	so we filter out steps with unavailable nodes.
 				var unavailableNodes bool
 				if planner.isMultitenant() {
-					unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
+					unavailableNodes = s.Context.Tenant.hasUnavailableNodes || s.Context.System.hasUnavailableNodes
 				} else {
-					unavailableNodes = s.context.System.hasUnavailableNodes
+					unavailableNodes = s.Context.System.hasUnavailableNodes
 				}
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !unavailableNodes
+				return s.Context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !unavailableNodes
 			})
 
 		stepToPartition := possiblePointsInTime.RandomStep(rng)
@@ -591,16 +591,16 @@ func (m networkPartitionMutator) Generate(
 			// TODO: The partitioned node should be able to restart safely, provided
 			// the necessary steps are altered to allow it.
 
-			_, restartSystem := s.impl.(restartWithNewBinaryStep)
-			_, restartTenant := s.impl.(restartVirtualClusterStep)
+			_, restartSystem := s.Impl.(restartWithNewBinaryStep)
+			_, restartTenant := s.Impl.(restartVirtualClusterStep)
 			// Many hook steps require communication between specific nodes, so we
 			// should recover the network partition before running any incompatible
 			// hook steps.
-			_, runHook := s.impl.(runHookStep)
+			_, runHook := s.Impl.(runHookStep)
 			// Waiting for stable cluster version requires communication between
 			// all nodes in the cluster, so we should recover the network partition
 			// before running it.
-			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			_, waitForStable := s.Impl.(waitForStableClusterVersionStep)
 
 			if idx.IsConcurrent(s) {
 				if firstStepInConcurrentBlock == nil {
@@ -614,9 +614,9 @@ func (m networkPartitionMutator) Generate(
 
 			var unavailableNodes bool
 			if planner.isMultitenant() {
-				unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
+				unavailableNodes = s.Context.Tenant.hasUnavailableNodes || s.Context.System.hasUnavailableNodes
 			} else {
-				unavailableNodes = s.context.System.hasUnavailableNodes
+				unavailableNodes = s.Context.System.hasUnavailableNodes
 			}
 			return unavailableNodes || restartTenant || restartSystem || (runHook && !planner.options.hooksSupportFailureInjection) || waitForStable
 		}

@@ -41,7 +41,7 @@ func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
 	for j < len(mutations) {
 		// Removal
 		require.Equal(t, mutationRemove, mutations[j].op)
-		require.IsType(t, allowUpgradeStep{}, mutations[j].reference.impl)
+		require.IsType(t, allowUpgradeStep{}, mutations[j].reference.Impl)
 
 		// Insertion
 		require.Equal(t, mutationInsertBefore, mutations[j+1].op)
@@ -72,7 +72,7 @@ func TestClusterSettingMutator(t *testing.T) {
 		}
 
 		var nodesInValidVersion option.NodeListOption
-		stepContext := m.reference.context
+		stepContext := m.reference.Context
 		for _, node := range stepContext.System.Descriptor.Nodes {
 			nodeV, err := stepContext.NodeVersion(node)
 			require.NoError(t, err)
