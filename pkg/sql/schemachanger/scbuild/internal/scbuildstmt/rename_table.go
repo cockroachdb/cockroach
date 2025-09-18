@@ -240,7 +240,27 @@ func checkNameBasedDependencies(
 			_, _, viewNS := scpb.FindNamespace(viewElts)
 			panic(sqlerrors.NewDependentBlocksOpError("rename", "relation", objectName.String(), "view", viewNS.Name))
 		case *scpb.FunctionName:
-			panic(sqlerrors.NewDependentBlocksOpError("rename", "relation", objectName.String(), "function", backRefElem.Name))
+			funcElem := b.QueryByID(backRefElem.FunctionID).FilterFunction().MustGetOneElement()
+			funcType := "function"
+			if funcElem.IsProcedure {
+				funcType = "procedure"
+			}
+			panic(sqlerrors.NewDependentBlocksOpError("rename", "relation", objectName.String(), funcType, backRefElem.Name))
+		case *scpb.TriggerDeps:
+			for _, usesRelation := range backRefElem.UsesRelations {
+				if usesRelation.ID == descriptorID {
+					dependentTableID := backRefElem.TableID
+					dependentTriggerID := backRefElem.TriggerID
+					dependentTableNS := b.QueryByID(dependentTableID).FilterNamespace().MustGetOneElement()
+					dependentTriggerName := backRefs.FilterTriggerName().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerName) bool {
+						return e.TriggerID == dependentTriggerID && e.TableID == dependentTableID
+					}).MustGetOneElement()
+					panic(sqlerrors.NewDependentObjectErrorf(
+						"cannot rename relation %q because trigger %q on table %q depends on it",
+						objectName.String(), dependentTriggerName.Name, dependentTableNS.Name,
+					))
+				}
+			}
 		}
 	})
 }

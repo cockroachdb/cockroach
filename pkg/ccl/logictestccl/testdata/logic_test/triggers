@@ -929,7 +929,12 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
+onlyif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
 statement error pgcode 2BP01 cannot rename relation "t" because trigger "foo" on table "xy" depends on it
+ALTER TABLE t RENAME TO t2;
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
+statement error pgcode 2BP01 cannot rename relation "test.public.t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
 # Sequences are remapped to their IDs, so renaming is allowed.
