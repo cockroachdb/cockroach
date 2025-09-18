@@ -549,7 +549,7 @@ func TestDataDriven(t *testing.T) {
 						for sample := 0; sample < samples; sample++ {
 							recIdx := map[int64]int{}
 							settingsGen.Settings.OnRecording = func(storeID int64, rec tracingpb.Recording) {
-								if len(rec[0].Logs) == 0 {
+								if !rewrite || len(rec[0].Logs) == 0 {
 									return
 								}
 								traceDir := filepath.Join(plotDir, "traces", fmt.Sprintf("s%d", storeID))
@@ -557,11 +557,11 @@ func TestDataDriven(t *testing.T) {
 									require.NoError(t, os.MkdirAll(traceDir, 0755))
 								}
 								re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
-								outName := fmt.Sprintf(testName+"_%s_s%d", re.ReplaceAllString(rec[0].Operation, "_"), storeID)
+								outName := fmt.Sprintf("%s_%s_s%d", mv, re.ReplaceAllString(rec[0].Operation, "_"), storeID)
 								if sample > 0 {
-									outName += fmt.Sprintf("_%d", sample+1)
+									outName += fmt.Sprintf("_sample%d", sample+1)
 								}
-								outName += "_" + fmt.Sprintf("cc_%d.txt", recIdx[storeID])
+								outName += "_" + fmt.Sprintf("%03d.txt", recIdx[storeID])
 								assert.NoError(t, os.WriteFile(
 									filepath.Join(traceDir, outName),
 									[]byte(rec.String()), 0644))
