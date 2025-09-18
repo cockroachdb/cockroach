@@ -328,7 +328,7 @@ type ScorerOptions interface {
 	getIOOverloadOptions() IOOverloadOptions
 	// getDiskOptions returns the scorer options for disk fullness.
 	getDiskOptions() DiskCapacityOptions
-	shouldNotRebalanceForMMA(candidate roachpb.StoreDescriptor, candidateSL storepool.StoreList) bool
+	isInConflictWithMMA(candidate roachpb.StoreID, candidateSL storepool.StoreList) bool
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -387,9 +387,7 @@ func (bo BaseScorerOptions) deterministicForTesting() bool {
 	return bo.Deterministic
 }
 
-func (bo BaseScorerOptions) shouldNotRebalanceForMMA(
-	_ roachpb.StoreDescriptor, _ storepool.StoreList,
-) bool {
+func (bo BaseScorerOptions) isInConflictWithMMA(_ roachpb.StoreID, _ storepool.StoreList) bool {
 	return false
 }
 
@@ -585,14 +583,10 @@ type LoadAwareRangeCountScorerOptions struct {
 
 var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
 
-func (lao LoadAwareRangeCountScorerOptions) shouldNotRebalanceForMMA(
-	cand roachpb.StoreDescriptor, candidateSL storepool.StoreList,
+func (lr LoadAwareRangeCountScorerOptions) isInConflictWithMMA(
+	cand roachpb.StoreID, candidateSL storepool.StoreList,
 ) bool {
-	storeIDs := make([]roachpb.StoreID, 0, len(candidateSL.Stores))
-	for _, s := range candidateSL.Stores {
-		storeIDs = append(storeIDs, s.StoreID)
-	}
-	return lao.AllocatorSync.ShouldNotRebalanceForMMA(cand, storeIDs)
+	return lr.IsInConflictWithMMA(cand, candidateSL)
 }
 
 // LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
@@ -1850,7 +1844,7 @@ func rankedCandidateListForRebalancing(
 			if _, ok := existingStores[cand.store.StoreID]; ok {
 				continue
 			}
-			if options.shouldNotRebalanceForMMA(cand.store, comparable.candidateSL) {
+			if options.isInConflictWithMMA(cand.store.StoreID, comparable.candidateSL) {
 				continue
 			}
 			// We already computed valid, necessary, fullDisk, and diversityScore
