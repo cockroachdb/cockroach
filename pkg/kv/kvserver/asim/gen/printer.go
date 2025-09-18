@@ -33,7 +33,8 @@ func compareSettingsToDefault(settings config.SimulationSettings) string {
 		// Skip cluster setting ST and seed. The simulation seed is derived from
 		// rand.New(rand.NewSource(42)).Int63() by default, while the default
 		// simulation setting itself uses 42.
-		if field.Name == "ST" || field.Name == "Seed" {
+		// We also skip the OnRecording callback.
+		if field.Name == "ST" || field.Name == "Seed" || field.Name == "OnRecording" {
 			continue
 		}
 
