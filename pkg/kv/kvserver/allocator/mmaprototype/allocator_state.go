@@ -242,8 +242,8 @@ func (a *allocatorState) Metrics() *MMAMetrics {
 	return a.mmaMetrics
 }
 
-func (a *allocatorState) LoadSummaryForAllStores() string {
-	return a.cs.loadSummaryForAllStores()
+func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
+	return a.cs.loadSummaryForAllStores(ctx)
 }
 
 var mmaid = atomic.Int64{}
@@ -291,7 +291,7 @@ func (a *allocatorState) rebalanceStores(
 	// is storeMembershipRemoving (decommissioning). These are currently handled
 	// via replicate_queue.go.
 	for storeID, ss := range a.cs.stores {
-		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
+		sls := a.cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		log.Dev.VInfof(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
 			storeID, sls.nls, sls.sls, sls.worstDim)
 
@@ -477,7 +477,7 @@ func (a *allocatorState) rebalanceStores(
 				clear(scratchNodes)
 				means.stores = candsPL
 				computeMeansForStoreSet(a.cs, &means, scratchNodes)
-				sls := a.cs.computeLoadSummary(store.StoreID, &means.storeLoad, &means.nodeLoad)
+				sls := a.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 				log.Dev.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 				if sls.dimSummary[CPURate] < overloadSlow {
 					// This store is not cpu overloaded relative to these candidates for
@@ -493,7 +493,7 @@ func (a *allocatorState) rebalanceStores(
 							cand.storeID)
 						continue
 					}
-					candSls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
+					candSls := a.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
 					if sls.fd != fdOK {
 						log.Dev.VInfof(ctx, 2, "skipping store s%d: failure detection status not OK", cand.storeID)
 						continue
@@ -685,7 +685,7 @@ func (a *allocatorState) rebalanceStores(
 				}
 			}
 			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-			cands, ssSLS := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
+			cands, ssSLS := a.computeCandidatesForRange(ctx, disj[:], storesToExcludeForRange, store.StoreID)
 			log.Dev.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 				rangeID, store.StoreID, ss.adjusted.load)
 			if log.V(2) {
@@ -1359,12 +1359,15 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 // loadSheddingStore is only specified if this candidate computation is
 // happening because of overload.
 func (a *allocatorState) computeCandidatesForRange(
-	expr constraintsDisj, storesToExclude storeIDPostingList, loadSheddingStore roachpb.StoreID,
+	ctx context.Context,
+	expr constraintsDisj,
+	storesToExclude storeIDPostingList,
+	loadSheddingStore roachpb.StoreID,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := a.cs.meansMemo.getMeans(expr)
 	if loadSheddingStore > 0 {
 		sheddingSS := a.cs.stores[loadSheddingStore]
-		sheddingSLS = a.cs.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
+		sheddingSLS = a.cs.meansMemo.getStoreLoadSummary(ctx, means, loadSheddingStore, sheddingSS.loadSeqNum)
 		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
 			return candidateSet{}, sheddingSLS
@@ -1378,7 +1381,7 @@ func (a *allocatorState) computeCandidatesForRange(
 			continue
 		}
 		ss := a.cs.stores[storeID]
-		csls := a.cs.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
+		csls := a.cs.meansMemo.getStoreLoadSummary(ctx, means, storeID, ss.loadSeqNum)
 		if csls.fd != fdOK {
 			continue
 		}

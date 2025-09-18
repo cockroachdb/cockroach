@@ -7,11 +7,7 @@ proto_library(
     srcs = ["progress.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/jobs/jobspb:jobspb_proto",
-        "//pkg/util/hlc:hlc_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )
 
 go_proto_library(
@@ -20,11 +16,7 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb",
     proto = ":cdcprogresspb_proto",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/jobs/jobspb",
-        "//pkg/util/hlc",
-        "@com_github_gogo_protobuf//gogoproto",
-    ],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
 
 go_library(

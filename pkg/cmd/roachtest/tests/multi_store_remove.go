@@ -60,6 +60,12 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startSettings := install.MakeClusterSettings()
 	// Speed up the replicate queue.
 	startSettings.Env = append(startSettings.Env, "COCKROACH_SCAN_INTERVAL=30s")
+
+	// Increase the verbosity of this test to help debug future failures.
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=*=1,raft=3",
+	)
+
 	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
 
 	// Confirm that there are 6 stores live.

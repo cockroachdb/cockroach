@@ -656,6 +656,12 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, errors.Wrapf(err, "failed to restore span-level checkpoint")
 	}
 
+	for _, rs := range ca.spec.ResolvedSpans {
+		if _, err := ca.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+			return nil, errors.Wrapf(err, "failed to restore frontier")
+		}
+	}
+
 	return spans, nil
 }
 
@@ -1480,6 +1486,15 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 
+	for _, rs := range cf.spec.ResolvedSpans {
+		if _, err := cf.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+			log.Changefeed.Warningf(cf.Ctx(),
+				"moving to draining due to error restoring frontier: %v", err)
+			cf.MoveToDraining(err)
+			return
+		}
+	}
+
 	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
 		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)
 	}
@@ -1875,20 +1890,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			if updateRunStatus {
 				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
-			}
-
-			// Write per-table progress if enabled.
-			if cf.spec.ProgressConfig != nil && cf.spec.ProgressConfig.PerTableTracking {
-				resolvedTables := &cdcprogresspb.ResolvedTables{
-					Tables: make(map[descpb.ID]hlc.Timestamp),
-				}
-				for tableID, tableFrontier := range cf.frontier.Frontiers() {
-					resolvedTables.Tables[tableID] = tableFrontier.Frontier()
-				}
-
-				if err := writeChangefeedJobInfo(ctx, resolvedTablesFilename, resolvedTables, txn, cf.spec.JobID); err != nil {
-					return errors.Wrap(err, "error writing resolved tables to job info")
-				}
 			}
 
 			ju.UpdateProgress(progress)

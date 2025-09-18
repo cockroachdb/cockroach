@@ -1404,7 +1404,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			ss.adjusted.topKRanges[msg.StoreID] = topk
 		}
 		topk.startInit()
-		sls := cs.computeLoadSummary(ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad)
+		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad)
 		if ss.StoreID == localss.StoreID {
 			topk.dim = CPURate
 		} else {
@@ -1970,7 +1970,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Or maybe CPU is the only dimension that matters at the node level. It feels
 	// sloppy/confusing though.
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
-	targetSLS := computeLoadSummary(targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
+	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
 	// Undo the addition.
 	targetSS.adjusted.load.subtract(deltaToAdd)
 	targetNS.adjustedCPU -= deltaToAdd[CPURate]
@@ -1979,7 +1979,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcNS := cs.nodes[srcSS.NodeID]
 	srcSS.adjusted.load.subtract(delta)
 	srcNS.adjustedCPU -= delta[CPURate]
-	srcSLS := computeLoadSummary(srcSS, srcNS, &means.storeLoad, &means.nodeLoad)
+	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad)
 	// Undo the removal.
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
@@ -2141,15 +2141,15 @@ func (cs *clusterState) canShedAndAddLoad(
 }
 
 func (cs *clusterState) computeLoadSummary(
-	storeID roachpb.StoreID, msl *meanStoreLoad, mnl *meanNodeLoad,
+	ctx context.Context, storeID roachpb.StoreID, msl *meanStoreLoad, mnl *meanNodeLoad,
 ) storeLoadSummary {
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
-	return computeLoadSummary(ss, ns, msl, mnl)
+	return computeLoadSummary(ctx, ss, ns, msl, mnl)
 }
 
 // TODO(wenyihu6): check to make sure obs here is correct
-func (cs *clusterState) loadSummaryForAllStores() string {
+func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
 	var b strings.Builder
 	clusterMeans := cs.meansMemo.getMeans(nil)
 	b.WriteString(fmt.Sprintf("cluster means: (stores-load %s) (stores-capacity %s)\n",
@@ -2157,14 +2157,14 @@ func (cs *clusterState) loadSummaryForAllStores() string {
 	b.WriteString(fmt.Sprintf("(nodes-cpu-load %d) (nodes-cpu-capacity %d)\n",
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU))
 	for storeID, ss := range cs.stores {
-		sls := cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
+		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		b.WriteString(fmt.Sprintf("evaluating store s%d for shedding: load summary %v", storeID, sls))
 	}
 	return b.String()
 }
 
 func computeLoadSummary(
-	ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
+	ctx context.Context, ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
 ) storeLoadSummary {
 	sls := loadLow
 	var highDiskSpaceUtil bool
@@ -2172,8 +2172,9 @@ func computeLoadSummary(
 	var worstDim LoadDimension
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
-		ls := loadSummaryForDimension(
-			ss.StoreID, 0 /*NodeID(for logging)*/, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
+		const nodeIDForLogging = 0
+		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
+			msl.load[i], msl.util[i])
 		if ls > sls {
 			sls = ls
 			worstDim = LoadDimension(i)
@@ -2184,7 +2185,8 @@ func computeLoadSummary(
 			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
 		}
 	}
-	nls := loadSummaryForDimension(0 /*StoreID(for logging)*/, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
+	const storeIDForLogging = 0
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,

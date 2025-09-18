@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -470,6 +471,22 @@ func makePlan(
 			}
 		}
 
+		var resolvedSpans []jobspb.ResolvedSpan
+		if jobID != 0 {
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
+				if err != nil {
+					return err
+				}
+				if ok {
+					resolvedSpans = spans
+				}
+				return nil
+			}); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
@@ -493,6 +510,7 @@ func makePlan(
 				Select:              execinfrapb.Expression{Expr: details.Select},
 				Description:         description,
 				ProgressConfig:      progressConfig,
+				ResolvedSpans:       resolvedSpans,
 			}
 		}
 
@@ -508,6 +526,7 @@ func makePlan(
 			UserProto:           execCtx.User().EncodeProto(),
 			Description:         description,
 			ProgressConfig:      progressConfig,
+			ResolvedSpans:       resolvedSpans,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
