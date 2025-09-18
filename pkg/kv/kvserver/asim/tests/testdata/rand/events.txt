@@ -12,36 +12,36 @@ eval duration=20m num_iterations=3 verbose=(events)
 ----------------------------------
 sample1: start running
 4 events executed:
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=US_East}] [lease:{region=US_East}]
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=US_East}] [lease:{region=US_East}]
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:10:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_East}] [lease:{region=US_East}] at 11:10:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_East}] [lease:{region=US_East}] at 11:10:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:20:00
 sample1: pass
 ----------------------------------
 sample2: start running
 4 events executed:
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=US_East}] [lease:{region=US_East}]
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=US_East}] [lease:{region=US_East}]
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:10:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_East}] [lease:{region=US_East}] at 11:10:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_East}] [lease:{region=US_East}] at 11:10:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:20:00
 sample2: pass
 ----------------------------------
 sample3: start running
 4 events executed:
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=US_East}] [lease:{region=US_East}]
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=US_East}] [lease:{region=US_East}]
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:10:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_East}] [lease:{region=US_East}] at 11:10:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_East}] [lease:{region=US_East}] at 11:10:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:20:00
 sample3: pass

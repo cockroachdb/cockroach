@@ -87,10 +87,10 @@ func generateClusterVisualization(
 		}
 		return s
 	}
-	clusterSetUp := emptyIfBlank(s.NodesString())
+	clusterSetUp := emptyIfBlank(s.NodesStringWithTag("\t"))
 	rangeState := emptyIfBlank(rangeStateStr)
-	event := emptyIfBlank(eventGen.String())
-	workloadSetUp := emptyIfBlank(loadGen.String())
+	event := emptyIfBlank(eventGen.StringWithTag("\t"))
+	workloadSetUp := emptyIfBlank(loadGen.StringWithTag("\t"))
 	settingsChanges := emptyIfBlank(compareSettingsToDefault(settings))
 	_, _ = fmt.Fprintf(buf, "Cluster Set Up\n%s\n", clusterSetUp)
 	_, _ = fmt.Fprintf(buf, "Key Space\n%s\n", rangeState)

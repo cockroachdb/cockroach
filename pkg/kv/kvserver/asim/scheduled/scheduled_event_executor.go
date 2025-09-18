@@ -31,7 +31,7 @@ type EventExecutor interface {
 	TickEvents(context.Context, time.Time, state.State, history.History) bool
 	// PrintEventSummary returns a string summarizing the executed mutation and
 	// assertion events.
-	PrintEventSummary() string
+	PrintEventSummary(tag string) string
 	// PrintEventsExecuted returns a detailed string representation of executed
 	// events including details of mutation events, assertion checks, and assertion
 	// results.
@@ -68,16 +68,16 @@ func newExecutorWithNoEvents() *eventExecutor {
 
 // PrintEventSummary returns a string summarizing the executed mutation and
 // assertion events.
-func (e *eventExecutor) PrintEventSummary() string {
+func (e *eventExecutor) PrintEventSummary(tag string) string {
 	mutationEvents, assertionEvents := 0, 0
 	var buf strings.Builder
 	sort.Sort(e.scheduledEvents)
-	for i, event := range e.scheduledEvents {
-		_, _ = fmt.Fprintf(&buf, "%v", event)
+	for i, ev := range e.scheduledEvents {
+		_, _ = fmt.Fprintf(&buf, "%v", ev.StringWithTag(tag))
 		if i != len(e.scheduledEvents)-1 {
 			_, _ = fmt.Fprintf(&buf, "\n")
 		}
-		if event.IsMutationEvent() {
+		if ev.IsMutationEvent() {
 			mutationEvents++
 		} else {
 			assertionEvents++
@@ -110,7 +110,7 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
 		for i, event := range e.scheduledEvents {
-			_, _ = fmt.Fprintf(&buf, "%v", event.String())
+			_, _ = fmt.Fprintf(&buf, "%v", event.StringWithTag(""))
 			if i != len(e.scheduledEvents)-1 {
 				_, _ = fmt.Fprintf(&buf, "\n")
 			}
