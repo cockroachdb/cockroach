@@ -1267,6 +1267,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		return nil, errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
 	}
 
+	log.Dev.Infof(ctx, "moving lease non-cooperatively of range %v to %v", rangeDesc, dest)
 	destServer, err := tc.FindMemberServer(dest.StoreID)
 	if err != nil {
 		return nil, err
@@ -1380,8 +1381,25 @@ func (tc *TestCluster) ensureLeaderStepsDown(
 				leaderStore = curStore
 				leaderNode = s
 				leaderReplica = curR
+
+				// Make sure that the leader has a valid leader lease because in the
+				// next step we will stop store liveness messages to the leader and we
+				// want that to cause it to step down. If the leader does not have a
+				// valid leader lease yet, stopping store liveness messages to it will
+				// not cause it to step down.
+				leaseStatus := curR.CurrentLeaseStatus(ctx)
+				if !leaseStatus.IsValid() {
+					return errors.Errorf("leader lease is not valid")
+				}
+				if leaseStatus.Lease.Type() != roachpb.LeaseLeader {
+					return errors.Errorf("leader lease is not a leader lease")
+				}
+				if curR.RaftStatus().LeadSupportUntil.IsEmpty() {
+					return errors.Errorf("leader is not fortified")
+				}
 			}
 		}
+
 		// At this point we have iterated over all nodes in the cluster, if we
 		// haven't found a leader, wait for a bit for one to step up.
 		if leaderStore == nil {
