@@ -868,15 +868,13 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 	}
 }
 
-func (a *allocatorState) ShouldNotRebalanceForMMA(
-	cand roachpb.StoreDescriptor, cands []roachpb.StoreID,
-) bool {
+func (a *allocatorState) IsInConflictWithMMA(cand roachpb.StoreID, cands []roachpb.StoreID) bool {
 	var means meansForStoreSet
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	storeIDs := makeStoreIDPostingList(cands)
 	means.stores = storeIDs
 	computeMeansForStoreSet(a.cs, &means, scratchNodes)
-	sls := a.cs.computeLoadSummary(cand.StoreID, &means.storeLoad, &means.nodeLoad)
+	sls := a.cs.computeLoadSummary(cand, &means.storeLoad, &means.nodeLoad)
 	return sls.sls >= overloadSlow
 }
 

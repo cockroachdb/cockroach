@@ -50,10 +50,10 @@ replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=3
 replicas#1: last:  [s1=28, s2=28, s3=28, s4=40, s5=40, s6=40, s7=40, s8=40, s9=40] (stddev=5.66, mean=36.00, sum=324)
 write_bytes_per_second#1: last:  [s1=3898, s2=3891, s3=3878, s4=6939, s5=6939, s6=6929, s7=6990, s8=6964, s9=6978] (stddev=1446.16, mean=5934.00, sum=53406)
 artifacts[mma-only]: 1d73e264a60412ba
-cpu#1: last:  [s1=572415460, s2=566578888, s3=569096957, s4=556745916, s5=570328363, s6=558184663, s7=560070762, s8=557855218, s9=558141451] (stddev=5893908.39, mean=563268630.89, sum=5069417678)
+cpu#1: last:  [s1=710358687, s2=850724661, s3=848230740, s4=439655416, s5=421370041, s6=556430222, s7=278394186, s8=426354428, s9=416067579] (stddev=194607849.96, mean=549731773.33, sum=4947585960)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0, s7=36, s8=0, s9=0] (stddev=16.97, mean=12.00, sum=108)
-leases#1: last:  [s1=7, s2=10, s3=8, s4=17, s5=13, s6=13, s7=16, s8=12, s9=12] (stddev=3.13, mean=12.00, sum=108)
+leases#1: last:  [s1=6, s2=9, s3=7, s4=18, s5=13, s6=12, s7=17, s8=14, s9=12] (stddev=3.89, mean=12.00, sum=108)
 replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=36] (stddev=0.00, mean=36.00, sum=324)
-replicas#1: last:  [s1=36, s2=34, s3=36, s4=37, s5=36, s6=36, s7=37, s8=36, s9=36] (stddev=0.82, mean=36.00, sum=324)
-write_bytes_per_second#1: last:  [s1=5194, s2=5256, s3=5415, s4=6318, s5=6216, s6=6171, s7=6283, s8=6298, s9=6257] (stddev=461.69, mean=5934.22, sum=53408)
-artifacts[mma-and-count]: 4fab04c2e6adb6a5
+replicas#1: last:  [s1=36, s2=34, s3=34, s4=35, s5=36, s6=37, s7=38, s8=37, s9=37] (stddev=1.33, mean=36.00, sum=324)
+write_bytes_per_second#1: last:  [s1=5079, s2=4859, s3=4973, s4=6093, s5=6209, s6=6405, s7=6705, s8=6245, s9=6452] (stddev=672.96, mean=5891.11, sum=53020)
+artifacts[mma-and-count]: 9c590fd0708d094c
