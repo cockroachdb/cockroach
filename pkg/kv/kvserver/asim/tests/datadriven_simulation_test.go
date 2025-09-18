@@ -567,7 +567,7 @@ func TestDataDriven(t *testing.T) {
 						// parameter to the `eval` command.
 						testName := name + "_" + mv
 						for sample, h := range run.hs {
-							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
+							printStatsAndGenerateJSON(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
 								settingsGen.Settings.TickInterval, metricsMap)
 							generateTopology(t, h,
 								filepath.Join(plotDir, fmt.Sprintf("%s_%d_topology.txt", testName, sample+1)),
