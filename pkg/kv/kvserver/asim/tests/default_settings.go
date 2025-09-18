@@ -42,6 +42,7 @@ type staticOptionSettings struct {
 	nodes               int
 	storesPerNode       int
 	storeByteCapacity   int64
+	nodeCPURateCapacity int64
 	rwRatio             float64
 	rate                float64
 	minBlock            int
@@ -59,6 +60,7 @@ type staticOptionSettings struct {
 
 func getDefaultStaticOptionSettings() staticOptionSettings {
 	return staticOptionSettings{
+		nodeCPURateCapacity: config.DefaultNodeCPURateCapacityNanos,
 		nodes:               defaultNodes,
 		storesPerNode:       defaultStoresPerNode,
 		storeByteCapacity:   defaultStoreByteCapacity,
@@ -80,9 +82,10 @@ func getDefaultStaticOptionSettings() staticOptionSettings {
 
 func (f randTestingFramework) defaultBasicClusterGen() gen.BasicCluster {
 	return gen.BasicCluster{
-		Nodes:             f.defaultStaticSettings.nodes,
-		StoresPerNode:     f.defaultStaticSettings.storesPerNode,
-		StoreByteCapacity: f.defaultStaticSettings.storeByteCapacity,
+		Nodes:               f.defaultStaticSettings.nodes,
+		StoresPerNode:       f.defaultStaticSettings.storesPerNode,
+		StoreByteCapacity:   f.defaultStaticSettings.storeByteCapacity,
+		NodeCPURateCapacity: f.defaultStaticSettings.nodeCPURateCapacity,
 	}
 }
 
