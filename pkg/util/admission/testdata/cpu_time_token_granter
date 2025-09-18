@@ -1,0 +1,189 @@
+# Simple tryGet calls.
+init regular=1 elastic=0
+----
+cpuTimeTokenGranter:
+regular 0 {0} / regular 1 {1} / elastic 0 {0} / elastic 1 {0} / 
+
+try-get work=elastic v=1
+----
+kvelastic: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {0} / regular 1 {1} / elastic 0 {0} / elastic 1 {0} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned true
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {0} / elastic 0 {-1} / elastic 1 {-1} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {0} / elastic 0 {-1} / elastic 1 {-1} / 
+
+# More simple tryGet calls. This time, elastic work is admitted.
+init regular=2 elastic=1
+----
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {2} / elastic 0 {-1} / elastic 1 {1} / 
+
+continue-grant-chain work=regular
+----
+kvregular: continueGrantChain
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {2} / elastic 0 {-1} / elastic 1 {1} / 
+
+try-get work=elastic v=1
+----
+kvelastic: tryGet(1) returned true
+cpuTimeTokenGranter:
+regular 0 {-2} / regular 1 {1} / elastic 0 {-2} / elastic 1 {0} / 
+
+try-get work=elastic v=1
+----
+kvelastic: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {-2} / regular 1 {1} / elastic 0 {-2} / elastic 1 {0} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned true
+cpuTimeTokenGranter:
+regular 0 {-3} / regular 1 {0} / elastic 0 {-3} / elastic 1 {-1} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {-3} / regular 1 {0} / elastic 0 {-3} / elastic 1 {-1} / 
+
+# returnGrant adds tokens to the buckets, when a positive count is used.
+init regular=1 elastic=1
+----
+cpuTimeTokenGranter:
+regular 0 {-3} / regular 1 {1} / elastic 0 {-3} / elastic 1 {1} / 
+
+return-grant work=regular v=1
+----
+kvregular: returnGrant(1)
+cpuTimeTokenGranter:
+regular 0 {-2} / regular 1 {2} / elastic 0 {-2} / elastic 1 {2} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned true
+cpuTimeTokenGranter:
+regular 0 {-3} / regular 1 {1} / elastic 0 {-3} / elastic 1 {1} / 
+
+try-get work=elastic v=1
+----
+kvelastic: tryGet(1) returned true
+cpuTimeTokenGranter:
+regular 0 {-4} / regular 1 {0} / elastic 0 {-4} / elastic 1 {0} / 
+
+# Simple tookWithoutPermission test.
+init regular=3 elastic=3
+----
+cpuTimeTokenGranter:
+regular 0 {-4} / regular 1 {3} / elastic 0 {-4} / elastic 1 {3} / 
+
+took-without-permission work=elastic v=3
+----
+kvelastic: tookWithoutPermission(3)
+cpuTimeTokenGranter:
+regular 0 {-7} / regular 1 {0} / elastic 0 {-7} / elastic 1 {0} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {-7} / regular 1 {0} / elastic 0 {-7} / elastic 1 {0} / 
+
+try-get work=elastic v=1
+----
+kvelastic: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {-7} / regular 1 {0} / elastic 0 {-7} / elastic 1 {0} / 
+
+# Test granting. Single kvregular request is admitted.
+init regular=0 elastic=0 normalwaiter=2 elasticwaiter=1
+----
+cpuTimeTokenGranter:
+regular 0 {-7} / regular 1 {0} / elastic 0 {-7} / elastic 1 {0} / 
+
+return-grant work=regular v=2
+----
+kvregular: returnGrant(2)
+kvregular: granted in chain 0, and returning 2
+cpuTimeTokenGranter:
+regular 0 {-7} / regular 1 {0} / elastic 0 {-7} / elastic 1 {0} / 
+
+# Test granting. Two kvelastic requests are admitted.
+init regular=-1 elastic=-1 elasticwaiter=1
+----
+cpuTimeTokenGranter:
+regular 0 {-7} / regular 1 {-1} / elastic 0 {-7} / elastic 1 {-1} / 
+
+return-grant work=regular v=3
+----
+kvregular: returnGrant(3)
+kvelastic: granted in chain 0, and returning 1
+kvelastic: granted in chain 0, and returning 1
+cpuTimeTokenGranter:
+regular 0 {-6} / regular 1 {0} / elastic 0 {-6} / elastic 1 {0} / 
+
+# Simple tryGet calls, with burst this time.
+init regularburst=1 regular=0 elastic=0 elasticburst=0
+----
+cpuTimeTokenGranter:
+regular 0 {1} / regular 1 {0} / elastic 0 {0} / elastic 1 {0} / 
+
+try-get work=regular v=1
+----
+kvregular: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {1} / regular 1 {0} / elastic 0 {0} / elastic 1 {0} / 
+
+try-get work=elastic v=1
+----
+kvelastic: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {1} / regular 1 {0} / elastic 0 {0} / elastic 1 {0} / 
+
+try-get work=elastic burst v=1
+----
+kvelastic: tryGet(1) returned false
+cpuTimeTokenGranter:
+regular 0 {1} / regular 1 {0} / elastic 0 {0} / elastic 1 {0} / 
+
+try-get work=regular burst v=1
+----
+kvregular: tryGet(1) returned true
+cpuTimeTokenGranter:
+regular 0 {0} / regular 1 {-1} / elastic 0 {-1} / elastic 1 {-1} / 
+
+# Test granting, with burst. Only elastic burst has enough tokens to grant. So grant.
+init regular=-1 regularburst=-1 elastic=-1 elasticburst=0 elasticwaiter=1 elasticburstwaiter
+----
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {-1} / elastic 0 {0} / elastic 1 {-1} / 
+
+return-grant work=regular v=1
+----
+kvregular: returnGrant(1)
+kvelastic: granted in chain 0, and returning 1
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {-1} / elastic 0 {0} / elastic 1 {-1} / 
+
+# Test granting, with burst. Only elastic no-burst has enough tokens to grant. So no grant.
+init regular=-1 regularburst=-1 elastic=0 elasticburst=-1 elasticwaiter=1 elasticburstwaiter
+----
+cpuTimeTokenGranter:
+regular 0 {-1} / regular 1 {-1} / elastic 0 {-1} / elastic 1 {0} / 
+
+return-grant work=regular v=1
+----
+kvregular: returnGrant(1)
+cpuTimeTokenGranter:
+regular 0 {0} / regular 1 {0} / elastic 0 {0} / elastic 1 {1} / 
