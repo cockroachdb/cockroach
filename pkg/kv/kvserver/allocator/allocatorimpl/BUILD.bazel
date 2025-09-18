@@ -59,6 +59,7 @@ go_test(
         "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/mmaintegration",
         "//pkg/kv/kvserver/replicastats",
         "//pkg/raft",
         "//pkg/raft/raftpb",
