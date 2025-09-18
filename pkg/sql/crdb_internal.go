@@ -615,11 +615,6 @@ CREATE TABLE crdb_internal.tables (
 			if !isTable {
 				continue
 			}
-			if ok, err := p.HasAnyPrivilege(ctx, table); err != nil {
-				return err
-			} else if !ok {
-				continue
-			}
 			dbName := dbNames[table.GetParentID()]
 			if dbName == "" {
 				// The parent database was deleted. This is possible e.g. when
@@ -690,11 +685,6 @@ func crdbInternalTablesDatabaseLookupFunc(
 		}
 		table, isTable := desc.(catalog.TableDescriptor)
 		if !isTable {
-			return nil
-		}
-		if ok, err := p.HasAnyPrivilege(ctx, table); err != nil {
-			return err
-		} else if !ok {
 			return nil
 		}
 		seenAny = true
