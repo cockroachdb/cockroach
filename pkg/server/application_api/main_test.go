@@ -25,9 +25,12 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	rangetestutils.InitRangeTestServerFactory(server.TestServerFactory)
 	kvtenant.InitTestConnectorFactory()
+
 	defer serverutils.TestingGlobalDRPCOption(
-		base.TestDRPCEnabledRandomly,
+		// All the tests in this package should run with DRPC enabled.
+		base.TestDRPCEnabled,
 	)()
+
 	os.Exit(m.Run())
 }
 

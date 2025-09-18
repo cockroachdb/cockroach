@@ -864,6 +864,7 @@ func TestTriggerMetadataUpdateJobTriggerFailed(t *testing.T) {
 	// won't be adopted in this test run.
 	adoptDuration := time.Hour
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				IntervalOverrides: jobs.TestingIntervalOverrides{

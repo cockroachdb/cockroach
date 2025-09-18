@@ -30,6 +30,11 @@ func TestMain(m *testing.M) {
 		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
 	)()
 
+	defer serverutils.TestingGlobalDRPCOption(
+		// All the tests in this package should run with DRPC enabled.
+		base.TestDRPCEnabled,
+	)()
+
 	os.Exit(m.Run())
 }
 

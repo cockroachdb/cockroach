@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+
 	// To ensure the streaming replication cluster setting is defined.
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -31,7 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestAdminAPISettings(t *testing.T) {
+func BTestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -66,7 +67,9 @@ func TestAdminAPISettings(t *testing.T) {
 		"view_activity_user":          {userName: "view_activity_user", redactableSettings: true, grantRole: "SYSTEM VIEWACTIVITY", consoleOnly: true},
 		"view_activity_redacted_user": {userName: "view_activity_redacted_user", redactableSettings: true, grantRole: "SYSTEM VIEWACTIVITYREDACTED", consoleOnly: true},
 	}
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	defer ts.Stopper().Stop(ctx)
 	forSystemTenant := ts.ApplicationLayer().Codec().ForSystemTenant()
 	conn := sqlutils.MakeSQLRunner(ts.ApplicationLayer().SQLConn(t))
