@@ -598,7 +598,7 @@ func TestDataDriven(t *testing.T) {
 						hasher := fnv.New64a()
 
 						for sample, h := range run.hs {
-							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
+							printStatsAndGenerateJSON(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
 								settingsGen.Settings.TickInterval, metricsMap)
 						}
 						artifactsHash := hasher.Sum64()
