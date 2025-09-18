@@ -83,25 +83,62 @@ func computeThrashing(values []float64) thrashing {
 // respectively.
 //
 // Properties:
-// - tdtv(u,d) = tdtv(d,u) (symmetry)
-// - min(u,d) <= tdtv(u,d) <= u+d
-// - tdtv(u,0) = tdtv(0,u) = 0
-// - tdtv(u,u) = 2⋅u
-// - tdtv(k⋅u,k⋅d) = k⋅tdtv(u,d) for k≥0
-// - tdtv(l⋅u, d) > tdtv(u) for l>1 (same in second argument)
+//   - tdtv(u,d) = tdtv(d,u) (symmetry)
+//     We want this property because we don't want to privilege either direction
+//     of swing.
+//   - min(u,d) <= tdtv(u,d) <= u+d
+//     We want the upper bound because u+d is the total variation, and we are
+//     measuring a trend-discounting version of that.
+//     We want the lower bound so that even when there is a dominant trend, we
+//     don't discount for more than that dominant trend.
+//   - tdtv(u,0) = tdtv(0,u) = 0
+//     In other words, monotonic functions have zero tdtv, as they should.
+//   - tdtv(u,u) = 2⋅u
+//     If there is no dominant direction, we want tdtv to equal the total variation.
+//   - tdtv(k⋅u,k⋅d) = k⋅tdtv(u,d) for k≥0
+//     Scaling property: we want tdtv to be determined by the ratio of upwards
+//     and downwards variations only. i.e. it is unitless: tdtv(u,d)=tdtv(u/d,1).
+//   - tdtv(l⋅u, d) > tdtv(u, d) for l>1 and u, d ≠ 0  (concavity)
+//     Strict monotonicty in each component - if either variation increases,
+//     this must not reduce tdtv. In other words, additional variation will
+//     always be penalized; there is no way for variations to "offset each
+//     other".
 func tdtv(u, d float64) float64 {
-	tmin := min(u, d)
-	if tmin == 0 {
-		// There's only one direction of movement, so we discount all variation.
+	if u > d {
+		u, d = d, u
+		// We may now assume that u <= d.
+	}
+
+	if u == 0 {
+		// The smaller direction is zero, so the function is monotonic.
 		return 0
 	}
-	frac := tmin / max(u, d) // in [0, 1]
-	// The exponent can't exceed 1 because that would violate the scaling property
-	// (last property above). For the endpoint exponent 1, tdtv=2⋅min(u,d), and for
-	// the endpoint exponent 0, we get the (vanilla) total variation u+d.
-	// The choice of 0.8 is somewhat arbitrary, but gives a reasonable trade-off.
-	alpha := math.Pow(frac, 0.8)
-	return alpha*(u+d) + (1-alpha)*tmin
+	// NB: 0 < u <= d.
+	r := u / d // in [0,1]
+
+	// Any concave and increasing function alpha with alpha(0)=0 and alpha(1)=1
+	// works here:
+	// alpha(0) = 0 to satisfy tdtv(_,0) = 0
+	// alpha(1) = 1 to satisfy tdtv(u,u) = 2⋅u
+	//
+	alpha := func(r float64) float64 { // [0,1] -> [0,1]
+		// The exponent can't exceed 1 because that would violate the scaling property
+		// (last property above).
+		// - for p=1, we get tdtv=2⋅min(u,d), i.e. twice the smaller variation (i.e.
+		//   complete trend-discounting).
+		// - for p=0, tdtv equals the total variation (i.e. no trend discounting)
+		//
+		// The choice of 0.8 is somewhat arbitrary, but gives a reasonable trade-off.
+		//
+		// Other choices for alpha exist, like piecewise linear functions, or
+		// log(1+lambda*r)/log(1+lambda).
+		const p = 0.8
+		return math.Pow(r, p)
+	}
+	// Interpolate between u (smaller variation) and u+d (total variation). The
+	// more dominant a trend there is, the smaller r, and thus alpha(r), and thus
+	// the tdtv.
+	return u + alpha(r)*d
 }
 
 func extrema(vs []float64) (vmin, vmax, vrange float64) {
