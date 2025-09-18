@@ -101,7 +101,9 @@ func NewSimulator(
 	s := &Simulator{
 		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
 		onRecording: func(storeID state.StoreID, rec tracingpb.Recording) {
-			settings.OnRecording(int64(storeID), rec)
+			if fn := settings.OnRecording; fn != nil {
+				fn(int64(storeID), rec)
+			}
 		},
 		curr:        settings.StartTime,
 		end:         settings.StartTime.Add(duration),
