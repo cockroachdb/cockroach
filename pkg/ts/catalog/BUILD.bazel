@@ -22,6 +22,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ts/tspb:tspb_proto",
+        "//pkg/util/metric:metric_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto",
     ],
@@ -35,6 +36,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ts/tspb",
+        "//pkg/util/metric",
         "@com_github_gogo_protobuf//gogoproto",
         "@com_github_prometheus_client_model//go",
     ],
