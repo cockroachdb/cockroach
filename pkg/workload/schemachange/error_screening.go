@@ -303,7 +303,8 @@ func (og *operationGenerator) columnIsDependedOn(
 	// so performing unions and joins is easier.
 	//
 	// To check if any foreign key references exist to this table, we use pg_constraint
-	// and check if any columns are dependent.
+	// and check if any columns are dependent. We check both confrelid (table is referenced)
+	// and self-referential foreign keys (where conrelid = confrelid).
 	return og.scanBool(ctx, tx, `SELECT EXISTS(
 		SELECT source.column_id
 			FROM (
@@ -331,6 +332,12 @@ func (og *operationGenerator) columnIsDependedOn(
 			           SELECT unnest(confkey) AS column_id
 			             FROM pg_catalog.pg_constraint
 			            WHERE confrelid = $1::REGCLASS
+			          )
+			   UNION  (
+			           SELECT unnest(conkey) AS column_id
+			             FROM pg_catalog.pg_constraint
+			            WHERE conrelid = $1::REGCLASS
+			              AND confrelid = $1::REGCLASS
 			          )
 			 ) AS cons
 			 INNER JOIN (
