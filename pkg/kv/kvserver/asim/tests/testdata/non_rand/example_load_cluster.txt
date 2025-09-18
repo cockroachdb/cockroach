@@ -22,7 +22,7 @@ assertion type=conformance unavailable=0 under=0 over=0  violating=0
 
 eval duration=2m samples=1 seed=42 cfgs=(sma-count,mma-only)
 ----
-artifacts[sma-count]: 33ad9dff027a296a
+artifacts[sma-count]: cc0152b6c0c3ca91
 ==========================
-artifacts[mma-only]: 33ad9dff027a296a
+artifacts[mma-only]: cc0152b6c0c3ca91
 ==========================

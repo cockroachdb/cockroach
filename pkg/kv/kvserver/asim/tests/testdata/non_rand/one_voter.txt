@@ -12,11 +12,11 @@ leases#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 leases#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
 replicas#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 replicas#1: last:  [s1=51, s2=49] (stddev=1.00, mean=50.00, sum=100)
-artifacts[sma-count]: db55b6d407888d3c
+artifacts[sma-count]: da3db4e0424eced7
 ==========================
 leases#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 leases#1: last:  [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 replicas#1: first: [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
 replicas#1: last:  [s1=66, s2=34] (stddev=16.00, mean=50.00, sum=100)
-artifacts[mma-only]: 3a17f6ce4f0d4f02
+artifacts[mma-only]: b08ad0dd7ed358f1
 ==========================
