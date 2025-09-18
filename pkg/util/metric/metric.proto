@@ -90,20 +90,42 @@ message Metadata {
     EXPIRATIONS = 16;
   }
 
-  // if essential is true, the metric is required to be included in
-  // a DB Console dashboard, in our public docs, and in all tsdump
-  // exports.
-  //
-  // The initial list of essential metrics was based on the "100 essential
-  // metrics" that can be found at
-  // https://github.com/cockroachlabs/cockroachdb-runbook-template/blob/main/monitoring-alerts/monitoring-dashboard-custom.md
-  required bool essential = 9 [(gogoproto.nullable) = false];
-  // category is the dashboard category of this metric. This is
-  // required if `essential` is true.
-  required Category category = 11 [(gogoproto.nullable) = false];
-  // how_to_use is an extended description of how to use this metric
-  // with a running cluster. This is required if `essential` is true.
-  required string how_to_use = 12 [(gogoproto.nullable) = false];
+  // Scope defines the availability of metrics across different CockroachDB offerings.
+  enum Scope {
+    // SCOPE_UNSET is the default value when scope is not explicitly set.
+    // Metrics without explicit scope are available in self-hosted deployments only.
+    SCOPE_UNSET = 0;
+    // ADVANCED_ONLY metrics are only exported in advanced deployment offering.
+    ADVANCED_ONLY = 1;
+    // TENANT_ONLY metrics are only exported in serverless/tenant deployment offering.
+    TENANT_ONLY = 2;
+    // SHARED metrics are exported in both advanced and serverless/tenant deployment offerings.
+    SHARED = 3;
+    // if scope is ESSENTIAL, the metric is required to be included in
+    // a DB Console dashboard, in our public docs, and in all tsdump
+    // exports.
+    //
+    // The initial list of essential metrics was based on the "100 essential
+    // metrics" that can be found at
+    // https://github.com/cockroachlabs/cockroachdb-runbook-template/blob/main/monitoring-alerts/monitoring-dashboard-custom.md
+    //
+    // NOTE: All essential metrics are shared by default. Meaning they are exported 
+    // in both advanced and serverless/tenant deployment offerings.
+    ESSENTIAL = 4;
+  }
 
-  // Next ID: 10 (then 13).
+  // essential is deprecated. Use scope instead.
+  reserved 9;
+  // category is the dashboard category of this metric. This is
+  // required if `scope` is ESSENTIAL.
+  required Category category = 11 [(gogoproto.nullable) = false];
+  // scope defines the availability of this metric across different deployment offerings.
+  // This determines whether the metric is exported to cloud deployments (advanced/serverless).
+  // Metrics without explicit scope are self-hosted only.
+  required Scope scope = 10 [(gogoproto.nullable) = false];
+  // how_to_use is an extended description of how to use this metric
+  // with a running cluster. This is required if `scope` is ESSENTIAL.
+  required string how_to_use = 12 [(gogoproto.nullable) = false];
+  
+  // Next ID: 13
 }

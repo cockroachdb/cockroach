@@ -585,7 +585,7 @@ func init() {
 						Help:        "The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric",
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
-						Essential:   true,
+						Scope:       metric.Metadata_ESSENTIAL,
 						Category:    metric.Metadata_SQL,
 						HowToUse: `Monitor this metric to ensure that backups are
 						meeting the recovery point objective (RPO). Each node

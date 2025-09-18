@@ -145,7 +145,7 @@ var (
 		Help:        "Number of replica-addressed RPCs sent due to per-replica errors",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse:    `RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.`,
 	}
@@ -154,7 +154,7 @@ var (
 		Help:        "Number of NotLeaseHolderErrors encountered from replica-addressed RPCs",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse:    `Errors of this type are normal during elastic cluster topology changes when leaseholders are actively rebalancing. They are automatically retried. However they may create occasional response time spikes. In that case, this metric may provide the explanation of the cause.`,
 	}

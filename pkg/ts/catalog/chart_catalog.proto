@@ -11,6 +11,7 @@ import "ts/tspb/timeseries.proto";
 
 import "gogoproto/gogo.proto";
 import "io/prometheus/client/metrics.proto";
+import "util/metric/metric.proto";
 
 // AxisUnits describes the Unit options available in the Admin UI. It is defined here
 // as opposed to importing the value from the Admin UI for historical reasons.
@@ -90,12 +91,14 @@ message ChartMetric {
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
   // exportedName is the name of metrics as seen by external scrapers.
   required string exportedName = 6 [(gogoproto.nullable) = false];
-  // essential is true when the metric is part of the essential list for customers to monitor.
-  required bool essential = 7 [(gogoproto.nullable) = false];
+  // essential is deprecated. Use scope instead.
+  reserved 7;
   // howToUse is the usage instructions for the metric.
   optional string howToUse = 8 [(gogoproto.nullable) = false];
   // labeledName is the name of the metric with its labels, formatted as name{label1: value1, ...}.
   optional string labeledName = 9 [(gogoproto.nullable) = false];
+  // scope indicates the availability scope of this metric across different deployment offerings.
+  optional cockroach.util.metric.Metadata.Scope scope = 10 [(gogoproto.nullable) = false];
 }
 
 // IndividualChart describes both the properties necessary to display

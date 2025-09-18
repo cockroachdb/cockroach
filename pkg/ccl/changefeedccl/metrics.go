@@ -723,7 +723,7 @@ var (
 		Help:        "Total retryable errors encountered by all changefeeds",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks transient changefeed errors. Alert on "too many" errors, such as 50 retries in 15 minutes. For example, during a rolling upgrade this counter will increase because the changefeed jobs will restart following node restarts. There is an exponential backoff, up to 10 minutes. But if there is no rolling upgrade in process or other cluster maintenance, and the error rate is high, investigate the changefeed job.`,
 	}
@@ -732,7 +732,7 @@ var (
 		Help:        "Total number of changefeed jobs which have failed",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.`,
 	}
@@ -813,7 +813,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Messages emitted by all feeds",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.`,
 	}
@@ -836,7 +836,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Bytes emitted by all feeds",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the throughput bytes being streamed from the CockroachDB cluster.`,
 	}
@@ -878,7 +878,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			"Excludes latency during backfill",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.`,
 	}
@@ -909,7 +909,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Number of currently running changefeeds, including sinkless",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Scope:       metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks the total number of all running changefeeds.`,
 	}
