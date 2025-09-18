@@ -466,10 +466,8 @@ func (s *initServer) attemptJoinTo(
 		BinaryVersion: &latestVersion,
 	}
 
-	var initClient kvpb.RPCNodeClient
-	if !rpcbase.TODODRPC {
-		initClient = kvpb.NewGRPCInternalClientAdapter(conn)
-	}
+	// TODO(server): add support for DRPC initClient
+	var initClient kvpb.RPCNodeClient = kvpb.NewGRPCInternalClientAdapter(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
