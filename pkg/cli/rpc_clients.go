@@ -101,7 +101,7 @@ func makeRPCClientConfig(cfg server.Config) rpc.ClientConnConfig {
 
 func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), error) {
 	ccfg := makeRPCClientConfig(cfg)
-	if !rpcbase.TODODRPC {
+	if !rpcbase.DRPCEnabled(ctx, cfg.Settings) {
 		cc, finish, err := rpc.NewClientConn(ctx, ccfg)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to connect to the node")
