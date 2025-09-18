@@ -215,6 +215,16 @@ func MemtableSize(bytes uint64) ConfigOption {
 	}
 }
 
+// MemTableStopWritesThreshold configures the number of memtables that can be
+// queued before Pebble will induce a write stall, preventing all batch commits
+// from proceeding until a flush completes.
+func MemTableStopWritesThreshold(n int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.MemTableStopWritesThreshold = n
+		return nil
+	}
+}
+
 // L0CompactionThreshold configures the amount of L0 read-amplification
 // necessary to trigger an L0 compaction.
 func L0CompactionThreshold(n int) ConfigOption {
