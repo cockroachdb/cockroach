@@ -739,8 +739,25 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	if err != nil {
 		return Engines{}, err
 	}
-
 	log.Event(ctx, "initializing engines")
+
+	// The (pebble.Options).MemTableStopWritesThreshold configures the number of
+	// memtables that may be queued before Pebble induces a write stall.
+	// Queueing memtables consume memory from the block cache, evicting resident
+	// blocks. If flushes are not keeping up and the count of queued memtables
+	// grows too large, read performance will degrade severely:
+	//
+	// - Every read needs to seek in every queued memtable.
+	// - Memtables take memory from the block cache, meaning that block
+	//   cache effectiveness decreases the more memtables that are queued.
+	//
+	// We constrain the count of queued memtables to be between 4 and 16. Within
+	// those bounds, we'll grow it to use up to half of the block cache. If
+	// there are multiple stores, we need to divide that half by the count of
+	// stores.
+	stopWritesThreshold := int(cfg.CacheSize/2/storage.DefaultMemtableSize) / len(cfg.Stores.Specs)
+	stopWritesThreshold = max(stopWritesThreshold, 4)
+	stopWritesThreshold = min(stopWritesThreshold, 16)
 
 	var fileCache *pebble.FileCache
 	// TODO(radu): use the fileCache for in-memory stores as well.
@@ -779,6 +796,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storage.Attributes(roachpb.Attributes{Attrs: spec.Attributes}),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
+			storage.MemTableStopWritesThreshold(stopWritesThreshold),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
