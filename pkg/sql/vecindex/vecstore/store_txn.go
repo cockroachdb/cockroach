@@ -274,17 +274,15 @@ func (tx *Txn) SearchPartitions(
 	for i := range toSearch {
 		metadataKey := vecencoding.EncodeMetadataKey(tx.store.prefix, treeKey, toSearch[i].Key)
 		b.Get(metadataKey)
-		var startKey, endKey roachpb.Key
+		var startKey roachpb.Key
 		if toSearch[i].ExcludeLeafVectors {
 			// Skip past vectors at the leaf level.
 			startKey = vecencoding.EncodePrefixVectorKey(metadataKey, cspann.SecondLevel)
-			endKey = vecencoding.EncodeEndVectorKey(metadataKey)
-			b.Scan(startKey, endKey)
 		} else {
 			startKey = vecencoding.EncodeStartVectorKey(metadataKey)
-			endKey = vecencoding.EncodeEndVectorKey(metadataKey)
-			b.Scan(startKey, endKey)
 		}
+		endKey := vecencoding.EncodeEndVectorKey(metadataKey)
+		b.Scan(startKey, endKey)
 
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.VEventf(ctx, 2, "Scan %s", roachpb.Span{Key: startKey, EndKey: endKey}.String())
@@ -353,20 +351,38 @@ func InitGetFullVectorsFetchSpec(
 	spec.FamilyIDs = splitter.FamilyIDs()
 
 	// We need to decode the columns for the PK from the vector index. If the
-	// vector index is being mutated, there's a chance the primary key is changing.
-	// The vector index needs to point into the NEW primary key, so find that here.
+	// vector index is being mutated or the primary key is being changed, this
+	// can get a bit complicated. We need to find the PK for which the vector
+	// index was encoded, so that the vector index has the PK's key columns In most
+	// cases, this will just be the primary key, which is the first index returned
+	// by AllIndexes().
 	var primaryKey catalog.Index
-	primaryKey = tableDesc.GetPrimaryIndex()
-	if indexDesc.IsMutation() {
-		for _, idx := range tableDesc.NonPrimaryIndexes() {
-			if idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding && !idx.IsTemporaryIndexForBackfill() {
-				primaryKey = idx
-				break
-			}
+	haveCols := indexDesc.CollectKeyColumnIDs()
+	haveCols.UnionWith(indexDesc.CollectKeySuffixColumnIDs())
+	for _, idx := range tableDesc.AllIndexes() {
+		if idx.GetEncodingType() != catenumpb.PrimaryIndexEncoding {
+			continue
 		}
+
+		if idx.IsTemporaryIndexForBackfill() {
+			continue
+		}
+
+		if !idx.CollectKeyColumnIDs().SubsetOf(haveCols) {
+			continue
+		}
+
+		primaryKey = idx
+		break
 	}
+	if primaryKey == nil {
+		return errors.AssertionFailedf("No primary key of '%s' has column '%s' and is keyed by %v",
+			tableDesc.GetName(), vectorCol.GetName(), haveCols)
+	}
+
 	keyCols := primaryKey.CollectKeyColumnIDs().Ordered()
-	return rowenc.InitIndexFetchSpec(&spec.ExtractPKFetchSpec, evalCtx.Codec, tableDesc, indexDesc, keyCols)
+	return rowenc.InitIndexFetchSpec(&spec.ExtractPKFetchSpec, evalCtx.Codec, tableDesc,
+		indexDesc, keyCols)
 }
 
 // PKDecoder is used to extract the primary key from a vector index.
