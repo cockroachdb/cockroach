@@ -22,6 +22,7 @@ type StoreMetrics struct {
 	StoreID             int64
 	QPS                 int64
 	CPU                 int64
+	NodeCPUUtilization  float64
 	WriteKeys           int64
 	WriteBytes          int64
 	WriteBytesPerSecond int64
@@ -40,7 +41,6 @@ type StoreMetrics struct {
 	RebalanceRcvdBytes int64
 	RangeSplits        int64
 	DiskFractionUsed   float64
-	NodeCPUUtilization float64
 }
 
 // GetMetricValue extracts the requested metric value from StoreMetrics.
