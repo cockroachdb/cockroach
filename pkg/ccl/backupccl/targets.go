@@ -306,6 +306,10 @@ func fullClusterTargetsRestore(
 	var filteredDescs []catalog.Descriptor
 	var filteredDBs []catalog.DatabaseDescriptor
 	for _, desc := range fullClusterDescs {
+		if table, ok := desc.(catalog.TableDescriptor); ok && table.IsTemporary() {
+			// TODO(jeffswenson): We should move this filtering into backup.
+			continue
+		}
 		if desc.GetID() != keys.SystemDatabaseID {
 			filteredDescs = append(filteredDescs, desc)
 		}
@@ -382,7 +386,6 @@ func selectTargets(
 	}
 
 	if descriptorCoverage == tree.AllDescriptors {
-
 		tables, dbs, patterns, err := fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
 		return tables, dbs, patterns, nil, err
 	}
