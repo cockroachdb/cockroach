@@ -84,6 +84,7 @@ export const idleTransactionSession: SessionInfo = {
       implicit: false,
       num_retries: 5,
       num_auto_retries: 3,
+      isolation_level: "SERIALIZABLE",
     },
     last_active_query_no_constants: "SHOW database",
     active_queries: [],
@@ -113,6 +114,7 @@ export const activeSession: SessionInfo = {
         phase: Phase.EXECUTING,
         txn_id: toUuid("e8NTvpOvScO1tSMreygtcg=="),
         sql_no_constants: "SELECT pg_sleep(_)",
+        isolation_level: "SERIALIZABLE",
       },
     ],
     start: {
@@ -141,6 +143,7 @@ export const activeSession: SessionInfo = {
       implicit: true,
       num_retries: 5,
       num_auto_retries: 3,
+      isolation_level: "SERIALIZABLE",
     },
     last_active_query_no_constants: "SHOW database",
     status: Status.ACTIVE,
