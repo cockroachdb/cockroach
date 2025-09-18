@@ -177,16 +177,19 @@ func TestExploreTDTV(t *testing.T) {
 		// You can paste a time series copied from viewer.html here to explore
 		// the variation of its prefixes.
 		0,
-		0,
+		1,
+		2,
+		3,
+		2,
 	}
 	testutils.RunTrueAndFalse(t, "stripped", func(t *testing.T, stripped bool) {
 		sl := sl
 		if stripped {
 			sl = stripLeaderingZeroes(sl)
 		}
-		for i := len(sl) / 100; i < len(sl); i += len(sl) / 100 {
+		const step = 100
+		for i := min(step, len(sl)); i <= len(sl); i += min(step, len(sl)-i+1) {
 			t.Logf("sl[:%d]: %+v", i, computeThrashing(sl[:i]))
 		}
-
 	})
 }
