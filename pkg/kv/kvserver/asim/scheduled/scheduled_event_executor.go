@@ -70,15 +70,20 @@ func newExecutorWithNoEvents() *eventExecutor {
 // assertion events.
 func (e *eventExecutor) PrintEventSummary() string {
 	mutationEvents, assertionEvents := 0, 0
-	for _, e := range e.scheduledEvents {
-		if e.IsMutationEvent() {
+	var buf strings.Builder
+	sort.Sort(e.scheduledEvents)
+	for i, event := range e.scheduledEvents {
+		_, _ = fmt.Fprintf(&buf, "%v", event)
+		if i != len(e.scheduledEvents)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
+		if event.IsMutationEvent() {
 			mutationEvents++
 		} else {
 			assertionEvents++
 		}
 	}
-	return fmt.Sprintf(
-		"number of mutation events=%d, number of assertion events=%d", mutationEvents, assertionEvents)
+	return buf.String()
 }
 
 // PrintEventsExecuted returns a detailed string representation of executed
@@ -100,12 +105,15 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 		panic("unexpected")
 	}
 	if len(e.scheduledEvents) == 0 {
-		return fmt.Sprintln("no events were scheduled")
+		return "no events were scheduled"
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
-		for _, event := range e.scheduledEvents {
-			buf.WriteString(fmt.Sprintln(event.String()))
+		for i, event := range e.scheduledEvents {
+			_, _ = fmt.Fprintf(&buf, "%v", event.String())
+			if i != len(e.scheduledEvents)-1 {
+				_, _ = fmt.Fprintf(&buf, "\n")
+			}
 		}
 		return buf.String()
 	}

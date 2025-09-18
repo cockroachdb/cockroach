@@ -36,7 +36,7 @@ gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=
 setting split_queue_enabled=false
 ----
 
-eval duration=60m samples=1 seed=42 cfgs=(mma-only,mma-and-count) metrics=(cpu,write_bytes_per_second,replicas,leases)
+eval duration=60m samples=1 seed=42 cfgs=(mma-only,mma-and-count) metrics=(cpu,write_bytes_per_second,replicas,leases) full=true
 ----
 cpu#1: last:  [s1=83373599, s2=82955301, s3=83154536, s4=83182126, s5=83144874, s6=84444013] (stddev=492899.15, mean=83375741.50, sum=500254449)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
@@ -45,6 +45,7 @@ replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean
 replicas#1: last:  [s1=35, s2=54, s3=53, s4=25, s5=25, s6=24] (stddev=12.91, mean=36.00, sum=216)
 write_bytes_per_second#1: last:  [s1=7810763, s2=10583352, s3=10582678, s4=10533730, s5=10534887, s6=9975971] (stddev=1003663.69, mean=10003563.50, sum=60021381)
 artifacts[mma-only]: 7429169245b4ae6f
+==========================
 cpu#1: last:  [s1=83248327, s2=83210584, s3=83163956, s4=84314390, s5=83287653, s6=83089142] (stddev=420065.93, mean=83385675.33, sum=500314052)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
 leases#1: last:  [s1=15, s2=10, s3=15, s4=12, s5=10, s6=10] (stddev=2.24, mean=12.00, sum=72)
@@ -52,3 +53,22 @@ replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean
 replicas#1: last:  [s1=36, s2=36, s3=33, s4=38, s5=37, s6=36] (stddev=1.53, mean=36.00, sum=216)
 write_bytes_per_second#1: last:  [s1=8869835, s2=9976536, s3=9422900, s4=10582759, s5=10582017, s6=10584517] (stddev=662170.98, mean=10003094.00, sum=60018564)
 artifacts[mma-and-count]: 7f610ee196e8be23
+==========================
+Cluster Set Up
+	n1(AU_EAST,AU_EAST_1,0vcpu): {s1:(256GiB)}
+	n2(AU_EAST,AU_EAST_1,0vcpu): {s2:(256GiB)}
+	n3(AU_EAST,AU_EAST_1,0vcpu): {s3:(256GiB)}
+	n4(AU_EAST,AU_EAST_1,0vcpu): {s4:(256GiB)}
+	n5(AU_EAST,AU_EAST_1,0vcpu): {s5:(256GiB)}
+	n6(AU_EAST,AU_EAST_1,0vcpu): {s6:(256GiB)}
+Key Space
+	[1,10000): 36(rf=3), 256MiB, [{s1*,s2,s3}:36]
+	[10001,20000): 36(rf=3), 256MiB, [{s4*,s5,s6}:36]
+Event
+	set LBRebalancingMode to 3
+Workload Set Up
+	[1,10000): read-only high-cpu [500.00cpu-us/op, 1B/op, 1000ops/s]
+	[10001,20000): write-only large-block [0.00cpu-us/write(raft), 1000B/op, 20000ops/s]
+Changed Settings
+	SplitQueueEnabled: false (default: true)
+==========================

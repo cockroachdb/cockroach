@@ -37,3 +37,4 @@ leases#1: last:  [s1=36, s2=33, s3=31, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stdd
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
 replicas#1: last:  [s1=69, s2=100, s3=31, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=44.65, mean=55.56, sum=500)
 artifacts[mma-only]: f6d2c7aa158e594e
+==========================

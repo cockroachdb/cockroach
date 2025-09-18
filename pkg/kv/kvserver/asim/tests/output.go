@@ -149,10 +149,18 @@ func (tr testResultsReport) String() string {
 		buf.WriteString(fmt.Sprintf("sample%d: start running\n", nthSample))
 		if failed || tr.flags.Has(OutputConfigGen) {
 			buf.WriteString(fmt.Sprintf("configurations generated using seed %d\n", output.seed))
-			buf.WriteString(fmt.Sprintf("\t%v\n", output.clusterGen))
-			buf.WriteString(fmt.Sprintf("\t%v\n", output.rangeGen))
-			buf.WriteString(fmt.Sprintf("\t%v\n", output.loadGen))
-			buf.WriteString(fmt.Sprintf("\t%v\n", output.eventGen))
+			clusterGenStr, rangeGenStr, loadGenStr, eventGenStr :=
+				output.clusterGen.String(), output.rangeGen.String(), output.loadGen.String(), output.eventGen.String()
+			emptyIfBlank := func(s string) string {
+				if s == "" {
+					return "empty"
+				}
+				return s
+			}
+			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank(clusterGenStr)))
+			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank(rangeGenStr)))
+			buf.WriteString(fmt.Sprintf("%v\n", emptyIfBlank(loadGenStr)))
+			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank(eventGenStr)))
 		}
 		if failed || tr.flags.Has(OutputInitialState) {
 			buf.WriteString(fmt.Sprintf("initial state at %s:\n", output.initialTime.Format("2006-01-02 15:04:05")))
@@ -163,7 +171,7 @@ func (tr testResultsReport) String() string {
 			buf.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
 		}
 		if failed || tr.flags.Has(OutputEvents) {
-			buf.WriteString(output.eventExecutor.PrintEventsExecuted())
+			buf.WriteString(fmt.Sprintf("%v\n", output.eventExecutor.PrintEventsExecuted()))
 		}
 		if failed {
 			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s\n", nthSample, output.reason))

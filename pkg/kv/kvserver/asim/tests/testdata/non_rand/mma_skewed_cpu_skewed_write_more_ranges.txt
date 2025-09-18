@@ -45,3 +45,4 @@ replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300] (stddev=0.00
 replicas#1: last:  [s1=283, s2=430, s3=430, s4=209, s5=211, s6=237] (stddev=95.10, mean=300.00, sum=1800)
 write_bytes_per_second#1: last:  [s1=4565462, s2=10497859, s3=10497096, s4=10961474, s5=10895186, s6=12602252] (stddev=2533989.43, mean=10003221.50, sum=60019329)
 artifacts[mma-only]: 7e2ef8861fdf2e81
+==========================

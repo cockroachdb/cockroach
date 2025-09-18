@@ -31,4 +31,6 @@ assertion type=conformance lease-violating=1 lease-less-preferred=1
 eval duration=10m cfgs=(sma-count,mma-only)
 ----
 artifacts[sma-count]: aff3a3eeb0838864
+==========================
 artifacts[mma-only]: feb445a342bb08e4
+==========================

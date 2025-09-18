@@ -29,6 +29,7 @@ failed assertion sample 1
 	store=5 stat=117.00
 	store=5 stat=117.00
 	store=5 stat=117.00
+==========================
 leases#1: first: [s1=259, s2=129, s3=64, s4=32, s5=16] (stddev=88.43, mean=100.00, sum=500)
 leases#1: last:  [s1=259, s2=145, s3=64, s4=32, s5=0] (stddev=92.98, mean=100.00, sum=500)
 replicas#1: first: [s1=500, s2=456, s3=262, s4=165, s5=117] (stddev=153.29, mean=300.00, sum=1500)
@@ -42,3 +43,4 @@ failed assertion sample 1
 	store=5 stat=117.00
 	store=5 stat=117.00
 	store=5 stat=117.00
+==========================
