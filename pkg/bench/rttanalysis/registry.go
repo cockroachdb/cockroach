@@ -6,9 +6,12 @@
 package rttanalysis
 
 import (
+	"hash/fnv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -53,13 +56,48 @@ func (r *Registry) Run(b *testing.B) {
 //
 // It takes a long time and thus is skipped under stress, race
 // and short.
-func (r *Registry) RunExpectations(t *testing.T) {
+//
+// When shard and totalShards are provided (> 1), only a subset of benchmarks
+// assigned to the specific shard will be run, enabling parallel execution.
+func (r *Registry) RunExpectations(t *testing.T, shard, totalShards int) {
+	defer jobs.TestingSetIDsToIgnore(map[jobspb.JobID]struct{}{3001: {}, 3002: {}})()
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	skip.UnderShort(t)
 	skip.UnderDeadlock(t)
 
-	runBenchmarkExpectationTests(t, r)
+	// If totalShards is 1, run all tests; otherwise shard them
+	var registryToUse *Registry
+	if totalShards <= 1 {
+		// Run all test groups
+		registryToUse = r
+	} else {
+		// Create a registry with only the test groups assigned to this shard
+		shardRegistry := &Registry{
+			numNodes: r.numNodes,
+			cc:       r.cc,
+			r:        make(map[string][]RoundTripBenchTestCase),
+		}
+
+		// Distribute test groups across shards using hash-based assignment
+		for groupName, testCases := range r.r {
+			h := fnv32Hash(groupName)
+			assignedShard := (h % totalShards) + 1
+			if assignedShard == shard {
+				shardRegistry.r[groupName] = testCases
+			}
+		}
+		registryToUse = shardRegistry
+	}
+
+	runBenchmarkExpectationTests(t, registryToUse)
+}
+
+// fnv32Hash returns a stable hash for consistent shard assignment
+func fnv32Hash(s string) int {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return int(h.Sum32())
 }
 
 // Register registers a set of test cases to a given benchmark name. It is

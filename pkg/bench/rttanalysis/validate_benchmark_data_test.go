@@ -5,14 +5,23 @@
 
 package rttanalysis
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-)
+// NOTE: If you change the number of shards, you must also update the
+// shard_count in BUILD.bazel to match.
 
-func TestBenchmarkExpectation(t *testing.T) {
-	defer jobs.TestingSetIDsToIgnore(map[jobspb.JobID]struct{}{3001: {}, 3002: {}})()
-	reg.RunExpectations(t)
+func TestBenchmarkExpectationShard1(t *testing.T) {
+	reg.RunExpectations(t, 1, 4)
+}
+
+func TestBenchmarkExpectationShard2(t *testing.T) {
+	reg.RunExpectations(t, 2, 4)
+}
+
+func TestBenchmarkExpectationShard3(t *testing.T) {
+	reg.RunExpectations(t, 3, 4)
+}
+
+func TestBenchmarkExpectationShard4(t *testing.T) {
+	reg.RunExpectations(t, 4, 4)
 }
