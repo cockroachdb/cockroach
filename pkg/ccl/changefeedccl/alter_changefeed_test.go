@@ -1524,13 +1524,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 			defer rndMu.Unlock()
 
 			if r.Span.Equal(fooTableSpan) {
-				// Do not emit resolved events for the entire table span.
-				// We "simulate" large table by splitting single table span into many parts, so
-				// we want to resolve those sub-spans instead of the entire table span.
-				// However, we have to emit something -- otherwise the entire changefeed
-				// machine would not work.
-				r.Span.EndKey = fooTableSpan.Key.Next()
-				return false, nil
+				return true, nil
 			}
 			if haveGaps {
 				return rndMu.rnd.Intn(10) > 7, nil
