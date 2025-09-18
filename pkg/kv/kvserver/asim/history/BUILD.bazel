@@ -17,10 +17,11 @@ go_library(
 
 go_test(
     name = "history_test",
-    srcs = ["trashing_test.go"],
+    srcs = ["thrashing_test.go"],
     data = glob(["testdata/**"]),
     embed = [":history"],
     deps = [
+        "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
         "//pkg/util/randutil",
