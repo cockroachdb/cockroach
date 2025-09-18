@@ -73,5 +73,4 @@ Workload Set Up
 	[10001,20000): write-only large-block [0.00cpu-us/write(raft), 1000B/op, 20000ops/s]
 Changed Settings
 	SplitQueueEnabled: false (default: true)
-	OnRecording: 0x10487ef50 (default: <nil>)
 ==========================
