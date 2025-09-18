@@ -1028,10 +1028,11 @@ func (w *walkCtx) walkForeignKeyConstraint(
 func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 	typeT := newTypeT(fnDesc.GetReturnType().Type)
 	fn := &scpb.Function{
-		FunctionID: fnDesc.GetID(),
-		ReturnSet:  fnDesc.GetReturnType().ReturnSet,
-		ReturnType: *typeT,
-		Params:     make([]scpb.Function_Parameter, len(fnDesc.GetParams())),
+		FunctionID:  fnDesc.GetID(),
+		ReturnSet:   fnDesc.GetReturnType().ReturnSet,
+		ReturnType:  *typeT,
+		Params:      make([]scpb.Function_Parameter, len(fnDesc.GetParams())),
+		IsProcedure: fnDesc.IsProcedure(),
 	}
 	for i, param := range fnDesc.GetParams() {
 		typeT := newTypeT(param.Type)
