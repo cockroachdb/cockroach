@@ -1188,7 +1188,9 @@ func runCDCInitialScanRollingRestart(
 			t.L().Printf("starting changefeed %d...", i)
 			var job int
 			if err := db.QueryRow(
-				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE large, small INTO 'webhook-%s/?insecure_tls_skip_verify=true' WITH initial_scan='only'", sinkURL),
+				fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE large, small
+INTO 'webhook-%s/?insecure_tls_skip_verify=true'
+WITH initial_scan='only', min_checkpoint_frequency='5s'`, sinkURL),
 			).Scan(&job); err != nil {
 				t.Fatal(err)
 			}
