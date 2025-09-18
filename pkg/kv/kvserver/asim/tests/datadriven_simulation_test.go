@@ -540,7 +540,6 @@ func TestDataDriven(t *testing.T) {
 						require.NotNil(t, set, "unknown mode value: %s", mv)
 						set(&eventGen)
 
-						plotDir := datapathutils.TestDataPath(t, "generated", name)
 						// TODO(tbg): need to decide whether multiple evals in a single file
 						// is a feature or an anti-pattern. If it's a feature, we should let
 						// the `name` part below be adjustable (but not the plotDir) via a
