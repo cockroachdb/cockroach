@@ -88,9 +88,11 @@ var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 // to be backpressured.
 var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
-	// Backpressure from the end of the system config forward instead of
-	// over all table data to avoid backpressuring unsplittable ranges.
-	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
+	// Exclude the span_configurations table to avoid
+	// catch-22 situations where protected timestamp updates or garbage
+	// collection TTL updates are blocked by backpressure.
+	{Key: keys.SystemConfigTableDataMax, EndKey: keys.SpanConfigTableMin},
+	{Key: keys.SpanConfigTableMax, EndKey: keys.TableDataMax},
 }
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible

@@ -374,6 +374,10 @@ var (
 	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
 	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
+	// SpanConfigTableMin is the start key of system.span_configurations.
+	SpanConfigTableMin = SystemSQLCodec.TablePrefix(SpanConfigurationsTableID)
+	// SpanConfigTableMax is the end key of system.span_configurations.
+	SpanConfigTableMax = SystemSQLCodec.TablePrefix(SpanConfigurationsTableID + 1)
 
 	// 4. Non-system tenant SQL keys
 	//

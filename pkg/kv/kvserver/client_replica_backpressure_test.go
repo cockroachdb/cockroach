@@ -342,17 +342,18 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	})
 }
 
-// TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges
-// verifies that spanconfig updates are blocked by backpressure when the
-// `system.span_configurations` table range becomes full, recreating the issue.
+// TestSpanConfigUpdatesDoNotGetBlockByRangeSizeBackpressureOnDefaultRanges
+// verifies that spanconfig updates do not block by backpressure when the
+// `system.span_configurations` table range becomes full, showing the allowlist
+// is working.
 //
 // Test strategy:
 //  1. Configure `system.span_configurations` table range to be a small size (8 KiB).
 //  2. Write many large spanconfig records (2 KiB each) to fill up the range.
-//  3. Verify spanconfig updates fail due to backpressure when the range is full,
-//  4. This test recreates the scenario where spanconfig updates are blocked by
+//  3. Verify spanconfig updates do not fail due to backpressure when the range is full,
+//  4. This test recreates the scenario where spanconfig updates do not fail due to
 //     backpressure.
-func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testing.T) {
+func TestSpanConfigUpdatesDoNotGetBlockByRangeSizeBackpressureOnDefaultRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -438,8 +439,8 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 	if repl != nil {
 		conf, err := repl.LoadSpanConfig(ctx)
 		require.NoError(t, err)
-		t.Logf("current range config - RangeMaxBytes: %d bytes (%d MiB), "+
-			"RangeMinBytes: %d bytes (%d MiB)",
+		t.Logf("current range config - RangeMaxBytes: %d bytes (%s), "+
+			"RangeMinBytes: %d bytes (%s)",
 			conf.RangeMaxBytes, humanize.Bytes(uint64(conf.RangeMaxBytes)),
 			conf.RangeMinBytes, humanize.Bytes(uint64(conf.RangeMinBytes)))
 
@@ -517,9 +518,9 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 		}
 	}
 
-	// Assert that the operation failed due to backpressure.
-	require.Error(t, err,
-		"expected span config writes to fail due to backpressure, but they succeeded")
+	// Assert that the operation does not fail due to backpressure.
+	require.NoError(t, err,
+		"expected span config writes to not fail due to backpressure, but they did")
 
 	systemSpanConfigurationsTableSpanMVCCStats := roachpb.Span{
 		Key:    keys.SystemSQLCodec.TablePrefix(keys.SpanConfigurationsTableID),
@@ -566,7 +567,7 @@ func TestSpanConfigUpdatesBlockedByRangeSizeBackpressureOnDefaultRanges(t *testi
 		[]spanconfig.Target{scratchTarget}, []spanconfig.Record{smallSpanconfigRecord},
 		hlc.MinTimestamp, hlc.MaxTimestamp)
 
-	require.Error(t, smallSpanconfigRecordWriteErr,
-		"expected smallSpanconfigRecord write to fail due to backpressure")
+	require.NoError(t, smallSpanconfigRecordWriteErr,
+		"expected smallSpanconfigRecord write to not fail due to backpressure")
 
 }
