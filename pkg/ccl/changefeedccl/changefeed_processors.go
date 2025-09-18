@@ -110,6 +110,10 @@ type changeAggregator struct {
 	flushFrequency     time.Duration // how often high watermark can be checkpointed.
 	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
+	// frontierFlushLimiter is a rate limiter for flushing the span frontier
+	// to the coordinator.
+	frontierFlushLimiter *saveRateLimiter
+
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
 	frontier *resolvedspan.AggregatorFrontier
@@ -280,6 +284,16 @@ func newChangeAggregatorProcessor(
 	} else {
 		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
 	}
+
+	ca.frontierFlushLimiter = newSaveRateLimiter(saveRateConfig{
+		name: "frontier",
+		intervalName: func() redact.SafeValue {
+			return redact.SafeString(changefeedbase.OptMinCheckpointFrequency)
+		},
+		interval: func() time.Duration {
+			return ca.flushFrequency
+		},
+	})
 
 	return ca, nil
 }
@@ -894,6 +908,7 @@ func (ca *changeAggregator) flushBufferedEvents(ctx context.Context) error {
 	return ca.sink.Flush(ctx)
 }
 
+// TODO need to push progress to frontier even if not advanced
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
@@ -1313,8 +1328,18 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	cf.frontierPersistenceLimiter = newSaveRateLimiter(
-		"frontier" /* name */, changefeedbase.FrontierPersistenceInterval)
+	cf.frontierPersistenceLimiter = newSaveRateLimiter(saveRateConfig{
+		name: "frontier",
+		intervalName: func() redact.SafeValue {
+			return changefeedbase.FrontierPersistenceInterval.Name()
+		},
+		interval: func() time.Duration {
+			return changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
+		},
+		jitter: func() float64 {
+			return aggregatorFlushJitter.Get(&cf.FlowCtx.Cfg.Settings.SV)
+		},
+	})
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
@@ -1919,7 +1944,7 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 
 	if cf.spec.JobID == 0 ||
 		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
-		!cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
+		!cf.frontierPersistenceLimiter.canSave(ctx) {
 		return nil
 	}
 
@@ -2349,10 +2374,12 @@ func shouldCountUsageError(err error) bool {
 		status.Code(err) != codes.Canceled
 }
 
-// durationSetting is a duration cluster setting.
-type durationSetting interface {
-	Name() settings.SettingName
-	Get(sv *settings.Values) time.Duration
+// saveRateConfig is the config for a saveRateLimiter.
+type saveRateConfig struct {
+	name         redact.SafeString
+	intervalName func() redact.SafeValue
+	interval     func() time.Duration
+	jitter       func() float64
 }
 
 // saveRateLimiter is a rate limiter for saving a piece of progress.
@@ -2360,28 +2387,32 @@ type durationSetting interface {
 // It also limits saving to not be more frequent than the average
 // duration it takes to save progress.
 type saveRateLimiter struct {
-	name         redact.SafeString
-	saveInterval durationSetting
-	warnEveryN   util.EveryN
+	config     saveRateConfig
+	warnEveryN util.EveryN
 
 	lastSave        time.Time
 	avgSaveDuration time.Duration
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
-func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *saveRateLimiter {
+func newSaveRateLimiter(config saveRateConfig) *saveRateLimiter {
 	return &saveRateLimiter{
-		name:         name,
-		saveInterval: saveInterval,
-		warnEveryN:   util.Every(time.Minute),
+		config:     config,
+		warnEveryN: util.Every(time.Minute),
 	}
 }
 
 // canSave returns whether enough time has passed to save progress again.
-func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool {
-	interval := l.saveInterval.Get(sv)
+func (l *saveRateLimiter) canSave(ctx context.Context) bool {
+	interval := l.config.interval()
 	if interval == 0 {
 		return false
+	}
+	jitter := l.config.jitter()
+	if jitter > 0 {
+		if maxJitter := jitter * float64(interval); maxJitter > 0 {
+			interval += time.Duration(rand.Int63n(int64(maxJitter)))
+		}
 	}
 	now := timeutil.Now()
 	elapsed := now.Sub(l.lastSave)
@@ -2393,7 +2424,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool
 			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
 				"since last save and %s is set to %s because average duration to save was %s "+
 				"and further saving is disabled until that much time elapses",
-				l.name, elapsed, l.saveInterval.Name(),
+				l.config.name, elapsed, l.config.intervalName(),
 				interval, l.avgSaveDuration)
 		}
 		return false
