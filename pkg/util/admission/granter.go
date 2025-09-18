@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -248,6 +249,211 @@ func (tg *tokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
 		}
 	}
 	return res
+}
+
+// cpuTimeTokenChildGranter implements granter. It stores WorkClass and
+// proxies to cpuTimeTokenGranter. See the declaration comment for cpuTimeTokenGranter
+// for more details.
+//
+// Each "child" granter is paired with a requester, since the requester (in practice, a
+// WorkQueue) does not need to know about the others. An alternative would be to make
+// WorkClass an argument to the various granter methods, but this approach seems cleaner.
+type cpuTimeTokenChildGranter struct {
+	// NB: The ElasticWorkClass here is not the same as the one that uses the
+	// ElasticCPUGrantCoordinator. The one here falls below the RegularWorkClass
+	// in priority, but above the ones that use the ElasticCPUGrantCoordinator.
+	wc     admissionpb.WorkClass
+	parent *cpuTimeTokenGranter
+}
+
+var _ granter = &cpuTimeTokenChildGranter{}
+
+// tryGet implements granter.
+func (cg *cpuTimeTokenChildGranter) tryGet(qual burstQualification, count int64) bool {
+	return cg.parent.tryGet(cg.wc, qual, count)
+}
+
+// returnGrant implements granter.
+func (cg *cpuTimeTokenChildGranter) returnGrant(count int64) {
+	cg.parent.returnGrant(count)
+}
+
+// tookWithoutPermission implements granter.
+func (cg *cpuTimeTokenChildGranter) tookWithoutPermission(count int64) {
+	cg.parent.tookWithoutPermission(count)
+}
+
+// continueGrantChain implements granter.
+func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID) {
+	// Ignore since grant chains are not used.
+}
+
+// cpuTimeTokenGranter uses token buckets to limit CPU usage. There is one
+// token bucket per type of request. Requests are only admitted (tryGet
+// only returns true), if the bucket for the type of request to be done has
+// positive tokens. Before a request is admitted, tokens are deducated from all
+// buckets, not just the bucket that was checked initially. This enables
+// setting up a hierarchy of types of requests, where some types can use more
+// CPU than others.
+//
+// For example, on an 8 vCPU machine, it might be set up like this:
+//
+// - Burstable regular work -> 6 seconds of CPU time per second
+// - Non-burstable regular work -> 5 seconds of CPU time per second
+// - Elastic work -> 2 seconds of CPU time per second
+//
+// A request for 5s of burstable regular work would be admitted immediately,
+// since the burstable regular bucket is positive. It would deduct from all
+// three buckets, resulting in a balance of (1,0,-3). Non-burstable and elastic
+// work would now have to wait for their respective buckets to refill, while
+// burstable regular work is still admissible.
+//
+// The immediate purpose of this is to achieve low goroutine scheduling latencies
+// even in the case of a Serverless tenant sending a large workload to a multi-host
+// cluster. The above rates will be set so as to limit CPU utilization to some
+// cluster-setting-configurable maximum. For example, if the target max is 80%, and
+// if the machine has 8 vCPUs, then the non-burstable regular work will be allowed
+// 6.4 seconds of CPU time per second. In limiting CPU usage to some max, goroutine
+// scheduling latency can be kept low.
+//
+// Why the distinction between burstable & non-burstable? Let's say tenant A is
+// sending a large workload, and tenant B is sending a small workload. Due to what
+// has already been described, goroutine scheduling latency will be kept low. That's
+// good, but what is not good is tenant B will regularly queue in admission control,
+// since the 6.4 second token bucket will often be empty. To avoid this, we
+// classify a tenant sending a small workload as burstable. Thus, tenant B can pull from
+// a slightly bigger token bucket, to avoid queuing in AC. (Note that even without
+// this, tenant B will not wait as long as tenant A on average, since the WorkQueue itself
+// will implement fair sharing of CPU time tokens.)
+//
+// TODO(josh): Add docs about RegularWorkClass vs. ElasticWorkClass after more discussion
+// with Sumeer.
+//
+// Note that cpuTimeTokenGranter does not handle replenishing the buckets.
+//
+// For more, see the initial design sketch:
+// https://docs.google.com/document/d/1-Kr2gRFTk0QV8kBs7AXRXUwFpK2ZxR1cqIwWCuOx22Q/edit?tab=t.0
+// TODO(josh): Turn into a proper design documnet.
+type cpuTimeTokenGranter struct {
+	requester [admissionpb.NumWorkClasses]requester
+	mu        struct {
+		// TODO(josh): I suspect putting the mutex here is better than in
+		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
+		// Think better to decice when I put up a PR that introduces
+		// CPUTimeTokenGrantCoordinator & cpuTimeTokenAdjusterNew.
+		syncutil.Mutex
+		// Invariant: For any two buckets A & B, if A has a lower ordinal admissionpb.WorkClasss,
+		// then A must have more tokens than B. Since admission deducts from all buckets, this
+		// invariant is true, so long as token bucket replenishing respects it also. Token bucket
+		// replenishing is not yet implemented. See tryGrantLocked for a situation where this
+		// invariant is relied on.
+		buckets [admissionpb.NumWorkClasses][numBurstQualifications]tokenBucket
+	}
+}
+
+// TODO(josh): Make this observable. See here for one approach:
+// https://github.com/cockroachdb/cockroach/commit/06967f5fa72115348d57fc66fe895aec514261d5#diff-6212d039fab53dd464bd989bdbd537947b11d37a9c8fe77ca497870b49e28a9cR367
+type tokenBucket struct {
+	tokens int64
+}
+
+func (stg *cpuTimeTokenGranter) String() string {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	var str string
+	for wc := admissionpb.RegularWorkClass; wc < admissionpb.NumWorkClasses; wc++ {
+		for gk := canBurst; gk < numBurstQualifications; gk++ {
+			str += fmt.Sprintf("%s %s tokens: %d / ", wc, gk, stg.mu.buckets[wc][gk].tokens)
+		}
+	}
+	return str
+}
+
+// tryGet is the helper for implementing granter.tryGet.
+func (stg *cpuTimeTokenGranter) tryGet(
+	wc admissionpb.WorkClass, qual burstQualification, count int64,
+) bool {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	if stg.mu.buckets[wc][qual].tokens <= 0 {
+		return false
+	}
+	stg.tookWithoutPermissionLocked(count)
+	return true
+}
+
+// returnGrant is the helper for implementing granter.tryGet.
+func (stg *cpuTimeTokenGranter) returnGrant(count int64) {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	stg.tookWithoutPermissionLocked(-count)
+	// count must be positive. Thus above always adds tokens to the buckets.
+	// Thus returnGrant should always attempt to grant admission to waiting requests.
+	stg.grantUntilNoWaitingRequestsLocked()
+}
+
+// tookWithoutPermission is the helper for implementing granter.tryGet.
+func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	stg.tookWithoutPermissionLocked(count)
+}
+
+func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
+	for wc := range stg.mu.buckets {
+		for qual := range stg.mu.buckets[wc] {
+			stg.mu.buckets[wc][qual].tokens -= count
+		}
+	}
+}
+
+// grantUntilNoWaitingRequestsLocked grants admission to all queued requests
+// that can be granted, given the current state of the token buckets, etc.
+// It prioritizes requesters from higher class work in the sense of
+// admissionpb.WorkClass. That is, multiple waiting requests of class
+// RegularWorkClass will be granted before a single one is from ElasticWorkClass.
+func (stg *cpuTimeTokenGranter) grantUntilNoWaitingRequestsLocked() {
+	// TODO(josh): If there are a lot of tokens, this could hold the mutex for a long
+	// time. We may want to drop and reacquire the mutex after every 1000 requests or so.
+	for stg.tryGrantLocked() {
+	}
+}
+
+// tryGrantLocked attempts to grant admission to a single queued request.
+// It prioritizes requesters from higher class work, in the sense of
+// admissionpb.WorkClass.
+func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
+	for i := range stg.requester {
+		hasWaitingRequests, qual := stg.requester[i].hasWaitingRequests()
+		if !hasWaitingRequests {
+			continue
+		}
+		// tryGrantLocked does not need to continue here, since there are
+		// no more requests to grant. The detailed reason for this is:
+		//
+		// - stg.requester is ordered by admissionpb.WorkClass.
+		// - Given two buckets A & B, if A is for a lower ordinal
+		//   admissionpb.WorkClass, more tokens will be in bucket A
+		//   than bucket B (see cpuTimeTokenGranter for more on this
+		//   invariant).
+		// - Thus, if no tokens in A, there are no tokens in B.
+		//
+		// Note that it is up to the requester which is the next request
+		// to admit. So tryGrantLocked only needs to check the bucket that
+		// corresponds to the burstQualification of that request, as is done
+		// below.
+		if stg.mu.buckets[i][qual].tokens <= 0 {
+			return false
+		}
+		tokens := stg.requester[i].granted(0)
+		if tokens == 0 {
+			// Did not accept grant.
+			continue
+		}
+		stg.tookWithoutPermissionLocked(tokens)
+		return true
+	}
+	return false
 }
 
 // kvStoreTokenGranter is used for grants to KVWork to a store, that is

@@ -115,7 +115,7 @@ func TestCPUGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanCPUWorkKind(t, d)].tryGet(int64(v))
+			requesters[scanCPUWorkKind(t, d)].tryGet(noBurst /* arbitary */, int64(v))
 			return flushAndReset()
 
 		case "return-grant":
@@ -163,6 +163,131 @@ func TestCPUGranterBasic(t *testing.T) {
 				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
+
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	})
+}
+
+func TestCPUTimeTokenGranter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var requesters [admissionpb.NumWorkClasses]*testRequester
+	granter := &cpuTimeTokenGranter{}
+	regular := &cpuTimeTokenChildGranter{
+		wc:     admissionpb.RegularWorkClass,
+		parent: granter,
+	}
+	elastic := &cpuTimeTokenChildGranter{
+		wc:     admissionpb.ElasticWorkClass,
+		parent: granter,
+	}
+	var buf strings.Builder
+	flushAndReset := func() string {
+		fmt.Fprintf(&buf, "cpuTimeTokenGranter:\n%s\n", granter.String())
+		str := buf.String()
+		buf.Reset()
+		return str
+	}
+	requesters[admissionpb.RegularWorkClass] = &testRequester{
+		additionalID: admissionpb.RegularWorkClass.String(),
+		granter:      regular,
+		buf:          &buf,
+	}
+	requesters[admissionpb.ElasticWorkClass] = &testRequester{
+		additionalID: admissionpb.ElasticWorkClass.String(),
+		granter:      elastic,
+		buf:          &buf,
+	}
+	granter.requester[admissionpb.RegularWorkClass] = requesters[admissionpb.RegularWorkClass]
+	granter.requester[admissionpb.ElasticWorkClass] = requesters[admissionpb.ElasticWorkClass]
+
+	requesters[admissionpb.RegularWorkClass].returnValueFromHasWaitingRequests = noBurst
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_granter"), func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "init":
+			if d.HasArg("regular") {
+				var n int64
+				d.ScanArgs(t, "regular", &n)
+				granter.mu.buckets[admissionpb.RegularWorkClass][noBurst].tokens = n
+			}
+			if d.HasArg("regularburst") {
+				var n int64
+				d.ScanArgs(t, "regularburst", &n)
+				granter.mu.buckets[admissionpb.RegularWorkClass][canBurst].tokens = n
+			}
+			if d.HasArg("elastic") {
+				var n int64
+				d.ScanArgs(t, "elastic", &n)
+				granter.mu.buckets[admissionpb.ElasticWorkClass][noBurst].tokens = n
+			}
+			if d.HasArg("elasticburst") {
+				var n int64
+				d.ScanArgs(t, "elasticburst", &n)
+				granter.mu.buckets[admissionpb.ElasticWorkClass][canBurst].tokens = n
+			}
+			if d.HasArg("normalwaiter") {
+				var n int64
+				d.ScanArgs(t, "normalwaiter", &n)
+				requesters[admissionpb.RegularWorkClass].waitingRequests = true
+				requesters[admissionpb.RegularWorkClass].returnValueFromGranted = n
+			} else {
+				requesters[admissionpb.RegularWorkClass].waitingRequests = false
+				requesters[admissionpb.RegularWorkClass].returnValueFromGranted = 0
+			}
+			if d.HasArg("elasticwaiter") {
+				var n int64
+				d.ScanArgs(t, "elasticwaiter", &n)
+				requesters[admissionpb.ElasticWorkClass].waitingRequests = true
+				requesters[admissionpb.ElasticWorkClass].returnValueFromGranted = n
+			} else {
+				requesters[admissionpb.ElasticWorkClass].waitingRequests = false
+				requesters[admissionpb.ElasticWorkClass].returnValueFromGranted = 0
+			}
+			if d.HasArg("elasticburstwaiter") {
+				if !d.HasArg("elasticwaiter") {
+					panic("must set elasticwaiter")
+				}
+				requesters[admissionpb.ElasticWorkClass].returnValueFromHasWaitingRequests = canBurst
+			} else {
+				requesters[admissionpb.ElasticWorkClass].returnValueFromHasWaitingRequests = noBurst
+			}
+			return flushAndReset()
+
+		case "try-get":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			qual := noBurst
+			if d.HasArg("burst") {
+				qual = canBurst
+			}
+			requesters[scanWorkClass(t, d)].tryGet(qual, int64(v))
+			return flushAndReset()
+
+		case "return-grant":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkClass(t, d)].returnGrant(int64(v))
+			return flushAndReset()
+
+		case "took-without-permission":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkClass(t, d)].tookWithoutPermission(int64(v))
+			return flushAndReset()
+
+		case "continue-grant-chain":
+			requesters[scanWorkClass(t, d)].continueGrantChain()
+			return flushAndReset()
 
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -301,7 +426,7 @@ func TestStoreGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanStoreWorkType(t, d)].tryGet(int64(v))
+			requesters[scanStoreWorkType(t, d)].tryGet(noBurst /* arbitrary */, int64(v))
 			return flushAndReset()
 
 		case "return-grant":
@@ -489,7 +614,7 @@ func TestStoreCoordinators(t *testing.T) {
 	// point in time, so will return true.
 	requesters = requesters[1:]
 	for i := range requesters {
-		requesters[i].tryGet(1)
+		requesters[i].tryGet(noBurst /* arbitrary */, 1)
 	}
 	require.Equal(t,
 		"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n"+
@@ -505,15 +630,16 @@ type testRequester struct {
 	usesTokens   bool
 	buf          *strings.Builder
 
-	waitingRequests        bool
-	returnValueFromGranted int64
-	grantChainID           grantChainID
+	waitingRequests                   bool
+	returnValueFromHasWaitingRequests burstQualification
+	returnValueFromGranted            int64
+	grantChainID                      grantChainID
 }
 
 var _ requester = &testRequester{}
 
 func (tr *testRequester) hasWaitingRequests() (bool, burstQualification) {
-	return tr.waitingRequests, canBurst /*arbitrary*/
+	return tr.waitingRequests, tr.returnValueFromHasWaitingRequests
 }
 
 func (tr *testRequester) granted(grantChainID grantChainID) int64 {
@@ -526,8 +652,8 @@ func (tr *testRequester) granted(grantChainID grantChainID) int64 {
 
 func (tr *testRequester) close() {}
 
-func (tr *testRequester) tryGet(count int64) {
-	rv := tr.granter.tryGet(canBurst /*arbitrary*/, count)
+func (tr *testRequester) tryGet(qual burstQualification, count int64) {
+	rv := tr.granter.tryGet(qual, count)
 	fmt.Fprintf(tr.buf, "%s%s: tryGet(%d) returned %t\n", tr.workKind,
 		tr.additionalID, count, rv)
 }
@@ -587,6 +713,18 @@ func scanCPUWorkKind(t *testing.T, d *datadriven.TestData) WorkKind {
 		return SQLSQLResponseWork
 	}
 	panic("unknown WorkKind")
+}
+
+func scanWorkClass(t *testing.T, d *datadriven.TestData) admissionpb.WorkClass {
+	var kindStr string
+	d.ScanArgs(t, "work", &kindStr)
+	switch kindStr {
+	case "regular":
+		return admissionpb.RegularWorkClass
+	case "elastic":
+		return admissionpb.ElasticWorkClass
+	}
+	panic("unknown WorkClass")
 }
 
 func scanStoreWorkType(t *testing.T, d *datadriven.TestData) admissionpb.StoreWorkType {
