@@ -32,5 +32,5 @@ leases#1: first: [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev
 leases#1: last:  [s1=7, s2=0, s3=3, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=2.28, mean=1.11, sum=10)
 replicas#1: first: [s1=10, s2=10, s3=0, s4=10, s5=10, s6=10, s7=0, s8=0, s9=0] (stddev=4.97, mean=5.56, sum=50)
 replicas#1: last:  [s1=8, s2=8, s3=4, s4=10, s5=10, s6=10, s7=0, s8=0, s9=0] (stddev=4.30, mean=5.56, sum=50)
-artifacts[mma-only]: 330dd789028fa2f6
+artifacts[mma-only]: 512bcb3481322125
 ==========================

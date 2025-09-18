@@ -34,13 +34,13 @@ replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
-artifacts[sma-count]: 7ff576d2c1e85fc6
+artifacts[sma-count]: 62ac1b2595570a64
 ==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
-artifacts[mma-only]: a50f509e7700298e
+artifacts[mma-only]: 7f8cb11357cb8494
 ==========================
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
@@ -57,11 +57,11 @@ replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
-artifacts[sma-count]: 2fc0e18cc0303bc6
+artifacts[sma-count]: fcc6171fb20aaf96
 ==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=10] (stddev=0.00, mean=10.00, sum=10)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
-artifacts[mma-only]: a31676c456df8ec8
+artifacts[mma-only]: 78253b79ec7c7d5a
 ==========================

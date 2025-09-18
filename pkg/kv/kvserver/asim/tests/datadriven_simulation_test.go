@@ -8,7 +8,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"hash"
 	"hash/fnv"
 	"math/rand"
 	"os"
@@ -601,9 +600,6 @@ func TestDataDriven(t *testing.T) {
 						for sample, h := range run.hs {
 							printStatsAndGenerateJSON(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
 								settingsGen.Settings.TickInterval, metricsMap)
-							generateTopology(t, h,
-								filepath.Join(plotDir, fmt.Sprintf("%s_%d_topology.txt", testName, sample+1)),
-								hasher, rewrite)
 						}
 						artifactsHash := hasher.Sum64()
 
@@ -737,22 +733,6 @@ func TestDataDriven(t *testing.T) {
 type modeHistory struct {
 	mode string
 	hs   []history.History
-}
-
-func generateTopology(
-	t *testing.T, h history.History, topFile string, hasher hash.Hash, rewrite bool,
-) {
-	// TODO(tbg): this can in principle be printed without even
-	// evaluating the test, and in particular it's independent of
-	// settings. It seems like an artifact of the implementation
-	// that we can only access the structured topology after the
-	// simulation has run.
-	top := h.S.Topology()
-	s := top.String()
-	_, _ = fmt.Fprint(hasher, s)
-	if rewrite {
-		require.NoError(t, os.WriteFile(topFile, []byte(s), 0644))
-	}
 }
 
 // writeStateStrToFile writes the state string to the given file.
