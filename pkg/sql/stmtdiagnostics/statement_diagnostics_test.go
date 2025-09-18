@@ -1051,7 +1051,7 @@ LIMIT 1`)
 	for _, tc := range []struct {
 		name                        string
 		expectedMinExecutionLatency string
-		expectedExpiresAt           time.Duration
+		expectedExpiresAt           string
 		expectedSampleProbability   float64
 		expectedRedacted            bool
 		expectedError               string
@@ -1061,14 +1061,14 @@ LIMIT 1`)
 			name:                        "conditional",
 			expectedMinExecutionLatency: "00:00:00.1",
 			expectedSampleProbability:   0.5,
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            false,
 		},
 		{
 			name:                        "conditional_no_min_latency",
 			expectedSampleProbability:   0.5,
 			expectedMinExecutionLatency: "0",
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            false,
 			expectedError:               "got non-zero sampling probability",
 		},
@@ -1076,20 +1076,20 @@ LIMIT 1`)
 			name:                        "conditional_probability_out_of_bounds",
 			expectedSampleProbability:   1.5,
 			expectedMinExecutionLatency: "0",
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            false,
 			expectedError:               "expected sampling probability in range",
 		},
 		{
 			name:                        "not_conditional",
 			expectedMinExecutionLatency: "0",
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedSampleProbability:   0,
 			expectedRedacted:            false,
 		},
 		{
 			name:                        "with_expiration",
-			expectedExpiresAt:           time.Hour,
+			expectedExpiresAt:           "1h",
 			expectedMinExecutionLatency: "0",
 			expectedSampleProbability:   0,
 			expectedRedacted:            false,
@@ -1097,7 +1097,7 @@ LIMIT 1`)
 		{
 			name:                        "redacted",
 			expectedMinExecutionLatency: "0",
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedSampleProbability:   0,
 			expectedRedacted:            true,
 		},
@@ -1105,7 +1105,7 @@ LIMIT 1`)
 			name:                        "alloweduser",
 			expectedMinExecutionLatency: "0",
 			expectedSampleProbability:   0,
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            false,
 			expectedUser:                "alloweduser",
 		},
@@ -1113,7 +1113,7 @@ LIMIT 1`)
 			name:                        "alloweduserredacted",
 			expectedMinExecutionLatency: "0",
 			expectedSampleProbability:   0,
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            true,
 			expectedUser:                "alloweduserredacted",
 		},
@@ -1121,7 +1121,7 @@ LIMIT 1`)
 			name:                        "alloweduserredacted must be redacted",
 			expectedMinExecutionLatency: "0",
 			expectedSampleProbability:   0,
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            false,
 			expectedError:               "users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles",
 			expectedUser:                "alloweduserredacted",
@@ -1130,7 +1130,7 @@ LIMIT 1`)
 			name:                        "notalloweduser",
 			expectedMinExecutionLatency: "0",
 			expectedSampleProbability:   0,
-			expectedExpiresAt:           0,
+			expectedExpiresAt:           "0",
 			expectedRedacted:            false,
 			expectedError:               "requesting statement bundle requires VIEWACTIVITY privilege",
 			expectedUser:                "notalloweduser",
@@ -1154,7 +1154,7 @@ LIMIT 1`)
 					expectedTxnFpId,
 					tc.expectedSampleProbability,
 					tc.expectedMinExecutionLatency,
-					tc.expectedExpiresAt.String(),
+					tc.expectedExpiresAt,
 					tc.expectedRedacted)
 			} else {
 				requestTime := timeutil.Now()
@@ -1198,9 +1198,11 @@ LIMIT 1`)
 					require.Equal(t, tc.expectedMinExecutionLatency, minExecutionLatency.String)
 				}
 
-				if tc.expectedExpiresAt != 0 {
+				if tc.expectedExpiresAt != "0" {
 					require.True(t, expiresAt.Valid, "expiresAt should not be NULL when expectedExpiresAt is set")
-					require.Greaterf(t, expiresAt.Time, requestTime.Add(tc.expectedExpiresAt),
+					expectedExpiresAt, err := time.ParseDuration(tc.expectedExpiresAt)
+					require.NoError(t, err)
+					require.Greaterf(t, expiresAt.Time, requestTime.Add(expectedExpiresAt),
 						"expected expiresAt to be roughly %s from request time, got %s", tc.expectedExpiresAt, expiresAt.Time)
 				}
 
