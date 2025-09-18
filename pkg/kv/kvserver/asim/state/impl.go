@@ -1425,7 +1425,7 @@ func (s *state) SetSimulationSettings(Key string, Value interface{}) {
 	}
 }
 
-func (s *state) NodesString() string {
+func (s *state) NodesStringWithTag(tag string) string {
 	var buf strings.Builder
 
 	nodes := make([]*node, 0, len(s.nodes))
@@ -1437,7 +1437,7 @@ func (s *state) NodesString() string {
 	})
 
 	for nID, n := range nodes {
-		_, _ = fmt.Fprintf(&buf, "\tn%d(", n.nodeID)
+		_, _ = fmt.Fprintf(&buf, "%sn%d(", tag, n.nodeID)
 		for _, locality := range n.desc.Locality.Tiers {
 			_, _ = fmt.Fprintf(&buf, "%s,", locality.Value)
 		}

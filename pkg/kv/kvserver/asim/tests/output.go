@@ -150,17 +150,22 @@ func (tr testResultsReport) String() string {
 		if failed || tr.flags.Has(OutputConfigGen) {
 			buf.WriteString(fmt.Sprintf("configurations generated using seed %d\n", output.seed))
 			clusterGenStr, rangeGenStr, loadGenStr, eventGenStr :=
-				output.clusterGen.String(), output.rangeGen.String(), output.loadGen.String(), output.eventGen.String()
-			emptyIfBlank := func(s string) string {
+				output.clusterGen.String(), output.rangeGen.String(), output.loadGen.StringWithTag(""), output.eventGen.StringWithTag("")
+			emptyIfBlank := func(tag string, s string) string {
 				if s == "" {
-					return "empty"
+					return fmt.Sprintf("%s: empty", tag)
 				}
 				return s
 			}
-			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank(clusterGenStr)))
-			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank(rangeGenStr)))
-			buf.WriteString(fmt.Sprintf("%v\n", emptyIfBlank(loadGenStr)))
-			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank(eventGenStr)))
+			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank("cluster", clusterGenStr)))
+			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank("range", rangeGenStr)))
+			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank("load", loadGenStr)))
+			buf.WriteString(fmt.Sprint("\tscheduled_event:\n"))
+			if eventGenStr == "" {
+				eventGenStr = "\t\tempty"
+			}
+			buf.WriteString(fmt.Sprintf("%v\n", eventGenStr))
+
 		}
 		if failed || tr.flags.Has(OutputInitialState) {
 			buf.WriteString(fmt.Sprintf("initial state at %s:\n", output.initialTime.Format("2006-01-02 15:04:05")))

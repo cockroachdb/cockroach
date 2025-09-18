@@ -294,8 +294,7 @@ func (c ClusterInfo) String() (s string) {
 				buf.WriteString(", ")
 			}
 		}
-		buf.WriteString("]")
-		buf.WriteString("\n")
+		buf.WriteString("]\n")
 	}
 	buf.WriteString(fmt.Sprintf("store_disk_capacity=%d bytes, node_cpu_rate_capacity=%d cpu-ns/sec",
 		c.StoreDiskCapacityBytes, c.NodeCPURateCapacityNanos))
