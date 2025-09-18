@@ -624,8 +624,11 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t)
-	skip.UnderDeadlock(t)
+	skip.UnderDuress(t)
+
+	// Increase the verbosity of the logs to help debug the test if it fails, especially
+	// raft related logs when the test tries to transfer the lease non-cooperatively.
+	require.NoError(t, log.SetVModule("raft=4,*=1"))
 
 	for _, test := range []struct {
 		name string
