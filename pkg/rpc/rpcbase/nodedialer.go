@@ -39,10 +39,6 @@ var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
 		return nil
 	}))
 
-// TODODRPC is a marker to identify each RPC client creation site that needs to
-// be updated to support DRPC.
-const TODODRPC = false
-
 // NodeDialer interface defines methods for dialing peer nodes using their
 // node IDs.
 type NodeDialer interface {
@@ -73,7 +69,7 @@ func DialRPCClient[C any](
 	useDRPC := ExperimentalDRPCEnabled.Get(&st.SV)
 
 	var nilC C
-	if !TODODRPC && !useDRPC {
+	if !useDRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nilC, err
@@ -102,7 +98,7 @@ func DialRPCClientNoBreaker[C any](
 	useDRPC := ExperimentalDRPCEnabled.Get(&st.SV)
 
 	var nilC C
-	if !TODODRPC && !useDRPC {
+	if !useDRPC {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
 		if err != nil {
 			return nilC, err
@@ -115,4 +111,8 @@ func DialRPCClientNoBreaker[C any](
 		return nilC, err
 	}
 	return drpcClientFn(conn), nil
+}
+
+func DRPCEnabled(ctx context.Context, st *cluster.Settings) bool {
+	return ExperimentalDRPCEnabled.Get(&st.SV)
 }
