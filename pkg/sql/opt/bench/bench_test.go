@@ -854,6 +854,7 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 		semaCtx: tree.MakeSemaContext(nil /* resolver */),
 		evalCtx: eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+	h.evalCtx.Annotations = &h.semaCtx.Annotations
 
 	// Set session settings to their global defaults.
 	if err := sql.TestingResetSessionVariables(h.ctx, h.evalCtx); err != nil {
