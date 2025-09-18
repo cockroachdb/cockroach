@@ -55,7 +55,7 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	}
 }))
 
-func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }
+func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t, 1, 1) }
 
 const (
 	multipleTableFixture = `
