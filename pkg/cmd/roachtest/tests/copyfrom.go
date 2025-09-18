@@ -158,6 +158,11 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 		"CREATE USER importer WITH PASSWORD '123'",
 		fmt.Sprintf("ALTER ROLE importer SET copy_from_atomic_enabled = %t", atomic),
 	}
+	if atomic {
+		// Disable auto stats collection so that it doesn't contend with the
+		// long-running atomic COPY txn.
+		stmts = append(stmts, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	}
 	for _, stmt := range stmts {
 		_, err = db.ExecContext(ctx, stmt)
 		if err != nil {
