@@ -1819,10 +1819,8 @@ func runCDCMultiTablePTSBenchmark(
 		numRanges = params.numRanges
 	}
 
-	if params.perTablePTS {
-		if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = true"); err != nil {
-			t.Fatalf("failed to set per-table protected timestamps: %v", err)
-		}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
+		t.Fatalf("failed to set per-table protected timestamps: %v", err)
 	}
 
 	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
