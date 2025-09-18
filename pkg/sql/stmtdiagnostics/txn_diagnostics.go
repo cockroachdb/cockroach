@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -230,6 +231,7 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 	var expiresAt time.Time
 	if expiresAfter != 0 {
 		expiresAt = r.ts.Now().Add(expiresAfter)
+		log.Dev.Infof(ctx, "transaction diagnostics request will expire at %s", expiresAt)
 	}
 
 	// Insert the request into system.transaction_diagnostics_requests

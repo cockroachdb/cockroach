@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
@@ -4282,6 +4283,8 @@ FROM (
 	if sd := evalCtx.SessionData(); sd != nil {
 		username = sd.User().Normalized()
 	}
+	expiresAt := time.Duration(expiresAfter.Duration.Nanos())
+	log.Dev.Infof(ctx, "setting expiresAt to: %s", expiresAt)
 	reqId, err := evalCtx.TxnDiagnosticsRequestInserter(
 		ctx,
 		txnFingerprintId,
@@ -4289,7 +4292,7 @@ FROM (
 		username,
 		samplingProbability,
 		time.Duration(minExecutionLatency.Duration.Nanos()),
-		time.Duration(expiresAfter.Duration.Nanos()),
+		expiresAt,
 		redacted)
 	if err != nil {
 		return nil, err
