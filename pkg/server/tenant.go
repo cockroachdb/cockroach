@@ -825,7 +825,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 
 	var apiInternalServer http.Handler
-	if rpcbase.ExperimentalDRPCEnabled.Get(&s.cfg.Settings.SV) {
+	if rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer,
