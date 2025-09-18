@@ -58,7 +58,7 @@ func (r RandomizedBasicRanges) String() string {
 }
 
 func (r RandomizedBasicRanges) Generate(
-	seed int64, settings *config.SimulationSettings, s state.State,
+	_ string, seed int64, settings *config.SimulationSettings, s state.State,
 ) (state.State, string) {
 	if r.placementType != gen.Random {
 		panic("RandomizedBasicRanges generate only randomized distributions")
@@ -84,7 +84,7 @@ func (wr WeightedRandomizedBasicRanges) String() string {
 }
 
 func (wr WeightedRandomizedBasicRanges) Generate(
-	seed int64, settings *config.SimulationSettings, s state.State,
+	_ string, seed int64, settings *config.SimulationSettings, s state.State,
 ) (state.State, string) {
 	if wr.placementType != gen.WeightedRandom || len(wr.weightedRand) == 0 {
 		panic("RandomizedBasicRanges generate only weighted randomized distributions with non-empty weightedRand")

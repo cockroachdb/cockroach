@@ -31,7 +31,7 @@ type LoadGen interface {
 	// Generate returns a workload generator that is parameterized randomly by
 	// the seed and simulation settings provided.
 	Generate(seed int64, settings *config.SimulationSettings) []workload.Generator
-	String() string
+	StringWithTag(tag string) string
 }
 
 // ClusterGen provides a method to generate the initial cluster state,  given a
@@ -51,7 +51,7 @@ type RangeGen interface {
 	// Generate returns an updated state, given the initial state, seed and
 	// simulation settings provided. In the updated state, ranges will have been
 	// created, replicas and leases assigned to stores in the cluster.
-	Generate(seed int64, settings *config.SimulationSettings, s state.State) (state.State, string)
+	Generate(tag string, seed int64, settings *config.SimulationSettings, s state.State) (state.State, string)
 	String() string
 }
 
@@ -66,10 +66,11 @@ func GenerateSimulation(
 	eventGen EventGen,
 	seed int64,
 	buf *strings.Builder,
+	tag string,
 ) *asim.Simulator {
 	settings := settingsGen.Generate(seed)
 	s := clusterGen.Generate(seed, &settings)
-	s, rangeStateStr := rangeGen.Generate(seed, &settings, s)
+	s, rangeStateStr := rangeGen.Generate(tag, seed, &settings, s)
 	eventExecutor := eventGen.Generate(seed, &settings)
 	generateClusterVisualization(buf, s, loadGen, eventGen, rangeStateStr, settings)
 	return asim.NewSimulator(
@@ -102,10 +103,10 @@ type MultiLoad []BasicLoad
 // BasicLoad.
 var _ LoadGen = MultiLoad{}
 
-func (ml MultiLoad) String() string {
+func (ml MultiLoad) StringWithTag(tag string) string {
 	var buf strings.Builder
 	for i, load := range ml {
-		_, _ = fmt.Fprintf(&buf, "%s", load.String())
+		_, _ = fmt.Fprintf(&buf, "%s", load.StringWithTag(tag))
 		if i != len(ml)-1 {
 			_, _ = fmt.Fprintf(&buf, "\n")
 		}
@@ -135,9 +136,9 @@ type BasicLoad struct {
 
 var _ LoadGen = BasicLoad{}
 
-func (bl BasicLoad) String() string {
+func (bl BasicLoad) StringWithTag(tag string) string {
 	var buf strings.Builder
-	fmt.Fprintf(&buf, "\t[%d,%d): ", bl.MinKey, bl.MaxKey)
+	fmt.Fprintf(&buf, "%s[%d,%d): ", tag, bl.MinKey, bl.MaxKey)
 	if bl.RWRatio == 1 {
 		_, _ = fmt.Fprint(&buf, "read-only")
 	} else if bl.RWRatio == 0 {
@@ -214,7 +215,7 @@ func (lc LoadedCluster) Generate(seed int64, settings *config.SimulationSettings
 }
 
 func (lc LoadedCluster) String() string {
-	return fmt.Sprintf("cluster: %s", lc.Info.String())
+	return fmt.Sprintf("cluster: \n%s", lc.Info.String())
 }
 
 func (lc LoadedCluster) Regions() []state.Region {
@@ -356,6 +357,11 @@ type BaseRanges struct {
 	ReplicaPlacement  state.ReplicaPlacement
 }
 
+func (br BaseRanges) String() string {
+	return fmt.Sprintf("[%d,%d): %d(rf=%d), %dMiB",
+		br.MinKey, br.MaxKey, br.Ranges, br.ReplicationFactor, br.Bytes>>20)
+}
+
 // GetRangesInfo generates and distributes ranges across stores based on
 // PlacementType while using other BaseRanges fields for range configuration.
 func (b BaseRanges) GetRangesInfo(
@@ -404,7 +410,7 @@ func (br BasicRanges) String() string {
 // ranges generated based on the parameters specified in the fields of
 // BasicRanges.
 func (br BasicRanges) Generate(
-	seed int64, settings *config.SimulationSettings, s state.State,
+	tag string, seed int64, settings *config.SimulationSettings, s state.State,
 ) (state.State, string) {
 	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
 		panic("BasicRanges generate only uniform or skewed distributions")
@@ -412,7 +418,7 @@ func (br BasicRanges) Generate(
 	rangesInfo, str := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
 	var buf strings.Builder
-	_, _ = fmt.Fprintf(&buf, "\t%s, %s", br, str)
+	_, _ = fmt.Fprintf(&buf, "%s%s, %s", tag, br, str)
 	return s, buf.String()
 }
 
@@ -434,14 +440,14 @@ func (mr MultiRanges) String() string {
 }
 
 func (mr MultiRanges) Generate(
-	seed int64, settings *config.SimulationSettings, s state.State,
+	tag string, seed int64, settings *config.SimulationSettings, s state.State,
 ) (state.State, string) {
 	var rangeInfos []state.RangeInfo
 	var rangeInfoStrings []string
 	for _, ranges := range mr {
 		rangeInfo, rangeInfoStr := ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})
 		rangeInfos = append(rangeInfos, rangeInfo...)
-		rangeInfoStrings = append(rangeInfoStrings, fmt.Sprintf("\t%s, %s", ranges.String(), rangeInfoStr))
+		rangeInfoStrings = append(rangeInfoStrings, fmt.Sprintf("%s%s, %s", tag, ranges.String(), rangeInfoStr))
 	}
 	state.LoadRangeInfo(s, rangeInfos...)
 	var buf strings.Builder

@@ -39,9 +39,9 @@ type ScheduledEvent struct {
 	TargetEvent event.Event
 }
 
-func (se ScheduledEvent) String() string {
+func (se ScheduledEvent) StringWithTag(tag string) string {
 	buf := strings.Builder{}
-	buf.WriteString(fmt.Sprintf("\t%s", se.TargetEvent.String()))
+	buf.WriteString(fmt.Sprintf("%s%s", tag, se.TargetEvent.String()))
 	if !se.At.Equal(config.DefaultStartTime) {
 		buf.WriteString(fmt.Sprintf(" at %s", se.At.Format("15:04:05")))
 	}

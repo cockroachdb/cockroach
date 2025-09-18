@@ -24,61 +24,63 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 7894140303635748408
-	cluster: region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
+	cluster: 
+region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_4(nodes=10,stores=1)]
 region:US_West [zone=US_West_1(nodes=2,stores=1)]
 region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
 store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
 	[0,200000): 1(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
-		[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}]
-	assertion checking event
+	scheduled_event:
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}]
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:05:00
-	[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:05:00
-	assertion checking event
+[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:05:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:10:00
-	[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:10:00
-	assertion checking event
+[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:10:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:15:00
-	[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:15:00
-	assertion checking event
+[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:15:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:20:00
-	[0000000000,9999999999): 3voters [voters:{0:region=US_West}] [lease:{region=US_West}] at 11:20:00
-	assertion checking event
+[0000000000,9999999999): 3voters [voters:{0:region=US_West}] [lease:{region=US_West}] at 11:20:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
   actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
   r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}] at 11:25:00
-	[0000000000,9999999999): 5voters [voters:{2:region=EU}] [lease:{region=EU}] at 11:25:00
-	assertion checking event
+[0000000000,9999999999): 5voters [voters:{2:region=EU}] [lease:{region=EU}] at 11:25:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:30:00
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:30:00
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:30:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:35:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:35:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:35:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:40:00
-	[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:40:00
-	assertion checking event
+[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:40:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:45:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:45:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:45:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:50:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=EU}] [lease:{region=EU}] at 11:50:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=EU}] [lease:{region=EU}] at 11:50:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:55:00
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:55:00
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:55:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 12:00:00
 initial state at 2022-03-21 11:00:00:
@@ -104,55 +106,55 @@ US_West
   US_West_1
     └── [17 18]
 24 events executed:
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}]
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}]
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:05:00
-	[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:05:00
-	assertion checking event
+[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:05:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:10:00
-	[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:10:00
-	assertion checking event
+[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:10:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:15:00
-	[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:15:00
-	assertion checking event
+[0000000000,9999999999): 5voters [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:15:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:20:00
-	[0000000000,9999999999): 3voters [voters:{0:region=US_West}] [lease:{region=US_West}] at 11:20:00
-	assertion checking event
+[0000000000,9999999999): 3voters [voters:{0:region=US_West}] [lease:{region=US_West}] at 11:20:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
   actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
   r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}] at 11:25:00
-	[0000000000,9999999999): 5voters [voters:{2:region=EU}] [lease:{region=EU}] at 11:25:00
-	assertion checking event
+[0000000000,9999999999): 5voters [voters:{2:region=EU}] [lease:{region=EU}] at 11:25:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:30:00
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:30:00
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:30:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:35:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:35:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:35:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:40:00
-	[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:40:00
-	assertion checking event
+[0000000000,9999999999): 3voters [voters:{0:region=EU}] [lease:{region=EU}] at 11:40:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:45:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:45:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=US_West}] [lease:{region=US_West}] at 11:45:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:50:00
-	[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=EU}] [lease:{region=EU}] at 11:50:00
-	assertion checking event
+[0000000000,9999999999): 5voters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{2:region=EU}] [lease:{region=EU}] at 11:50:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 11:55:00
-	[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:55:00
-	assertion checking event
+[0000000000,9999999999): 3voters,2nonvoters [replicas:{1:region=US_East}{1:region=US_West}{1:region=EU}] [voters:{0:region=EU}] [lease:{region=EU}] at 11:55:00
+assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
 			passed at 12:00:00
 sample1: pass

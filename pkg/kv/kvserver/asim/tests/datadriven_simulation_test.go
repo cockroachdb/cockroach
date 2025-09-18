@@ -539,7 +539,7 @@ func TestDataDriven(t *testing.T) {
 							}
 							simulator := gen.GenerateSimulation(
 								duration, clusterGen, rangeGen, loadGen,
-								settingsGen, eventGen, seedGen.Int63(), tmpStrB,
+								settingsGen, eventGen, seedGen.Int63(), tmpStrB, "\t",
 							)
 							if stateStrForOnce == "" {
 								stateStrForOnce = tmpStrB.String()

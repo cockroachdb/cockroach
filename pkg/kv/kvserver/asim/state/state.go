@@ -64,7 +64,7 @@ type State interface {
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
 	// NodesString returns a string representation of all nodes.
-	NodesString() string
+	NodesStringWithTag(tag string) string
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
 	// cannot fail.
 	RangeFor(Key) Range
