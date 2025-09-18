@@ -639,7 +639,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
 		// concurrent requests.
-		if q.granter.tryGet(info.RequestedCount) {
+		//
+		// TODO(sumeer): set a proper burstQualification.
+		if q.granter.tryGet(canBurst /*arbitrary*/, info.RequestedCount) {
 			q.metrics.incAdmitted(info.Priority)
 			if info.ReplicatedWorkInfo.Enabled {
 				// TODO(irfansharif): There's a race here, and could lead to
@@ -871,10 +873,11 @@ func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID, cpuTime time.Dur
 	q.granter.returnGrant(1)
 }
 
-func (q *WorkQueue) hasWaitingRequests() bool {
+func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.mu.tenantHeap) > 0
+	// TODO(sumeer): return a proper burstQualification.
+	return len(q.mu.tenantHeap) > 0, canBurst /*arbitrary*/
 }
 
 func (q *WorkQueue) granted(grantChainID grantChainID) int64 {

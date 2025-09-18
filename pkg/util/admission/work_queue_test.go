@@ -74,7 +74,7 @@ func (tg *testGranter) grantKind() grantKind {
 	return tg.gk
 }
 
-func (tg *testGranter) tryGet(count int64) bool {
+func (tg *testGranter) tryGet(_ burstQualification, count int64) bool {
 	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
 	return tg.returnValueFromTryGet
 }

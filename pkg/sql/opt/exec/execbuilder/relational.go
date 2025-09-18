@@ -737,7 +737,7 @@ func (b *Builder) scanParams(
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
-	softLimit := reqProps.LimitHintInt64()
+	softLimit := uint64(reqProps.LimitHintInt64())
 	hardLimit := scan.HardLimit.RowCount()
 	maxResults, maxResultsOk := b.indexConstraintMaxResults(scan, relProps)
 

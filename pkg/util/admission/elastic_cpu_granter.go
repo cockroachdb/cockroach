@@ -146,7 +146,7 @@ func (e *elasticCPUGranter) grantKind() grantKind {
 }
 
 // tryGet implements granter.
-func (e *elasticCPUGranter) tryGet(count int64) (granted bool) {
+func (e *elasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -182,7 +182,7 @@ func (e *elasticCPUGranter) continueGrantChain(grantChainID) {
 
 // tryGrant is used to attempt to grant to waiting requests.
 func (e *elasticCPUGranter) tryGrant() {
-	for e.requester.hasWaitingRequests() && e.tryGet(1) {
+	for e.hasWaitingRequests() && e.tryGet(canBurst /*arbitrary*/, 1) {
 		tokens := e.requester.granted(noGrantChain)
 		if tokens == 0 {
 			e.returnGrantWithoutGrantingElsewhere(1)
@@ -235,7 +235,8 @@ func (e *elasticCPUGranter) getUtilizationLimit() float64 {
 
 // hasWaitingRequests is part of the elasticCPULimiter interface.
 func (e *elasticCPUGranter) hasWaitingRequests() bool {
-	return e.requester.hasWaitingRequests()
+	hasWaiting, _ := e.requester.hasWaitingRequests()
+	return hasWaiting
 }
 
 // computeUtilizationMetric is part of the elasticCPULimiter interface.

@@ -129,13 +129,28 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
+// burstQualification is an optional behavior of certain WorkQueues (which
+// implement requester), that differentiate between tenants that are qualified
+// to burst (in their token consumption) and those that are not. This is a
+// dynamic attribute of a tenant, based on token consumption history
+// maintained in the WorkQueue. The ordering of tenants is also affected in
+// that burstable tenants are ordered before non-burstable tenants.
+type burstQualification uint8
+
+const (
+	canBurst burstQualification = iota
+	noBurst
+	numBurstQualifications
+)
+
 // requester is an interface implemented by an object that orders admission
 // work for a particular WorkKind. See WorkQueue for the implementation of
 // requester.
 type requester interface {
 	// hasWaitingRequests returns whether there are any waiting/queued requests
-	// of this WorkKind.
-	hasWaitingRequests() bool
+	// of this WorkKind, and when true, the qualification of the highest
+	// importance getter.
+	hasWaitingRequests() (bool, burstQualification)
 	// granted is called by a granter to grant admission to a single queued
 	// request. It returns > 0 if the grant was accepted, else returns 0. A
 	// grant may not be accepted if the grant raced with request cancellation
@@ -155,12 +170,15 @@ type granter interface {
 	grantKind() grantKind
 	// tryGet is used by a requester to get slots/tokens for a piece of work
 	// that has encountered no waiting/queued work. This is the fast path that
-	// avoids queueing in the requester.
+	// avoids queueing in the requester. The optional parameter
+	// burstQualification identifies the qualification of the getter, which is
+	// useful for certain granters.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
-	tryGet(count int64) (granted bool)
+	tryGet(getterQual burstQualification, count int64) (granted bool)
 	// returnGrant is called for:
 	// - returning slots after use.
+	// - returning tokens after use, if all the granted tokens were not used.
 	// - returning either slots or tokens when the grant raced with the work
 	//   being canceled, and the grantee did not end up doing any work.
 	//
@@ -197,7 +215,9 @@ type granter interface {
 	// the grantee after its goroutine runs and notices that it has been granted
 	// a slot/tokens. This provides a natural throttling that reduces grant
 	// bursts by taking into immediate account the capability of the goroutine
-	// scheduler to schedule such work.
+	// scheduler to schedule such work. Grant chains are only used for the CPU
+	// resource in the hybrid slot/token scheme, where slots are used for KVWork
+	// and tokens for SQLKVResponseWork and SQLSQLResponseWork.
 	//
 	// In an experiment, using such grant chains reduced burstiness of grants by
 	// 5x and shifted ~2s of latency (at p99) from the scheduler into admission
