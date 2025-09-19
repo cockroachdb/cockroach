@@ -50,7 +50,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return err
 	}
 
-	ctx, span := tracing.ChildSpan(params.ctx, "CheckExternalConnection")
+	ctx, span := tracing.ChildSpan(params.ctx, "CheckExternalConnection-planning")
 	defer span.Finish()
 
 	store, err := params.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, n.loc, params.p.User())
@@ -103,9 +103,14 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return nil
 	})
 
-	grp := ctxgroup.WithContext(ctx)
+	grp := ctxgroup.WithContext(params.ctx)
 	n.execGrp = grp
 	grp.GoCtx(func(ctx context.Context) error {
+		// Derive a separate tracing span since the planning one will be
+		// finished when the main goroutine exits from startExec.
+		ctx, span := tracing.ChildSpan(ctx, "CheckExternalConnection-execution")
+		defer span.Finish()
+
 		recv := MakeDistSQLReceiver(
 			ctx,
 			rowWriter,
@@ -128,9 +133,6 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 }
 
 func (n *checkExternalConnectionNode) Next(params runParams) (bool, error) {
-	if n.rows == nil {
-		return false, nil
-	}
 	select {
 	case <-params.ctx.Done():
 		return false, params.ctx.Err()
@@ -149,7 +151,6 @@ func (n *checkExternalConnectionNode) Values() tree.Datums {
 
 func (n *checkExternalConnectionNode) Close(_ context.Context) {
 	_ = n.execGrp.Wait()
-	n.rows = nil
 }
 
 func (n *checkExternalConnectionNode) parseParams(params runParams) error {
