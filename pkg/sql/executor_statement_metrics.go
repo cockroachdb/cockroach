@@ -191,8 +191,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 	startTime := phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
 	implicitTxn := flags.IsSet(planFlagImplicitTxn)
-	stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
-		stmt.StmtNoConstants, implicitTxn, planner.SessionData().Database)
+	stmtFingerprintID := planner.instrumentation.fingerprintId
 	autoRetryReason := ex.state.mu.autoRetryReason
 	if automaticRetryStmtCount > 0 {
 		autoRetryReason = planner.autoRetryStmtReason

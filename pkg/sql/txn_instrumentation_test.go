@@ -9,15 +9,20 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"io"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +35,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_NoMoreFps(t *testing.T) {
 		func(t *testing.T, stmt tree.Statement) {
 			request := stmtdiagnostics.TxnRequest{}
 			requestID := stmtdiagnostics.RequestID(42)
-			collector := newTxnDiagnosticsCollector(request, requestID)
+			collector := newTxnDiagnosticsCollector(request, requestID, nil)
 
 			// Since stmtsFpsToCapture is empty, only commit/rollback should be accepted
 			bundle := stmtdiagnostics.StmtDiagnostic{}
@@ -48,7 +53,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_ExpectedCommitOrRollback(t *
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID)
+	collector := newTxnDiagnosticsCollector(request, requestID, nil)
 
 	stmt := &tree.Select{
 		Select: &tree.SelectClause{},
@@ -66,7 +71,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_AlreadyFinalized(t *testing.
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID)
+	collector := newTxnDiagnosticsCollector(request, requestID, nil)
 	collector.readyToFinalize = true
 
 	stmt := &tree.Select{
@@ -85,7 +90,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testin
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID)
+	collector := newTxnDiagnosticsCollector(request, requestID, nil)
 	collector.stmtsFpsToCapture = []uint64{123, 456}
 
 	stmt1 := &tree.Select{
@@ -117,7 +122,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WrongFingerprint(t *testing.
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID)
+	collector := newTxnDiagnosticsCollector(request, requestID, nil)
 
 	collector.stmtsFpsToCapture = []uint64{123, 456}
 
@@ -141,10 +146,12 @@ func TestTxnInstrumentationHelper_StartDiagnostics(t *testing.T) {
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
 
-	helper.StartDiagnostics(request, requestID)
+	span := &tracing.Span{}
+	helper.StartDiagnostics(request, requestID, span)
 
 	require.Equal(t, request, helper.diagnosticsCollector.request)
 	require.Equal(t, requestID, helper.diagnosticsCollector.requestId)
+	require.Equal(t, span, helper.diagnosticsCollector.span)
 	require.True(t, helper.DiagnosticsInProgress())
 }
 
@@ -152,12 +159,42 @@ func TestTxnInstrumentationHelper_DiagnosticsInProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	helper := &txnInstrumentationHelper{}
+	for _, tc := range []struct {
+		name               string
+		requestId          stmtdiagnostics.RequestID
+		stmtsFpsToCapture  []uint64
+		stmtBundles        []stmtdiagnostics.StmtDiagnostic
+		expectedInProgress bool
+	}{
+		{
+			name:               "not in progress",
+			expectedInProgress: false,
+		}, {
+			name:               "with requestId",
+			requestId:          stmtdiagnostics.RequestID(42),
+			stmtsFpsToCapture:  nil,
+			stmtBundles:        nil,
+			expectedInProgress: true,
+		}, {
+			name:               "with stmtFpsToCapture",
+			stmtsFpsToCapture:  []uint64{123, 456},
+			expectedInProgress: true,
+		}, {
+			name:               "with stmtBundles",
+			stmtsFpsToCapture:  nil,
+			stmtBundles:        []stmtdiagnostics.StmtDiagnostic{{}},
+			expectedInProgress: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 
-	require.False(t, helper.DiagnosticsInProgress())
-
-	helper.diagnosticsCollector.requestId = stmtdiagnostics.RequestID(42)
-	require.True(t, helper.DiagnosticsInProgress())
+			helper := &txnInstrumentationHelper{}
+			helper.diagnosticsCollector.requestId = tc.requestId
+			helper.diagnosticsCollector.stmtsFpsToCapture = tc.stmtsFpsToCapture
+			helper.diagnosticsCollector.stmtBundles = tc.stmtBundles
+			require.Equal(t, tc.expectedInProgress, helper.DiagnosticsInProgress())
+		})
+	}
 }
 
 func TestTxnInstrumentationHelper_AddStatementBundle_Success(t *testing.T) {
@@ -168,7 +205,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Success(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID)
+	helper.StartDiagnostics(request, requestID, nil)
 
 	ctx := context.Background()
 	stmt := &tree.CommitTransaction{} // Use commit since we have no expected statements
@@ -191,7 +228,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID)
+	helper.StartDiagnostics(request, requestID, nil)
 
 	// Set collector to already finalized to trigger error
 	helper.diagnosticsCollector.readyToFinalize = true
@@ -217,7 +254,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID)
+	helper.StartDiagnostics(request, requestID, nil)
 
 	// Set up expected fingerprints so we can trigger no-success case
 	helper.diagnosticsCollector.stmtsFpsToCapture = []uint64{123}
@@ -299,7 +336,7 @@ func TestTxnInstrumentationHelper_ShouldContinueDiagnostics(t *testing.T) {
 			0,
 		)
 		requestID := stmtdiagnostics.RequestID(42)
-		helper.StartDiagnostics(request, requestID)
+		helper.StartDiagnostics(request, requestID, nil)
 		actual := helper.ShouldContinueDiagnostics(tc.stmt.stmt, tc.stmt.fpId)
 		require.Equal(t, tc.shouldContinue, actual)
 
@@ -319,7 +356,7 @@ func TestTxnInstrumentationHelper_ShouldRedact(t *testing.T) {
 
 		request := stmtdiagnostics.NewTxnRequest(0, nil, shouldRedact, "", time.Time{}, 0, 0)
 		requestID := stmtdiagnostics.RequestID(42)
-		helper.StartDiagnostics(request, requestID)
+		helper.StartDiagnostics(request, requestID, nil)
 
 		require.Equal(t, shouldRedact, helper.ShouldRedact())
 	})
@@ -334,7 +371,7 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID)
+	helper.StartDiagnostics(request, requestID, nil)
 
 	// Simulate a TxnRequest with multiple statement fingerprints
 	expectedFingerprints := []uint64{100, 200, 300}
@@ -386,7 +423,7 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 	require.True(t, helper.diagnosticsCollector.readyToFinalize)
 }
 
-func TestTxnDiagnosticsCollector_AddTrace_RedactedRequest(t *testing.T) {
+func TestTxnDiagnosticsCollector_collectTrace_RedactedRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -400,31 +437,28 @@ func TestTxnDiagnosticsCollector_AddTrace_RedactedRequest(t *testing.T) {
 		0,
 		0,
 	)
-	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42))
+	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), nil)
+	collector.collectTrace()
 
-	// Create a mock trace
-	trace := tracingpb.Recording{
-		{
-			TraceID:   1,
-			SpanID:    1,
-			Operation: "test-operation",
-		},
-	}
-
-	// Add trace - should be a no-op for redacted requests
-	collector.AddTrace(trace)
-
-	// Verify no files were added by finalizing and checking if zip is empty
 	buf, err := collector.z.Finalize()
 	require.NoError(t, err)
 
 	// Read the zip to check if it's empty
 	reader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	require.NoError(t, err)
-	require.Len(t, reader.File, 0, "No files should be added for redacted requests")
+	require.Len(t, reader.File, 1)
+
+	// Check that the file contains the expected message
+	rc, err := reader.File[0].Open()
+	require.NoError(t, err)
+	defer rc.Close()
+
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.Equal(t, "trace not collected due to redacted request", string(content))
 }
 
-func TestTxnDiagnosticsCollector_AddTrace(t *testing.T) {
+func TestTxnDiagnosticsCollector_collectTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -438,21 +472,14 @@ func TestTxnDiagnosticsCollector_AddTrace(t *testing.T) {
 		0,
 		0,
 	)
-	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42))
 
-	// Create a valid trace with proper span
-	trace := tracingpb.Recording{
-		{
-			TraceID:   1,
-			SpanID:    1,
-			Operation: "test-operation",
-			StartTime: timeutil.Now(),
-			Duration:  time.Millisecond,
-		},
-	}
+	tracer := tracing.NewTracer()
+	span := tracer.StartSpan("test-tracer", tracing.WithRecording(tracingpb.RecordingVerbose))
+	span.Record("test msg")
+	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), span)
 
 	// Add trace
-	collector.AddTrace(trace)
+	collector.collectTrace()
 
 	// Verify files were added
 	buf, err := collector.z.Finalize()
@@ -471,7 +498,7 @@ func TestTxnDiagnosticsCollector_AddTrace(t *testing.T) {
 	require.True(t, fileNames["trace-jaeger.json"])
 }
 
-func TestTxnDiagnosticsCollector_AddTrace_notrace(t *testing.T) {
+func TestTxnDiagnosticsCollector_collectTrace_emptyRecordings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -485,16 +512,67 @@ func TestTxnDiagnosticsCollector_AddTrace_notrace(t *testing.T) {
 		0,
 		0,
 	)
-	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42))
 
-	// Add trace
-	collector.AddTrace(nil)
+	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), &tracing.Span{})
+	collector.collectTrace()
 
-	// Verify files were added
 	buf, err := collector.z.Finalize()
 	require.NoError(t, err)
 
+	// Read the zip to check if it's empty
 	reader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	require.NoError(t, err)
-	require.Len(t, reader.File, 0, "No files should be added for empty trace")
+	require.Len(t, reader.File, 1)
+
+	// Check that the file contains the expected message
+	rc, err := reader.File[0].Open()
+	require.NoError(t, err)
+	defer rc.Close()
+
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.Equal(t, "trace empty", string(content))
+}
+
+func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	baseHelper := txnInstrumentationHelper{
+		TxnDiagnosticsRecorder: stmtdiagnostics.NewTxnRegistry(nil, nil, nil, timeutil.DefaultTimeSource{}),
+	}
+
+	t.Run("already in progress", func(t *testing.T) {
+		ctx := context.Background()
+		helper := baseHelper
+		helper.diagnosticsCollector.requestId = stmtdiagnostics.RequestID(42)
+		newCtx, started := helper.MaybeStartDiagnostics(ctx, 123, nil)
+		require.False(t, started)
+		require.Equal(t, ctx, newCtx)
+
+	})
+
+	t.Run("not started", func(t *testing.T) {
+		ctx := context.Background()
+		helper := baseHelper
+		newCtx, started := helper.MaybeStartDiagnostics(ctx, 123, nil)
+		require.False(t, started)
+		require.Equal(t, ctx, newCtx)
+	})
+	t.Run("started", func(t *testing.T) {
+		ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		ctx := context.Background()
+		defer ts.Stopper().Stop(ctx)
+
+		helper := baseHelper
+		helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(ts.InternalDB().(isql.DB), nil, nil, timeutil.DefaultTimeSource{})
+
+		err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, false)
+		require.NoError(t, err)
+
+		_, started := helper.MaybeStartDiagnostics(ctx, 123, ts.Tracer())
+		require.True(t, started)
+		require.True(t, helper.DiagnosticsInProgress())
+		require.NotNil(t, helper.diagnosticsCollector.span)
+	})
 }

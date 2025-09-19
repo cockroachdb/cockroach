@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -293,6 +294,7 @@ func startConnExecutor(
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
 	collectionFactory := descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec)
+	registry := stmtdiagnostics.NewRegistry(nil, st)
 	cfg := &ExecutorConfig{
 		AmbientCtx: ambientCtx,
 		Settings:   st,
@@ -339,7 +341,8 @@ func startConnExecutor(
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
+		StmtDiagnosticsRecorder: registry,
+		TxnDiagnosticsRecorder:  stmtdiagnostics.NewTxnRegistry(nil, st, registry, timeutil.DefaultTimeSource{}),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       collectionFactory,
 		LicenseEnforcer:         license.NewEnforcer(nil),
