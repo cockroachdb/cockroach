@@ -76,25 +76,26 @@ func TestSaveRateLimiter(t *testing.T) {
 				// Can't immediately save again.
 				require.False(t, l.canSave(ctx))
 
-				if jitter <= 0 {
+				// Make sure jitter works correctly.
+				var maxJitter time.Duration
+				if jitter > 0 {
+					maxJitter = time.Duration(jitter * float64(interval))
+				}
+				if maxJitter == 0 {
 					// If there's no jitter, we should be able to save again once the
-					// interval duration has passed.
+					// interval duration has elapsed.
 					clock.Advance(interval)
 					require.True(t, l.canSave(ctx))
 					l.doneSave(0 /* saveDuration */)
 				} else {
-					// If there is a jitter, we might not be able to save again until
-					// the additional jitter amount has passed.
-					clock.Advance(interval)
-					if l.canSave(ctx) {
-						l.doneSave(0 /* saveDuration */)
-					} else {
-						maxJitter := time.Duration(jitter * float64(interval))
-						clock.Advance(maxJitter)
-						require.True(t, l.canSave(ctx))
-						l.doneSave(0 /* saveDuration */)
-					}
+					// If there is a jitter, we should definitely be able to save once
+					// the interval duration and the maximum possible jitter has elapsed.
+					clock.Advance(interval + maxJitter)
+					require.True(t, l.canSave(ctx))
+					l.doneSave(0 /* saveDuration */)
 				}
+
+				// TODO test the saveDuration thing
 			})
 		}
 	}
