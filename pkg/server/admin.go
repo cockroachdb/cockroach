@@ -2135,7 +2135,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if rpcbase.ExperimentalDRPCEnabled.Get(&s.st.SV) {
+	if rpcbase.DRPCEnabled(ctx, s.st) {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2181,7 +2181,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if rpcbase.ExperimentalDRPCEnabled.Get(&s.st.SV) {
+	if rpcbase.DRPCEnabled(ctx, s.st) {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
