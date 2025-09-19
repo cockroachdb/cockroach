@@ -284,7 +284,7 @@ func newChangeAggregatorProcessor(
 		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
 	}
 
-	ca.frontierFlushLimiter = newSaveRateLimiter(saveRateConfig{
+	ca.frontierFlushLimiter, err = newSaveRateLimiter(saveRateConfig{
 		name: "frontier",
 		intervalName: func() redact.SafeValue {
 			return redact.SafeString(changefeedbase.OptMinCheckpointFrequency)
@@ -296,6 +296,9 @@ func newChangeAggregatorProcessor(
 			return aggregatorFlushJitter.Get(&ca.FlowCtx.Cfg.Settings.SV)
 		},
 	}, timeutil.DefaultTimeSource{})
+	if err != nil {
+		return nil, err
+	}
 
 	return ca, nil
 }
@@ -1333,7 +1336,7 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	cf.frontierPersistenceLimiter = newSaveRateLimiter(saveRateConfig{
+	cf.frontierPersistenceLimiter, err = newSaveRateLimiter(saveRateConfig{
 		name: "frontier",
 		intervalName: func() redact.SafeValue {
 			return changefeedbase.FrontierPersistenceInterval.Name()
@@ -1342,6 +1345,9 @@ func newChangeFrontierProcessor(
 			return changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		},
 	}, timeutil.DefaultTimeSource{})
+	if err != nil {
+		return nil, err
+	}
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
@@ -2399,12 +2405,23 @@ type saveRateLimiter struct {
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
-func newSaveRateLimiter(config saveRateConfig, clock timeutil.TimeSource) *saveRateLimiter {
+func newSaveRateLimiter(
+	config saveRateConfig, clock timeutil.TimeSource,
+) (*saveRateLimiter, error) {
+	if len(config.name) == 0 {
+		return nil, errors.AssertionFailedf("name is required")
+	}
+	if config.intervalName == nil {
+		return nil, errors.AssertionFailedf("interval name is required")
+	}
+	if config.interval == nil {
+		return nil, errors.AssertionFailedf("interval is required")
+	}
 	return &saveRateLimiter{
 		config:     config,
 		warnEveryN: util.Every(time.Minute),
 		clock:      clock,
-	}
+	}, nil
 }
 
 // canSave returns whether enough time has passed to save progress again.
