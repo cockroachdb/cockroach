@@ -2381,7 +2381,7 @@ type saveRateConfig struct {
 	name         redact.SafeString
 	intervalName func() redact.SafeValue
 	interval     func() time.Duration
-	jitter       func() float64
+	jitter       func() float64 // optional
 }
 
 // saveRateLimiter is a rate limiter for saving a piece of progress.
@@ -2413,10 +2413,12 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 	if interval == 0 {
 		return false
 	}
-	jitter := l.config.jitter()
-	if jitter > 0 {
-		if maxJitter := jitter * float64(interval); maxJitter > 0 {
-			interval += time.Duration(rand.Int63n(int64(maxJitter)))
+	if l.config.jitter != nil {
+		jitter := l.config.jitter()
+		if jitter > 0 {
+			if maxJitter := jitter * float64(interval); maxJitter > 0 {
+				interval += time.Duration(rand.Int63n(int64(maxJitter)))
+			}
 		}
 	}
 	now := l.clock.Now()
