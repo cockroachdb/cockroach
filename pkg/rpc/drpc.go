@@ -138,8 +138,13 @@ type closeEntirePoolConn struct {
 }
 
 func (c *closeEntirePoolConn) Close() error {
-	_ = c.Conn.Close()
-	return c.pool.Close()
+	select {
+	case <-c.Conn.Closed():
+		return nil // already closed
+	default:
+		_ = c.Conn.Close()
+		return c.pool.Close()
+	}
 }
 
 type DRPCConnection = Connection[drpc.Conn]
