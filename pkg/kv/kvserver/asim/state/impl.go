@@ -419,9 +419,9 @@ func (s *state) Replicas(storeID StoreID) []Replica {
 	return repls
 }
 
-// AddNode modifies the state to include one additional node. This cannot
-// fail. The new Node is returned.
-func (s *state) AddNode() Node {
+// AddNode modifies the state to include one additional node. This cannot fail.
+// The new Node is returned.
+func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
 	mmAllocator := mmaprototype.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed)))
@@ -437,6 +437,8 @@ func (s *state) AddNode() Node {
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
+	s.SetNodeLocality(nodeID, locality)
+	s.SetNodeCPURateCapacity(nodeID, nodeCPUCapacity)
 	return node
 }
 func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
