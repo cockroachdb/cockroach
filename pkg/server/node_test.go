@@ -105,7 +105,7 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Add the initial keys for sql.
-	kvs, tableSplits := GetBootstrapSchema(
+	kvs, tableSplits := GetBootstrapSchemaForTest(
 		zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	).GetInitialValues()
 	for _, kv := range kvs {
