@@ -926,7 +926,10 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
-			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+				Knobs:             knobs,
+			},
 			ReplicationMode: base.ReplicationManual,
 		},
 	)
@@ -1050,6 +1053,9 @@ func TestSnapshotsToDrainingNodes(t *testing.T) {
 		tc := testcluster.StartTestCluster(
 			t, 2, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					DefaultDRPCOption: base.TestDRPCDisabled,
+				},
 			},
 		)
 		defer tc.Stopper().Stop(ctx)

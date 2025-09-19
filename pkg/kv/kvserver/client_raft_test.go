@@ -1504,6 +1504,7 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						DisableRaftSnapshotQueue: true,
@@ -5036,7 +5037,10 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		base.TestClusterArgs{
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: lisReg,
-			ServerArgsPerNode:   stickyServerArgs,
+			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+			},
+			ServerArgsPerNode: stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 	// Make a key that's in the user data space.
@@ -6277,7 +6281,8 @@ func TestRaftPreVote(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					Settings: st,
+					DefaultDRPCOption: base.TestDRPCDisabled,
+					Settings:          st,
 					RaftConfig: base.RaftConfig{
 						RaftEnableCheckQuorum: true,
 						RaftTickInterval:      200 * time.Millisecond, // speed up test

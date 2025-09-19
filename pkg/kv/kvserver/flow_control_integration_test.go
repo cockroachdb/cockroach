@@ -554,7 +554,8 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Settings: settings,
+				DefaultDRPCOption: base.TestDRPCDisabled,
+				Settings:          settings,
 				RaftConfig: base.RaftConfig{
 					// Reduce the RangeLeaseDuration to speeds up failure detection
 					// below.
@@ -1800,7 +1801,10 @@ func TestFlowControlSendQueue(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
-		ReplicationMode:   base.ReplicationManual,
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 		ServerArgsPerNode: stickyArgsPerServer,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -3329,7 +3333,10 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
-		ReplicationMode:   base.ReplicationManual,
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 		ServerArgsPerNode: argsPerServer,
 	})
 	defer tc.Stopper().Stop(ctx)
