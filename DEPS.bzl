@@ -10500,6 +10500,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "in_yaml_go_yaml_v4",
+        build_file_proto_mode = "disable_global",
+        importpath = "go.yaml.in/yaml/v4",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:/FrI8D64VSr4HtGIlUtlFMGsm7H7pWTbj6vOLVZcA6s=",
+        version = "v4.0.0-rc.2",
+    )
+    go_repository(
         name = "io_etcd_go_bbolt",
         build_file_proto_mode = "disable_global",
         importpath = "go.etcd.io/bbolt",

@@ -106,7 +106,7 @@ func InitEnvFromStoreSpec(
 ) (*Env, error) {
 	fs := vfs.Default
 	dir := spec.Path
-	if spec.InMemory {
+	if spec.InMemory() {
 		if spec.StickyVFSID != "" {
 			if stickyRegistry == nil {
 				return nil, errors.Errorf("missing StickyVFSRegistry")

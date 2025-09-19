@@ -1303,7 +1303,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
 	}
 	for i := range engines {
-		if specs[i].Path == "" || specs[i].InMemory {
+		if specs[i].Path == "" || specs[i].InMemory() {
 			continue
 		}
 		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])

@@ -958,7 +958,7 @@ func TempStorageConfigFromEnv(
 	parentDir string,
 	maxSizeBytes int64,
 ) TempStorageConfig {
-	inMem := parentDir == "" && useStore.InMemory
+	inMem := parentDir == "" && useStore.InMemory()
 	return newTempStorageConfig(ctx, st, inMem, useStore, maxSizeBytes)
 }
 
