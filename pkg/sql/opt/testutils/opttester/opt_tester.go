@@ -568,6 +568,13 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //   - max-stack: sets the maximum stack size for the goroutine that optimizes
 //     the query. See debug.SetMaxStack.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
+	// Apply "session" defaults.
+	ot.catalog.(*testcat.Catalog).ForEachSessionVar(func(name string, value string) {
+		if err := sql.TestingSetSessionVariable(ot.ctx, ot.evalCtx, name, value); err != nil {
+			panic(err)
+		}
+	})
+
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
 		if err := ot.Flags.Set(a); err != nil {
