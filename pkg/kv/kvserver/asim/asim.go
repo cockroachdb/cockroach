@@ -21,12 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
 // in that cluster.
 type Simulator struct {
 	log.AmbientContext
+	onRecording func(storeID state.StoreID, rec tracingpb.Recording)
+
 	curr time.Time
 	end  time.Time
 	// interval is the step between ticks for active simulaton components, such
@@ -96,22 +100,27 @@ func NewSimulator(
 
 	s := &Simulator{
 		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
-		curr:           settings.StartTime,
-		end:            settings.StartTime.Add(duration),
-		interval:       settings.TickInterval,
-		generators:     wgs,
-		state:          initialState,
-		changer:        changer,
-		rqs:            rqs,
-		lqs:            lqs,
-		sqs:            sqs,
-		controllers:    controllers,
-		srs:            srs,
-		mmSRs:          mmSRs,
-		pacers:         pacers,
-		gossip:         gossip.NewGossip(initialState, settings),
-		metrics:        m,
-		shuffler:       state.NewShuffler(settings.Seed),
+		onRecording: func(storeID state.StoreID, rec tracingpb.Recording) {
+			if fn := settings.OnRecording; fn != nil {
+				fn(int64(storeID), rec)
+			}
+		},
+		curr:        settings.StartTime,
+		end:         settings.StartTime.Add(duration),
+		interval:    settings.TickInterval,
+		generators:  wgs,
+		state:       initialState,
+		changer:     changer,
+		rqs:         rqs,
+		lqs:         lqs,
+		sqs:         sqs,
+		controllers: controllers,
+		srs:         srs,
+		mmSRs:       mmSRs,
+		pacers:      pacers,
+		gossip:      gossip.NewGossip(initialState, settings),
+		metrics:     m,
+		shuffler:    state.NewShuffler(settings.Seed),
 		// TODO(kvoli): Keeping the state around is a bit hacky, find a better
 		// method of reporting the ranges.
 		history:       history.History{Recorded: [][]metrics.StoreMetrics{}, S: initialState},
@@ -380,7 +389,14 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, 
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
+		var finishAndGetRecording func() tracingpb.Recording
+		if s.onRecording != nil {
+			ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, s.Tracer, "mma.ComputeChanges")
+		}
 		s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
+		if finishAndGetRecording != nil {
+			s.onRecording(store.StoreID(), finishAndGetRecording())
+		}
 	}
 }
 

@@ -21,14 +21,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// generateAllPlots creates plots for all available metrics from simulation history.
+// printStatsAndGenerateJSON creates plots for all available metrics from simulation history.
 // All plot files are hashed directly to the provided hasher.
 // If rewrite is false, plots are generated but not saved to disk.
 // Returns a slice of filenames for all generated plots.
 //
 // TODO(tbg): introduce a SimulationEnv and make this a method on it.
-// TODO(tbg): rename to generateArtifacts.
-func generateAllPlots(
+func printStatsAndGenerateJSON(
 	t *testing.T,
 	buf *strings.Builder,
 	h history.History,
