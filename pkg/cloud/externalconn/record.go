@@ -355,20 +355,26 @@ func (e *MutableExternalConnection) Create(ctx context.Context, txn isql.Txn) er
 }
 
 func (e *MutableExternalConnection) Update(ctx context.Context, txn isql.Txn) error {
-	cols, qargs, err := e.marshalChanges()
+	cols, qargsForChanges, err := e.marshalChanges()
 	if err != nil {
 		return err
 	}
 
+	qargs := make([]interface{}, 0, 1+len(qargsForChanges))
+	qargs = append(qargs, e.ConnectionName())
+	qargs = append(qargs, qargsForChanges...)
+
 	var setClauses []string
-	for i, col := range cols {
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i+1))
+	placeHolder := 2
+	for _, col := range cols {
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, placeHolder))
+		placeHolder++
 	}
 
 	updateQuery := fmt.Sprintf(`UPDATE system.external_connections 
 															SET %s, updated = now() 
-		                          WHERE connection_name = '%s'`,
-		strings.Join(setClauses, ", "), e.ConnectionName())
+		                          WHERE connection_name = $1`,
+		strings.Join(setClauses, ", "))
 
 	_, err = txn.ExecEx(ctx, "ExternalConnection.Update", txn.KV(), sessiondata.NodeUserSessionDataOverride, updateQuery, qargs...)
 	return err
