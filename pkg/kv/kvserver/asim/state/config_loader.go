@@ -26,7 +26,8 @@ var AllClusterOptions = [...]string{"single_region", "single_region_multi_store"
 // SingleRegionConfig is a simple cluster config with a single region and 3
 // zones, all have the same number of nodes.
 var SingleRegionConfig = ClusterInfo{
-	StoreDiskCapacityBytes: 1024 << 30, // 1024 GiB
+	NodeCPURateCapacityNanos: config.DefaultNodeCPURateCapacityNanos, // 8vpucs
+	StoreDiskCapacityBytes:   config.DefaultStoreDiskCapacityBytes,   // 1024 GiB
 	Regions: []Region{
 		{
 			Name: "US",
@@ -42,7 +43,8 @@ var SingleRegionConfig = ClusterInfo{
 // SingleRegionMultiStoreConfig is a simple cluster config with a single region
 // and 3 zones, all zones have 1 node and 5 stores per node.
 var SingleRegionMultiStoreConfig = ClusterInfo{
-	StoreDiskCapacityBytes: 1024 << 30, // 1024 GiB
+	NodeCPURateCapacityNanos: config.DefaultNodeCPURateCapacityNanos, // 8 vcpus
+	StoreDiskCapacityBytes:   config.DefaultStoreDiskCapacityBytes,   // 1024 GiB
 	Regions: []Region{
 		{
 			Name: "US",
@@ -57,7 +59,8 @@ var SingleRegionMultiStoreConfig = ClusterInfo{
 
 // MultiRegionConfig is a perfectly balanced cluster config with 3 regions.
 var MultiRegionConfig = ClusterInfo{
-	StoreDiskCapacityBytes: 2048 << 30, // 2048 GiB
+	NodeCPURateCapacityNanos: config.DoubleDefaultNodeCPURateCapacityNanos, // 16 vcpus
+	StoreDiskCapacityBytes:   config.DoubleDefaultStoreDiskCapacityBytes,   // 2048 GiB
 	Regions: []Region{
 		{
 			Name: "US_East",
@@ -88,7 +91,8 @@ var MultiRegionConfig = ClusterInfo{
 
 // ComplexConfig is an imbalanced multi-region cluster config.
 var ComplexConfig = ClusterInfo{
-	StoreDiskCapacityBytes: 2048 << 30, // 2048 GiB
+	NodeCPURateCapacityNanos: config.DoubleDefaultNodeCPURateCapacityNanos, // 16 vcpus
+	StoreDiskCapacityBytes:   config.DoubleDefaultStoreDiskCapacityBytes,   // 2048 GiB
 	Regions: []Region{
 		{
 			Name: "US_East",
@@ -371,9 +375,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 				Tiers: []roachpb.Tier{regionTier, zoneTier},
 			}
 			for i := 0; i < z.NodeCount; i++ {
-				node := s.AddNode()
-				s.SetNodeLocality(node.NodeID(), locality)
-				s.SetNodeCPURateCapacity(node.NodeID(), c.NodeCPURateCapacityNanos)
+				node := s.AddNode(c.NodeCPURateCapacityNanos, locality)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -123,14 +124,14 @@ func (se SetSpanConfigEvent) String() string {
 
 func (ae AddNodeEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		node := s.AddNode()
+		// TDOO(wenyihu6): should we change AddNode to take in
+		var locality roachpb.Locality
 		if ae.LocalityString != "" {
-			var locality roachpb.Locality
 			if err := locality.Set(ae.LocalityString); err != nil {
 				panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
 			}
-			s.SetNodeLocality(node.NodeID(), locality)
 		}
+		node := s.AddNode(config.DefaultNodeCPURateCapacityNanos, locality)
 		for i := 0; i < ae.NumStores; i++ {
 			if _, ok := s.AddStore(node.NodeID()); !ok {
 				panic(fmt.Sprintf("adding store to node=%d failed", node))
