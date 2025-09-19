@@ -9364,6 +9364,7 @@ func TestCheckpointFrequency(t *testing.T) {
 	require.False(t, js.progressUpdatesSkipped)
 }
 
+// TODO rewrite this test to use the saveRateLimiter
 func TestFlushJitter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

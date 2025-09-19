@@ -106,9 +106,8 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	nextHighWaterFlush time.Time     // next time high watermark may be flushed.
-	flushFrequency     time.Duration // how often high watermark can be checkpointed.
-	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
+	flushFrequency time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush  time.Time     // last time expensive, span based checkpoint was written.
 
 	// frontierFlushLimiter is a rate limiter for flushing the span frontier
 	// to the coordinator.
@@ -744,6 +743,7 @@ var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.WithPublic,
 )
 
+// TODO delete this function
 func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (time.Time, error) {
 	if j < 0 || d < 0 {
 		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
@@ -908,11 +908,10 @@ func (ca *changeAggregator) flushBufferedEvents(ctx context.Context) error {
 	return ca.sink.Flush(ctx)
 }
 
-// TODO need to push progress to frontier even if not advanced
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
 	ctx, sp := tracing.ChildSpan(ca.Ctx(), "changefeed.aggregator.note_resolved_span")
 	defer sp.Finish()
 
@@ -950,18 +949,15 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
 	//  works in the frontier where if we missed the window to checkpoint, we will attempt
 	//  the checkpoint at the next opportune moment.
-	checkpointFrontier := advanced &&
-		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
+	checkpointFrontier := (advanced && forceFlush) || ca.frontierFlushLimiter.canSave(ctx)
 
 	if checkpointFrontier {
-		defer func() {
-			ca.nextHighWaterFlush, err = nextFlushWithJitter(
-				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
-			if err != nil {
-				returnErr = errors.CombineErrors(returnErr, err)
-			}
-		}()
-		return ca.flushFrontier(ctx)
+		now := timeutil.Now()
+		if err := ca.flushFrontier(ctx); err != nil {
+			return err
+		}
+		ca.frontierFlushLimiter.doneSave(timeutil.Since(now))
+		return nil
 	}
 
 	// At a lower frequency, we checkpoint specific spans in the job progress
@@ -973,9 +969,15 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 		defer func() {
 			ca.lastSpanFlush = timeutil.Now()
 		}()
-		return ca.flushFrontier(ctx)
+		now := timeutil.Now()
+		if err := ca.flushFrontier(ctx); err != nil {
+			return err
+		}
+		ca.frontierFlushLimiter.doneSave(timeutil.Since(now))
+		return nil
 	}
-	return returnErr
+
+	return nil
 }
 
 // flushFrontier flushes sink and emits resolved spans to the change frontier.
