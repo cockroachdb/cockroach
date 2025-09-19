@@ -1541,6 +1541,10 @@ func ValidateConstraint(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 	if err != nil {
 		return err
@@ -1666,6 +1670,10 @@ func ValidateInvertedIndexes(
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
 
@@ -1769,6 +1777,11 @@ func countExpectedRowsForInvertedIndex(
 ) (int64, error) {
 	desc := tableDesc
 	start := timeutil.Now()
+
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	if withFirstMutationPublic {
 		// Make the mutations public in an in-memory copy of the descriptor and
 		// add it to the Collection's synthetic descriptors, so that we can use
@@ -1867,6 +1880,10 @@ func ValidateForwardIndexes(
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	grp := ctxgroup.WithContext(ctx)
 
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1983,6 +2000,10 @@ func populateExpectedCounts(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	desc := tableDesc
 	if withFirstMutationPublic {
 		// The query to count the expected number of rows can reference columns
@@ -2049,6 +2070,10 @@ func countIndexRowsAndMaybeCheckUniqueness(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	// If we are doing a REGIONAL BY ROW locality change, we can
 	// bypass the uniqueness check below as we are only adding or
 	// removing an implicit partitioning column.  Scan the
