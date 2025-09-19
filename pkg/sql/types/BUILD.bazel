@@ -38,6 +38,7 @@ go_test(
     name = "types_test",
     size = "small",
     srcs = [
+        "canonical_test.go",
         "types_test.go",
         "types_text_marshal_test.go",
     ],
