@@ -6,7 +6,6 @@
 package catpb
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // PrivilegeDescVersion is a custom type for PrivilegeDescriptor versions.
@@ -364,21 +364,25 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 		// We expect an "admin" role. Check that it has desired superuser permissions.
 		username.AdminRoleName(),
 	} {
+		// In case we hit an error, we include the user name in the redacted message.
+		// It's safe to include this since it's hardcoded system user.
+		redactSafeUser := redact.SafeString(user.Normalized())
+
 		superPriv, ok := p.FindUser(user)
 		if !ok {
-			return fmt.Errorf(
+			return errors.AssertionFailedf(
 				"user %s does not have privileges over %s",
-				user,
+				redactSafeUser,
 				privilegeObject(parentID, objectType, objectName),
 			)
 		}
 
 		// The super users must match the allowed privilege set exactly.
 		if superPriv.Privileges != allowedSuperuserPrivileges.ToBitField() {
-			return fmt.Errorf(
-				"user %s must have exactly %s privileges on %s",
-				user,
-				allowedSuperuserPrivileges.SortedDisplayNames(),
+			return errors.AssertionFailedf(
+				"user %s must have exactly [%v] privileges on %s",
+				redactSafeUser,
+				allowedSuperuserPrivileges,
 				privilegeObject(parentID, objectType, objectName),
 			)
 		}
@@ -394,7 +398,7 @@ func (p PrivilegeDescriptor) Validate(
 	allowedSuperuserPrivileges privilege.List,
 ) error {
 	if err := p.ValidateSuperuserPrivileges(parentID, objectType, objectName, allowedSuperuserPrivileges); err != nil {
-		return errors.HandleAsAssertionFailure(err)
+		return err
 	}
 
 	if p.Version >= OwnerVersion {
@@ -574,10 +578,10 @@ func (p *PrivilegeDescriptor) SetVersion(version PrivilegeDescVersion) {
 // privilegeObject is a helper function for privilege errors.
 func privilegeObject(
 	parentID catid.DescID, objectType privilege.ObjectType, objectName string,
-) string {
+) redact.RedactableString {
 	if parentID == keys.SystemDatabaseID ||
 		(parentID == catid.InvalidDescID && objectName == catconstants.SystemDatabaseName) {
-		return fmt.Sprintf("system %s %q", objectType, objectName)
+		return redact.Sprintf("system %s %q", objectType, objectName)
 	}
-	return fmt.Sprintf("%s %q", objectType, objectName)
+	return redact.Sprintf("%s %q", objectType, objectName)
 }
