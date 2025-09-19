@@ -2412,7 +2412,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 	}
 	if l.config.jitter != nil {
 		if jitter := l.config.jitter(); jitter > 0 {
-			if maxJitter := jitter * float64(interval); maxJitter > 0 {
+			if maxJitter := time.Duration(jitter * float64(interval)); maxJitter > 0 {
 				interval += time.Duration(rand.Int63n(int64(maxJitter)))
 			}
 		}

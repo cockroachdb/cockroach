@@ -1,6 +1,12 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package changefeedccl
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -15,6 +21,8 @@ import (
 func TestSaveRateLimiter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
 
 	intervals := map[string]time.Duration{
 		"positive interval":   30 * time.Second,
@@ -33,7 +41,10 @@ func TestSaveRateLimiter(t *testing.T) {
 	for intervalName, interval := range intervals {
 		for jitterName, jitter := range jitters {
 			t.Run(fmt.Sprintf("%s with %s", intervalName, jitterName), func(t *testing.T) {
-				config := saveRateConfig{
+				now := timeutil.Now()
+				clock := timeutil.NewManualTime(now)
+
+				l, err := newSaveRateLimiter(saveRateConfig{
 					name: "test",
 					intervalName: func() redact.SafeValue {
 						return redact.SafeString(intervalName)
@@ -44,13 +55,24 @@ func TestSaveRateLimiter(t *testing.T) {
 					jitter: func() float64 {
 						return jitter
 					},
+				}, clock)
+				require.NoError(t, err)
+
+				// A non-positive interval indicates that saving is disabled so we only
+				// need to test that we can't save at all.
+				if interval <= 0 {
+					require.False(t, l.canSave(ctx))
+					clock.Advance(24 * time.Hour)
+					require.False(t, l.canSave(ctx))
+					return
 				}
 
-				now := timeutil.Now()
-				clock := timeutil.NewManualTime(now)
-				l, err := newSaveRateLimiter(config, clock)
-				require.NoError(t, err)
-				_ = l
+				// We can do one save right away if the interval.
+				require.True(t, l.canSave(ctx))
+				l.doneSave(0 /* saveDuration */)
+
+				// Can't immediately save again.
+				require.False(t, l.canSave(ctx))
 			})
 		}
 	}
