@@ -2862,7 +2862,8 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllClouds,
+		// Disabled on IBM due to lack of Kafka support on s390x.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
