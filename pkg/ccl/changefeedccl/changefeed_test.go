@@ -9299,7 +9299,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 			return nil
 		}
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo WITH min_checkpoint_frequency='1ns'`)
 		defer closeFeed(t, foo)
 
 		payloads := make([]string, rowCount+1)
