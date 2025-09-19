@@ -7,6 +7,7 @@ package backup
 
 import (
 	"context"
+	gosql "database/sql"
 	"syscall"
 	"testing"
 	"time"
@@ -270,4 +271,50 @@ func TestRestoreJobMessages(t *testing.T) {
 		require.Greater(t, mu.retryCount, numErrMessages)
 		return nil
 	})
+}
+
+func TestRestoreDuplicateTempTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test for #153722. It verifies that restoring a backup
+	// that contains two temporary tables with the same name does not cause the
+	// restore to fail with an error of the form: "restoring 17 TableDescriptors
+	// from 4 databases: restoring table desc and namespace entries: table
+	// already exists"
+
+	clusterSize := 1
+	tc, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, clusterSize)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+	sqlDB.Exec(t, `CREATE DATABASE test_db`)
+	sqlDB.Exec(t, `USE test_db`)
+	sqlDB.Exec(t, `CREATE TABLE permanent_table (id INT PRIMARY KEY, name TEXT)`)
+
+	sessions := make([]*gosql.DB, 2)
+	for i := range sessions {
+		sessions[i] = tc.Servers[0].SQLConn(t)
+		sql := sqlutils.MakeSQLRunner(sessions[i])
+		sql.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sql.Exec(t, `USE test_db`)
+		sql.Exec(t, `CREATE TEMP TABLE duplicate_temp (id INT PRIMARY KEY, value TEXT)`)
+		sql.Exec(t, `INSERT INTO duplicate_temp VALUES (1, 'value')`)
+	}
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/duplicate_temp_backup'`)
+
+	for _, session := range sessions {
+		require.NoError(t, session.Close())
+	}
+
+	// The cluster must be empty for a full cluster restore.
+	sqlDB.Exec(t, `DROP DATABASE test_db CASCADE`)
+	sqlDB.Exec(t, `RESTORE FROM LATEST IN 'nodelocal://1/duplicate_temp_backup'`)
+
+	sqlDB.Exec(t, `DROP DATABASE test_db CASCADE`)
+	sqlDB.Exec(t, `RESTORE DATABASE test_db FROM LATEST IN 'nodelocal://1/duplicate_temp_backup'`)
+
+	result := sqlDB.QueryStr(t, `SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`)
+	require.Equal(t, [][]string{{"permanent_table"}}, result)
 }
