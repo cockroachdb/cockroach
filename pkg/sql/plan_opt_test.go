@@ -646,7 +646,7 @@ func TestPlanGistControl(t *testing.T) {
 	)
 	defer cleanup()
 
-	fmtFingerprintMask := tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV))
+	fmtFingerprintMask := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV))
 	p := internalPlanner.(*planner)
 	stmt, err := parser.ParseOne("SELECT 1")
 	if err != nil {

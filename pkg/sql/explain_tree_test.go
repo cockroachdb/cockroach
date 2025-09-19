@@ -72,7 +72,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			ih.collectBundle = true
 
 			p.stmt = makeStatement(stmt, clusterunique.ID{},
-				tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
+				tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}

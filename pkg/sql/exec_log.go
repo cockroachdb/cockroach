@@ -353,7 +353,7 @@ func (p *planner) maybeLogStatementInternal(
 		if stmtFingerprintID == 0 {
 			repQuery := p.stmt.StmtNoConstants
 			if repQuery == "" {
-				flags := tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV))
+				flags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV))
 				f := tree.NewFmtCtx(flags)
 				f.FormatNode(p.stmt.AST)
 				repQuery = f.CloseAndGetString()

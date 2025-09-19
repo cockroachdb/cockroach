@@ -200,6 +200,17 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 		Left:     left,
 		Right:    right,
 	}
+	switch s.rnd.Intn(10) {
+	// INVERTED is unlikely to work unless we get very lucky, so skip it for now.
+	case 0:
+		joinExpr.Hint = "HASH"
+	case 1:
+		joinExpr.Hint = "LOOKUP"
+	case 2:
+		joinExpr.Hint = "MERGE"
+	case 3:
+		joinExpr.Hint = "STRAIGHT"
+	}
 
 	if s.disableCrossJoins {
 		if available, ok := getAvailablePairedColsForJoinPreds(s, leftRefs, rightRefs); ok {
