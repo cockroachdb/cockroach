@@ -105,7 +105,7 @@ func scanThreshold(t *testing.T, d *datadriven.TestData) (th assertion.Threshold
 		th.ThresholdType = assertion.UpperBound
 		return th
 	}
-	scanArg(t, d, "lower_bound", &th.Value)
+	scanMustExist(t, d, "lower_bound", &th.Value)
 	th.ThresholdType = assertion.LowerBound
 	return th
 }
