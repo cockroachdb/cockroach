@@ -82,41 +82,41 @@ func TestSaveRateLimiterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for name, tc := range map[string]struct {
+	name := redact.SafeString("test")
+	intervalName := func() redact.SafeValue {
+		return redact.SafeString("interval")
+	}
+	interval := func() time.Duration {
+		return 30 * time.Second
+	}
+
+	for testName, tc := range map[string]struct {
 		config      saveRateConfig
 		expectedErr string
 	}{
 		"missing name": {
 			config: saveRateConfig{
-				intervalName: func() redact.SafeValue {
-					return redact.SafeString("interval")
-				},
-				interval: func() time.Duration {
-					return 30 * time.Second
-				},
+				intervalName: intervalName,
+				interval:     interval,
 			},
 			expectedErr: "name is required",
 		},
 		"missing interval name": {
 			config: saveRateConfig{
-				name: "test",
-				interval: func() time.Duration {
-					return 30 * time.Second
-				},
+				name:     name,
+				interval: interval,
 			},
 			expectedErr: "interval name is required",
 		},
 		"missing interval": {
 			config: saveRateConfig{
-				name: "test",
-				intervalName: func() redact.SafeValue {
-					return redact.SafeString("interval")
-				},
+				name:         name,
+				intervalName: intervalName,
 			},
 			expectedErr: "interval is required",
 		},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(testName, func(t *testing.T) {
 			if tc.expectedErr == "" {
 				t.Fatal("missing expected error")
 			}
