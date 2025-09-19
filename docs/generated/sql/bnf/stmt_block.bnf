@@ -1953,6 +1953,7 @@ opt_changefeed_sink ::=
 
 db_level_changefeed_filter_option ::=
 	'EXCLUDE' 'TABLES' table_name_list
+	| 'INCLUDE' 'TABLES' table_name_list
 	| 
 
 target_list ::=
