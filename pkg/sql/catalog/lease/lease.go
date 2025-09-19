@@ -102,6 +102,12 @@ var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLev
 	"enables waiting for the initial version of a descriptor",
 	true)
 
+var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease.use_locked_timestamps.enabled",
+	"guarantees transactional version consistency for descriptors used by the lease manager,"+
+		"descriptors used can be intentionally older to support this",
+	false)
+
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -1265,7 +1271,7 @@ func (m *Manager) purgeOldVersions(
 		// Acquire a refcount on the descriptor on the latest version to maintain an
 		// active lease, so that it doesn't get released when removeInactives()
 		// is called below. Release this lease after calling removeInactives().
-		desc, _, err = t.findForTimestamp(ctx, m.storage.clock.Now())
+		desc, _, err = t.findForTimestamp(ctx, TimestampToReadTimestamp(m.storage.clock.Now()))
 		if err == nil || !errors.Is(err, errRenewLease) {
 			break
 		}
@@ -1600,7 +1606,7 @@ func (m *Manager) SetRegionPrefix(val []byte) {
 // id and fails because the id has been dropped by the TRUNCATE.
 func (m *Manager) AcquireByName(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	timestamp ReadTimestamp,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
@@ -1622,9 +1628,9 @@ func (m *Manager) AcquireByName(
 		return desc, nil
 	}
 	// Check if we have cached an ID for this name.
-	descVersion, _ := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
+	descVersion, _ := m.names.get(ctx, parentID, parentSchemaID, name, timestamp.GetTimestamp())
 	if descVersion != nil {
-		if descVersion.GetModificationTime().LessEq(timestamp) {
+		if descVersion.GetModificationTime().LessEq(timestamp.GetTimestamp()) {
 			return validateDescriptorForReturn(descVersion)
 		}
 		// m.names.get() incremented the refcount, we decrement it to get a new
@@ -1643,7 +1649,7 @@ func (m *Manager) AcquireByName(
 	// lease with at least a bit of lifetime left in it. So, we do it the hard
 	// way: look in the database to resolve the name, then acquire a new lease.
 	var err error
-	id, err := m.resolveName(ctx, timestamp, parentID, parentSchemaID, name)
+	id, err := m.resolveName(ctx, timestamp.GetTimestamp(), parentID, parentSchemaID, name)
 	if err != nil {
 		return nil, err
 	}
@@ -1777,7 +1783,7 @@ type LeasedDescriptor interface {
 // can only return an older version of a descriptor if the latest version
 // can be leased; as it stands a dropped descriptor cannot be leased.
 func (m *Manager) Acquire(
-	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
+	ctx context.Context, timestamp ReadTimestamp, id descpb.ID,
 ) (LeasedDescriptor, error) {
 	for {
 		if m.IsDraining() {
@@ -1802,7 +1808,7 @@ func (m *Manager) Acquire(
 
 		case errors.Is(err, errReadOlderVersion):
 			// Read old versions from the store. This can block while reading.
-			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp)
+			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp.GetTimestamp())
 			if errRead != nil {
 				return nil, errRead
 			}
@@ -2135,6 +2141,9 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 	}
 
 	handleCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+		if m.testingKnobs.TestingOnRangeFeedCheckPoint != nil {
+			m.testingKnobs.TestingOnRangeFeedCheckPoint()
+		}
 		// Track checkpoints that occur from the rangefeed to make sure progress
 		// is always made.
 		m.mu.Lock()
@@ -2906,6 +2915,23 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 	wg.Wait()
 	log.Dev.Infof(ctx, "completed orphaned lease cleanup for instance ID %d: %d/%d leases released",
 		instanceID, releasedCount.Load(), totalLeases)
+}
+
+// GetReadTimestamp returns a locked timestamp to use for lease management.
+func (m *Manager) GetReadTimestamp(timestamp hlc.Timestamp) ReadTimestamp {
+	if LockedLeaseTimestamp.Get(&m.settings.SV) {
+		replicationTS := m.GetSafeReplicationTS()
+		if !replicationTS.IsEmpty() && replicationTS.Less(timestamp) {
+			return LeaseTimestamp{
+				ReadTimestamp:  timestamp,
+				LeaseTimestamp: replicationTS,
+			}
+		}
+	}
+	// Fallback to existing behavior with timestamps.
+	return LeaseTimestamp{
+		ReadTimestamp: timestamp,
+	}
 }
 
 // TestingGetBoundAccount returns the bound account used by the lease manager.

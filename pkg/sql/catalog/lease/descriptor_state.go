@@ -82,7 +82,7 @@ type descriptorState struct {
 // It returns true if the descriptor returned is the known latest version
 // of the descriptor.
 func (t *descriptorState) findForTimestamp(
-	ctx context.Context, timestamp hlc.Timestamp,
+	ctx context.Context, timestamp ReadTimestamp,
 ) (*descriptorVersionState, bool, error) {
 	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	t.mu.Lock()
@@ -95,10 +95,12 @@ func (t *descriptorState) findForTimestamp(
 
 	// Walk back the versions to find one that is valid for the timestamp.
 	for i := len(t.mu.active.data) - 1; i >= 0; i-- {
-		// Check to see if the ModificationTime is valid.
-		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp) {
+		// Check to see if the ModificationTime is valid. If only the initial version
+		// of the descriptor is known, then read it at the base timestamp.
+		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp.GetTimestamp()) ||
+			(len(t.mu.active.data) == 1 && desc.GetModificationTime().LessEq(timestamp.GetBaseTimestamp())) {
 			latest := i+1 == len(t.mu.active.data)
-			if !desc.hasExpired(ctx, timestamp) {
+			if !desc.hasExpired(ctx, timestamp.GetBaseTimestamp()) {
 				// Existing valid descriptor version.
 				desc.incRefCount(ctx, expensiveLogEnabled)
 				return desc, latest, nil
