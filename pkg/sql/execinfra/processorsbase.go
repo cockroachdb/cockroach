@@ -523,6 +523,9 @@ const (
 //
 // An error can be optionally passed. It will be the first piece of metadata
 // returned by DrainHelper().
+//
+// MoveToDraining should only be called from the main goroutine of the
+// processor.
 func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 	if pb.State != StateRunning {
 		// Calling MoveToDraining in any state is allowed in order to facilitate the
