@@ -2356,7 +2356,6 @@ type saveRateConfig struct {
 	jitter       func() float64 // optional
 }
 
-// TODO add unit tests for this
 // saveRateLimiter is a rate limiter for saving a piece of progress.
 // It uses a duration setting as the minimum interval between saves.
 // It also limits saving to not be more frequent than the average
