@@ -25,7 +25,9 @@ func TestRequestMetricRegistered(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	defer ts.Stopper().Stop(ctx)
 
 	requestMetrics := rpc.NewRequestMetrics()

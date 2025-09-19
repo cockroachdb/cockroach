@@ -189,6 +189,7 @@ func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainConte
 			// We need to start the cluster insecure in order to not
 			// care about TLS settings for the RPC client connection.
 			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DrainSleepFn: func(time.Duration) {
