@@ -3,13 +3,20 @@
 # settings to show the effect those settings have on the plan.
 #
 
+# Simulate a status column that happened not to sample one of the enum values.
+exec-ddl
+CREATE TYPE status_enum AS ENUM ('ACKNOWLEDGED', 'DROPPED', 'PENDING', 'SUCCEEDED');
+----
+
 exec-ddl
 CREATE TABLE t (
   k INT PRIMARY KEY,
   i INT,
   s STRING,
+  e status_enum,
   INDEX (i),
-  INDEX (s)
+  INDEX (s),
+  INDEX (i) WHERE e = 'PENDING'
 )
 ----
 
@@ -62,6 +69,20 @@ ALTER TABLE t INJECT STATISTICS '[
       {"num_eq": 200, "num_range": 100, "distinct_range": 10, "upper_bound": "mango"},
       {"num_eq": 200, "num_range": 100, "distinct_range": 10, "upper_bound": "pineapple"}
     ]
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 4,
+    "null_count": 0,
+    "avg_size": 1,
+    "histo_col_type": "status_enum",
+    "histo_buckets": [
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "ACKNOWLEDGED"},
+      {"num_eq": 99, "num_range": 0, "distinct_range": 0, "upper_bound": "DROPPED"},
+      {"num_eq": 900, "num_range": 0, "distinct_range": 0, "upper_bound": "SUCCEEDED"}
+    ]
   }
 ]'
 ----
@@ -86,7 +107,7 @@ opt
 SELECT * FROM t WHERE k IN (110, 120, 130, 140) AND i = 500
 ----
 index-join t
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(1,2)=2e-07, null(1,2)=0]
  │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
@@ -94,7 +115,7 @@ index-join t
  │   histogram(2)=
  ├── cost: 24.0200012
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  └── scan t@t_i_idx
       ├── columns: k:1!null i:2!null
       ├── constraint: /2/1
@@ -115,7 +136,7 @@ opt set=optimizer_prefer_bounded_cardinality=true
 SELECT * FROM t WHERE k IN (110, 120, 130, 140) AND i = 500
 ----
 index-join t
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(1,2)=2e-07, null(1,2)=0]
  │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
@@ -123,7 +144,7 @@ index-join t
  │   histogram(2)=
  ├── cost: 24.0200012
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  └── scan t@t_i_idx
       ├── columns: k:1!null i:2!null
       ├── constraint: /2/1
@@ -144,17 +165,17 @@ opt set=optimizer_min_row_count=1
 SELECT * FROM t WHERE k IN (110, 120, 130, 140) AND i = 500
 ----
 select
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
  │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
  │                <--- 110 --- 120 --- 130 --- 140
  │   histogram(2)=
- ├── cost: 24.21
+ ├── cost: 24.23
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/110 - /110]
  │    │    ├── [/120 - /120]
@@ -164,9 +185,9 @@ select
  │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1   0   1
  │    │                <--- 110 --- 120 --- 130 --- 140
- │    ├── cost: 24.15
+ │    ├── cost: 24.17
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── i:2 = 500 [outer=(2), constraints=(/2: [/500 - /500]; tight), fd=()-->(2)]
 
@@ -178,7 +199,7 @@ opt
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i > 500
 ----
 index-join t
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(1,2)=2e-07, null(1,2)=0]
  │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
@@ -186,7 +207,7 @@ index-join t
  │   histogram(2)=
  ├── cost: 18.0500006
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2-4)
  └── select
       ├── columns: k:1!null i:2!null
       ├── cardinality: [0 - 4]
@@ -213,17 +234,17 @@ opt set=optimizer_prefer_bounded_cardinality=true
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i > 500
 ----
 select
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(1,2)=2e-07, null(1,2)=0]
  │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
  │                <--- 100 --- 110 --- 120 --- 130
  │   histogram(2)=
- ├── cost: 24.21
+ ├── cost: 24.23
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2-4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/100 - /100]
  │    │    ├── [/110 - /110]
@@ -233,9 +254,9 @@ select
  │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1   0   1
  │    │                <--- 100 --- 110 --- 120 --- 130
- │    ├── cost: 24.15
+ │    ├── cost: 24.17
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
 
@@ -243,17 +264,17 @@ opt set=optimizer_min_row_count=1
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i > 500
 ----
 select
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
  │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
  │                <--- 100 --- 110 --- 120 --- 130
  │   histogram(2)=
- ├── cost: 24.21
+ ├── cost: 24.23
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2-4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/100 - /100]
  │    │    ├── [/110 - /110]
@@ -263,9 +284,9 @@ select
  │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1   0   1
  │    │                <--- 100 --- 110 --- 120 --- 130
- │    ├── cost: 24.15
+ │    ├── cost: 24.17
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
 
@@ -277,7 +298,7 @@ opt
 SELECT * FROM t WHERE k IN (410, 420, 430) AND i > 500
 ----
 index-join t
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 3]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(1,2)=2e-07, null(1,2)=0]
  │   histogram(1)=  0 6.6667e-08 0 6.6667e-08 0 6.6667e-08
@@ -285,7 +306,7 @@ index-join t
  │   histogram(2)=
  ├── cost: 18.0500006
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2-4)
  └── select
       ├── columns: k:1!null i:2!null
       ├── cardinality: [0 - 3]
@@ -312,17 +333,17 @@ opt set=optimizer_prefer_bounded_cardinality=true
 SELECT * FROM t WHERE k IN (410, 420, 430) AND i > 500
 ----
 select
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 3]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(1,2)=2e-07, null(1,2)=0]
  │   histogram(1)=  0 6.6667e-08 0 6.6667e-08 0 6.6667e-08
  │                <----- 410 -------- 420 -------- 430 ---
  │   histogram(2)=
- ├── cost: 19.165
+ ├── cost: 19.18
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2-4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/410 - /410]
  │    │    ├── [/420 - /420]
@@ -331,9 +352,9 @@ select
  │    ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1
  │    │                <--- 410 --- 420 --- 430
- │    ├── cost: 19.115
+ │    ├── cost: 19.13
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
 
@@ -341,17 +362,17 @@ opt set=optimizer_min_row_count=1
 SELECT * FROM t WHERE k IN (410, 420, 430) AND i > 500
 ----
 select
- ├── columns: k:1!null i:2!null s:3
+ ├── columns: k:1!null i:2!null s:3 e:4
  ├── cardinality: [0 - 3]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
  │   histogram(1)=  0 0.33333 0 0.33333 0 0.33333
  │                <---- 410 ----- 420 ----- 430 -
  │   histogram(2)=
- ├── cost: 19.165
+ ├── cost: 19.18
  ├── key: (1)
- ├── fd: (1)-->(2,3)
+ ├── fd: (1)-->(2-4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/410 - /410]
  │    │    ├── [/420 - /420]
@@ -360,9 +381,9 @@ select
  │    ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1
  │    │                <--- 410 --- 420 --- 430
- │    ├── cost: 19.115
+ │    ├── cost: 19.13
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       └── i:2 > 500 [outer=(2), constraints=(/2: [/501 - ]; tight)]
 
@@ -374,7 +395,7 @@ opt
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i = 400 AND s < 'apple'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(3)=2e-07, null(3)=0, distinct(2,3)=2e-07, null(2,3)=0, distinct(1-3)=2e-07, null(1-3)=0]
  │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
@@ -384,14 +405,14 @@ select
  │   histogram(3)=
  ├── cost: 18.0700002
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── index-join t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── cardinality: [0 - 4]
  │    ├── stats: [rows=8e-10]
  │    ├── cost: 18.0500002
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2-4)
  │    └── select
  │         ├── columns: k:1!null s:3!null
  │         ├── cardinality: [0 - 4]
@@ -420,7 +441,7 @@ opt set=optimizer_prefer_bounded_cardinality=true
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i = 400 AND s < 'apple'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(3)=2e-07, null(3)=0, distinct(2,3)=2e-07, null(2,3)=0, distinct(1-3)=2e-07, null(1-3)=0]
  │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
@@ -428,11 +449,11 @@ select
  │   histogram(2)=  0 2e-07
  │                <--- 400
  │   histogram(3)=
- ├── cost: 24.22
+ ├── cost: 24.24
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/100 - /100]
  │    │    ├── [/110 - /110]
@@ -442,9 +463,9 @@ select
  │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1   0   1
  │    │                <--- 100 --- 110 --- 120 --- 130
- │    ├── cost: 24.15
+ │    ├── cost: 24.17
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       ├── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
       └── s:3 < 'apple' [outer=(3), constraints=(/3: (/NULL - /'apple'); tight)]
@@ -453,7 +474,7 @@ opt set=optimizer_min_row_count=1
 SELECT * FROM t WHERE k IN (100, 110, 120, 130) AND i = 400 AND s < 'apple'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── cardinality: [0 - 4]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=1, null(1-3)=0]
  │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
@@ -461,11 +482,11 @@ select
  │   histogram(2)=  0   1
  │                <--- 400
  │   histogram(3)=
- ├── cost: 24.22
+ ├── cost: 24.24
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1
  │    │    ├── [/100 - /100]
  │    │    ├── [/110 - /110]
@@ -475,9 +496,9 @@ select
  │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  │    │   histogram(1)=  0   1   0   1   0   1   0   1
  │    │                <--- 100 --- 110 --- 120 --- 130
- │    ├── cost: 24.15
+ │    ├── cost: 24.17
  │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
+ │    └── fd: (1)-->(2-4)
  └── filters
       ├── i:2 = 400 [outer=(2), constraints=(/2: [/400 - /400]; tight), fd=()-->(2)]
       └── s:3 < 'apple' [outer=(3), constraints=(/3: (/NULL - /'apple'); tight)]
@@ -490,20 +511,20 @@ opt
 SELECT * FROM t WHERE i = 400 AND s > 'z'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── stats: [rows=2e-07, distinct(2)=2e-07, null(2)=0, distinct(3)=2e-07, null(3)=0, distinct(2,3)=2e-07, null(2,3)=0]
  │   histogram(2)=  0 2e-07
  │                <--- 400
  │   histogram(3)=
  ├── cost: 18.0700014
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── index-join t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── stats: [rows=2e-07]
  │    ├── cost: 18.0400014
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2-4)
  │    └── scan t@t_s_idx
  │         ├── columns: k:1!null s:3!null
  │         ├── constraint: /3/1: [/e'z\x00' - ]
@@ -519,7 +540,7 @@ opt set=optimizer_prefer_bounded_cardinality=true
 SELECT * FROM t WHERE i = 400 AND s > 'z'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── stats: [rows=2e-07, distinct(2)=2e-07, null(2)=0, distinct(3)=2e-07, null(3)=0, distinct(2,3)=2e-07, null(2,3)=0]
  │   histogram(2)=  0 2e-07
  │                <--- 400
@@ -527,14 +548,14 @@ select
  ├── cost: 18.0700014
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── index-join t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── stats: [rows=2e-07]
  │    ├── cost: 18.0400014
  │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2-4)
  │    └── scan t@t_s_idx
  │         ├── columns: k:1!null s:3!null
  │         ├── constraint: /3/1: [/e'z\x00' - ]
@@ -551,20 +572,20 @@ opt set=optimizer_min_row_count=1
 SELECT * FROM t WHERE i = 400 AND s > 'z'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  │   histogram(2)=  0   1
  │                <--- 400
  │   histogram(3)=
- ├── cost: 25.1375
+ ├── cost: 25.1425
  ├── key: (1)
- ├── fd: ()-->(2), (1)-->(3)
+ ├── fd: ()-->(2), (1)-->(3,4)
  ├── index-join t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── stats: [rows=1]
- │    ├── cost: 25.0975
+ │    ├── cost: 25.1025
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3)
+ │    ├── fd: (1)-->(2-4)
  │    └── scan t@t_s_idx
  │         ├── columns: k:1!null s:3!null
  │         ├── constraint: /3/1: [/e'z\x00' - ]
@@ -584,7 +605,7 @@ opt
 SELECT * FROM t WHERE k = 100 AND i = 500 AND s = 'zzz'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── cardinality: [0 - 1]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(3)=2e-07, null(3)=0]
  │   histogram(1)=  0 2e-07
@@ -593,14 +614,14 @@ select
  │   histogram(3)=
  ├── cost: 9.04000121
  ├── key: ()
- ├── fd: ()-->(1-3)
+ ├── fd: ()-->(1-4)
  ├── index-join t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=2e-07]
  │    ├── cost: 9.02000121
  │    ├── key: ()
- │    ├── fd: ()-->(1-3)
+ │    ├── fd: ()-->(1-4)
  │    └── scan t@t_i_idx
  │         ├── columns: k:1!null i:2!null
  │         ├── constraint: /2/1: [/500/100 - /500/100]
@@ -619,7 +640,7 @@ opt set=optimizer_prefer_bounded_cardinality=true
 SELECT * FROM t WHERE k = 100 AND i = 500 AND s = 'zzz'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── cardinality: [0 - 1]
  ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(2)=2e-07, null(2)=0, distinct(3)=2e-07, null(3)=0]
  │   histogram(1)=  0 2e-07
@@ -628,14 +649,14 @@ select
  │   histogram(3)=
  ├── cost: 9.04000121
  ├── key: ()
- ├── fd: ()-->(1-3)
+ ├── fd: ()-->(1-4)
  ├── index-join t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=2e-07]
  │    ├── cost: 9.02000121
  │    ├── key: ()
- │    ├── fd: ()-->(1-3)
+ │    ├── fd: ()-->(1-4)
  │    └── scan t@t_i_idx
  │         ├── columns: k:1!null i:2!null
  │         ├── constraint: /2/1: [/500/100 - /500/100]
@@ -654,26 +675,131 @@ opt set=optimizer_min_row_count=1
 SELECT * FROM t WHERE k = 100 AND i = 500 AND s = 'zzz'
 ----
 select
- ├── columns: k:1!null i:2!null s:3!null
+ ├── columns: k:1!null i:2!null s:3!null e:4
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
  │   histogram(1)=  0   1
  │                <--- 100
  │   histogram(2)=
  │   histogram(3)=
- ├── cost: 9.085
+ ├── cost: 9.09
  ├── key: ()
- ├── fd: ()-->(1-3)
+ ├── fd: ()-->(1-4)
  ├── scan t
- │    ├── columns: k:1!null i:2 s:3
+ │    ├── columns: k:1!null i:2 s:3 e:4
  │    ├── constraint: /1: [/100 - /100]
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    │   histogram(1)=  0   1
  │    │                <--- 100
- │    ├── cost: 9.045
+ │    ├── cost: 9.05
  │    ├── key: ()
- │    └── fd: ()-->(1-3)
+ │    └── fd: ()-->(1-4)
  └── filters
       ├── i:2 = 500 [outer=(2), constraints=(/2: [/500 - /500]; tight), fd=()-->(2)]
       └── s:3 = 'zzz' [outer=(3), constraints=(/3: [/'zzz' - /'zzz']; tight), fd=()-->(3)]
+
+# --------------------------------------------------
+# Q7
+# --------------------------------------------------
+
+opt
+SELECT * FROM t WHERE e = 'PENDING' AND k IN (110, 120, 130, 140)
+----
+index-join t
+ ├── columns: k:1!null i:2 s:3 e:4!null
+ ├── cardinality: [0 - 4]
+ ├── immutable
+ ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0, distinct(1,4)=2e-07, null(1,4)=0]
+ │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
+ │                <--- 110 --- 120 --- 130 --- 140
+ │   histogram(4)=  0      0
+ │                <--- 'PENDING'
+ ├── cost: 18.0500006
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ └── select
+      ├── columns: k:1!null i:2
+      ├── cardinality: [0 - 4]
+      ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
+      │   histogram(1)=  0 2e-10 0 2e-10 0 2e-10 0 2e-10
+      │                <--- 110 --- 120 --- 130 --- 140
+      ├── cost: 18.0400002
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan t@t_i_idx1,partial
+      │    ├── columns: k:1!null i:2
+      │    ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+      │    │   histogram(1)=  0  0  1.98e-08 2e-10 3.98e-08 2e-10 5.98e-08 2e-10 7.98e-08 2e-10
+      │    │                <--- 0 ---------- 100 ---------- 300 ---------- 600 ---------- 1000
+      │    │   histogram(4)=  0      0
+      │    │                <--- 'PENDING'
+      │    ├── cost: 18.0200002
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── k:1 IN (110, 120, 130, 140) [outer=(1), constraints=(/1: [/110 - /110] [/120 - /120] [/130 - /130] [/140 - /140]; tight)]
+
+opt set=optimizer_prefer_bounded_cardinality=true
+SELECT * FROM t WHERE e = 'PENDING' AND k IN (110, 120, 130, 140)
+----
+select
+ ├── columns: k:1!null i:2 s:3 e:4!null
+ ├── cardinality: [0 - 4]
+ ├── immutable
+ ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0, distinct(1,4)=2e-07, null(1,4)=0]
+ │   histogram(1)=  0 5e-08 0 5e-08 0 5e-08 0 5e-08
+ │                <--- 110 --- 120 --- 130 --- 140
+ │   histogram(4)=  0      0
+ │                <--- 'PENDING'
+ ├── cost: 24.23
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3 e:4
+ │    ├── constraint: /1
+ │    │    ├── [/110 - /110]
+ │    │    ├── [/120 - /120]
+ │    │    ├── [/130 - /130]
+ │    │    └── [/140 - /140]
+ │    ├── cardinality: [0 - 4]
+ │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
+ │    │   histogram(1)=  0   1   0   1   0   1   0   1
+ │    │                <--- 110 --- 120 --- 130 --- 140
+ │    ├── cost: 24.17
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── e:4 = 'PENDING' [outer=(4), immutable, constraints=(/4: [/'PENDING' - /'PENDING']; tight), fd=()-->(4)]
+
+opt set=optimizer_min_row_count=1
+SELECT * FROM t WHERE e = 'PENDING' AND k IN (110, 120, 130, 140)
+----
+select
+ ├── columns: k:1!null i:2 s:3 e:4!null
+ ├── cardinality: [0 - 4]
+ ├── immutable
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(4)=1, null(4)=0, distinct(1,4)=1, null(1,4)=0]
+ │   histogram(1)=  0 0.25  0 0.25  0 0.25  0 0.25
+ │                <--- 110 --- 120 --- 130 --- 140
+ │   histogram(4)=  0      0
+ │                <--- 'PENDING'
+ ├── cost: 24.23
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3)
+ ├── scan t
+ │    ├── columns: k:1!null i:2 s:3 e:4
+ │    ├── constraint: /1
+ │    │    ├── [/110 - /110]
+ │    │    ├── [/120 - /120]
+ │    │    ├── [/130 - /130]
+ │    │    └── [/140 - /140]
+ │    ├── cardinality: [0 - 4]
+ │    ├── stats: [rows=4, distinct(1)=4, null(1)=0]
+ │    │   histogram(1)=  0   1   0   1   0   1   0   1
+ │    │                <--- 110 --- 120 --- 130 --- 140
+ │    ├── cost: 24.17
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── e:4 = 'PENDING' [outer=(4), immutable, constraints=(/4: [/'PENDING' - /'PENDING']; tight), fd=()-->(4)]
