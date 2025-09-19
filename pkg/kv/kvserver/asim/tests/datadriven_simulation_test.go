@@ -313,8 +313,8 @@ func TestDataDriven(t *testing.T) {
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
-				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
-				var nodeCPURateCapacity int64 = 8 * 1e9 // 8 vcpus
+				var storeByteCapacity int64 = 256 << 30                                /* 256 GiB  */
+				var nodeCPURateCapacity int64 = config.DefaultNodeCPURateCapacityNanos // 8 vcpus
 				var region []string
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
