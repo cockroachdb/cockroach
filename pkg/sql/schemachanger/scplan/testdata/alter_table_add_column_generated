@@ -234,7 +234,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 41 MutationType ops
+PreCommitPhase stage 2 of 2 with 42 MutationType ops
   transitions:
     [[Sequence:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
@@ -274,6 +274,9 @@ PreCommitPhase stage 2 of 2 with 41 MutationType ops
         DescriptorID: 105
         Name: foo_j_seq
         SchemaID: 101
+    *scop.UpdateTTLScheduleMetadata
+      NewName: foo_j_seq
+      TableID: 105
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 105

@@ -189,7 +189,6 @@ root  false          tables       bar      CREATE             false
 root  false          tables       bar      DELETE             false
 root  false          tables       bar      DROP               false
 root  false          tables       bar      INSERT             false
-root  false          tables       bar      INSPECT            false
 root  false          tables       bar      REPLICATIONDEST    false
 root  false          tables       bar      REPLICATIONSOURCE  false
 root  false          tables       bar      TRIGGER            false
@@ -201,7 +200,6 @@ root  false          tables       foo      CREATE             false
 root  false          tables       foo      DELETE             false
 root  false          tables       foo      DROP               false
 root  false          tables       foo      INSERT             false
-root  false          tables       foo      INSPECT            false
 root  false          tables       foo      REPLICATIONDEST    false
 root  false          tables       foo      REPLICATIONSOURCE  false
 root  false          tables       foo      TRIGGER            false

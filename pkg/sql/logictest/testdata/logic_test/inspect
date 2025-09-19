@@ -84,17 +84,16 @@ CREATE USER testuser2;
 
 user testuser2
 
-statement error user testuser2 does not have INSPECT privilege on relation foo
+statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT TABLE foo;
 
-statement error user testuser2 does not have INSPECT privilege on database test
+statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT DATABASE test;
 
 user root
 
 statement ok
-GRANT INSPECT ON TABLE foo TO testuser2;
-GRANT INSPECT ON DATABASE test TO testuser2;
+GRANT SYSTEM INSPECT TO testuser2;
 
 user testuser2
 

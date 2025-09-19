@@ -1298,7 +1298,12 @@ func TestIncrementTableVersion(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	codec := srv.ApplicationLayer().Codec()
 
+	// This test relies on legacy schema changer testing knobs.
+	if _, err := sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
@@ -1404,7 +1409,12 @@ func TestTwoVersionInvariantRetryErrorWithSavePoint(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
+	// This test relies on legacy schema changer testing knobs.
+	if _, err := sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
@@ -1524,7 +1534,12 @@ func TestTwoVersionInvariantRetryError(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
+	// This test relies on legacy schema changer testing knobs.
+	if _, err := sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
