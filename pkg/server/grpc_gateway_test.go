@@ -30,6 +30,7 @@ func TestEndpointTelemetryBasic(t *testing.T) {
 		// Disable the default test tenant for now as this tests fails
 		// with it enabled. Tracked with #81590.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	defer s.Stopper().Stop(context.Background())
 
