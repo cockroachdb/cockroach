@@ -771,6 +771,10 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
 		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
+		cliflagcfg.BoolFlag(f, &zipCtx.useDebugUser, cliflags.ZipUseDebugUser)
+		// The following flag is planned to become non-experimental in 26.1.
+		_ = f.MarkHidden(cliflags.ZipUseDebugUser.Name)
+
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {

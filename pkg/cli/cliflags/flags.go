@@ -1837,6 +1837,13 @@ whether the generated zip file is valid and not corrupted.
 `,
 	}
 
+	ZipUseDebugUser = FlagInfo{
+		Name: "use-debug-user",
+		Description: `
+Use debug user during debug.zip generation.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

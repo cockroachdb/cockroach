@@ -13,6 +13,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"io"
 	"net"
 	"net/http"
@@ -191,6 +192,12 @@ will then convert it to the --format requested in the current invocation.
 		if convertFile == "" {
 			// To enable conversion without a running cluster, we want to skip
 			// connecting to the server when converting an existing tsdump.
+
+			if zipCtx.useDebugUser {
+				serverCfg.User = username.DebugUserName()
+				cliCtx.User = username.DebugUserName()
+			}
+
 			conn, finish, err := newClientConn(ctx, serverCfg)
 			if err != nil {
 				return err
