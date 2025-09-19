@@ -292,6 +292,9 @@ func newChangeAggregatorProcessor(
 		interval: func() time.Duration {
 			return ca.flushFrequency
 		},
+		jitter: func() float64 {
+			return aggregatorFlushJitter.Get(&ca.FlowCtx.Cfg.Settings.SV)
+		},
 	})
 
 	return ca, nil
@@ -1337,9 +1340,6 @@ func newChangeFrontierProcessor(
 		},
 		interval: func() time.Duration {
 			return changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
-		},
-		jitter: func() float64 {
-			return aggregatorFlushJitter.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		},
 	})
 
