@@ -5533,6 +5533,64 @@ REVOKE SYSTEM CREATEDB FROM can_createdb_global;
 statement ok
 DROP ROLE can_createdb_global;
 
+# Test that dependencies are preserved when altering only the USING expression
+# of a policy that has both USING and WITH CHECK expressions. This is a repro
+# for GH issue 153191.
+subtest bug_fix_lost_dependencies_alter_policy_#153191
+
+statement ok
+CREATE TABLE dep_test (id INT PRIMARY KEY, value INT);
+
+statement ok
+CREATE SEQUENCE seq_with_check;
+
+statement ok
+CREATE FUNCTION func_using_old(n INT) RETURNS BOOL AS $$ SELECT n > 0; $$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION func_using_new(n INT) RETURNS BOOL AS $$ SELECT n >= 0; $$ LANGUAGE SQL;
+
+# Create a olicy that have different dependencies for USING and WITH CHECK
+# expressions.
+statement ok
+CREATE POLICY test_policy ON dep_test
+  FOR ALL
+  USING (func_using_old(value))
+  WITH CHECK (nextval('seq_with_check') < 1000);
+
+# Verify initial dependencies are tracked.
+statement error pq: cannot drop function "func_using_old" because other objects
+DROP FUNCTION func_using_old;
+
+statement error pq: cannot drop sequence seq_with_check because other objects depend on it
+DROP SEQUENCE seq_with_check;
+
+# Alter only the USING expression, which should preserve the WITH CHECK
+# dependency.
+statement ok
+ALTER POLICY test_policy ON dep_test USING (func_using_new(value));
+
+# Ensure dependency on WITH CHECK still exists.
+statement error pq: cannot drop sequence seq_with_check because other objects depend on it
+DROP SEQUENCE seq_with_check;
+
+# Ensure old dependency on USING doesn't exist anymore.
+statement ok
+DROP FUNCTION func_using_old;
+
+# And the new USING function should be protected.
+statement error pq: cannot drop function "func_using_new" because other objects
+DROP FUNCTION func_using_new;
+
+statement ok
+DROP TABLE dep_test CASCADE;
+
+statement ok
+DROP SEQUENCE seq_with_check;
+
+statement ok
+DROP FUNCTION func_using_new;
+
 subtest end
 
 subtest filter_pushdown_leaks
