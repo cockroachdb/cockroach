@@ -216,7 +216,10 @@ func (p *proc) Start(ctx context.Context) {
 
 	if err := p.FlowCtx.Stopper().RunAsyncTask(p.Ctx(), "cloudcheck.proc", func(ctx context.Context) {
 		defer close(p.results)
-		if err := ctxgroup.GroupWorkers(ctx, concurrency, func(ctx context.Context, _ int) error {
+		// We're ignoring the context cancellation error (which is the only one
+		// possible) because the main goroutine will observe it on its own
+		// anyway in Next.
+		_ = ctxgroup.GroupWorkers(ctx, concurrency, func(ctx context.Context, _ int) error {
 			select {
 			case p.results <- checkURI(
 				ctx,
@@ -229,9 +232,7 @@ func (p *proc) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-		}); err != nil {
-			p.MoveToDraining(err)
-		}
+		})
 	}); err != nil {
 		p.MoveToDraining(err)
 	}
