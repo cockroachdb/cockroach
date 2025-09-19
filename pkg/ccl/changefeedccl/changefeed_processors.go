@@ -295,7 +295,7 @@ func newChangeAggregatorProcessor(
 		jitter: func() float64 {
 			return aggregatorFlushJitter.Get(&ca.FlowCtx.Cfg.Settings.SV)
 		},
-	})
+	}, timeutil.DefaultTimeSource{})
 
 	return ca, nil
 }
@@ -1341,7 +1341,7 @@ func newChangeFrontierProcessor(
 		interval: func() time.Duration {
 			return changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 		},
-	})
+	}, timeutil.DefaultTimeSource{})
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
@@ -2392,15 +2392,18 @@ type saveRateLimiter struct {
 	config     saveRateConfig
 	warnEveryN util.EveryN
 
+	clock timeutil.TimeSource
+
 	lastSave        time.Time
 	avgSaveDuration time.Duration
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
-func newSaveRateLimiter(config saveRateConfig) *saveRateLimiter {
+func newSaveRateLimiter(config saveRateConfig, clock timeutil.TimeSource) *saveRateLimiter {
 	return &saveRateLimiter{
 		config:     config,
 		warnEveryN: util.Every(time.Minute),
+		clock:      clock,
 	}
 }
 
@@ -2416,7 +2419,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 			interval += time.Duration(rand.Int63n(int64(maxJitter)))
 		}
 	}
-	now := timeutil.Now()
+	now := l.clock.Now()
 	elapsed := now.Sub(l.lastSave)
 	if elapsed < interval {
 		return false
@@ -2437,7 +2440,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 // doneSave must be called after each save is completed with the duration
 // it took to save progress.
 func (l *saveRateLimiter) doneSave(saveDuration time.Duration) {
-	l.lastSave = timeutil.Now()
+	l.lastSave = l.clock.Now()
 
 	// Update the average save duration using an exponential moving average.
 	if l.avgSaveDuration == 0 {
