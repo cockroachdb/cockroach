@@ -3,7 +3,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT DEFAULT 54);
 INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
 CREATE INDEX ON t(i) WHERE i<=0;
 CREATE INDEX ON t(j) WHERE j<= 0;
-CREATE INDEX ON t(k);
+CREATE INDEX idx ON t(k);
 ----
 ...
 +object {100 101 t} -> 104
@@ -285,7 +285,7 @@ upsert descriptor #104
   +      indexes:
   +        "8": t_i_idx
   +        "10": t_j_idx
-  +        "12": t_k_idx
+  +        "12": idx
   +        "14": t_i_key
   +        "16": t_pkey
   +      name: t
@@ -809,7 +809,7 @@ upsert descriptor #104
        keySuffixColumnIds:
   -    - 1
   +    - 2
-       name: t_k_idx
+       name: idx
        partitioning: {}
        sharded: {}
   +    storeColumnNames: []
@@ -1034,7 +1034,7 @@ upsert descriptor #104
   -      - 2
   -      name: crdb_internal_index_13_name_placeholder
   +      - 1
-  +      name: t_k_idx
+  +      name: idx
          partitioning: {}
          sharded: {}
   -      storeColumnNames: []
@@ -1441,7 +1441,7 @@ upsert descriptor #104
          - k
   -      keySuffixColumnIds:
   -      - 1
-  -      name: t_k_idx
+  -      name: idx
   -      partitioning: {}
   -      sharded: {}
   +      unique: true
@@ -1658,7 +1658,7 @@ upsert descriptor #104
   -      indexes:
   -        "8": t_i_idx
   -        "10": t_j_idx
-  -        "12": t_k_idx
+  -        "12": idx
   -        "14": t_i_key
   -        "16": t_pkey
   -      name: t

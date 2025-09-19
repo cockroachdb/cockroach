@@ -66,6 +66,9 @@ const (
 	// RecreateSourceIndexID is the index ID that we are replacing with
 	// this new index.
 	RecreateSourceIndexID
+	// RecreateTargetIndexID is the index ID that needs to be public before
+	// this index.
+	RecreateTargetIndexID
 	// SeqNum is a number given to different elements of the same conceptual
 	// object. It is used so we can differentiate those elements in the graph.
 	//
@@ -195,6 +198,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
 		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
 		rel.EntityAttr(RecreateSourceIndexID, "RecreateSourceIndexID"),
+		rel.EntityAttr(RecreateTargetIndexID, "RecreateTargetIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.TemporaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
