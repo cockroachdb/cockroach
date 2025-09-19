@@ -161,6 +161,14 @@ func dropColumn(
 				_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
 				panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColName.Name))
 			}
+			// Generate CASCADE notice for computed column
+			_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
+			_, _, tableName := scpb.FindNamespace(b.QueryByID(e.TableID))
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
+				"drop cascades to column %s of table %s",
+				computedColName.Name,
+				tableName.Name,
+			))
 			dropColumn(b, tn, tbl, stmt, n, e, elts, behavior)
 		case *scpb.PrimaryIndex:
 			// Nothing needs to be done. Primary index related drops (bc of column

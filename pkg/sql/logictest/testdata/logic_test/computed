@@ -1428,3 +1428,106 @@ statement error pgcode 22001 validate check constraint: value too long for type 
 ALTER TABLE t81698 ADD COLUMN v VARCHAR(2) AS (i || 'virtual') VIRTUAL;
 
 subtest end
+
+subtest drop_column_cascade_stored_computed
+
+statement ok
+CREATE TABLE test_table (
+    id INT PRIMARY KEY,
+    col_to_drop STRING,
+    other_col INT
+)
+
+statement ok
+CREATE INDEX secondary_idx ON test_table (col_to_drop) STORING (other_col)
+
+statement ok
+ALTER TABLE test_table ADD COLUMN computed_col STRING AS (col_to_drop) STORED
+
+statement ok
+INSERT INTO test_table (id, col_to_drop, other_col) VALUES (1, 'test1', 100), (2, 'test2', 200)
+
+query ITT colnames,rowsort
+SELECT id, col_to_drop, computed_col FROM test_table
+----
+id  col_to_drop  computed_col
+1   test1        test1
+2   test2        test2
+
+# Dropping a column that has a dependent computed column is not supported in
+# the legacy schema changer.
+#
+# In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
+# (as a cascade) in the same statement. We drop them separately. Newer versions
+# can do this due to a change in the dep rules.
+onlyif config local-mixed-25.3 local-mixed-25.2 local-legacy-schema-changer
+statement ok
+ALTER TABLE test_table DROP COLUMN computed_col
+
+statement ok
+ALTER TABLE test_table DROP COLUMN col_to_drop CASCADE
+
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM test_table] WHERE column_name != 'rowid'
+----
+id
+other_col
+
+# Verify the secondary index was also dropped via CASCADE
+query T
+SELECT index_name FROM [SHOW INDEXES FROM test_table] WHERE index_name != 'test_table_pkey'
+----
+
+query II colnames,rowsort
+SELECT * FROM test_table
+----
+id  other_col
+1   100
+2   200
+
+statement ok
+DROP TABLE test_table
+
+subtest end
+
+subtest drop_column_cascade_virtual_computed
+
+statement ok
+CREATE TABLE test_virtual (
+    id INT PRIMARY KEY,
+    col_to_drop STRING,
+    other_col INT
+)
+
+statement ok
+CREATE INDEX secondary_idx_virtual ON test_virtual (col_to_drop) STORING (other_col)
+
+statement ok
+ALTER TABLE test_virtual ADD COLUMN computed_col STRING AS (col_to_drop) VIRTUAL
+
+statement ok
+INSERT INTO test_virtual (id, col_to_drop, other_col) VALUES (1, 'virtual1', 300), (2, 'virtual2', 400)
+
+# Dropping a column that has a dependent computed column is not supported in
+# the legacy schema changer.
+#
+# In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
+# (as a cascade) in the same statement. We drop them separately. Newer versions
+# can do this due to a change in the dep rules.
+onlyif config local-mixed-25.3 local-mixed-25.2 local-legacy-schema-changer
+statement ok
+ALTER TABLE test_virtual DROP COLUMN computed_col
+
+statement ok
+ALTER TABLE test_virtual DROP COLUMN col_to_drop CASCADE
+
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM test_virtual] WHERE column_name != 'rowid'
+----
+id
+other_col
+
+statement ok
+DROP TABLE test_virtual
+
+subtest end
