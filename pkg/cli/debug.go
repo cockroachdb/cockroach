@@ -397,13 +397,15 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	usedBytes := du.TotalBytes - du.AvailBytes
 
 	var targetUsage uint64
-	p := debugCtx.ballastSize.Percent
-	if math.Abs(p) > 100 {
-		return errors.Errorf("absolute percentage value %f greater than 100", p)
-	}
-	b := debugCtx.ballastSize.Bytes
-	if p != 0 && b != 0 {
-		return errors.New("expected exactly one of percentage or bytes non-zero, found both")
+	var p float64
+	var b int64
+	if debugCtx.ballastSize.IsPercent() {
+		p = debugCtx.ballastSize.Percent()
+		if math.Abs(p) > 100 {
+			return errors.Errorf("absolute percentage value %f greater than 100", p)
+		}
+	} else if debugCtx.ballastSize.IsBytes() {
+		b = debugCtx.ballastSize.Bytes()
 	}
 	switch {
 	case p > 0:

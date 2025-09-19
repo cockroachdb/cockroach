@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -58,7 +59,7 @@ func TestReplicaCollection(t *testing.T) {
 	defer listenerReg.Close()
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			StoreSpecs: []base.StoreSpec{{Type: storageconfig.InMemoryStore}},
 			Insecure:   true,
 			Knobs: base.TestingKnobs{
 				LOQRecovery: &loqrecovery.TestingKnobs{
@@ -129,7 +130,7 @@ func TestStreamRestart(t *testing.T) {
 	var failCount atomic.Int64
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			StoreSpecs: []base.StoreSpec{{Type: storageconfig.InMemoryStore}},
 			Insecure:   true,
 			Knobs: base.TestingKnobs{
 				LOQRecovery: &loqrecovery.TestingKnobs{
@@ -749,7 +750,7 @@ func prepTestCluster(
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},

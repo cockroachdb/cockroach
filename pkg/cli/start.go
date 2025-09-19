@@ -199,7 +199,7 @@ func initTempStorageConfig(
 	specIdxDisk := -1
 	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
-		if spec.InMemory {
+		if spec.InMemory() {
 			continue
 		}
 		if spec.IsEncrypted() && specIdxEncrypted == -1 {
@@ -232,7 +232,7 @@ func initTempStorageConfig(
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
 	var tempStorePercentageResolver percentResolverFunc
-	if !useStore.InMemory {
+	if !useStore.InMemory() {
 		dir := useStore.Path
 		// Create the store dir, if it doesn't exist. The dir is required to exist
 		// by diskPercentResolverFactory.
@@ -257,7 +257,7 @@ func initTempStorageConfig(
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
-		if startCtx.tempDir == "" && useStore.InMemory {
+		if startCtx.tempDir == "" && useStore.InMemory() {
 			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 		} else {
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
@@ -287,7 +287,7 @@ func initTempStorageConfig(
 	}
 	tempStorageConfig.Path = tmpPath
 
-	if useStore.InMemory {
+	if useStore.InMemory() {
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
 			// Remove the temp directory directly since there is no record file.

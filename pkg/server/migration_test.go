@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -304,7 +305,7 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	const numStores = 3
 	var storeSpecs []base.StoreSpec
 	for i := 0; i < numStores; i++ {
-		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+		storeSpecs = append(storeSpecs, base.StoreSpec{Type: storageconfig.InMemoryStore})
 	}
 
 	intercepted := 0

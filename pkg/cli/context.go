@@ -470,7 +470,7 @@ func setDebugContextDefaults() {
 	debugCtx.sizes = false
 	debugCtx.replicated = false
 	debugCtx.inputFile = ""
-	debugCtx.ballastSize = storageconfig.Size{Bytes: 1000000000}
+	debugCtx.ballastSize = storageconfig.BytesSize(1000000000)
 	debugCtx.maxResults = 0
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false

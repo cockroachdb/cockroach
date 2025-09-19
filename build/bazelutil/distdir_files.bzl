@@ -1047,6 +1047,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/go.uber.org/multierr/org_uber_go_multierr-v1.7.0.zip": "abee21bbd1cb62b0721680430ef8e098717299d10b4382876b9aa40664e6556c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/go.uber.org/tools/org_uber_go_tools-v0.0.0-20190618225709-2cfd321de3ee.zip": "988dba9c5074080240d33d98e8ce511532f728698db7a9a4ac316c02c94030d6",
     "https://storage.googleapis.com/cockroach-godeps/gomod/go.uber.org/zap/org_uber_go_zap-v1.19.0.zip": "6437824258873fed421b7975b8e4cafd1be80cdc15e553beaa887b499dd01420",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/go.yaml.in/yaml/v4/in_yaml_go_yaml_v4-v4.0.0-rc.2.zip": "271496306084412b0d34bfb9a1d13a3ac487836070f485674be2a2ab0b44593b",
     "https://storage.googleapis.com/cockroach-godeps/gomod/goji.io/io_goji-v2.0.2+incompatible.zip": "1ea69b28e356cb91381ce2339004fcf144ad1b268c9e3497c9ef304751ae0bb3",
     "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/arch/org_golang_x_arch-v0.0.0-20180920145803-b19384d3c130.zip": "9f67b677a3fefc503111d9aa7df8bacd2677411b0fcb982eb1654aa6d14cc3f8",
     "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/crypto/org_golang_x_crypto-v0.41.0.zip": "7da981b09d79d021f79ea2953637a85e3c72e43fc88b6a3230e7976fbbeec2de",

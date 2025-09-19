@@ -804,7 +804,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 		path := filepath.Join(dir, "testserver", strconv.Itoa(i))
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs:      knobs,
-			StoreSpecs: []base.StoreSpec{{InMemory: false, Path: path}},
+			StoreSpecs: []base.StoreSpec{{Path: path}},
 		}
 	}
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{

@@ -10500,6 +10500,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "in_yaml_go_yaml_v4",
+        build_file_proto_mode = "disable_global",
+        importpath = "go.yaml.in/yaml/v4",
+        sha256 = "271496306084412b0d34bfb9a1d13a3ac487836070f485674be2a2ab0b44593b",
+        strip_prefix = "go.yaml.in/yaml/v4@v4.0.0-rc.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.yaml.in/yaml/v4/in_yaml_go_yaml_v4-v4.0.0-rc.2.zip",
+        ],
+    )
+    go_repository(
         name = "io_etcd_go_bbolt",
         build_file_proto_mode = "disable_global",
         importpath = "go.etcd.io/bbolt",

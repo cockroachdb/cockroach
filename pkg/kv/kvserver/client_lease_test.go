@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -933,7 +934,7 @@ func TestLeaseholderRelocate(t *testing.T) {
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -1137,7 +1138,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -1312,7 +1313,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -1960,7 +1961,7 @@ func TestLeaseStartTimeIsLargerThanPrevLeaseEndTimeAfterRestart(t *testing.T) {
 					},
 					StoreSpecs: []base.StoreSpec{
 						{
-							InMemory:    true,
+							Type:        storageconfig.InMemoryStore,
 							StickyVFSID: "test",
 						},
 					},
