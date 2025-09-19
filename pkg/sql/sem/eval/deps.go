@@ -765,6 +765,20 @@ type StmtDiagnosticsRequestInsertFunc func(
 	username string,
 ) error
 
+// TxnDiagnosticsRequestInsertFunc is an interface embedded in EvalCtx that can
+// be used by the builtins to insert a transaction diagnostics request. This
+// interface is introduced to avoid circular dependency.
+type TxnDiagnosticsRequestInsertFunc func(
+	ctx context.Context,
+	txnFingerprintId uint64,
+	stmtFingerprintIds []uint64,
+	username string,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+	redacted bool,
+) (int, error)
+
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME
 // clause.
 type AsOfSystemTime struct {

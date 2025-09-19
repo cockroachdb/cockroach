@@ -205,7 +205,7 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := registry.InsertTxnRequest(
+			_, err := registry.InsertTxnRequest(
 				ctx,
 				uint64(i),
 				[]uint64{1111, 2222, 3333},
@@ -417,7 +417,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 		row.Scan(&dbTxnFingerprintBytes, &dbTxnFingerprint, pq.Array(&dbStmtFingerprintIdsBytes), &dbCollectedAt, &dbRequestCompleted)
 
 		require.Equal(t, request.txnFingerprintId, toUint64(t, dbTxnFingerprintBytes), "transaction fingerprint ID should match")
-		require.Equal(t, request.stmtFingerprintIds, toUint64Slice(t, dbStmtFingerprintIdsBytes), "statement fingerprint IDs should match")
+		require.Equal(t, request.stmtFingerprintIds, ToUint64Slice(t, dbStmtFingerprintIdsBytes), "statement fingerprint IDs should match")
 		require.Contains(t, dbTxnFingerprint, req1.fingerprint, "transaction fingerprint string should contain statement 1 fingerprint")
 		require.Contains(t, dbTxnFingerprint, req2.fingerprint, "transaction fingerprint string should contain statement 2 fingerprint")
 		require.True(t, dbRequestCompleted, "request should be completed")
@@ -471,7 +471,7 @@ func toUint64(t *testing.T, bytes []byte) uint64 {
 	return fpId
 }
 
-func toUint64Slice(t *testing.T, bytes [][]byte) []uint64 {
+func ToUint64Slice(t *testing.T, bytes [][]byte) []uint64 {
 	t.Helper()
 	var ids []uint64
 	for _, b := range bytes {
@@ -509,7 +509,7 @@ func checkDatabaseForRequest(
 	row.Scan(&txnFingerprintBytes,
 		&minExecutionLatencyNanos, &expiresAt, &samplingProbability, &redacted, &username, pq.Array(&statementFpIdBytes))
 
-	statementFpIds = toUint64Slice(t, statementFpIdBytes)
+	statementFpIds = ToUint64Slice(t, statementFpIdBytes)
 
 	actualRequest := TxnRequest{
 		txnFingerprintId:   toUint64(t, txnFingerprintBytes),

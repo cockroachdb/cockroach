@@ -1170,6 +1170,7 @@ func (s *Server) newConnExecutor(
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 			execType:                     executorType,
+			txnInstrumentationHelper:     txnInstrumentationHelper{TxnDiagnosticsRecorder: s.cfg.TxnDiagnosticsRecorder},
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
@@ -1194,6 +1195,7 @@ func (s *Server) newConnExecutor(
 		executorType:              executorType,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
+		txnDiagnosticsRecorder:    s.cfg.TxnDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
 		txnIDCacheWriter:          s.txnIDCache,
 		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
@@ -1870,6 +1872,7 @@ type connExecutor struct {
 	// stmtDiagnosticsRecorder is used to track which queries need to have
 	// information collected.
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
+	txnDiagnosticsRecorder  *stmtdiagnostics.TxnRegistry
 
 	// indexUsageStats is used to track index usage stats.
 	indexUsageStats *idxusage.LocalIndexUsageStats
@@ -3827,6 +3830,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ConsistencyChecker:               p.execCfg.ConsistencyChecker,
 			RangeProber:                      p.execCfg.RangeProber,
 			StmtDiagnosticsRequestInserter:   ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
+			TxnDiagnosticsRequestInserter:    ex.server.cfg.TxnDiagnosticsRecorder.InsertTxnRequest,
 			CatalogBuiltins:                  &p.evalCatalogBuiltins,
 			QueryCancelKey:                   ex.queryCancelKey,
 			DescIDGenerator:                  ex.getDescIDGenerator(),

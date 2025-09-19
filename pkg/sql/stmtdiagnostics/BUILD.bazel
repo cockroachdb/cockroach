@@ -28,7 +28,7 @@ go_library(
 
 go_test(
     name = "stmtdiagnostics_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "main_test.go",
         "statement_diagnostics_helpers_test.go",
@@ -37,6 +37,7 @@ go_test(
         "txn_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
+    exec_properties = {"test.Pool": "large"},
     tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
@@ -53,6 +54,7 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/isql",
         "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlstats",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
