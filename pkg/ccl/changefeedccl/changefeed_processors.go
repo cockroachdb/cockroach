@@ -2407,12 +2407,11 @@ func newSaveRateLimiter(
 // canSave returns whether enough time has passed to save progress again.
 func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 	interval := l.config.interval()
-	if interval == 0 {
+	if interval <= 0 {
 		return false
 	}
 	if l.config.jitter != nil {
-		jitter := l.config.jitter()
-		if jitter > 0 {
+		if jitter := l.config.jitter(); jitter > 0 {
 			if maxJitter := jitter * float64(interval); maxJitter > 0 {
 				interval += time.Duration(rand.Int63n(int64(maxJitter)))
 			}
