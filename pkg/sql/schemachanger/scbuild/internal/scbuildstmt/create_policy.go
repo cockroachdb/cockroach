@@ -204,9 +204,9 @@ func upsertPolicyExpressions(
 			} else {
 				// If we aren't dropping the old expression, we need to keep track of
 				// the dependencies in case we replace PolicyDeps.
-				usesTypeIDs = catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...)
-				usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
-				usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
+				usesTypeIDs = usesTypeIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...))
+				usesRelationIDs = usesRelationIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...))
+				usesFunctionIDs = usesFunctionIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...))
 			}
 		}
 	})
@@ -217,9 +217,9 @@ func upsertPolicyExpressions(
 			PolicyID:   policyID,
 			Expression: *expr,
 		})
-		usesTypeIDs = catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...)
-		usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
-		usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
+		usesTypeIDs = usesTypeIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...))
+		usesRelationIDs = usesRelationIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...))
+		usesFunctionIDs = usesFunctionIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...))
 	}
 
 	policyElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
@@ -230,9 +230,9 @@ func upsertPolicyExpressions(
 			} else {
 				// If we aren't dropping the old expression, we need to keep track of
 				// the dependencies in case we replace PolicyDeps.
-				usesTypeIDs = catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...)
-				usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
-				usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
+				usesTypeIDs = usesTypeIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...))
+				usesRelationIDs = usesRelationIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...))
+				usesFunctionIDs = usesFunctionIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...))
 			}
 		}
 	})
