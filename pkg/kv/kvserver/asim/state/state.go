@@ -85,7 +85,7 @@ type State interface {
 	LeaseholderStore(RangeID) (Store, bool)
 	// AddNode modifies the state to include one additional node. This cannot
 	// fail. The new Node is returned.
-	AddNode() Node
+	AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node
 	// SetNodeLocality sets the locality of the node with ID NodeID to be the
 	// locality given.
 	SetNodeLocality(NodeID, roachpb.Locality)

@@ -25,7 +25,7 @@ import (
 
 func TestStateUpdates(t *testing.T) {
 	s := NewState(config.DefaultSimulationSettings())
-	node := s.AddNode()
+	node := s.AddNode(-1, roachpb.Locality{})
 	s.AddStore(node.NodeID())
 	require.Equal(t, 1, len(s.Nodes()))
 	require.Equal(t, 1, len(s.Stores()))
@@ -39,7 +39,7 @@ func TestRangeSplit(t *testing.T) {
 	k1 := MinKey
 	r1 := s.rangeFor(k1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 
 	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
@@ -126,7 +126,7 @@ func TestValidTransfer(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -159,7 +159,7 @@ func TestTransferLease(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -187,7 +187,7 @@ func TestValidReplicaTarget(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -227,7 +227,7 @@ func TestAddReplica(t *testing.T) {
 	_, r1, _ := s.SplitRange(1)
 	_, r2, _ := s.SplitRange(2)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -249,7 +249,7 @@ func TestAddReplica(t *testing.T) {
 func TestWorkloadApply(t *testing.T) {
 	s := NewState(config.DefaultSimulationSettings())
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 	s3, _ := s.AddStore(n1.NodeID())
@@ -299,9 +299,9 @@ func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 	s := NewState(settings)
 	start := settings.StartTime
 
-	n1 := s.AddNode()
-	n2 := s.AddNode()
-	n3 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
+	n2 := s.AddNode(-1, roachpb.Locality{})
+	n3 := s.AddNode(-1, roachpb.Locality{})
 	k1 := Key(100)
 	qps := 1000
 	s1, _ := s.AddStore(n1.NodeID())
@@ -532,7 +532,7 @@ func TestSetSpanConfig(t *testing.T) {
 
 	setupState := func() State {
 		s := newState(settings)
-		node := s.AddNode()
+		node := s.AddNode(-1, roachpb.Locality{})
 		_, ok := s.AddStore(node.NodeID())
 		require.True(t, ok)
 
