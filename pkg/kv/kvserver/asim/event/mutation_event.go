@@ -127,7 +127,6 @@ func (ae AddNodeEvent) Func() EventFunc {
 		// TDOO(wenyihu6): should we change AddNode to take in
 		var locality roachpb.Locality
 		if ae.LocalityString != "" {
-			var locality roachpb.Locality
 			if err := locality.Set(ae.LocalityString); err != nil {
 				panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
 			}
