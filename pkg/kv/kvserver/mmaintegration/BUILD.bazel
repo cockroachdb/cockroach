@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

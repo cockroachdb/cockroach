@@ -185,7 +185,8 @@ type TransferLeaseOptions struct {
 	AllowUninitializedCandidates bool
 	// LoadDimensions declares the load dimensions to use when the Goal is
 	// LoadConvergence.
-	LoadDimensions []load.Dimension
+	LoadDimensions       []load.Dimension
+	ShouldConsultWithMMA bool
 }
 
 // LeaseTransferOutcome represents the result of shedLease().

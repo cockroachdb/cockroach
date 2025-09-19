@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -327,6 +328,7 @@ type ScorerOptions interface {
 	getIOOverloadOptions() IOOverloadOptions
 	// getDiskOptions returns the scorer options for disk fullness.
 	getDiskOptions() DiskCapacityOptions
+	isInConflictWithMMA(candidate roachpb.StoreID, candidateSL storepool.StoreList) bool
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -383,6 +385,10 @@ func (bo BaseScorerOptions) getDiskOptions() DiskCapacityOptions {
 
 func (bo BaseScorerOptions) deterministicForTesting() bool {
 	return bo.Deterministic
+}
+
+func (bo BaseScorerOptions) isInConflictWithMMA(_ roachpb.StoreID, _ storepool.StoreList) bool {
+	return false
 }
 
 // maybeJitterStoreStats returns the provided store list since that is the
@@ -568,6 +574,19 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 		return 1
 	}
 	return 0
+}
+
+type LoadAwareRangeCountScorerOptions struct {
+	*RangeCountScorerOptions
+	*mmaintegration.AllocatorSync
+}
+
+var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
+
+func (lr LoadAwareRangeCountScorerOptions) isInConflictWithMMA(
+	cand roachpb.StoreID, candidateSL storepool.StoreList,
+) bool {
+	return lr.IsInConflictWithMMA(cand, candidateSL)
 }
 
 // LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
@@ -1823,6 +1842,9 @@ func rankedCandidateListForRebalancing(
 			// We handled the possible candidates for removal above. Don't process
 			// anymore here.
 			if _, ok := existingStores[cand.store.StoreID]; ok {
+				continue
+			}
+			if options.isInConflictWithMMA(cand.store.StoreID, comparable.candidateSL) {
 				continue
 			}
 			// We already computed valid, necessary, fullDisk, and diversityScore
