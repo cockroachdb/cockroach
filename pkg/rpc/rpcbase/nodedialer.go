@@ -8,12 +8,11 @@ package rpcbase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"storj.io/drpc"
 )
@@ -25,19 +24,15 @@ var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTA
 // usage (for example, does not implement authorization checks).
 var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"rpc.experimental_drpc.enabled",
+	"rpc.drpc.enabled",
 	"if true, use drpc to execute Batch RPCs (instead of gRPC)",
 	envExperimentalDRPCEnabled,
-	settings.WithValidateBool(func(values *settings.Values, b bool) error {
-		// drpc support is highly experimental and should not be enabled in production.
-		// Since authorization is not implemented, we only even host the server if the
-		// env var is set or it's a CRDB test build. Consequently, these are prereqs
-		// for setting the cluster setting.
-		if b && !(envExperimentalDRPCEnabled || buildutil.CrdbTestBuild) {
-			return errors.New("experimental drpc is not allowed in this environment")
-		}
-		return nil
-	}))
+	settings.WithRetiredName("rpc.experimental_drpc.enabled"))
+
+func DRPCEnabled(ctx context.Context, st *cluster.Settings) bool {
+	return st.Version.IsActive(ctx, clusterversion.V25_4_DRPCSupport) &&
+		ExperimentalDRPCEnabled.Get(&st.SV)
+}
 
 // TODODRPC is a marker to identify each RPC client creation site that needs to
 // be updated to support DRPC.
@@ -70,10 +65,8 @@ func DialRPCClient[C any](
 	drpcClientFn func(drpc.Conn) C,
 	st *cluster.Settings,
 ) (C, error) {
-	useDRPC := ExperimentalDRPCEnabled.Get(&st.SV)
-
 	var nilC C
-	if !TODODRPC && !useDRPC {
+	if !TODODRPC && !DRPCEnabled(ctx, st) {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nilC, err
@@ -99,10 +92,8 @@ func DialRPCClientNoBreaker[C any](
 	drpcClientFn func(drpc.Conn) C,
 	st *cluster.Settings,
 ) (C, error) {
-	useDRPC := ExperimentalDRPCEnabled.Get(&st.SV)
-
 	var nilC C
-	if !TODODRPC && !useDRPC {
+	if !TODODRPC && !DRPCEnabled(ctx, st) {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
 		if err != nil {
 			return nilC, err
