@@ -1,13 +1,32 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "history",
-    srcs = ["history.go"],
+    srcs = [
+        "history.go",
+        "thrashing.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "@com_github_montanaflynn_stats//:stats",
+    ],
+)
+
+go_test(
+    name = "history_test",
+    srcs = ["thrashing_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":history"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "//pkg/util/randutil",
+        "@com_github_guptarohit_asciigraph//:asciigraph",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

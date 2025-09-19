@@ -1,0 +1,17 @@
+echo
+----
+An almost monotonic function (the final outlier dominates total variation),
+so it is assigned a small thrashing percentage.
+input: [1 3 2 1 2005]
+ 2005 ┤                                      ╭
+ 1805 ┤                                     ╭╯
+ 1604 ┤                                    ╭╯
+ 1404 ┤                                   ╭╯
+ 1203 ┤                                  ╭╯
+ 1003 ┤                                 ╭╯
+  803 ┤                                ╭╯
+  602 ┤                               ╭╯
+  402 ┤                              ╭╯
+  201 ┤                             ╭╯
+    1 ┼─────────────────────────────╯
+tdtv=0.50% (10.0/2004.0) uptv=2006.0 dntv=2.0 runs=3

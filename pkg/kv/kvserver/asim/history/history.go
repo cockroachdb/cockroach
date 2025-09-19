@@ -47,6 +47,72 @@ func (h *History) PerStoreValuesAt(idx int, stat string) []float64 {
 	return values
 }
 
+// ThrashingForStat returns a per-store slice of thrashing measurements for the
+// provided stat.
+func (h *History) ThrashingForStat(stat string) ThrashingSlice {
+	if len(h.Recorded) == 0 {
+		return nil
+	}
+	numStores := len(h.PerStoreValuesAt(0, stat))
+	if numStores == 0 {
+		return nil
+	}
+
+	vsByStore := make([][]float64, numStores)
+	for tick := range h.Recorded {
+		for storeIdx, v := range h.PerStoreValuesAt(tick, stat) {
+			vsByStore[storeIdx] = append(vsByStore[storeIdx], v)
+		}
+	}
+
+	ths := make(ThrashingSlice, numStores)
+	for storeIdx := range vsByStore {
+		// HACK: we remove leading zeroes before computeThrasing. This works
+		// around the fact that some timeseries only show sensible values after an
+		// initial period of inactivity. For example, CPU usage is zero until the
+		// first stats tick. Without this hack, the large initial jump from zero to
+		// the first value would be interpreted as variation.
+		th := computeThrashing(stripLeaderingZeroes(vsByStore[storeIdx]))
+		ths[storeIdx] = th
+	}
+	ths.normalize()
+	return ths
+}
+
+func stripLeaderingZeroes(vs []float64) []float64 {
+	for i := range vs {
+		if vs[i] == 0 {
+			continue
+		}
+		return vs[i:]
+	}
+	return nil
+}
+
+// Thrashing returns a string representation of the thrashing for the given
+// stat.
+func (h *History) Thrashing(stat string) string {
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "[")
+
+	ths := h.ThrashingForStat(stat)
+	tvpcts := make([]float64, len(ths))
+	for i, th := range ths {
+		if i > 0 {
+			_, _ = fmt.Fprintf(&buf, ", ")
+		}
+		tvpct := th.TDTVPercent()
+		_, _ = fmt.Fprintf(&buf, "s%d=%.0f%%", i+1, tvpct)
+		tvpcts[i] = tvpct
+	}
+	_, _ = fmt.Fprintf(&buf, "] ")
+
+	sum, _ := stats.Sum(tvpcts)
+	_, _ = fmt.Fprintf(&buf, " (sum=%.0f%%)", sum)
+
+	return buf.String()
+}
+
 // ShowRecordedValueAt returns a string representation of the recorded values.
 // The returned boolean is false if (and only if) the recorded values were all
 // zero.
