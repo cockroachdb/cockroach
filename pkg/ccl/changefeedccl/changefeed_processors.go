@@ -2448,8 +2448,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
 				"since last save and %s is set to %s because average duration to save was %s "+
 				"and further saving is disabled until that much time elapses",
-				l.config.name, elapsed, l.config.intervalName(),
-				interval, l.avgSaveDuration)
+				l.config.name, elapsed, l.config.intervalName(), interval, l.avgSaveDuration)
 		}
 		return false
 	}
