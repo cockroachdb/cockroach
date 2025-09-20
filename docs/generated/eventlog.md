@@ -3421,25 +3421,20 @@ logged whenever a BACKUP and RESTORE job completes or fails.
 | `TargetScope` | TargetScope is the largest scope of the targets that the user is backing up or restoring based on the following order: table < schema < database < full cluster. | no |
 | `IsMultiregionTarget` | IsMultiregionTarget is true if any of the targets contain objects with multi-region primitives. | no |
 | `TargetCount` | TargetCount is the number of targets the in the BACKUP/RESTORE. | no |
-| `DestinationSubdirType` | DestinationSubdirType is - latest: if using the latest subdir - standard: if using a date-based subdir - custom: if using a custom subdir that's not date-based | no |
 | `DestinationStorageTypes` | DestinationStorageTypes are the types of storage that the user is backing up to or restoring from. | no |
 | `DestinationAuthTypes` | DestinationAuthTypes are the types of authentication methods that the user is using to access the destination storage. | no |
 | `IsLocalityAware` | IsLocalityAware indicates if the BACKUP or RESTORE is locality aware. | no |
-| `AsOfInterval` | AsOfInterval is the time interval in nanoseconds between the statement timestamp and the timestamp resolved by the AS OF SYSTEM TIME expression. The interval is expressed in nanoseconds. | no |
 | `WithRevisionHistory` | WithRevisionHistory is true if the BACKUP includes revision history. | no |
 | `HasEncryptionPassphrase` | HasEncryptionPassphrase is true if the user provided an encryption passphrase to encrypt/decrypt their backup. | no |
 | `KMSType` | KMSType is the type of KMS the user is using to encrypt/decrypt their backup. | no |
 | `KMSCount` | KMSCount is the number of KMS the user is using. | no |
 | `Options` | Options contain all the names of the options specified by the user in the BACKUP or RESTORE statement. For options that are accompanied by a value, only those with non-empty values will be present.<br><br>It's important to note that there are no option values anywhere in the event payload. Future changes to telemetry should refrain from adding values to the payload unless they are properly redacted. | no |
-| `DebugPauseOn` | DebugPauseOn is the type of event that the restore should pause on for debugging purposes. Currently only "error" is supported. | no |
 | `JobID` | JobID is the ID of the BACKUP/RESTORE job. | no |
 | `ResultStatus` | ResultStatus indicates whether the job succeeded or failed. | no |
 | `ErrorText` | ErrorText is the text of the error that caused the job to fail. | partially |
 | `RecurringCron` | RecurringCron is the crontab for the incremental backup. | no |
 | `FullBackupCron` | FullBackupCron is the crontab for the full backup. | no |
 | `CustomFirstRunTime` | CustomFirstRunTime is the timestamp for the user configured first run time. Expressed as nanoseconds since the Unix epoch. | no |
-| `OnExecutionFailure` | OnExecutionFailure describes the desired behavior if the schedule fails to execute. | no |
-| `OnPreviousRunning` | OnPreviousRunning describes the desired behavior if the previously scheduled BACKUP is still running. | no |
 | `IgnoreExistingBackup` | IgnoreExistingBackup is true iff the BACKUP schedule should still be created even if a backup is already present in its destination. | no |
 | `ApplicationName` | The application name for the session where recovery event was created. | no |
 | `NumRows` | NumRows is the number of rows successfully imported, backed up or restored. | no |

@@ -1953,11 +1953,6 @@ func doRestorePlan(
 		}
 	}
 
-	var asOfInterval int64
-	if !endTime.IsEmpty() {
-		asOfInterval = endTime.WallTime - p.ExtendedEvalContext().StmtTimestamp.UnixNano()
-	}
-
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
@@ -2133,7 +2128,7 @@ func doRestorePlan(
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-			descsByTablePattern, restoreDBs, asOfInterval, p.SessionData().ApplicationName)
+			descsByTablePattern, restoreDBs, p.SessionData().ApplicationName)
 		return nil
 	}
 
@@ -2180,7 +2175,7 @@ func doRestorePlan(
 	// execution.
 	p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-		descsByTablePattern, restoreDBs, asOfInterval, p.SessionData().ApplicationName)
+		descsByTablePattern, restoreDBs, p.SessionData().ApplicationName)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}
@@ -2200,20 +2195,13 @@ func collectRestoreTelemetry(
 	restoreStmt *tree.Restore,
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
-	asOfInterval int64,
 	applicationName string,
 ) {
 	telemetry.Count("restore.total.started")
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		telemetry.Count("restore.full-cluster")
 	}
-	if restoreStmt.Subdir == nil {
-		telemetry.Count("restore.deprecated-subdir-syntax")
-	} else {
-		telemetry.Count("restore.collection")
-	}
-
-	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, asOfInterval, restoreStmt.Options,
+	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, restoreStmt.Options,
 		descsByTablePattern, restoreDBs, applicationName)
 }
 
