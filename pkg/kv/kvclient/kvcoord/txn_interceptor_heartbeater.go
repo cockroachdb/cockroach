@@ -220,6 +220,21 @@ func (h *txnHeartbeater) SendLocked(
 			// Put the anchor also in the ba's copy of the txn, since this batch
 			// was prepared before we had an anchor.
 			ba.Txn.Key = anchor
+
+			// Moreover, if we're dealing with a read committed transaction, we can
+			// also forward the transaction's MinTimestamp, as no intents have been
+			// written yet. This has the benefit of allowing the transaction to avoid
+			// spurious errors from the timestamp cache when trying to create its
+			// transaction record. However, doing so also requires us to push the
+			// transaction's write timestamp forward -- this has the tradeoff of
+			// necessitating a read refresh to validate any prior reads are still
+			// valid before committing for Serializable transactions. The benefits are
+			// more clear cut for read committed transactions.
+			//
+			// TODO(arul): Actually limit this to just read committed transactions.
+			now := h.clock.Now()
+			ba.Txn.MinTimestamp.Forward(now)
+			ba.Txn.WriteTimestamp.Forward(now)
 		}
 
 		// Start the heartbeat loop if it has not already started.
