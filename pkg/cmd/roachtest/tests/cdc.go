@@ -1040,6 +1040,7 @@ type cdcCheckpointType int
 const (
 	cdcNormalCheckpoint cdcCheckpointType = iota
 	cdcShutdownCheckpoint
+	cdcFrontierPersistence
 )
 
 // runCDCInitialScanRollingRestart runs multiple initial-scan-only changefeeds
@@ -1087,8 +1088,9 @@ func runCDCInitialScanRollingRestart(
 	// Setup a large table with 1M rows and a small table with 5 rows.
 	// Keep ranges off n1 so that our plans use 2, 3, and 4.
 	const (
-		largeRowCount = 1000000
-		smallRowCount = 5
+		largeRowCount   = 1000000
+		largeSplitCount = 500
+		smallRowCount   = 5
 	)
 	t.L().Printf("setting up test data...")
 	setupStmts := []string{
@@ -1097,24 +1099,31 @@ func runCDCInitialScanRollingRestart(
 		`ALTER TABLE large SCATTER`,
 		fmt.Sprintf(`CREATE TABLE small (id PRIMARY KEY) AS SELECT generate_series(%d, %d)`, largeRowCount+1, largeRowCount+smallRowCount),
 		`ALTER TABLE small SCATTER`,
+		// Split some bigger chunks up to scatter it a bit more.
+		fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount/4),
+		`ALTER TABLE large SCATTER`,
+		// Finish splitting, so that drained ranges spread out evenly.
+		fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount),
+		`ALTER TABLE large SCATTER`,
 	}
 	switch checkpointType {
 	case cdcNormalCheckpoint:
 		setupStmts = append(setupStmts,
-			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '5s'`,
 			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
 		)
 	case cdcShutdownCheckpoint:
-		const largeSplitCount = 5
 		setupStmts = append(setupStmts,
 			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
 			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'true'`,
-			// Split some bigger chunks up to scatter it a bit more.
-			fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount/4),
-			`ALTER TABLE large SCATTER`,
-			// Finish splitting, so that drained ranges spread out evenly.
-			fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount),
-			`ALTER TABLE large SCATTER`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
+		)
+	case cdcFrontierPersistence:
+		setupStmts = append(setupStmts,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
+			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
 		)
 	}
 	for _, s := range setupStmts {
@@ -1180,7 +1189,9 @@ func runCDCInitialScanRollingRestart(
 			t.L().Printf("starting changefeed %d...", i)
 			var job int
 			if err := db.QueryRow(
-				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE large, small INTO 'webhook-%s/?insecure_tls_skip_verify=true' WITH initial_scan='only'", sinkURL),
+				fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE large, small
+INTO 'webhook-%s/?insecure_tls_skip_verify=true'
+WITH initial_scan='only', min_checkpoint_frequency='1s'`, sinkURL),
 			).Scan(&job); err != nil {
 				t.Fatal(err)
 			}
@@ -2137,6 +2148,17 @@ func registerCDC(r registry.Registry) {
 		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcShutdownCheckpoint)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/initial-scan-rolling-restart/frontier-persistence",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          30 * time.Minute,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCInitialScanRollingRestart(ctx, t, c, cdcFrontierPersistence)
 		},
 	})
 	r.Add(registry.TestSpec{
