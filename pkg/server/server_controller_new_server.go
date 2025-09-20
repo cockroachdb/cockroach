@@ -329,17 +329,19 @@ func makeSharedProcessTenantServerConfig(
 
 	tempStorageCfg := base.InheritTempStorageConfig(ctx, st, kvServerCfg.SQLConfig.TempStorageConfig)
 	if !tempStorageCfg.InMemory {
-		useStore := tempStorageCfg.Spec
-		// TODO(knz): Make tempDir configurable.
-		tempDir := useStore.Path
-		var unlockDirFn func()
-		if tempStorageCfg.Path, unlockDirFn, err = fs.CreateTempDir(tempDir, TempDirPrefix); err != nil {
+		// We create another temp directory alongside the existing one.
+		parentDir := filepath.Dir(tempStorageCfg.Path)
+		if parentDir == "" {
+			return BaseConfig{}, SQLConfig{}, errors.Newf("invalid temp storage config path %q", tempStorageCfg.Path)
+		}
+		tmpDir, unlockDirFn, err := fs.CreateTempDir(parentDir, TempDirPrefix)
+		if err != nil {
 			return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 		}
 		stopper.AddCloser(stop.CloserFn(unlockDirFn))
-		if useStore.Path != "" {
-			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			if err := fs.RecordTempDir(recordPath, tempStorageCfg.Path); err != nil {
+		tempStorageCfg.Path = tmpDir
+		if tempStorageCfg.TempDirsRecordPath != "" {
+			if err := fs.RecordTempDir(tempStorageCfg.TempDirsRecordPath, tempStorageCfg.Path); err != nil {
 				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not record temp dir")
 			}
 		}

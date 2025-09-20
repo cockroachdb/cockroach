@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -904,19 +906,25 @@ type TempStorageConfig struct {
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
-	// Path is the filepath of the temporary subdirectory created for
-	// the temp storage.
+	// Path is the filepath of the temporary subdirectory created for the temp
+	// storage. Empty if InMemory is true.
 	Path string
 	// Mon will be used by the temp storage to register all its capacity requests.
 	// It can be used to limit the disk or memory that temp storage is allowed to
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
-	// Spec stores the StoreSpec this TempStorageConfig will use.
-	Spec StoreSpec
+	// Encryption is set if encryption is enabled. We use the same encryption
+	// options as the store we chose for temp storage.
+	Encryption *storageconfig.EncryptionOptions
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
+	// If set, TempDirsRecordPath is the path to a temp-dirs-record.txt file in
+	// one of the stores (see server.TempDirsRecordFilename). Used when we create
+	// a new temporary storage directory for a new shared-process tenant. Empty if
+	// InMemory is false.
+	TempDirsRecordPath string
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
@@ -948,32 +956,29 @@ type ExternalIODirConfig struct {
 	EnableNonAdminImplicitAndArbitraryOutbound bool
 }
 
-// TempStorageConfigFromEnv creates a TempStorageConfig.
-// If parentDir is not specified and the specified store is in-memory,
-// then the temp storage will also be in-memory.
-func TempStorageConfigFromEnv(
-	ctx context.Context,
-	st *cluster.Settings,
-	useStore StoreSpec,
-	parentDir string,
-	maxSizeBytes int64,
-) TempStorageConfig {
-	inMem := parentDir == "" && useStore.InMemory
-	return newTempStorageConfig(ctx, st, inMem, useStore, maxSizeBytes)
-}
-
 // InheritTempStorageConfig creates a new TempStorageConfig using the
 // configuration of the given TempStorageConfig. It assumes the given
 // TempStorageConfig has been fully initialized.
 func InheritTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, parentConfig TempStorageConfig,
 ) TempStorageConfig {
-	return newTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Spec, parentConfig.Mon.Limit())
+	return NewTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Path, parentConfig.Encryption, parentConfig.Mon.Limit(), parentConfig.TempDirsRecordPath)
 }
 
-func newTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
+// NewTempStorageConfig creates a new TempStorageConfig.
+// The path should be empty iff inMemory is true.
+func NewTempStorageConfig(
+	ctx context.Context,
+	st *cluster.Settings,
+	inMemory bool,
+	path string,
+	encryption *storageconfig.EncryptionOptions,
+	maxSizeBytes int64,
+	tempDirsRecordPath string,
 ) TempStorageConfig {
+	if inMemory != (path == "") {
+		log.Dev.Fatalf(ctx, "inMemory (%t) must be true iff path is empty (%q)", inMemory, path)
+	}
 	var monitorName mon.Name
 	if inMemory {
 		monitorName = mon.MakeName("in-mem temp storage")
@@ -988,9 +993,11 @@ func newTempStorageConfig(
 	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
-		InMemory: inMemory,
-		Mon:      monitor,
-		Spec:     useStore,
-		Settings: st,
+		InMemory:           inMemory,
+		Path:               path,
+		Mon:                monitor,
+		Encryption:         encryption,
+		Settings:           st,
+		TempDirsRecordPath: tempDirsRecordPath,
 	}
 }

@@ -35,12 +35,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(
-		ctx,
-		base.DefaultTestTempStorageConfig(st),
-		base.DefaultTestStoreSpec,
-		nil, /* statsCollector */
-	)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	require.NoError(t, err)
 	defer tempEngine.Close()
 	memMonitor := mon.NewMonitor(mon.Options{
