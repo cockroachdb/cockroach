@@ -1312,6 +1312,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// Tell the status server how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
+	sStatus.setTxnDiagnosticsRequester(sqlServer.execCfg.TxnDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
 	// Create a server controller.
@@ -2149,6 +2150,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if err := s.http.setupRoutes(ctx,
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
+		s.admin.adminServer,          /* adminServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */

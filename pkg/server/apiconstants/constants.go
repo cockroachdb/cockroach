@@ -17,6 +17,16 @@ const (
 	// (This is also aliased via /health.)
 	AdminHealth = AdminPrefix + "health"
 
+	// AdminStmtBundle is the URL at which we download statement bundles.
+	// It does not share the admin handler because the implementation
+	// downloads zip files, not gRPC responses.
+	AdminStmtBundle = AdminPrefix + "stmtbundle/{id}"
+
+	// AdminTxnBundle is the URL at which we download transaction bundles.
+	// It does not share the admin handler because the implementation
+	// downloads zip files, not gRPC responses.
+	AdminTxnBundle = AdminPrefix + "txnbundle/{id}"
+
 	// StatusPrefix is the root of the cluster statistics and metrics API.
 	StatusPrefix = "/_status/"
 

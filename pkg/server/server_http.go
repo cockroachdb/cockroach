@@ -151,6 +151,7 @@ func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
+	adminServer *adminServer,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
@@ -205,8 +206,12 @@ func (s *httpServer) setupRoutes(
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
 	var authenticatedGWMux = unauthenticatedGWMux
+	var stmtBundleHandlerFunc = http.HandlerFunc(adminServer.StmtBundleHandler)
+	var txnBundleHandlerFunc = http.HandlerFunc(adminServer.TxnBundleHandler)
 	if !s.cfg.InsecureWebAccess() {
 		authenticatedGWMux = authserver.NewMux(authnServer, authenticatedGWMux, false /* allowAnonymous */)
+		stmtBundleHandlerFunc = authserver.NewMux(authnServer, stmtBundleHandlerFunc, false).ServeHTTP
+		txnBundleHandlerFunc = authserver.NewMux(authnServer, txnBundleHandlerFunc, false).ServeHTTP
 	}
 
 	// Login and logout paths.
@@ -221,6 +226,11 @@ func (s *httpServer) setupRoutes(
 	}
 
 	s.mux.Handle(apiconstants.AdminPrefix, authenticatedGWMux)
+
+	// Handlers for statement diagnostic bundle download. These are special
+	// because they return zip files, not protobufs or JSON.
+	s.mux.Handle(apiconstants.AdminStmtBundle, stmtBundleHandlerFunc)
+	s.mux.Handle(apiconstants.AdminTxnBundle, txnBundleHandlerFunc)
 
 	// The timeseries endpoint, used to produce graphs.
 	s.mux.Handle(ts.URLPrefix, authenticatedGWMux)
