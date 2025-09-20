@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
+	"net/http"
 	"net/url"
 	"path"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/http2"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -105,6 +107,7 @@ type gcsStorage struct {
 	ioConf   base.ExternalIODirConfig
 	prefix   string
 	settings *cluster.Settings
+	metrics  *cloud.Metrics
 }
 
 var _ cloud.ExternalStorage = &gcsStorage{}
@@ -210,7 +213,9 @@ func makeGCSStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create google cloud client")
 	}
-	g.SetRetry(gcs.WithErrorFunc(shouldRetry))
+	g.SetRetry(gcs.WithErrorFunc(func(err error) bool {
+		return shouldRetry(err, args.MetricsRecorder)
+	}))
 	g.SetRetry(gcs.WithPolicy(gcs.RetryAlways))
 	bucket := g.Bucket(conf.Bucket)
 	if conf.BillingProject != `` {
@@ -223,6 +228,7 @@ func makeGCSStorage(
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
 		settings: args.Settings,
+		metrics:  args.MetricsRecorder,
 	}, nil
 }
 
@@ -401,7 +407,7 @@ func (g *gcsStorage) Close() error {
 // https://github.com/googleapis/google-cloud-go/issues/3735
 // https://github.com/googleapis/google-cloud-go/issues/784
 // Remove if this error ever becomes part of the default retry predicate.
-func shouldRetry(err error) bool {
+func shouldRetry(err error, metrics *cloud.Metrics) bool {
 	if defaultShouldRetry(err) {
 		return true
 	}
@@ -413,7 +419,17 @@ func shouldRetry(err error) bool {
 	}
 
 	if e := (errors.Wrapper)(nil); errors.As(err, &e) {
-		return shouldRetry(e.Unwrap())
+		return shouldRetry(e.Unwrap(), metrics)
+	}
+
+	// Check for HTTP 429 (Too Many Requests) errors
+	if e := (*googleapi.Error)(nil); errors.As(err, &e) {
+		if e.Code == http.StatusTooManyRequests {
+			if metrics != nil {
+				metrics.ThrottlingErrors.Inc(1)
+			}
+			return true
+		}
 	}
 
 	return false
