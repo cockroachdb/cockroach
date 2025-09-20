@@ -4415,6 +4415,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedHoistJoinProject(val bool) {
 	m.data.OptimizerUseImprovedHoistJoinProject = val
 }
 
+func (m *sessionDataMutator) SetOptimizerAvoidSuboptimalUnorderedScans(val bool) {
+	m.data.OptimizerAvoidSuboptimalUnorderedScans = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

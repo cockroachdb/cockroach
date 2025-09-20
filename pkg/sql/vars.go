@@ -4402,6 +4402,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`optimizer_avoid_suboptimal_unordered_scans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_avoid_suboptimal_unordered_scans`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_avoid_suboptimal_unordered_scans", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerAvoidSuboptimalUnorderedScans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerAvoidSuboptimalUnorderedScans,
+			), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
