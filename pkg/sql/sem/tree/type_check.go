@@ -1943,6 +1943,9 @@ func (expr *Array) TypeCheck(
 		return nil, err
 	}
 
+	if typ.Family() == types.VoidFamily {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "array of type VOID is not supported")
+	}
 	expr.typ = types.MakeArray(typ)
 	for i := range typedSubExprs {
 		expr.Exprs[i] = typedSubExprs[i]
