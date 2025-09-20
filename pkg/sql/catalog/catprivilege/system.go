@@ -27,7 +27,6 @@ var (
 		catconstants.StatementActivityTableName,
 		catconstants.TransactionActivityTableName,
 		catconstants.PreparedTransactionsTableName,
-		catconstants.InspectErrorsTableName,
 	}
 
 	readWriteSystemTables = []catconstants.SystemTableName{
@@ -82,6 +81,7 @@ var (
 		catconstants.JobsMessageTableName,
 		catconstants.TransactionDiagnosticsRequestsTableName,
 		catconstants.TransactionDiagnosticsTableName,
+		catconstants.InspectErrorsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{

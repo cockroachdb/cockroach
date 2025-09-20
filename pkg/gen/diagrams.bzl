@@ -260,6 +260,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:show_functions.html",
     "//docs/generated/sql/bnf:show_grants.html",
     "//docs/generated/sql/bnf:show_indexes.html",
+    "//docs/generated/sql/bnf:show_inspect_errors.html",
     "//docs/generated/sql/bnf:show_jobs.html",
     "//docs/generated/sql/bnf:show_keys.html",
     "//docs/generated/sql/bnf:show_locality.html",
