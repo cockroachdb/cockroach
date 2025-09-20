@@ -291,8 +291,10 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
-			rangeStats:            newRangeStatsCollector(planInfo.writeProcessorCount),
-			r:                     r,
+			rangeStats: replicationutils.NewAggregateRangeStatsCollector(
+				planInfo.writeProcessorCount,
+			),
+			r: r,
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
@@ -787,7 +789,7 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
-	rangeStats rangeStatsByProcessorID
+	rangeStats replicationutils.AggregateRangeStatsCollector
 
 	lastPartitionUpdate time.Time
 
