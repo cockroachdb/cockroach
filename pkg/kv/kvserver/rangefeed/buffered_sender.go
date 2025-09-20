@@ -59,6 +59,7 @@ type BufferedSender struct {
 		stopped bool
 		buffer  *eventQueue
 	}
+	chunkQ chunkQueue
 
 	// notifyDataC is used to notify the BufferedSender.run goroutine that there
 	// are events to send. Channel is initialised with a buffer of 1 and all writes to it
@@ -83,6 +84,13 @@ func NewBufferedSender(
 	return bs
 }
 
+// FIXME(mxu): for testing only
+// We need to set a max buffer size to properly compare the buffered sender
+// consumption rate properly.
+// Without it, the buffer will grow indefinitely, effectively "soaking up" the
+// latency.
+const MAX_BUFFER_SIZE = 10 * eventQueueChunkSize
+
 // sendBuffered buffers the event before sending it to the underlying
 // gRPC stream. It does not block. sendBuffered will take the
 // ownership of the alloc and release it if the returned error is
@@ -94,6 +102,9 @@ func (bs *BufferedSender) sendBuffered(
 	defer bs.queueMu.Unlock()
 	if bs.queueMu.stopped {
 		return errors.New("stream sender is stopped")
+	}
+	if bs.queueMu.buffer.len() >= MAX_BUFFER_SIZE {
+		return errors.New("buffer is full")
 	}
 	// TODO(wenyihu6): pass an actual context here
 	alloc.Use(context.Background())
@@ -131,10 +142,11 @@ func (bs *BufferedSender) run(
 		case <-bs.notifyDataC:
 			for {
 				e, success := bs.popFront()
-				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				if !success {
 					break
 				}
+				// bs.QueueSize.Add(-1)
+				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				err := bs.sender.Send(e.ev)
 				e.alloc.Release(ctx)
 				if e.ev.Error != nil {
@@ -151,8 +163,23 @@ func (bs *BufferedSender) run(
 // popFront pops the front event from the buffer queue. It returns the event and
 // a boolean indicating if the event was successfully popped.
 func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
+	// first, check if we can use our cached chunk
+	if event, ok := bs.chunkQ.popFront(); ok {
+		return event, true
+	}
+
+	// if not, we need to wait for the mutex
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
+
+	// try to grab a chunk
+	if chunkQ, ok := bs.queueMu.buffer.popChunk(); ok {
+		bs.chunkQ = chunkQ
+		// the chunk has must have at least one value
+		return bs.chunkQ.popFront()
+	}
+
+	// otherwise just grab one
 	event, ok := bs.queueMu.buffer.popFront()
 	return event, ok
 }
@@ -164,6 +191,7 @@ func (bs *BufferedSender) cleanup(ctx context.Context) {
 	defer bs.queueMu.Unlock()
 	bs.queueMu.stopped = true
 	remaining := bs.queueMu.buffer.len()
+	bs.chunkQ.drain(ctx)
 	bs.queueMu.buffer.drain(ctx)
 	bs.metrics.BufferedSenderQueueSize.Dec(remaining)
 }
