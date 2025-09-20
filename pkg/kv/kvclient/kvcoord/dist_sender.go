@@ -1079,35 +1079,48 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 		return kvpb.NewErrorf("empty batch")
 	}
 
-	// Verify that forward and reverse range requests are never in the same
-	// batch. Also verify that the batch with limits contains only specific
-	// requests.
+	// We verify that:
+	//
+	// - Forward and reverse range requests are never in the same batch;
+	// - The batch with limits contains only specific requests; and,
+	// - Put and Delete requests don't occur after a DeleteRange.
+	//
 	var foundForward, foundReverse bool
+	var foundDeleteRange, foundPutOrDelAfterDelRange bool
 	var disallowedReq string
 	for _, req := range ba.Requests {
 		inner := req.GetInner()
 		switch inner.(type) {
 		case *kvpb.ScanRequest, *kvpb.ResolveIntentRangeRequest,
-			*kvpb.DeleteRangeRequest, *kvpb.RevertRangeRequest,
-			*kvpb.ExportRequest, *kvpb.QueryLocksRequest, *kvpb.IsSpanEmptyRequest:
+			*kvpb.RevertRangeRequest, *kvpb.ExportRequest, *kvpb.QueryLocksRequest,
+			*kvpb.IsSpanEmptyRequest:
 			// Accepted forward range requests.
 			foundForward = true
-
+		case *kvpb.DeleteRangeRequest:
+			foundForward = true
+			foundDeleteRange = true
 		case *kvpb.ReverseScanRequest:
 			// Accepted reverse range requests.
 			foundReverse = true
-
+		case *kvpb.DeleteRequest, *kvpb.PutRequest:
+			if foundDeleteRange {
+				foundPutOrDelAfterDelRange = true
+			}
+			// We accept DeleteRequest and PutRequest in batches with limit, so we
+			// don't set disallowedReq.
 		case *kvpb.QueryIntentRequest, *kvpb.EndTxnRequest,
-			*kvpb.GetRequest, *kvpb.ResolveIntentRequest, *kvpb.DeleteRequest, *kvpb.PutRequest:
+			*kvpb.GetRequest, *kvpb.ResolveIntentRequest:
 			// Accepted point requests that can be in batches with limit. No
 			// need to set disallowedReq.
-
 		default:
 			disallowedReq = inner.Method().String()
 		}
 	}
 	if foundForward && foundReverse {
 		return kvpb.NewErrorf("batch contains both forward and reverse requests")
+	}
+	if foundPutOrDelAfterDelRange {
+		return kvpb.NewErrorf("batch contains a Put or Delete after a DeleteRange request")
 	}
 	if (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) && disallowedReq != "" {
 		return kvpb.NewErrorf("batch with limit contains %s request", disallowedReq)
