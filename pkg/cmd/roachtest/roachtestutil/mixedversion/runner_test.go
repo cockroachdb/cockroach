@@ -168,8 +168,8 @@ type testSingleStep struct {
 	runFunc func() error
 }
 
-func (s *testSingleStep) Description() string  { return "testSingleStep" }
-func (*testSingleStep) Background() shouldStop { return nil }
+func (s *testSingleStep) Description(debug bool) string { return "testSingleStep" }
+func (*testSingleStep) Background() shouldStop          { return nil }
 
 func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
 	return tss.runFunc()

@@ -1,7 +1,7 @@
 # Test that user steps are not scheduled until the cluster is
 # upgrading from the minimum supported version.
 
-mixed-version-test predecessors=(21.2.11, 22.1.8, 22.2.3, 23.1.4, 23.2.0) num_upgrades=5 minimum_supported_version=v23.1.0
+mixed-version-test predecessors=(21.2.11, 22.1.8, 22.2.3, 23.1.0, 23.1.4, 23.2.0, 24.1.0, 24.2.1) num_upgrades=5 minimum_supported_version=v23.1.0 enable_skip_version=true
 ----
 ok
 
@@ -28,104 +28,88 @@ ok
 plan
 ----
 Seed:               12345
-Upgrades:           v21.2.11 → v22.1.8 → v22.2.3 → v23.1.4 → v23.2.0 → <current>
+Upgrades:           v22.2.3 → v23.1.0 → v23.1.4 → v23.2.0 → v24.1.0 → v24.3.0 (<current>)
 Deployment mode:    system-only
+Hooks:              bank workload, csv server, initialize bank workload, mixed-version 1, mixed-version 2, validate upgrade
 Plan:
-├── start cluster at version "v21.2.11" (1)
-├── wait for all nodes (:1-4) to acknowledge cluster version '21.2' on system tenant (2)
-├── upgrade cluster from "v21.2.11" to "v22.1.8"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (3)
-│   ├── upgrade nodes :1-4 from "v21.2.11" to "v22.1.8"
-│   │   ├── restart node 4 with binary version v22.1.8 (4)
-│   │   ├── restart node 3 with binary version v22.1.8 (5)
-│   │   ├── restart node 2 with binary version v22.1.8 (6)
-│   │   └── restart node 1 with binary version v22.1.8 (7)
-│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (8)
-│   └── wait for all nodes (:1-4) to acknowledge cluster version '22.1' on system tenant (9)
-├── upgrade cluster from "v22.1.8" to "v22.2.3"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (10)
-│   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
-│   │   ├── restart node 1 with binary version v22.2.3 (11)
-│   │   ├── restart node 3 with binary version v22.2.3 (12)
-│   │   ├── restart node 4 with binary version v22.2.3 (13)
-│   │   └── restart node 2 with binary version v22.2.3 (14)
-│   ├── downgrade nodes :1-4 from "v22.2.3" to "v22.1.8"
-│   │   ├── restart node 1 with binary version v22.1.8 (15)
-│   │   ├── restart node 3 with binary version v22.1.8 (16)
-│   │   ├── restart node 4 with binary version v22.1.8 (17)
-│   │   └── restart node 2 with binary version v22.1.8 (18)
-│   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
-│   │   ├── restart node 4 with binary version v22.2.3 (19)
-│   │   ├── restart node 1 with binary version v22.2.3 (20)
-│   │   ├── restart node 2 with binary version v22.2.3 (21)
-│   │   ├── restart node 3 with binary version v22.2.3 (22)
-│   │   └── wait for 1m0s (23)
-│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (24)
-│   └── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (25)
-├── upgrade cluster from "v22.2.3" to "v23.1.4"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (26)
-│   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
-│   │   ├── restart node 4 with binary version v23.1.4 (27)
-│   │   ├── restart node 1 with binary version v23.1.4 (28)
-│   │   ├── wait for 1m0s (29)
-│   │   ├── restart node 2 with binary version v23.1.4 (30)
-│   │   └── restart node 3 with binary version v23.1.4 (31)
-│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (32)
-│   └── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (33)
-├── run "initialize bank workload" (34)
+├── install fixtures for version "v22.2.3" (1)
+├── start cluster at version "v22.2.3" (2)
+├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (3)
+├── upgrade cluster from "v22.2.3" to "v23.1.0"
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4)
+│   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.0"
+│   │   ├── restart node 3 with binary version v23.1.0 (5)
+│   │   ├── restart node 1 with binary version v23.1.0 (6)
+│   │   ├── wait for 10m0s (7)
+│   │   ├── restart node 4 with binary version v23.1.0 (8)
+│   │   └── restart node 2 with binary version v23.1.0 (9)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (10)
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (11)
+├── run "initialize bank workload" (12)
 ├── start background hooks concurrently
-│   ├── run "bank workload", after 100ms delay (35)
-│   └── run "csv server", after 5s delay (36)
+│   ├── run "bank workload", after 5s delay (13)
+│   └── run "csv server", after 30s delay (14)
+├── upgrade cluster from "v23.1.0" to "v23.1.4"
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (15)
+│   ├── upgrade nodes :1-4 from "v23.1.0" to "v23.1.4"
+│   │   ├── restart node 1 with binary version v23.1.4 (16)
+│   │   ├── restart node 3 with binary version v23.1.4 (17)
+│   │   ├── run "mixed-version 2" (18)
+│   │   ├── restart node 4 with binary version v23.1.4 (19)
+│   │   ├── run "mixed-version 1" (20)
+│   │   └── restart node 2 with binary version v23.1.4 (21)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (22)
+│   ├── run "mixed-version 2" (23)
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (24)
+│   └── run "validate upgrade" (25)
 ├── upgrade cluster from "v23.1.4" to "v23.2.0"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (37)
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (26)
 │   ├── upgrade nodes :1-4 from "v23.1.4" to "v23.2.0"
-│   │   ├── restart node 1 with binary version v23.2.0 (38)
-│   │   ├── restart node 3 with binary version v23.2.0 (39)
-│   │   ├── run "mixed-version 2" (40)
-│   │   ├── restart node 4 with binary version v23.2.0 (41)
-│   │   ├── run "mixed-version 1" (42)
-│   │   └── restart node 2 with binary version v23.2.0 (43)
+│   │   ├── restart node 1 with binary version v23.2.0 (27)
+│   │   ├── restart node 4 with binary version v23.2.0 (28)
+│   │   ├── run "mixed-version 2" (29)
+│   │   ├── restart node 3 with binary version v23.2.0 (30)
+│   │   ├── restart node 2 with binary version v23.2.0 (31)
+│   │   └── run "mixed-version 1" (32)
 │   ├── downgrade nodes :1-4 from "v23.2.0" to "v23.1.4"
-│   │   ├── restart node 3 with binary version v23.1.4 (44)
-│   │   ├── restart node 4 with binary version v23.1.4 (45)
-│   │   ├── restart node 2 with binary version v23.1.4 (46)
-│   │   ├── run "mixed-version 2" (47)
-│   │   └── restart node 1 with binary version v23.1.4 (48)
+│   │   ├── restart node 2 with binary version v23.1.4 (33)
+│   │   ├── run "mixed-version 1" (34)
+│   │   ├── restart node 1 with binary version v23.1.4 (35)
+│   │   ├── restart node 4 with binary version v23.1.4 (36)
+│   │   ├── run "mixed-version 2" (37)
+│   │   └── restart node 3 with binary version v23.1.4 (38)
 │   ├── upgrade nodes :1-4 from "v23.1.4" to "v23.2.0"
-│   │   ├── restart node 1 with binary version v23.2.0 (49)
-│   │   ├── restart node 4 with binary version v23.2.0 (50)
-│   │   ├── run "mixed-version 2" (51)
-│   │   ├── restart node 3 with binary version v23.2.0 (52)
-│   │   ├── run "mixed-version 1" (53)
-│   │   └── restart node 2 with binary version v23.2.0 (54)
-│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (55)
-│   ├── run "mixed-version 2" (56)
-│   ├── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on system tenant (57)
+│   │   ├── restart node 2 with binary version v23.2.0 (39)
+│   │   ├── run "mixed-version 1" (40)
+│   │   ├── restart node 3 with binary version v23.2.0 (41)
+│   │   ├── restart node 4 with binary version v23.2.0 (42)
+│   │   ├── restart node 1 with binary version v23.2.0 (43)
+│   │   └── run "mixed-version 2" (44)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (45)
+│   ├── run "mixed-version 2" (46)
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on system tenant (47)
+│   └── run "validate upgrade" (48)
+├── upgrade cluster from "v23.2.0" to "v24.1.0"
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (49)
+│   ├── upgrade nodes :1-4 from "v23.2.0" to "v24.1.0"
+│   │   ├── restart node 2 with binary version v24.1.0 (50)
+│   │   ├── run "mixed-version 1" (51)
+│   │   ├── restart node 1 with binary version v24.1.0 (52)
+│   │   ├── restart node 4 with binary version v24.1.0 (53)
+│   │   ├── restart node 3 with binary version v24.1.0 (54)
+│   │   └── run "mixed-version 2" (55)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (56)
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (57)
 │   └── run "validate upgrade" (58)
-└── upgrade cluster from "v23.2.0" to "<current>"
+└── upgrade cluster from "v24.1.0" to "v24.3.0 (<current>)"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (59)
-   ├── upgrade nodes :1-4 from "v23.2.0" to "<current>"
-   │   ├── restart node 4 with binary version <current> (60)
-   │   ├── restart node 1 with binary version <current> (61)
-   │   ├── run "mixed-version 1" (62)
-   │   ├── restart node 3 with binary version <current> (63)
-   │   ├── restart node 2 with binary version <current> (64)
+   ├── upgrade nodes :1-4 from "v24.1.0" to "v24.3.0 (<current>)"
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (60)
+   │   ├── run "mixed-version 1" (61)
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (62)
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (63)
+   │   ├── restart node 1 with binary version v24.3.0 (<current>) (64)
    │   └── run "mixed-version 2" (65)
-   ├── downgrade nodes :1-4 from "<current>" to "v23.2.0"
-   │   ├── restart node 3 with binary version v23.2.0 (66)
-   │   ├── restart node 1 with binary version v23.2.0 (67)
-   │   ├── restart node 4 with binary version v23.2.0 (68)
-   │   ├── run "mixed-version 2" (69)
-   │   └── restart node 2 with binary version v23.2.0 (70)
-   ├── upgrade nodes :1-4 from "v23.2.0" to "<current>"
-   │   ├── restart node 3 with binary version <current> (71)
-   │   ├── restart node 2 with binary version <current> (72)
-   │   ├── run mixed-version hooks concurrently
-   │   │   ├── run "mixed-version 1", after 0s delay (73)
-   │   │   └── run "mixed-version 2", after 3m0s delay (74)
-   │   ├── restart node 1 with binary version <current> (75)
-   │   └── restart node 4 with binary version <current> (76)
-   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (77)
-   ├── run "mixed-version 2" (78)
-   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (79)
-   └── run "validate upgrade" (80)
+   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (66)
+   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (67)
+   └── run "validate upgrade" (68)
