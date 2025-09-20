@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrivilege(t *testing.T) {
@@ -703,4 +705,29 @@ func TestRevokeWithGrantOption(t *testing.T) {
 				tcNum, actualGrantOption, tc.expectedGrantOption)
 		}
 	}
+}
+
+// TestPrivilegeValidationErrorRedaction tests that privilege validation errors
+// are properly redacted.
+func TestPrivilegeValidationErrorRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a descriptor where root/admin don't have the required privileges
+	// This will trigger ValidateSuperuserPrivileges error
+	descriptor := catpb.NewCustomSuperuserPrivilegeDescriptor(
+		privilege.List{privilege.UPDATE}, // Wrong privilege (not ALL)
+		username.AdminRoleName(),
+	)
+
+	id := catid.DescID(bootstrap.TestingMinUserDescID())
+	err := descriptor.Validate(id, privilege.Table, "sensitive_table_name", catpb.DefaultSuperuserPrivileges)
+	require.Error(t, err)
+
+	nonRedactedMsg := redact.Sprint(err).StripMarkers()
+	expectedNonRedacted := `user root must have exactly [ALL] privileges on table "sensitive_table_name"`
+	require.Equal(t, expectedNonRedacted, nonRedactedMsg, "non-redacted message mismatch")
+
+	redactedMsg := redact.Sprint(err).Redact()
+	expectedRedacted := `user root must have exactly [ALL] privileges on table ‹×›`
+	require.Equal(t, expectedRedacted, string(redactedMsg), "redacted message mismatch")
 }
