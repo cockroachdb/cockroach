@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
@@ -58,7 +59,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer cleanupSink()
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
-	t.Run("destination cannot be system tenant", func(t *testing.T) {
+	t.Run("destination cannot be systemtenant", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
@@ -741,4 +742,60 @@ func TestPhysicalReplicationGatewayRoute(t *testing.T) {
 
 	progress := jobutils.GetJobProgress(t, systemDB, jobspb.JobID(jobID))
 	require.Empty(t, progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.PartitionConnUris)
+}
+
+func TestPhysicalReplicationScanMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	initWorkload, runWorkload := replicationtestutils.CreateBankWorkloadHandles(
+		t, ctx, replicationtestutils.WithNumAccounts(1000),
+	)
+
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.SrcInitFunc = func(t *testing.T, _ *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		require.NoError(t, initWorkload(tenantSQL))
+	}
+
+	clusters, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	dstExecCfg := clusters.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
+	dstMetrics := dstExecCfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+
+	// Speed up checkpointing interval to collect more metrics
+	clusters.DestSysSQL.Exec(
+		t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'`,
+	)
+
+	pID, iID := clusters.StartStreamReplication(ctx)
+	producerJobID, ingestionJobID := jobspb.JobID(pID), jobspb.JobID(iID)
+
+	jobutils.WaitForJobToRun(t, clusters.SrcSysSQL, producerJobID)
+	jobutils.WaitForJobToRun(t, clusters.DestSysSQL, ingestionJobID)
+
+	stopWorkload, err := runWorkload(clusters.SrcTenantServer)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, stopWorkload())
+	}()
+
+	trackingCh := make(chan struct{})
+	maxScanningRanges := int64(0)
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case <-trackingCh:
+				return nil
+			case <-time.After(25 * time.Millisecond):
+				maxScanningRanges = max(maxScanningRanges, dstMetrics.ScanningRanges.Value())
+			}
+		}
+	})
+	clusters.WaitUntilStartTimeReached(ingestionJobID)
+	close(trackingCh)
+
+	require.Greater(t, maxScanningRanges, int64(0))
 }

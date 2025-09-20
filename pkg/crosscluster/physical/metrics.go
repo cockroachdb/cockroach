@@ -101,6 +101,19 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaScanningRanges = metric.Metadata{
+		Name:        "physical_replication.scanning_ranges",
+		Help:        "Source side ranges undergoing an initial scan",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCatchupRanges = metric.Metadata{
+		Name:        "physical_replication.catchup_ranges",
+		Help:        "Source side ranges undergoing catch up scans",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
@@ -116,6 +129,8 @@ type Metrics struct {
 	RunningCount               *metric.Gauge
 	ReplicatedTimeSeconds      *metric.Gauge
 	ReplicationCutoverProgress *metric.Gauge
+	ScanningRanges             *metric.Gauge
+	CatchupRanges              *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -153,6 +168,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		RunningCount:               metric.NewGauge(metaStreamsRunning),
 		ReplicatedTimeSeconds:      metric.NewGauge(metaReplicatedTimeSeconds),
 		ReplicationCutoverProgress: metric.NewGauge(metaReplicationCutoverProgress),
+		ScanningRanges:             metric.NewGauge(metaScanningRanges),
+		CatchupRanges:              metric.NewGauge(metaCatchupRanges),
 	}
 	return m
 }
