@@ -1223,6 +1223,8 @@ func (ds *DistSender) Send(
 	ctx, sp := tracing.ChildSpan(ctx, "dist sender send")
 	defer sp.Finish()
 
+	log.Eventf(ctx, "sending batch %s", ba)
+
 	// Send proxy requests directly through the transport. Any errors are
 	// encoded in the response.
 	if ba.ProxyRangeInfo != nil {
@@ -1246,9 +1248,13 @@ func (ds *DistSender) Send(
 	rplChunks := singleRplChunk[:0:1]
 
 	onePart := len(parts) == 1
+	if !onePart {
+		log.Eventf(ctx, "batch split into %d parts by (*kvpb.BatchRequest).Split with splitET=%v", len(parts), splitET)
+	}
 	errIdxOffset := 0
 	for len(parts) > 0 {
 		if !onePart {
+			log.Eventf(ctx, "sending batch %s", ba)
 			ba = ba.ShallowCopy()
 			ba.Requests = parts[0]
 		}

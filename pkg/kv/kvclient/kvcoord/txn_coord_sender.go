@@ -547,6 +547,8 @@ func (tc *TxnCoordSender) Send(
 		}
 	}
 
+	log.Eventf(ctx, "coordinating batch %s", ba)
+
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
 	if ba.ReadConsistency != kvpb.CONSISTENT {
