@@ -7,8 +7,10 @@ package aggmetric
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -393,4 +395,171 @@ func (s *SQLChildCounter) Value() int64 {
 // Inc increments the SQLChildCounter's value.
 func (s *SQLChildCounter) Inc(i int64) {
 	s.value.Inc(i)
+}
+
+// HighCardinalityCounter is similar to AggCounter but uses cache storage instead of B-tree,
+// allowing for automatic eviction of less frequently used child metrics.
+// This is useful when dealing with high cardinality metrics that might exceed resource limits.
+type HighCardinalityCounter struct {
+	g metric.Counter
+	childSet
+	labelSliceCache *metric.LabelSliceCache
+}
+
+var _ metric.Iterable = (*HighCardinalityCounter)(nil)
+var _ metric.PrometheusEvictable = (*HighCardinalityCounter)(nil)
+
+// NewHighCardinalityCounter constructs a new HighCardinalityCounter that uses cache storage
+// with eviction for child metrics.
+func NewHighCardinalityCounter(
+	metadata metric.Metadata, childLabels ...string,
+) *HighCardinalityCounter {
+	c := &HighCardinalityCounter{g: *metric.NewCounter(metadata)}
+	c.initWithCacheStorageType(childLabels, metadata.Name)
+	return c
+}
+
+// GetName is part of the metric.Iterable interface.
+func (c *HighCardinalityCounter) GetName(useStaticLabels bool) string {
+	return c.g.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (c *HighCardinalityCounter) GetHelp() string { return c.g.GetHelp() }
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (c *HighCardinalityCounter) GetMeasurement() string { return c.g.GetMeasurement() }
+
+// GetUnit is part of the metric.Iterable interface.
+func (c *HighCardinalityCounter) GetUnit() metric.Unit { return c.g.GetUnit() }
+
+// GetMetadata is part of the metric.Iterable interface.
+func (c *HighCardinalityCounter) GetMetadata() metric.Metadata { return c.g.GetMetadata() }
+
+// Inspect is part of the metric.Iterable interface.
+func (c *HighCardinalityCounter) Inspect(f func(interface{})) { f(c) }
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (c *HighCardinalityCounter) GetType() *io_prometheus_client.MetricType {
+	return c.g.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (c *HighCardinalityCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return c.g.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (c *HighCardinalityCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return c.g.ToPrometheusMetric()
+}
+
+// Count returns the aggregate count of all of its current and past children.
+func (c *HighCardinalityCounter) Count() int64 {
+	return c.g.Count()
+}
+
+// Inc increments the counter value by i for the given label values. If a
+// counter with the given label values doesn't exist yet, it creates a new
+// counter and increments it. Inc increments parent metrics as well.
+func (c *HighCardinalityCounter) Inc(i int64, labelValues ...string) {
+	c.g.Inc(i)
+
+	childMetric := c.GetOrAddChild(labelValues...)
+
+	if childMetric != nil {
+		childMetric.Inc(i)
+	}
+
+}
+
+// Each is part of the metric.PrometheusIterable interface.
+func (c *HighCardinalityCounter) Each(
+	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
+) {
+	c.EachWithLabels(labels, f, c.labelSliceCache)
+}
+
+// InitializeMetrics is part of the PrometheusEvictable interface.
+func (c *HighCardinalityCounter) InitializeMetrics(labelCache *metric.LabelSliceCache) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.labelSliceCache = labelCache
+}
+
+// GetOrAddChild returns the existing child counter for the given label values,
+// or creates a new one if it doesn't exist. This is the preferred method for
+// cache-based storage to avoid panics on existing keys.
+func (c *HighCardinalityCounter) GetOrAddChild(labelVals ...string) *HighCardinalityChildCounter {
+
+	if len(labelVals) == 0 {
+		return nil
+	}
+
+	// Create a LabelSliceCacheKey from the tenantID.
+	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+
+	child := c.getOrAddWithLabelSliceCache(c.GetMetadata().Name, c.createHighCardinalityChildCounter, c.labelSliceCache, labelVals...)
+
+	c.labelSliceCache.Upsert(key, &metric.LabelSliceCacheValue{
+		LabelValues: labelVals,
+	})
+
+	return child.(*HighCardinalityChildCounter)
+}
+
+func (c *HighCardinalityCounter) createHighCardinalityChildCounter(
+	key uint64, cache *metric.LabelSliceCache,
+) LabelSliceCachedChildMetric {
+	return &HighCardinalityChildCounter{
+		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
+		LabelSliceCache:    cache,
+		createdAt:          timeutil.Now(),
+	}
+}
+
+// HighCardinalityChildCounter is a child of a HighCardinalityCounter. When metrics are
+// collected by prometheus, each of the children will appear with a distinct label,
+// however, when cockroach internally collects  metrics, only the parent is collected.
+type HighCardinalityChildCounter struct {
+	metric.LabelSliceCacheKey
+	value metric.Counter
+	*metric.LabelSliceCache
+	createdAt time.Time
+}
+
+func (c *HighCardinalityChildCounter) CreatedAt() time.Time {
+	return c.createdAt
+}
+
+func (c *HighCardinalityChildCounter) DecrementLabelSliceCacheReference() {
+	c.LabelSliceCache.DecrementAndDeleteIfZero(c.LabelSliceCacheKey)
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this HighCardinalityChildCounter.
+func (c *HighCardinalityChildCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Counter: &io_prometheus_client.Counter{
+			Value: proto.Float64(float64(c.Value())),
+		},
+	}
+}
+
+func (c *HighCardinalityChildCounter) labelValues() []string {
+	lv, ok := c.LabelSliceCache.Get(c.LabelSliceCacheKey)
+	if !ok {
+		return nil
+	}
+	return lv.LabelValues
+}
+
+// Value returns the HighCardinalityChildCounter's current value.
+func (c *HighCardinalityChildCounter) Value() int64 {
+	return c.value.Count()
+}
+
+// Inc increments the HighCardinalityChildCounter's value.
+func (c *HighCardinalityChildCounter) Inc(i int64) {
+	c.value.Inc(i)
 }

@@ -9,14 +9,18 @@
 package aggmetric
 
 import (
+	"context"
 	"hash/fnv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -24,11 +28,14 @@ import (
 var delimiter = []byte{'_'}
 
 const (
-	dbLabel        = "database"
-	appLabel       = "application_name"
-	cacheSize      = 5000
-	childMetricTTL = 20 * time.Second
+	dbLabel                   = "database"
+	appLabel                  = "application_name"
+	cacheSize                 = 5000
+	retentionTimeTillEviction = 20 * time.Second
 )
+
+// This is a no-op context used during logging.
+var noOpCtx = context.TODO()
 
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
@@ -99,6 +106,41 @@ func (cs *childSet) initWithBTreeStorageType(labels []string) {
 	}
 }
 
+func (cs *childSet) initWithCacheStorageType(labels []string, metricName string) {
+	cs.labels = labels
+
+	cs.mu.children = &UnorderedCacheWrapper{
+		cache: cache.NewUnorderedCache(cache.Config{
+			Policy: cache.CacheLRU,
+			ShouldEvict: func(size int, key, value any) bool {
+				if childMetric, ok := value.(ChildMetric); ok {
+					// Check if the child metric has exceeded 20 seconds and cache size is greater than 5000
+					if labelSliceCachedChildMetric, ok := childMetric.(LabelSliceCachedChildMetric); ok {
+						currentTime := timeutil.Now()
+						age := currentTime.Sub(labelSliceCachedChildMetric.CreatedAt())
+						return size > cacheSize && age > retentionTimeTillEviction
+					}
+				}
+				return size > cacheSize
+			},
+			OnEvictedEntry: func(entry *cache.Entry) {
+				if childMetric, ok := entry.Value.(ChildMetric); ok {
+					labelValues := childMetric.labelValues()
+
+					// log metric name and label values of evicted entry
+					log.Dev.Infof(noOpCtx, "evicted child of metric %s with label values: %s\n",
+						redact.SafeString(metricName), redact.SafeString(strings.Join(labelValues, ",")))
+
+					// Invoke DecrementAndDeleteIfZero from ChildMetric which relies on LabelSliceCache
+					if boundedChild, ok := childMetric.(LabelSliceCachedChildMetric); ok {
+						boundedChild.DecrementLabelSliceCacheReference()
+					}
+				}
+			},
+		}),
+	}
+}
+
 func getCacheStorage() *cache.UnorderedCache {
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
@@ -163,6 +205,75 @@ func (cs *childSet) get(labelVals ...string) (ChildMetric, bool) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.mu.children.Get(labelVals...)
+}
+
+func (cs *childSet) getOrAddWithLabelSliceCache(
+	metricName string,
+	createFn func(key uint64, cache *metric.LabelSliceCache) LabelSliceCachedChildMetric,
+	labelSliceCache *metric.LabelSliceCache,
+	labelVals ...string,
+) ChildMetric {
+	// Validate label values count
+	if len(labelVals) != len(cs.labels) {
+		if log.V(2) {
+			log.Dev.Errorf(noOpCtx,
+				"cannot add child with %d label values %v to  metric %s with %d labels %s",
+				len(labelVals), redact.SafeString(metricName), redact.SafeString(strings.Join(labelVals, ",")),
+				len(cs.labels), redact.SafeString(strings.Join(cs.labels, ",")))
+		}
+		return nil
+	}
+
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Create a LabelSliceCacheKey from the label.
+	key := metricKey(labelVals...)
+
+	// Check if the child already exists
+	if child, ok := cs.mu.children.GetValue(key); ok {
+		return child
+	}
+
+	// Create and add the new child
+	child := createFn(key, labelSliceCache)
+	err := cs.mu.children.AddKey(key, child)
+	if err != nil {
+		if log.V(2) {
+			log.Dev.Errorf(context.TODO(), "child metric creation failed for metric %s with error %v", redact.SafeString(metricName), err)
+		}
+		return nil
+	}
+	return child
+}
+
+// EachWithLabels is a generic implementation for iterating over child metrics and building prometheus metrics.
+// This can be used by any aggregate metric type that embeds childSet.
+func (cs *childSet) EachWithLabels(
+	labels []*io_prometheus_client.LabelPair,
+	f func(metric *io_prometheus_client.Metric),
+	labelCache *metric.LabelSliceCache,
+) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	cs.mu.children.ForEach(func(cm ChildMetric) {
+		m := cm.ToPrometheusMetric()
+		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.labels))
+		childLabels = append(childLabels, labels...)
+		lvs := cm.labelValues()
+		key := metricKey(lvs...)
+		labelValueCacheValues, _ := labelCache.Get(metric.LabelSliceCacheKey(key))
+		for i := range cs.labels {
+			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+				Name:  &cs.labels[i],
+				Value: &labelValueCacheValues.LabelValues[i],
+			})
+		}
+
+		m.Label = childLabels
+		f(m)
+	})
 }
 
 // clear method removes all children from the childSet. It does not reset parent metric values.
@@ -321,6 +432,7 @@ type ChildMetric interface {
 type LabelSliceCachedChildMetric interface {
 	ChildMetric
 	CreatedAt() time.Time
+	DecrementLabelSliceCacheReference()
 }
 
 type labelValuer interface {
@@ -368,7 +480,7 @@ func (ucw *UnorderedCacheWrapper) GetValue(key uint64) (ChildMetric, bool) {
 
 func (ucw *UnorderedCacheWrapper) AddKey(key uint64, metric ChildMetric) error {
 	if _, ok := ucw.cache.Get(key); ok {
-		return errors.Newf("child %v already exists\n", metric.labelValues())
+		return errors.Newf("child %s already exists\n", redact.SafeString(strings.Join(metric.labelValues(), ",")))
 	}
 	ucw.cache.Add(key, metric)
 	return nil
