@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -128,6 +129,50 @@ type TxnRegistry struct {
 
 		rand *rand.Rand
 	}
+}
+
+func (r *TxnRegistry) InsertRequest(
+	ctx context.Context,
+	txnFingerprintID appstatspb.TransactionFingerprintID,
+	stmtFingerprintIDs []appstatspb.StmtFingerprintID,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+	redacted bool,
+	username string,
+) (int64, error) {
+	stmtFingerprintUintIDs := make([]uint64, len(stmtFingerprintIDs))
+	for i, sf := range stmtFingerprintIDs {
+		stmtFingerprintUintIDs[i] = uint64(sf)
+	}
+	id, err := r.insertTxnRequestInternal(ctx, uint64(txnFingerprintID), stmtFingerprintUintIDs, username, samplingProbability, minExecutionLatency, expiresAfter, redacted)
+	return int64(id), err
+}
+
+func (r *TxnRegistry) CancelRequest(ctx context.Context, requestID int64) error {
+	row, err := r.db.Executor().QueryRowEx(ctx, "txn-diag-cancel-request", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		// Rather than deleting the row from the table, we choose to mark the
+		// request as "expired" by setting `expires_at` into the past. This will
+		// allow any queries that are currently being traced for this request to
+		// write their collected bundles.
+		"UPDATE system.transaction_diagnostics_requests SET expires_at = '1970-01-01' "+
+			"WHERE completed = false AND id = $1 "+
+			"AND (expires_at IS NULL OR expires_at > now()) RETURNING id;",
+		requestID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if row == nil {
+		// There is no pending diagnostics request with the given request.
+		return errors.Newf("no pending request found for the request: %s", requestID)
+	}
+
+	reqID := RequestID(requestID)
+	r.RemoveFromRegistry(reqID)
+	return nil
 }
 
 func NewTxnRegistry(
