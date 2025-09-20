@@ -1082,9 +1082,7 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (*virtualSchem
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
-func (vs *VirtualSchemaHolder) getVirtualTableEntry(
-	tn *tree.TableName, ns eval.ClientNoticeSender,
-) (*virtualDefEntry, error) {
+func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
 		tableName := tn.Table()
 		if t, ok := db.defs[tableName]; ok {
@@ -1107,8 +1105,8 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName, ns eval.ClientNoticeSender) (catalog.TableDescriptor, error)
-	getVirtualTableEntry(tn *tree.TableName, ns eval.ClientNoticeSender) (*virtualDefEntry, error)
+	getVirtualTableDesc(tn *tree.TableName) (catalog.TableDescriptor, error)
+	getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error)
 	getSchemas() map[string]*virtualSchemaEntry
 	getSchemaNames() []string
 }
@@ -1117,9 +1115,9 @@ type VirtualTabler interface {
 // pair, and returns its descriptor if it does.
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
-	tn *tree.TableName, ns eval.ClientNoticeSender,
+	tn *tree.TableName,
 ) (catalog.TableDescriptor, error) {
-	t, err := vs.getVirtualTableEntry(tn, ns)
+	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil || t == nil {
 		return nil, err
 	}
