@@ -85,7 +85,7 @@ func (f randTestingFramework) defaultBasicClusterGen() gen.BasicCluster {
 		Nodes:               f.defaultStaticSettings.nodes,
 		StoresPerNode:       f.defaultStaticSettings.storesPerNode,
 		StoreByteCapacity:   f.defaultStaticSettings.storeByteCapacity,
-		NodeCPURateCapacity: f.defaultStaticSettings.nodeCPURateCapacity,
+		NodeCPURateCapacity: []uint64{uint64(f.defaultStaticSettings.nodeCPURateCapacity)},
 	}
 }
 
