@@ -13,6 +13,7 @@ import "gogoproto/gogo.proto";
 message ProtectedTimestampRecords {
   map<uint32, bytes> protected_timestamp_records = 1 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
   ];
 }
