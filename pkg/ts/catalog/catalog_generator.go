@@ -101,6 +101,7 @@ func generateInternal(
 					Essential:      meta.Essential,
 					HowToUse:       meta.HowToUse,
 					LabeledName:    formatLabeledName(meta),
+					CloudScope:     meta.CloudScope,
 				},
 			},
 		})

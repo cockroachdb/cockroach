@@ -275,9 +275,10 @@ var (
 		Measurement: "Uptime",
 		Unit:        metric.Unit_SECONDS,
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.`,
+		Essential:  true,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.`,
+		CloudScope: metric.Metadata_ESSENTIAL_SHARED,
 	}
 
 	// These disk and network stats are counters of the number of operations, packets, bytes, and
