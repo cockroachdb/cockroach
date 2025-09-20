@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func compareTimeHelper(t *testing.T, expected, actual time.Time, delta time.Duration) {
@@ -364,5 +366,78 @@ WHERE database_name=$1 AND schema_name=$2 AND name=$3`,
 		// Assert Table ID is correct.
 		require.Equal(t, fmt.Sprint(tableID), actualTableID[0][0])
 		require.Equal(t, fmt.Sprint(databaseID), actualTableID[0][1])
+	}
+}
+
+func TestGetTableID_error(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create tables under public and user defined schemas.
+	db.Exec(t, `
+CREATE DATABASE test_db1;
+SET DATABASE=test_db1;
+CREATE TABLE test_table (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+);
+CREATE SCHEMA schema;
+CREATE TABLE schema.test_table (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX(a)
+);
+`)
+	// Get Table IDs.
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		database string
+		schema   string
+		table    string
+	}{
+		// DB exists, but table does not
+		{
+			database: "test_db1",
+			schema:   "public",
+			table:    "test_table1",
+		},
+		// DB exists, but schema does not
+		{
+			database: "test_db1",
+			schema:   "public1",
+			table:    "test_table",
+		},
+		// DB and new schema exist, but table does not
+		{
+			database: "test_db1",
+			schema:   "schema",
+			table:    "test_table1",
+		},
+		// DB does not exist
+		{
+			database: "test_db2",
+			schema:   "public",
+			table:    "test_table",
+		},
+	}
+
+	for _, tc := range testCases {
+		tableName := fmt.Sprintf("%s.%s", tc.schema, tc.table)
+		_, _, err := getIDFromDatabaseAndTableName(ctx, tc.database, tableName, s.InternalExecutor().(*sql.InternalExecutor), userName)
+		st, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, codes.NotFound, st.Code())
+		require.ErrorContains(t, err, tableName)
+		require.ErrorContains(t, err, tc.database)
 	}
 }
