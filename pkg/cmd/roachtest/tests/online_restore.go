@@ -238,7 +238,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						"admission.disk_bandwidth_tokens.elastic.enabled=false",
 						"admission.kv.enabled=false",
 						"admission.sql_kv_response.enabled=false",
-						"kv.consistency_queue.enabled=false",
+						//"kv.consistency_queue.enabled=false",
 						"kv.range_merge.skip_external_bytes.enabled=true",
 					}
 
