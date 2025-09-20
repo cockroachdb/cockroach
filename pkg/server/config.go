@@ -642,9 +642,9 @@ func makeStorageCfg(
 	if err != nil {
 		panic(err)
 	}
-	tempStorageCfg := base.TempStorageConfigFromEnv(
-		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
-	return storeSpec, tempStorageCfg
+	//tempStorageCfg := base.TempStorageConfigFromEnv(
+	//	ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
+	return storeSpec, base.TempStorageConfig{}
 }
 
 // String implements the fmt.Stringer interface.

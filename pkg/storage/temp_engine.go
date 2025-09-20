@@ -65,6 +65,9 @@ func newTempEngine(
 		cacheSize = 8 << 20 // 8 MiB, smaller for in-memory, still non-zero
 		baseFS = vfs.NewMem()
 	} else {
+		if tempStorage.Path == "" {
+			return nil, nil, errors.AssertionFailedf("no path specified for temp storage")
+		}
 		baseFS = vfs.Default
 		dir = tempStorage.Path
 	}
