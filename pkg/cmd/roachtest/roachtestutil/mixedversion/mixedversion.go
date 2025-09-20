@@ -350,6 +350,7 @@ type (
 		tag                            string
 		overriddenMutatorProbabilities map[string]float64
 		hooksSupportFailureInjection   bool
+		workloadNodes                  option.NodeListOption
 	}
 
 	CustomOption func(*testOptions)
@@ -575,6 +576,13 @@ func DisableAllFailureInjectionMutators() CustomOption {
 func WithTag(tag string) CustomOption {
 	return func(opts *testOptions) {
 		opts.tag = tag
+	}
+}
+
+// WithWorkloadNodes allows callers to specify workload nodes which
+func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
+	return func(opts *testOptions) {
+		opts.workloadNodes = nodes
 	}
 }
 

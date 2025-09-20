@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	mockcluster "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -121,7 +122,9 @@ func TestTestPlanner(t *testing.T) {
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
 			case "mixed-version-test-with-workload":
-				mvt = newTestWithWorkloadNode(ctrl)
+				mc := mockcluster.NewMockCluster(ctrl)
+				mc.EXPECT().WorkloadNode().AnyTimes().Return(option.NewNodeListOptionRange(1, 1))
+				mvt = newTestWithWorkloadNode(ctrl, mc, WithWorkloadNodes(mc.WorkloadNode()))
 			case "before-cluster-start":
 				mvt.BeforeClusterStart(d.CmdArgs[0].Vals[0], dummyHook)
 			case "on-startup":
@@ -494,8 +497,8 @@ func newTest(ctrl *gomock.Controller, options ...CustomOption) *Test {
 	// prevents flaking whenever new versions are added.
 	testOptions.predecessorFunc = testPredecessorFunc
 	mc := mockcluster.NewMockCluster(ctrl)
-	mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
-	mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
+	//mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
+	//mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	return &Test{
 		ctx:       ctx,
 		logger:    nilLogger,
@@ -510,13 +513,11 @@ func newTest(ctrl *gomock.Controller, options ...CustomOption) *Test {
 	}
 }
 
-// newTestWithWorkloadNode override the mockcluster.ALL and
-// mockcluster.CRDBNodes to simulate the existence of a workload node
-func newTestWithWorkloadNode(ctrl *gomock.Controller, options ...CustomOption) *Test {
+// newTestWithWorkloadNode creates a new Test with the passed in mockcluster.Cluster
+func newTestWithWorkloadNode(
+	ctrl *gomock.Controller, mc cluster.Cluster, options ...CustomOption,
+) *Test {
 	t := newTest(ctrl, options...)
-	mc := mockcluster.NewMockCluster(ctrl)
-	mc.EXPECT().All().AnyTimes().Return(option.NewNodeListOptionRange(0, 1))
-	mc.EXPECT().CRDBNodes().AnyTimes().Return(option.NewNodeListOptionRange(0, 0))
 	t.cluster = mc
 	return t
 }

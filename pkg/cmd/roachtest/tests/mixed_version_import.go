@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
@@ -27,7 +28,7 @@ func registerImportMixedVersions(r registry.Registry) {
 		Skip:    "Issue #143870",
 		Name:    "import/mixed-versions",
 		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
 		// Disabled on IBM because s390x is only built on master and mixed-version
 		// is impossible to test as of 05/2025.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
@@ -55,13 +56,16 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 		// Only use the latest version of each release to work around #127029.
 		mixedversion.AlwaysUseLatestPredecessors,
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 	runImport := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {
 			return err
 		}
 		node := c.All().SeededRandNode(r)[0]
-		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", warehouses) + fmt.Sprintf(" {pgurl%s}", c.Node(node))
+		cmd := tpccImportCmdWithCockroachBinary(
+			h.CockroachBinaryForWorkload(t), "", "tpcc", warehouses) +
+			fmt.Sprintf(" {pgurl%s}", c.Node(node))
 		l.Printf("executing %q on node %d", cmd, node)
 		return c.RunE(ctx, option.WithNodes(c.Node(node)), cmd)
 	}

@@ -2918,6 +2918,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// migrations enough time to finish considering all the data
 				// that might exist in the cluster by the time the upgrade is
 				// attempted.
+				mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 				mixedversion.UpgradeTimeout(30*time.Minute),
 				mixedversion.AlwaysUseLatestPredecessors,
 				mixedversion.EnabledDeploymentModes(enabledDeploymentModes...),

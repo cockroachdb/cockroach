@@ -627,7 +627,8 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	if len(clusterStartHooks) > 0 {
 		steps = append(steps, p.concurrently(beforeClusterStartLabel, clusterStartHooks)...)
 	}
-	return append(steps,
+
+	steps = append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
 			version:            initialVersion,
 			rt:                 p.rt,
@@ -642,6 +643,19 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 			virtualClusterName: install.SystemInterfaceName,
 		}),
 	)
+
+	if len(p.options.workloadNodes) > 0 {
+		// Add step for staging all workload binaries needed for test on workload
+		// node(s)
+		steps = append(steps,
+			p.newSingleStepWithContext(setupContext, stageAllWorkloadBinariesStep{
+				versions:      p.versions,
+				rt:            p.rt,
+				workloadNodes: p.options.workloadNodes,
+			}))
+	}
+
+	return steps
 }
 
 // tenantSetupSteps returns the series of steps needed to create the
@@ -803,15 +817,6 @@ func (p *testPlanner) afterUpgradeSteps(
 	p.setFinalizing(service, false)
 	p.setStage(service, AfterUpgradeFinalizedStage)
 
-	if len(p.cluster.All()) != len(p.cluster.CRDBNodes()) {
-		// Add step for staging binary on workload node(s) that matches the
-		// current cluster version
-		steps = append(steps,
-			p.newSingleStep(stageWorkloadBinaryStep{
-				version: service.FromVersion,
-				rt:      p.rt,
-			}))
-	}
 	if scheduleHooks {
 		steps = append(steps,
 			p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))...)

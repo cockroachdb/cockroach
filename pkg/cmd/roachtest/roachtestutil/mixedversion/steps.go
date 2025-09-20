@@ -98,7 +98,7 @@ func (s startStep) Description() string {
 func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	systemNodes := h.System.Descriptor.Nodes
 	binaryPath, err := clusterupgrade.UploadCockroach(
-		ctx, s.rt, l, h.runner.cluster, h.runner.cluster.All(), s.version,
+		ctx, s.rt, l, h.runner.cluster, systemNodes, s.version,
 	)
 	if err != nil {
 		return err
@@ -1011,39 +1011,40 @@ func (s alterReplicationFactorStep) ConcurrencyDisabled() bool {
 	return false
 }
 
-// stageWorkloadBinaryStep stages new binary on workload node(s) after cluster
-// upgrade is finalized
-type stageWorkloadBinaryStep struct {
-	version *clusterupgrade.Version
-	rt      test.Test
+// stageAllWorkloadBinariesStep stages new binaries on workload node(s)
+type stageAllWorkloadBinariesStep struct {
+	versions      []*clusterupgrade.Version
+	rt            test.Test
+	workloadNodes option.NodeListOption
 }
 
-func (s stageWorkloadBinaryStep) Background() shouldStop { return nil }
-func (s stageWorkloadBinaryStep) Description() string {
-	return fmt.Sprintf("stage workload binary on workload node(s) for version %q",
-		s.version.String())
+func (s stageAllWorkloadBinariesStep) Background() shouldStop { return nil }
+func (s stageAllWorkloadBinariesStep) Description() string {
+	versionStrings := make([]string, len(s.versions))
+	for i, v := range s.versions {
+		versionStrings[i] = v.String()
+	}
+	return fmt.Sprintf("stage workload binary on workload node(s) %s for version(s) %s",
+		s.workloadNodes.String(), strings.Join(versionStrings, ", "))
 }
 
-// Run stages the cockroach binary associated with the current cluster version
+// Run stages all the cockroach binaries needed for workload for this test
 // on the workload node(s) to keep the workload binary version in sync with the
 // cluster version because the workload binary is no longer backwards
-// compatible. This step is only intended to be run after a cluster version
-// change has finalized.
-func (s stageWorkloadBinaryStep) Run(
+// compatible with certain workloads.
+func (s stageAllWorkloadBinariesStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	numWorkloadNodes := len(h.runner.cluster.All()) - len(h.runner.cluster.CRDBNodes())
-	if numWorkloadNodes > 0 {
-		workloadNodes := h.runner.cluster.Range(
-			len(h.runner.cluster.CRDBNodes())+1, len(h.runner.cluster.All()))
+
+	for _, version := range s.versions {
 		_, err := clusterupgrade.UploadCockroach(
-			ctx, s.rt, l, h.runner.cluster, workloadNodes, s.version)
+			ctx, s.rt, l, h.runner.cluster, s.workloadNodes, version)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
-func (s stageWorkloadBinaryStep) ConcurrencyDisabled() bool {
+func (s stageAllWorkloadBinariesStep) ConcurrencyDisabled() bool {
 	return true
 }

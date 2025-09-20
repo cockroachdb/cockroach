@@ -451,8 +451,8 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 	if err := enableTenantSplitScatter(l, r, h); err != nil {
 		return err
 	}
-	binPath := clusterupgrade.BinaryPathForVersion(cmvt.t, h.System.FromVersion, "cockroach")
-	bankInit := roachtestutil.NewCommand("%s workload init bank", binPath).
+	bankInit := roachtestutil.NewCommand(
+		"%s workload init bank", h.CockroachBinaryForWorkload(cmvt.t)).
 		Flag("ranges", targetTableRanges).
 		Flag("rows", targetTableRows).
 		Flag("seed", r.Int63()).
@@ -555,6 +555,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// We limit the total number of plan steps to 80, which is roughly 60% of all plan lengths.
 		// See https://github.com/cockroachdb/cockroach/pull/137963#discussion_r1906256740 for more details.
 		mixedversion.MaxNumPlanSteps(80),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
@@ -629,6 +630,7 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
 		// the first version with the new span-level checkpoint format.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)

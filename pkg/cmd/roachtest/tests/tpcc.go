@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -592,6 +591,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		// We limit the total number of plan steps to 70, which is roughly 80% of all plan lengths.
 		// See #138014 for more details.
 		mixedversion.MaxNumPlanSteps(70),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	}
 
 	// If the test is a chaos test, we want to opt for the more expansive panic
@@ -617,9 +617,9 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		l.Printf("waiting for tenant features to be enabled")
 		<-tenantFeaturesEnabled
 
-		randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
-		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
-		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
+		//randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
+		cmd := tpccImportCmdWithCockroachBinary(h.CockroachBinaryForWorkload(t), "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", c.WorkloadNode()))
+		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
 	// Add a lot of cold data to this cluster. This further stresses the version
@@ -627,11 +627,11 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 	// to the amount data may be carried out.
 	importLargeBank := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 		randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
-		binary := clusterupgrade.BinaryPathForVersion(t, h.System.FromVersion, "cockroach")
 		l.Printf("waiting for tenant features to be enabled")
 		<-tenantFeaturesEnabled
 
-		cmd := roachtestutil.NewCommand("%s workload fixtures import bank", binary).
+		cmd := roachtestutil.NewCommand(
+			"%s workload fixtures import bank", h.CockroachBinaryForWorkload(t)).
 			Arg("{pgurl%s}", randomNode).
 			Flag("payload-bytes", 10240).
 			Flag("rows", bankRows).
@@ -665,7 +665,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		if t.ExportOpenmetrics() {
 			labelsMap = getTpccLabels(headroomWarehouses, rampDur, workloadDur/time.Millisecond, nil)
 		}
-		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
+		cmd := roachtestutil.NewCommand("%s workload run tpcc", h.CockroachBinaryForWorkload(t)).
 			Arg("{pgurl%s}", h.AvailableNodes()).
 			Flag("duration", workloadDur).
 			Flag("warehouses", headroomWarehouses).
