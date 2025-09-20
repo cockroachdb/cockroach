@@ -1,0 +1,41 @@
+user testuser
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement error pq: user testuser does not have INSPECT system privilege
+SHOW INSPECT ERRORS
+
+user root
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement error relation "bad_table" does not exist
+SHOW INSPECT ERRORS FOR TABLE bad_table
+
+statement ok
+CREATE TABLE foo (a INT)
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+SHOW INSPECT ERRORS
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+SHOW INSPECT ERRORS WITH DETAILS
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+SHOW INSPECT ERRORS FOR JOB 666
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666 WITH DETAILS

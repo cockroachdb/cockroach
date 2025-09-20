@@ -780,6 +780,18 @@ func (p *planner) LookupSchemaByID(
 	return schema, nil
 }
 
+// CheckPrivilegeForDatabaseID verifies that the user has `privilege` on the
+// database denoted by `databaseID`. Requires a valid transaction to be open.
+func (p *planner) CheckPrivilegeForDatabaseID(
+	ctx context.Context, databaseID descpb.ID, privilege privilege.Kind,
+) error {
+	desc, err := p.LookupDatabaseByID(ctx, databaseID)
+	if err != nil {
+		return err
+	}
+	return p.CheckPrivilegeForUser(ctx, desc, privilege, p.User())
+}
+
 // LookupDatabaseByID looks up a database by the given descriptor ID.
 func (p *planner) LookupDatabaseByID(
 	ctx context.Context, databaseID descpb.ID,
