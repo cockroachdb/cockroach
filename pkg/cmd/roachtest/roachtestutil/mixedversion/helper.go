@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/modular"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,6 +56,7 @@ type (
 	// Helper is the struct passed to `stepFunc`s (user-provided or
 	// implemented by the framework) that provides helper functions that
 	// mixed-version tests can use.
+	// Implements modular.StepHelper interface for compatibility with modular steps.
 	Helper struct {
 		System *Service
 		Tenant *Service
