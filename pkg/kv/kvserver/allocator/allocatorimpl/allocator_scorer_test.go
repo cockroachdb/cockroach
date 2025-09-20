@@ -2179,3 +2179,45 @@ func TestCandidateListString(t *testing.T) {
 		"s3, valid:false, fulldisk:false, necessary:false, voterNecessary:false, diversity:1.00, ioOverloaded: false, ioOverload: 1.00, converges:-1, balance:-1, hasNonVoter:false, rangeCount:3, queriesPerSecond:0.00, details:(mock detail 3)]",
 		cl.String())
 }
+
+func TestIOOverloadOptionsDiskUnhealthy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	options := IOOverloadOptions{
+		UseIOThresholdMax:            false,
+		ReplicaIOOverloadThreshold:   0.2,
+		LeaseIOOverloadThreshold:     0.2,
+		LeaseIOOverloadShedThreshold: 0.2,
+		DiskUnhealthyScore:           0.3,
+	}
+
+	store := roachpb.StoreDescriptor{}
+	o := options
+	o.ReplicaEnforcementLevel = IOOverloadThresholdBlockAll
+	require.True(t, o.allocateReplicaToCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.allocateReplicaToCheck(ctx, store, storepool.StoreList{}))
+
+	store = roachpb.StoreDescriptor{}
+	o = options
+	o.ReplicaEnforcementLevel = IOOverloadThresholdBlockTransfers
+	require.True(t, o.rebalanceReplicaToCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.rebalanceReplicaToCheck(ctx, store, storepool.StoreList{}))
+
+	store = roachpb.StoreDescriptor{}
+	o = options
+	o.LeaseEnforcementLevel = IOOverloadThresholdShed
+	require.True(t, o.ExistingLeaseCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.ExistingLeaseCheck(ctx, store, storepool.StoreList{}))
+
+	store = roachpb.StoreDescriptor{}
+	o = options
+	o.LeaseEnforcementLevel = IOOverloadThresholdBlockTransfers
+	require.True(t, o.transferLeaseToCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.transferLeaseToCheck(ctx, store, storepool.StoreList{}))
+}

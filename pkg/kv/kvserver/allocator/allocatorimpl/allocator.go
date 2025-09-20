@@ -2358,6 +2358,7 @@ func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 		ReplicaIOOverloadThreshold:   ReplicaIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadThreshold:     LeaseIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadShedThreshold: LeaseIOOverloadShedThreshold.Get(&a.st.SV),
+		DiskUnhealthyScore:           DiskUnhealthyIOOverloadScore.Get(&a.st.SV),
 	}
 }
 
