@@ -60,6 +60,7 @@ go_test(
     embedsrcs = ["testdata/test_releases.yaml"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
