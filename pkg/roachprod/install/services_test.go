@@ -334,7 +334,7 @@ func TestMultipleRegistrations(t *testing.T) {
 	verify := func(c *SyncedCluster, servicesToRegister [][]ServiceDesc) bool {
 		for _, services := range servicesToRegister {
 			if len(services) == 0 {
-				err := testDNS.DeleteRecordsBySubdomain(ctx, c.Name)
+				err := testDNS.DeleteSRVRecordsBySubdomain(ctx, c.Name)
 				require.NoError(t, err)
 				continue
 			}
