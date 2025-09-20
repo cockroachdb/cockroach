@@ -195,6 +195,7 @@ func (ex *connExecutor) prepare(
 			// beginning of the execution (in execStmtInOpenState). We might have also
 			// instrumented the planner to collect execution statistics, and resetting
 			// the planner here would break the assumptions of the instrumentation.
+			ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
@@ -435,6 +436,7 @@ func (ex *connExecutor) execBind(
 		}
 
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
+			ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			p := &ex.planner
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
