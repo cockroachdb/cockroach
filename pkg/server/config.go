@@ -608,9 +608,9 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 
 // MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
-	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
+	storeSpec := makeStorageCfg(ctx, st)
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID,
-		roachpb.TenantName(roachpb.SystemTenantID.String()), tempStorageCfg)
+		roachpb.TenantName(roachpb.SystemTenantID.String()), base.TempStorageConfig{})
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 	baseCfg := MakeBaseConfig(st, tr, storeSpec)
 	kvCfg := MakeKVConfig()
@@ -628,23 +628,19 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 // preserving the base.Config reference. Enables running tests
 // multiple times.
 func (cfg *Config) SetDefaults(ctx context.Context, st *cluster.Settings) {
-	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
-	cfg.SQLConfig.SetDefaults(tempStorageCfg)
+	storeSpec := makeStorageCfg(ctx, st)
+	cfg.SQLConfig.SetDefaults(base.TempStorageConfig{})
 	cfg.KVConfig.SetDefaults()
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 	cfg.BaseConfig.SetDefaults(st, tr, storeSpec)
 }
 
-func makeStorageCfg(
-	ctx context.Context, st *cluster.Settings,
-) (base.StoreSpec, base.TempStorageConfig) {
+func makeStorageCfg(ctx context.Context, st *cluster.Settings) base.StoreSpec {
 	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
 	if err != nil {
 		panic(err)
 	}
-	tempStorageCfg := base.TempStorageConfigFromEnv(
-		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
-	return storeSpec, tempStorageCfg
+	return storeSpec
 }
 
 // String implements the fmt.Stringer interface.
