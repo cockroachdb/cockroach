@@ -5,7 +5,15 @@
 
 package server
 
-import "sync/atomic"
+import (
+	"strings"
+	"sync/atomic"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
+)
 
 type serveModeHandler struct {
 	mode serveMode
@@ -20,6 +28,54 @@ func (s *serveModeHandler) setMode(mode serveMode) {
 func (s *serveModeHandler) operational() bool {
 	sMode := s.mode.get()
 	return sMode == modeOperational || sMode == modeDraining
+}
+
+var rpcsAllowedWhileBootstrapping = map[string]struct{}{
+	"/cockroach.rpc.Heartbeat/Ping":             {},
+	"/cockroach.gossip.Gossip/Gossip":           {},
+	"/cockroach.server.serverpb.Init/Bootstrap": {},
+	"/cockroach.server.serverpb.Admin/Health":   {},
+}
+
+// intercept implements filtering rules for each server state.
+func (s *serveModeHandler) intercept(fullName string) error {
+	if s.operational() {
+		return nil
+	}
+	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
+		return NewWaitingForInitError(fullName)
+	}
+	return nil
+}
+
+const (
+	serverPrefix = "/cockroach.server"
+	tsdbPrefix   = "/cockroach.ts"
+)
+
+// serverRPCRequestMetricsEnabled is a cluster setting that enables the
+// collection of gRPC and DRPC request duration metrics. This uses export only
+// metrics so the metrics are only exported to external sources such as
+// /_status/vars and DataDog.
+var serverRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"server.rpc.request_metrics.enabled",
+	"enables the collection of rpc metrics",
+	false,
+	settings.WithName("server.grpc.request_metrics.enabled"),
+)
+
+func shouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
+	return serverRPCRequestMetricsEnabled.Get(&settings.SV) &&
+		(strings.HasPrefix(method, serverPrefix) ||
+			strings.HasPrefix(method, tsdbPrefix))
+}
+
+// NewWaitingForInitError creates an error indicating that the server cannot run
+// the specified method until the node has been initialized.
+func NewWaitingForInitError(methodName string) error {
+	// NB: this error string is sadly matched in grpcutil.IsWaitingForInit().
+	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
 }
 
 // A list of the server states for bootstrap process.
