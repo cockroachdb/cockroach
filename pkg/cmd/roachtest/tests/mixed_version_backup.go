@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
@@ -2950,8 +2951,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// for the cluster used in this test without overloading it,
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
-			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, c.CRDBNodes(), false)
-			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, numWarehouses, c.CRDBNodes())
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, roachtestflags.GlobalSeed, c.CRDBNodes(), false)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, roachtestflags.GlobalSeed, numWarehouses, c.CRDBNodes())
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
@@ -2989,15 +2990,21 @@ func registerBackupMixedVersion(r registry.Registry) {
 }
 
 func tpccWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, numWarehouses int, roachNodes option.NodeListOption,
+	l *logger.Logger,
+	testRNG *rand.Rand,
+	seed int64,
+	numWarehouses int,
+	roachNodes option.NodeListOption,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	init = roachtestutil.NewCommand("./cockroach workload init tpcc").
 		MaybeOption(testRNG.Intn(2) == 0, "families").
 		Arg("{pgurl%s}", roachNodes).
-		Flag("warehouses", numWarehouses)
+		Flag("warehouses", numWarehouses).
+		MaybeFlag(seed != 0, "seed", seed)
 	run = roachtestutil.NewCommand("./cockroach workload run tpcc").
 		Arg("{pgurl%s}", roachNodes).
 		Flag("warehouses", numWarehouses).
+		MaybeFlag(seed != 0, "seed", seed).
 		Option("tolerate-errors")
 	l.Printf("tpcc init: %s", init)
 	l.Printf("tpcc run: %s", run)
@@ -3005,7 +3012,7 @@ func tpccWorkloadCmd(
 }
 
 func bankWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption, mock bool,
+	l *logger.Logger, testRNG *rand.Rand, seed int64, roachNodes option.NodeListOption, mock bool,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
 	possiblePayloads := bankPossiblePayloadBytes
@@ -3024,10 +3031,12 @@ func bankWorkloadCmd(
 	init = roachtestutil.NewCommand("./cockroach workload init bank").
 		Flag("rows", bankRows).
 		MaybeFlag(bankPayload != 0, "payload-bytes", bankPayload).
+		MaybeFlag(seed != 0, "seed", seed).
 		Flag("ranges", 0).
 		Arg("{pgurl%s}", roachNodes)
 	run = roachtestutil.NewCommand("./cockroach workload run bank").
 		Arg("{pgurl%s}", roachNodes).
+		MaybeFlag(seed != 0, "seed", seed).
 		Option("tolerate-errors")
 	l.Printf("bank init: %s", init)
 	l.Printf("bank run: %s", run)
@@ -3035,7 +3044,7 @@ func bankWorkloadCmd(
 }
 
 func schemaChangeWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption, mock bool,
+	l *logger.Logger, testRNG *rand.Rand, seed int64, roachNodes option.NodeListOption, mock bool,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	maxOps := 1000
 	concurrency := 5
@@ -3043,12 +3052,15 @@ func schemaChangeWorkloadCmd(
 		maxOps = 10
 		concurrency = 2
 	}
-	initCmd := roachtestutil.NewCommand("./workload init schemachange").
+	if seed == 0 {
+		seed = testRNG.Int63()
+	}
+	initCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload init schemachange", seed).
 		Arg("{pgurl%s}", roachNodes)
 	// TODO (msbutler): ideally we'd use the `db` flag to explicitly set the
 	// database, but it is currently broken:
 	// https://github.com/cockroachdb/cockroach/issues/115545
-	runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", testRNG.Int63()).
+	runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", seed).
 		Flag("verbose", 1).
 		Flag("max-ops", maxOps).
 		Flag("concurrency", concurrency).

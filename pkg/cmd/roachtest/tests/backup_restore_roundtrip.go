@@ -157,7 +157,7 @@ func backupRestoreRoundTrip(
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, testUtils, dbs,
+			ctx, t, c, m, testRNG, seed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
@@ -243,6 +243,7 @@ func startBackgroundWorkloads(
 	c cluster.Cluster,
 	m cluster.Monitor,
 	testRNG *rand.Rand,
+	seed int64,
 	roachNodes, workloadNode option.NodeListOption,
 	testUtils *CommonTestUtils,
 	dbs []string,
@@ -254,9 +255,9 @@ func startBackgroundWorkloads(
 	if testUtils.mock {
 		numWarehouses = 10
 	}
-	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, numWarehouses, roachNodes)
-	bankInit, bankRun := bankWorkloadCmd(l, testRNG, roachNodes, testUtils.mock)
-	scInit, scRun := schemaChangeWorkloadCmd(l, testRNG, roachNodes, testUtils.mock)
+	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, seed, numWarehouses, roachNodes)
+	bankInit, bankRun := bankWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
+	scInit, scRun := schemaChangeWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
 	if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
 		return nil, err
 	}
@@ -420,11 +421,12 @@ func createDriversForBackupRestore(
 	c cluster.Cluster,
 	m cluster.Monitor,
 	rng *rand.Rand,
+	seed int64,
 	testUtils *CommonTestUtils,
 	dbs []string,
 ) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
 	runBackgroundWorkload, err := startBackgroundWorkloads(
-		ctx, t.L(), c, m, rng, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+		ctx, t.L(), c, m, rng, seed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -460,7 +462,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, testUtils, dbs,
+			ctx, t, c, m, testRNG, seed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
