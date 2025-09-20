@@ -252,6 +252,23 @@ var PreserveDowngradeVersion = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
+// AutoUpgradeEnabled is used to enable and disable automatic upgrade.
+var AutoUpgradeEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cluster.auto_upgrade.enabled",
+	"disable automatic cluster version upgrade until reset",
+	true,
+	settings.WithReportable(true),
+	settings.WithPublic,
+)
+
+var AutoUpgradeSystemClusterFromMeta1Leaseholder = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cluster.auto_upgrade.initiate_from_meta1leaseholder.enabled",
+	"only initiate automatic cluster version upgrade from the Meta1 leaseholder (system-cluster only)",
+	true,
+)
+
 var metaPreserveDowngradeLastUpdated = metric.Metadata{
 	Name:        "cluster.preserve-downgrade-option.last-updated",
 	Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
@@ -291,13 +308,3 @@ func MakeMetricsAndRegisterOnVersionChangeCallback(sv *settings.Values) Metrics 
 		PreserveDowngradeLastUpdated: gauge,
 	}
 }
-
-// AutoUpgradeEnabled is used to enable and disable automatic upgrade.
-var AutoUpgradeEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"cluster.auto_upgrade.enabled",
-	"disable automatic cluster version upgrade until reset",
-	true,
-	settings.WithReportable(true),
-	settings.WithPublic,
-)
