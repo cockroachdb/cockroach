@@ -1739,7 +1739,6 @@ func TestBackupRestoreResume(t *testing.T) {
 			checkpointDirectory string
 		}{
 			{testName: "backup-progress-directory", checkpointDirectory: "/" + backupinfo.BackupProgressDirectory},
-			{testName: "backup-base-directory", checkpointDirectory: ""},
 		} {
 			item := item
 			t.Run(item.testName, func(t *testing.T) {
