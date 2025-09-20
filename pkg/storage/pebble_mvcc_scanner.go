@@ -938,10 +938,9 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 	if len(p.meta.RawBytes) != 0 {
 		// 7. Emit immediately if the value is inline.
 		//
-		// TODO(ssd): We error if we find an inline when
-		// ReturnRawMVCCValues is set. Anyone scanning with
-		// that option set should not be encountering inline
-		// values.
+		// TODO(ssd): We should error if we find an inline value when
+		// ReturnRawMVCCValues is set. Anyone scanning with that option set should
+		// not be scanning keyspace that includes inline values.
 		//
 		// https://github.com/cockroachdb/cockroach/issues/131667
 		return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.meta.RawBytes, p.meta.RawBytes)
