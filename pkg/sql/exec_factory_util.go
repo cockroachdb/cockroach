@@ -268,7 +268,7 @@ func constructVirtualScan(
 	}
 	idx := index.(*optVirtualIndex).idx
 	columns, constructor := virtual.getPlanInfo(
-		table.(*optVirtualTable).desc, idx, params.IndexConstraint, p.execCfg.Stopper,
+		table.(*optVirtualTable).desc, idx, params, p.execCfg.Stopper,
 	)
 
 	n, err := delayedNodeCallback(&delayedNode{
