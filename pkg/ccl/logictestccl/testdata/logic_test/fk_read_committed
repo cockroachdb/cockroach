@@ -140,6 +140,7 @@ WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx
 user testuser
 
 statement ok
+SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -179,6 +180,7 @@ WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
 user testuser
 
 statement ok
+SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -225,6 +227,7 @@ WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282 WHERE p = 1;
 user testuser
 
 statement ok
+SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -248,6 +251,7 @@ SELECT * FROM child_150282;
 user testuser
 
 statement ok
+RESET lock_timeout;
 RESET enable_implicit_fk_locking_for_serializable;
 RESET enable_shared_locking_for_serializable;
 RESET enable_durable_locking_for_serializable
