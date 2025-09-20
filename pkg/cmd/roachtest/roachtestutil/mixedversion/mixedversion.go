@@ -350,6 +350,7 @@ type (
 		tag                            string
 		overriddenMutatorProbabilities map[string]float64
 		hooksSupportFailureInjection   bool
+		workloadNodes                  option.NodeListOption
 	}
 
 	CustomOption func(*testOptions)
@@ -575,6 +576,13 @@ func DisableAllFailureInjectionMutators() CustomOption {
 func WithTag(tag string) CustomOption {
 	return func(opts *testOptions) {
 		opts.tag = tag
+	}
+}
+
+// WithWorkloadNodes allows callers to specify workload nodes which
+func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
+	return func(opts *testOptions) {
+		opts.workloadNodes = nodes
 	}
 }
 
@@ -836,10 +844,13 @@ func (t *Test) BackgroundCommand(
 // synchronously as a regular startup function. `runCmd` is the
 // command to actually run the command; it is run in the background.
 //
-// If overrideBinary is true, the binary used to run the command(s) will
-// be replaced with the cockroach binary of the current version the
-// cluster is running in.
-// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+// By default, the binary used to run the command(s) will be the same as the
+// the current version of the cluster at the time this hook is executed.
+// This is because the binary version is no longer backwards compatible as of
+// v25.3
+//
+// If overrideBinary is true, the binary used to run the command(s) will be
+// roachtestutil.Command.Binary. Assumes binary is already staged.
 func (t *Test) Workload(
 	name string,
 	node option.NodeListOption,
@@ -852,16 +863,11 @@ func (t *Test) Workload(
 			cmd.Flag("seed", seed)
 		}
 	}
-
 	if initCmd != nil {
 		addSeed(initCmd)
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-			if overrideBinary {
-				binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
-				if err != nil {
-					t.rt.Fatal(err)
-				}
-				initCmd.Binary = binary
+			if !overrideBinary {
+				initCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
 			}
 			l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
 			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
@@ -870,17 +876,57 @@ func (t *Test) Workload(
 
 	addSeed(runCmd)
 	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-		if overrideBinary {
-			binary, err := clusterupgrade.UploadCockroach(ctx, t.rt, t.logger, t.cluster, node, h.System.FromVersion)
-			if err != nil {
-				t.rt.Fatal(err)
-			}
-			runCmd.Binary = binary
+		if !overrideBinary {
+			runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
 		}
 		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
 		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
 	})
 }
+
+// DepricatedWorkload is this needed?  TODO remove if not needed
+//func (t *Test) DepricatedWorkload(
+//	name string,
+//	node option.NodeListOption,
+//	initCmd, runCmd *roachtestutil.Command,
+//	overrideBinary bool,
+//) StopFunc {
+//	seed := uint64(t.prng.Int63())
+//	addSeed := func(cmd *roachtestutil.Command) {
+//		if !cmd.HasFlag("seed") {
+//			cmd.Flag("seed", seed)
+//		}
+//	}
+//	if initCmd != nil {
+//		addSeed(initCmd)
+//		t.OnStartup(fmt.Sprintf("initialize %s workload using (depricated) dedicated workload binary", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+//			if !overrideBinary {
+//				binaryPath, _, err := clusterupgrade.UploadWorkload(
+//					ctx, t.rt, l, t.cluster, node, h.System.FromVersion)
+//				if err != nil {
+//					return err
+//				}
+//				initCmd.Binary = binaryPath
+//			}
+//			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
+//		})
+//	}
+//
+//	addSeed(runCmd)
+//	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+//		if !overrideBinary {
+//			binaryPath, _, err := clusterupgrade.UploadWorkload(
+//				ctx, t.rt, l, t.cluster, node, h.System.FromVersion)
+//			if err != nil {
+//				return err
+//			}
+//			//runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
+//			runCmd.Binary = binaryPath
+//		}
+//		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
+//		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
+//	})
+//}
 
 // Run is like RunE, except it fatals the test if any error occurs.
 func (t *Test) Run() {
