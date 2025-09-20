@@ -997,11 +997,18 @@ func (opc *optPlanningCtx) runExecBuilder(
 }
 
 // DecodeGist Avoid an import cycle by keeping the cat out of the tree. If
-// external is true gist is from a foreign database and we use nil catalog.
-func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([]string, error) {
+// external is true gist is from a foreign database and we use nil catalog. If
+// decompile is true, the plan gist is decompiled into a pheromone for plan
+// pinning.
+func (p *planner) DecodeGist(
+	ctx context.Context, gist string, external, decompile bool,
+) ([]string, error) {
 	var cat cat.Catalog
 	if !external {
 		cat = p.optPlanningCtx.catalog
+	}
+	if decompile {
+		return explain.DecompilePlanGistToPheromoneRows(gist, cat)
 	}
 	return explain.DecodePlanGistToRows(ctx, p.EvalContext(), gist, cat)
 }

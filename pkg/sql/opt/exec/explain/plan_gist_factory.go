@@ -10,6 +10,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/binary"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
 
@@ -172,6 +174,17 @@ type planGistDecoder struct {
 	// catalog can be nil when decoding gists via decode_external_plan_gist in which
 	// case we don't attempt to resolve tables or indexes.
 	catalog cat.Catalog
+}
+
+func DecompilePlanGistToPheromoneRows(gist string, catalog cat.Catalog) ([]string, error) {
+	plan, err := DecodePlanGistToPlan(gist, catalog)
+	if err != nil {
+		return nil, err
+	}
+	pheromone := DecompileToPheromone(plan.Root)
+	tp := treeprinter.New()
+	pheromone.Format(tp)
+	return strings.Split(tp.String(), "\n"), nil
 }
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
