@@ -40,6 +40,9 @@ type QueryBounds struct {
 	// span's end key is exclusive because the end bounds are based on the first
 	// row < Span.EndKey.
 	End tree.Datums
+	// Span is the original span that these query bounds were derived from.
+	// This preserves the source span information for reference.
+	Span roachpb.Span
 }
 
 var (
@@ -110,6 +113,7 @@ func SpanToQueryBounds(
 	if err != nil {
 		return bounds, false, errors.Wrapf(err, "decode endKeyValues error on %+v", endKeyValues)
 	}
+	bounds.Span = span
 	return bounds, true, nil
 }
 
