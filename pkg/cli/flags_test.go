@@ -1486,8 +1486,7 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
 				for _, s := range serverCfg.Stores.Specs {
-					assert.Zero(t, s.BallastSize.Bytes)
-					assert.Zero(t, s.BallastSize.Percent)
+					assert.Zero(t, s.BallastSize.Bytes())
 				}
 			} else {
 				require.EqualError(t, err, td.expectedErr)

@@ -253,12 +253,10 @@ func TestStoreMetrics(t *testing.T) {
 	specs := make(map[int]base.StoreSpec)
 	for i := 0; i < numServers; i++ {
 		spec := base.StoreSpec{
-			InMemory:    true,
+			Type:        storageconfig.InMemoryStore,
 			StickyVFSID: strconv.FormatInt(int64(i), 10),
 			// Specify a size to trigger the BlockCache in Pebble.
-			Size: storageconfig.Size{
-				Bytes: 512 << 20, /* 512 MiB */
-			},
+			Size: storageconfig.BytesSize(512 << 20 /* 512 MiB */),
 		}
 		stickyServerArgs[i] = base.TestServerArgs{
 			CacheSize:  2 << 20, /* 2 MiB */
