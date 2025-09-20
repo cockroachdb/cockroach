@@ -470,6 +470,7 @@ sinks:
   changefeed:             { channels: CHANGEFEED }
   health:                 { channels: HEALTH }
   kv-distribution:        { channels: KV_DISTRIBUTION }
+  kv-exec:                { channels: KV_EXEC }
   pebble:                 { channels: STORAGE }
   security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true }
   sql-auth:               { channels: SESSIONS, auditable: true }
