@@ -789,6 +789,10 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 	settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
 	t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
 
+	perTableTracking := fmt.Sprintf("%t", rand.Intn(2) == 0)
+	settings.ClusterSettings["changefeed.progress.per_table_tracking.enabled"] = perTableTracking
+	t.Status(fmt.Sprintf("changefeed.progress.per_table_tracking.enabled: %s", perTableTracking))
+
 	settings.Env = append(settings.Env, envVars...)
 
 	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
@@ -3106,7 +3110,6 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-
 	for _, perTablePTS := range []bool{false, true} {
 		for _, config := range []struct {
 			numTables    int
@@ -3145,86 +3148,85 @@ func registerCDC(r registry.Registry) {
 	} {
 		for _, cfg := range []struct {
 			tables int
-			rows   int
 			ranges int
 		}{
-			{tables: 1},
-			{tables: 10_000, rows: 1_000, ranges: 10},
+			{tables: 1, ranges: 10_000},
+			{tables: 10_000, ranges: 10},
 		} {
-			for _, perTableTracking := range []bool{false, true} {
-				r.Add(registry.TestSpec{
-					Name: "cdc/frontier-persistence-benchmark" +
-						fmt.Sprintf("/interval=%s/per-table-tracking=%t", interval, perTableTracking),
-					Owner:            registry.OwnerCDC,
-					Benchmark:        true,
-					Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-					CompatibleClouds: registry.AllClouds,
-					Suites:           registry.Suites(registry.Nightly),
-					Timeout:          2 * time.Hour,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						ct := newCDCTester(ctx, t, c)
-						defer ct.Close()
+			r.Add(registry.TestSpec{
+				Name: "cdc/frontier-persistence-benchmark" +
+					fmt.Sprintf("/interval=%s/tables=%d/ranges=%d", interval, cfg.tables, cfg.ranges),
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				Timeout:          2 * time.Hour,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					ct := newCDCTester(ctx, t, c)
+					defer ct.Close()
 
-						db := ct.DB()
+					db := ct.DB()
 
-						// Configure various cluster settings.
-						for name, value := range map[string]string{
-							"changefeed.progress.frontier_persistence.interval": fmt.Sprintf("'%s'", interval),
-							"changefeed.progress.per_table_tracking.enabled":    fmt.Sprintf("%t", perTableTracking),
-							// Disable span-level checkpointing since it's not necessary
-							// when frontier persistence is on.
-							"changefeed.span_checkpoint.interval": "'0'",
-							// Disable per-table PTS to avoid impact on results.
-							"changefeed.protected_timestamp.per_table.enabled": "false",
-						} {
-							stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
-							if _, err := db.ExecContext(ctx, stmt); err != nil {
-								t.Fatalf("failed to run %q: %v", stmt, err)
-							}
+					// Configure various cluster settings.
+					for name, value := range map[string]string{
+						"changefeed.progress.frontier_persistence.interval": fmt.Sprintf("'%s'", interval),
+						// Disable span-level checkpointing since it's not necessary
+						// when frontier persistence is on.
+						"changefeed.span_checkpoint.interval": "'0'",
+						// Disable per-table PTS to avoid impact on results.
+						"changefeed.protected_timestamp.per_table.enabled": "false",
+					} {
+						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
+						if _, err := db.ExecContext(ctx, stmt); err != nil {
+							t.Fatalf("failed to run %q: %v", stmt, err)
 						}
+					}
 
-						// Initialize bank workload with multiple tables.
-						initCmd := fmt.Sprintf(
-							"./cockroach workload init bank --tables=%d --rows=%d --ranges=%d {pgurl%s}",
-							cfg.tables, cfg.rows, cfg.ranges, ct.crdbNodes.RandNode())
-						if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
-							t.Fatalf("failed to initialize bank tables: %v", err)
-						}
+					// Initialize bank workload with multiple tables with multiple ranges.
+					// Each range will have a single row to maximize the likelihood of
+					// unmerged spans in the span frontier.
+					rows := cfg.ranges
+					initCmd := fmt.Sprintf(
+						"./cockroach workload init bank --tables=%d --ranges=%d --rows=%d {pgurl%s}",
+						cfg.tables, cfg.ranges, rows, ct.crdbNodes.RandNode())
+					if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
+						t.Fatalf("failed to initialize bank tables: %v", err)
+					}
 
-						// Run bank workload.
-						ct.workloadWg.Add(1)
-						ct.mon.Go(func(ctx context.Context) error {
-							defer ct.workloadWg.Done()
-							workloadCmd := fmt.Sprintf(
-								"./cockroach workload run bank --tables=%d --rows=%d --duration=30m {pgurl%s}",
-								cfg.tables, cfg.rows, ct.crdbNodes)
-							return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
-						})
+					// Run bank workload.
+					ct.workloadWg.Add(1)
+					ct.mon.Go(func(ctx context.Context) error {
+						defer ct.workloadWg.Done()
+						workloadCmd := fmt.Sprintf(
+							"./cockroach workload run bank --tables=%d --rows=%d --duration=30m {pgurl%s}",
+							cfg.tables, rows, ct.crdbNodes)
+						return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
+					})
 
-						// Create changefeed targeting all the bank tables.
-						targetNames := make([]string, 0, cfg.tables)
-						for i := range cfg.tables {
-							targetNames = append(targetNames, fmt.Sprintf("bank.bank_%d", i))
-						}
+					// Create changefeed targeting all the bank tables.
+					targetNames := make([]string, 0, cfg.tables)
+					for i := range cfg.tables {
+						targetNames = append(targetNames, fmt.Sprintf("bank.bank_%d", i))
+					}
 
-						feed := ct.newChangefeed(feedArgs{
-							sinkType: nullSink,
-							targets:  targetNames,
-							opts: map[string]string{
-								"initial_scan":             "'no'",
-								"resolved":                 "'3s'",
-								"min_checkpoint_frequency": "'30s'",
-							},
-						})
+					feed := ct.newChangefeed(feedArgs{
+						sinkType: nullSink,
+						targets:  targetNames,
+						opts: map[string]string{
+							"initial_scan":             "'no'",
+							"resolved":                 "'3s'",
+							"min_checkpoint_frequency": "'30s'",
+						},
+					})
 
-						ct.runFeedLatencyVerifier(feed, latencyTargets{
-							steadyLatency: 2 * time.Minute,
-						})
+					ct.runFeedLatencyVerifier(feed, latencyTargets{
+						steadyLatency: 2 * time.Minute,
+					})
 
-						ct.waitForWorkload()
-					},
-				})
-			}
+					ct.waitForWorkload()
+				},
+			})
 		}
 	}
 }
