@@ -1830,7 +1830,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	// highwater mark remains fixed while other spans may significantly outpace
 	// it, therefore to avoid losing that progress on changefeed resumption we
 	// also store as many of those leading spans as we can in the job progress
-	updateCheckpoint := (inBackfill || cf.frontier.HasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
+	updateCheckpoint := !cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) &&
+		(inBackfill || cf.frontier.HasLaggingSpans(&cf.js.settings.SV)) && cf.js.canCheckpointSpans()
 
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint *jobspb.TimestampSpansMap
