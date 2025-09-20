@@ -45,6 +45,7 @@ type mmaState interface {
 	// AdjustPendingChangesDisposition is called by the allocator sync to adjust
 	// the disposition of pending changes.
 	AdjustPendingChangesDisposition(changeIDs []mmaprototype.ChangeID, success bool)
+	ShouldNotRebalanceForMMA(cand roachpb.StoreDescriptor, cands []roachpb.StoreID) bool
 }
 
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
@@ -227,4 +228,10 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 				chg.Target.StoreID, trackedChange.usage, chg.ChangeType)
 		}
 	}
+}
+
+func (as *AllocatorSync) ShouldNotRebalanceForMMA(
+	cand roachpb.StoreDescriptor, cands []roachpb.StoreID,
+) bool {
+	return as.mmaAllocator.ShouldNotRebalanceForMMA(cand, cands)
 }
