@@ -35,7 +35,6 @@ query T
 EXPLAIN UPDATE multi_col_fam_checks SET a = 5, b = 6
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: multi_col_fam_checks
@@ -55,7 +54,6 @@ query T
 EXPLAIN UPDATE multi_col_fam_checks SET a = 5, b = 6, e = 3
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: multi_col_fam_checks
@@ -75,7 +73,6 @@ query T
 EXPLAIN UPDATE multi_col_fam_checks SET e = 3 WHERE a = 5
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: multi_col_fam_checks
@@ -95,7 +92,6 @@ query T
 EXPLAIN UPDATE multi_col_fam_checks SET e = 3
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: multi_col_fam_checks

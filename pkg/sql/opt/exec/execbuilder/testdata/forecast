@@ -186,7 +186,6 @@ query T
 EXPLAIN SELECT * FROM g WHERE a >= 9 AND a < 12
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
@@ -426,7 +425,6 @@ query T
 EXPLAIN SELECT * FROM s WHERE b >= 0 AND b < 12
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -606,7 +604,6 @@ query T
 EXPLAIN SELECT * FROM c WHERE h >= '1988-08-07'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 24 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -891,7 +888,6 @@ query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -921,7 +917,6 @@ query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (11% of the table; stats collected <hidden> ago)
@@ -945,7 +940,6 @@ query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -970,7 +964,6 @@ query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (4.2% of the table; stats collected <hidden> ago)
@@ -994,7 +987,6 @@ query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (25% of the table; stats collected <hidden> ago)
@@ -1018,7 +1010,6 @@ query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1046,7 +1037,6 @@ query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1071,7 +1061,6 @@ query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1096,7 +1085,6 @@ query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1121,7 +1109,6 @@ query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1146,7 +1133,6 @@ query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1177,7 +1163,6 @@ query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (11% of the table; stats collected <hidden> ago)
@@ -1188,7 +1173,6 @@ query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1199,7 +1183,6 @@ query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (4.2% of the table; stats collected <hidden> ago)
@@ -1210,7 +1193,6 @@ query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (25% of the table; stats collected <hidden> ago)
@@ -1221,7 +1203,6 @@ query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1238,7 +1219,6 @@ query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1255,7 +1235,6 @@ query T
 EXPLAIN SELECT * FROM g WHERE a > 8
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1266,7 +1245,6 @@ query T
 EXPLAIN SELECT * FROM s WHERE b < 3
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1277,7 +1255,6 @@ query T
 EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1288,7 +1265,6 @@ query T
 EXPLAIN SELECT * FROM x WHERE a > 16
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
@@ -1299,7 +1275,6 @@ query T
 EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
@@ -1556,7 +1531,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = 3 AND b = 13
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ estimated row count: 1
@@ -1599,7 +1573,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = 3 AND b = 13
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ estimated row count: 1
@@ -1881,7 +1854,6 @@ query T
 EXPLAIN SELECT * FROM t_103958
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 3,000 (100% of the table; stats collected <hidden> ago)
@@ -2361,7 +2333,6 @@ query T
 EXPLAIN UPDATE st SET t = '2024-04-09 19:05:00.000000' WHERE s >= 0 AND s < 10 AND t IS NULL
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: st
