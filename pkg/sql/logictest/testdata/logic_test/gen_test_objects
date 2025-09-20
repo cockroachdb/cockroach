@@ -179,16 +179,16 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
+%vui
 comments
-descriptor_id_se'q
-jo b_progress
-mvcc_statistics
-sche%vduled_j%qobs
-settings
-span_stats_unique_keys
+descriptor_id_se͌q
+job_progress_history
+ro le_options
+sett"ings
+statement_bundle_chunks
+statement_diagnost ics
 sta😣tement_statistics
-tenant_id_seq
-tenant_se\\x7bttings
+task%q_payloads
 users
 
 # Again, the column names are randomized.
@@ -198,27 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-comments              """ sub_i d"   bigint
-comments              "c omment"     text
-comments              "object_id "   bigint
-comments              rowid          bigint
-comments              "t😌y p😂e"      bigint
-"descriptor_id_se'q"  rowid          bigint
-"descriptor_id_se'q"  value          bigint
-"jo b_progress"       fractio😲n      double precision
-"jo b_progress"       "job_i'd"      bigint
-"jo b_progress"       "resoLve%qd"   numeric
-"jo b_progress"       rowid          bigint
-"jo b_progress"       written        timestamp with time zone
-mvcc_statistics       "!created_at"  timestamp with time zone
-mvcc_statistics       database_id    bigint
-mvcc_statistics       "inde%vx_id
-"                     bigint
-mvcc_statistics       rowid              bigint
-mvcc_statistics       "statisti%pcs"     jsonb
-mvcc_statistics       "ta\\x2dble_id"    bigint
-"sche%vduled_j%qobs"  created            timestamp with time zone
-"sche%vduled_j%qobs"  "execution_a?rgs"  bytea
+"%vui"                "\\U00105591ke😰y"  text
+"%vui"                "lastUpda͗ted"     timestamp without time zone
+"%vui"                rowid              bigint
+"%vui"                "v̮/alue'"         bytea
+comments              "%pobjec̏t_😫id"    bigint
+comments              "commen  t "       text
+comments              rowid              bigint
+comments              sub_id             bigint
+comments              "type'😡"           bigint
+descriptor_id_se͌q    rowid              bigint
+descriptor_id_se͌q    value              bigint
+job_progress_history  "fra""ction"       double precision
+job_progress_history  job_id             bigint
+job_progress_history  "resOlved%q"       numeric
+job_progress_history  rowid              bigint
+job_progress_history  "wRit́ten"         timestamp with time zone
+"ro le_options"       option             text
+"ro le_options"       rowid              bigint
+"ro le_options"       user_id            oid
+"ro le_options"       username           text
 
 subtest templates/different_templates_in_each_db
 
@@ -236,15 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  "%56ev                              entlo\ng%v"
-"d%qbt_1"  public  descriptor_id_seq
-"d%qbt_1"  public  scheduled_jobs
-"d%qbt_2"  public  jobs
-"d%qbt_2"  public  "privil)eges"
-"d%qbt_2"  public  "transaction_executio%pn_insights"
-dbt_3      public  "job_i nfo"
-dbt_3      public  sql_instances
-dbt_3      public  "statement_diagnostIcs"
+"d%qbt_1"  public  job_status
+"d%qbt_1"  public  sp😗an_stats_unique_keys
+"d%qbt_1"  public  statement_execution̫_insights
+"d%qbt_2"  public  role_options
+"d%qbt_2"  public  "table_metadat(a"
+"d%qbt_2"  public  ui
+dbt_3      public  protected_ts_meta
+dbt_3      public  statement_hints
+dbt_3      public  web_sessions
 
 
 statement ok

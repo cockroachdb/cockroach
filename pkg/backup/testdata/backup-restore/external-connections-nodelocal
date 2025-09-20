@@ -51,6 +51,7 @@ role_options table full
 scheduled_jobs table full
 schema schema full
 settings table full
+statement_hints table full
 system database full
 ui table full
 users table full
