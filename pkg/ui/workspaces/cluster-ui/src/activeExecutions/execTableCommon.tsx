@@ -26,7 +26,8 @@ export type ExecutionsColumn =
   | "statementCount"
   | "status"
   | "timeSpentBlocking"
-  | "timeSpentWaiting";
+  | "timeSpentWaiting"
+  | "isolationLevel";
 
 export const executionsColumnLabels: Record<
   ExecutionsColumn,
@@ -55,6 +56,7 @@ export const executionsColumnLabels: Record<
   status: () => "Status",
   timeSpentBlocking: () => "Time Spent Blocking",
   timeSpentWaiting: () => "Time Spent Waiting",
+  isolationLevel: () => "Isolation Level",
 };
 
 export type ExecutionsTableColumnKeys = keyof typeof executionsColumnLabels;
@@ -148,6 +150,15 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
       {getLabel("timeSpentWaiting")}
     </Tooltip>
   ),
+  isolationLevel: () => (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={<p>Isolation level of this transaction.</p>}
+    >
+      {getLabel("isolationLevel")}
+    </Tooltip>
+  ),
 };
 
 function getID(item: ActiveExecution, execType: ExecutionType) {
@@ -214,6 +225,12 @@ function makeActiveExecutionColumns(
       title: executionsTableTitles.applicationName(execType),
       cell: (item: ActiveExecution) => item.application,
       sort: (item: ActiveExecution) => item.application,
+    },
+    isolationLevel: {
+      name: "isolationLevel",
+      title: executionsTableTitles.isolationLevel(execType),
+      cell: (item: ActiveExecution) => item.isolationLevel,
+      sort: (item: ActiveExecution) => item.isolationLevel,
     },
   };
 }

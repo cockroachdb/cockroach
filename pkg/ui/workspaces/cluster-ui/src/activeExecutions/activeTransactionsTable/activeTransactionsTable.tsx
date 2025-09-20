@@ -59,6 +59,7 @@ export function makeActiveTransactionsColumns(
       cell: (item: ActiveTransaction) => item.retries,
       sort: (item: ActiveTransaction) => item.retries,
     },
+    activeTransactionColumnsFromCommon.isolationLevel,
     activeTransactionColumnsFromCommon.applicationName,
   ].filter(col => col != null);
 }
