@@ -92,7 +92,7 @@ func TestStartupFailureRandomRange(t *testing.T) {
 	// run it under nightly (skipping race builds because with many nodes they are
 	// very resource intensive and tend to collapse).
 	skip.UnderRace(t, "6 nodes with replication is too slow for race")
-	if !skip.NightlyStress() {
+	if !skip.Stress() {
 		skip.IgnoreLint(t, "test takes 30s to run due to circuit breakers and timeouts")
 	}
 
