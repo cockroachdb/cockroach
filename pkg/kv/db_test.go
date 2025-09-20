@@ -738,6 +738,9 @@ func TestDBDecommissionedOperations(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
