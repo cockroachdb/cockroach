@@ -9,6 +9,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb:kvflowinspectpb_proto",
+        "//pkg/kv/kvserver/rangefeed/rangefeedpb:rangefeedpb_proto",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb:storelivenesspb_proto",
     ],
 )
@@ -24,6 +25,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
+        "//pkg/kv/kvserver/rangefeed/rangefeedpb",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
     ],
 )
