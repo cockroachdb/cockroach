@@ -224,7 +224,36 @@ func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
-func TestDatabaseLevelChangefeedWithFilter(t *testing.T) {
+func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		expectSuccess := func(stmt string) {
+			successfulFeed := feed(t, f, stmt)
+			defer closeFeed(t, successfulFeed)
+			_, err := successfulFeed.Next()
+			require.NoError(t, err)
+		}
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+
+		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`)
+		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo,foo2`)
+		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.*`,
+			`at or near "*": syntax error`)
+		// TODO(#147421): Assert payload once the filter works
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+func TestDatabaseLevelChangefeedWithExcludeFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

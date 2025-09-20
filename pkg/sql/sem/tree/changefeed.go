@@ -23,9 +23,9 @@ const (
 
 type FilterType int
 
-// Needs to be the same as
 const (
 	ExcludeFilter FilterType = iota
+	IncludeFilter
 )
 
 type ChangefeedFilterOption struct {
@@ -38,7 +38,7 @@ func (l ChangefeedLevel) String() string {
 }
 
 func (l FilterType) String() string {
-	return []string{"EXCLUDE"}[l]
+	return []string{"EXCLUDE", "INCLUDE"}[l]
 }
 
 // CreateChangefeed represents a CREATE CHANGEFEED statement.

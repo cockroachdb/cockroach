@@ -6501,6 +6501,10 @@ db_level_changefeed_filter_option:
   {
     $$.val = &tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.ExcludeFilter}
   }
+| INCLUDE TABLES table_name_list
+  {
+    $$.val = &tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.IncludeFilter}
+  }
 | /* EMPTY */ 
   {
     $$.val = nil
