@@ -53,6 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -859,4 +863,97 @@ func GetProducerJobIDFromLDRJob(
 ) jobspb.JobID {
 	payload := jobutils.GetJobPayload(t, sqlRunner, ldrJobID)
 	return jobspb.JobID(payload.GetLogicalReplicationDetails().StreamID)
+}
+
+type bankOptions struct {
+	numAccounts int
+	payloadSize int
+	splits      int
+	batchSize   int
+	concurrency int
+}
+
+type BankOption func(*bankOptions)
+
+func WithNumAccounts(numAccounts int) BankOption {
+	return func(opts *bankOptions) {
+		opts.numAccounts = numAccounts
+	}
+}
+
+var defaultBankOpts = bankOptions{
+	numAccounts: 1,
+	payloadSize: 1024,
+	splits:      10,
+	batchSize:   1000,
+	concurrency: 4,
+}
+
+// CreateBankWorkloadHandles creates initialization and run functions for
+// running a bank workload against a server.
+func CreateBankWorkloadHandles(
+	t *testing.T, ctx context.Context, options ...BankOption,
+) (
+	init func(sql *sqlutils.SQLRunner) error,
+	run func(srv serverutils.ApplicationLayerInterface) (func() error, error),
+) {
+	opts := defaultBankOpts
+	for _, opt := range options {
+		opt(&opts)
+	}
+	bankData := bank.FromConfig(opts.numAccounts, opts.numAccounts, opts.payloadSize, opts.splits)
+	loader := workloadsql.InsertsDataLoader{BatchSize: opts.batchSize, Concurrency: opts.concurrency}
+
+	init = func(sql *sqlutils.SQLRunner) error {
+		_, err := workloadsql.Setup(ctx, sql.DB.(*gosql.DB), bankData, loader)
+		return err
+	}
+
+	run = func(srv serverutils.ApplicationLayerInterface) (stop func() error, err error) {
+		stopper := make(chan struct{})
+		pgURL, cleanup := srv.PGUrl(t)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create pgURL for bank workload")
+		}
+		defer func() {
+			if err != nil {
+				cleanup()
+			}
+		}()
+		reg := histogram.NewRegistry(20*time.Second, bankData.Meta().Name)
+		ops, err := bankData.(workload.Opser).Ops(ctx, []string{pgURL.String()}, reg)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create bank workload ops")
+		}
+
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer cleanup()
+			defer func() {
+				if ops.Close != nil {
+					err := ops.Close(ctx)
+					require.NoError(t, err, "failed to close bank workload ops")
+				}
+			}()
+
+			fn := ops.WorkerFns[0]
+			for {
+				err := fn(ctx)
+				if err != nil {
+					return errors.Wrap(err, "bank workload worker operation failed")
+				}
+				select {
+				case <-stopper:
+					return nil
+				default:
+				}
+			}
+		})
+
+		return func() error {
+			close(stopper)
+			return g.Wait()
+		}, nil
+	}
+	return init, run
 }
