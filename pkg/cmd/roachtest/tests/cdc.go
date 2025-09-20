@@ -3138,7 +3138,11 @@ func registerCDC(r registry.Registry) {
 			})
 		}
 	}
-	for _, interval := range []string{"30s", "5m", "10m"} {
+	for _, interval := range []string{
+		"5s",  // min interval
+		"30s", // default interval
+		"10m", // max interval
+	} {
 		for _, perTableTracking := range []bool{false, true} {
 			r.Add(registry.TestSpec{
 				Name: "cdc/frontier-persistence-benchmark" +
@@ -3172,7 +3176,7 @@ func registerCDC(r registry.Registry) {
 					}
 
 					// Initialize bank workload with multiple tables.
-					numTables := 1_000
+					numTables := 10_000
 					numRows := 1_000
 					numRanges := 10
 					initCmd := fmt.Sprintf(
