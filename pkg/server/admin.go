@@ -2492,12 +2492,15 @@ func jobHelper(
 	return &job, nil
 }
 
+// fetchJobMessages retrieves the messages associated with a job using the node
+// user; its results should only be shown to a user already known to have access
+// to the passed job.
 func fetchJobMessages(
 	ctx context.Context, jobID int64, user username.SQLUsername, sqlServer *SQLServer,
 ) (messages []serverpb.JobMessage) {
 	const msgQuery = `SELECT kind, written, message FROM system.job_message WHERE job_id = $1 ORDER BY written DESC`
 	it, err := sqlServer.internalExecutor.QueryIteratorEx(ctx, "admin-job-messages", nil,
-		sessiondata.InternalExecutorOverride{User: user},
+		sessiondata.NodeUserSessionDataOverride, // We are post-priv check and sys table requires node.
 		msgQuery,
 		jobID,
 	)
