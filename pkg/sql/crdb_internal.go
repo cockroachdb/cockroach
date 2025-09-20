@@ -2226,21 +2226,23 @@ func populateTransactionsTable(
 
 const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-  query_id         STRING,         -- the cluster-unique ID of the query
-  txn_id           UUID,           -- the unique ID of the query's transaction
-  node_id          INT NOT NULL,   -- the node on which the query is running
-  session_id       STRING,         -- the ID of the session
-  user_name        STRING,         -- the user running the query
-  start            TIMESTAMPTZ,    -- the start time of the query
-  query            STRING,         -- the SQL code of the query
-  client_address   STRING,         -- the address of the client that issued the query
-  application_name STRING,         -- the name of the application as per SET application_name
-  distributed      BOOL,           -- whether the query is running distributed
-  phase            STRING,         -- the current execution phase
-  full_scan        BOOL,           -- whether the query contains a full table or index scan
-  plan_gist        STRING,         -- Compressed logical plan.
-  database         STRING,         -- the database the statement was executed on
-  isolation_level  STRING          -- the isolation level of the query's transaction
+  query_id             STRING,         -- the cluster-unique ID of the query
+  txn_id               UUID,           -- the unique ID of the query's transaction
+  node_id              INT NOT NULL,   -- the node on which the query is running
+  session_id           STRING,         -- the ID of the session
+  user_name            STRING,         -- the user running the query
+  start                TIMESTAMPTZ,    -- the start time of the query
+  query                STRING,         -- the SQL code of the query
+  client_address       STRING,         -- the address of the client that issued the query
+  application_name     STRING,         -- the name of the application as per SET application_name
+  distributed          BOOL,           -- whether the query is running distributed
+  phase                STRING,         -- the current execution phase
+  full_scan            BOOL,           -- whether the query contains a full table or index scan
+  plan_gist            STRING,         -- Compressed logical plan.
+  database             STRING,         -- the database the statement was executed on
+  isolation_level      STRING,         -- the isolation level of the query's transaction
+  num_txn_retries      INT,            -- number of txn retries
+  num_txn_auto_retries INT             -- number of auto retries via SQL conn executor
 )`
 
 func (p *planner) makeSessionsRequest(
@@ -2358,6 +2360,11 @@ func populateQueriesTable(
 			continue
 		}
 		sessionID := getSessionID(session)
+		numTxnRetries, numTxnAutoRetries := tree.DNull, tree.DNull
+		if txn := session.ActiveTxn; txn != nil {
+			numTxnRetries = tree.NewDInt(tree.DInt(txn.NumRetries))
+			numTxnAutoRetries = tree.NewDInt(tree.DInt(txn.NumAutoRetries))
+		}
 		for _, query := range session.ActiveQueries {
 			isDistributedDatum := tree.DNull
 			isFullScanDatum := tree.DNull
@@ -2376,16 +2383,6 @@ func populateQueriesTable(
 
 			if query.Progress > 0 {
 				phase = fmt.Sprintf("%s (%.2f%%)", phase, query.Progress*100)
-			}
-
-			var txnID tree.Datum
-			// query.TxnID and query.TxnStart were only added in 20.1. In case this
-			// is a mixed cluster setting, report NULL if these values were not filled
-			// out by the remote session.
-			if query.ID == "" {
-				txnID = tree.DNull
-			} else {
-				txnID = tree.NewDUuid(tree.DUuid{UUID: query.TxnID})
 			}
 
 			ts, err := tree.MakeDTimestampTZ(query.Start, time.Microsecond)
@@ -2414,7 +2411,7 @@ func populateQueriesTable(
 
 			if err := addRow(
 				tree.NewDString(query.ID),
-				txnID,
+				tree.NewDUuid(tree.DUuid{UUID: query.TxnID}),
 				tree.NewDInt(tree.DInt(session.NodeID)),
 				sessionID,
 				tree.NewDString(session.Username),
@@ -2428,6 +2425,8 @@ func populateQueriesTable(
 				planGistDatum,
 				tree.NewDString(query.Database),
 				isolationLevelDatum,
+				numTxnRetries,
+				numTxnAutoRetries,
 			); err != nil {
 				return err
 			}
@@ -2455,6 +2454,8 @@ func populateQueriesTable(
 				tree.DNull,                             // plan_gist
 				tree.DNull,                             // database
 				tree.DNull,                             // isolation_level
+				tree.DNull,                             // num_txn_retries
+				tree.DNull,                             // num_txn_auto_retries
 			); err != nil {
 				return err
 			}
