@@ -1,0 +1,64 @@
+# This test sets up a single node with four stores that all have an identical number
+# of (single-voter) replicas. However, only the replicas on the fourth store experience
+# load. We expect the allocator to swap replicas around such that CPU load harmonizes.
+# For the MMA, this wasn't true until
+
+gen_cluster nodes=1 stores_per_node=4
+----
+
+# These ranges will see load.
+gen_ranges ranges=300 min_key=1 max_key=10000 repl_factor=1 placement_type=replica_placement
+{s4}:1
+----
+{s4:*}:1
+
+gen_ranges ranges=900 min_key=10000 max_key=20000 repl_factor=1 placement_type=replica_placement
+{s1}:1
+{s2}:1
+{s3}:1
+----
+{s1:*}:1
+{s2:*}:1
+{s3:*}:1
+
+# Read-only workload - 6 cores.
+gen_load rate=6000 rw_ratio=1 min_key=1 max_key=10000 request_cpu_per_access=100000
+----
+
+# CPU should balance.
+
+assertion type=balance ticks=5 stat=cpu upper_bound=1.1
+----
+asserting: max_{stores}(cpu)/mean_{stores}(cpu) < 1.10 at each of last 5 ticks
+
+# Leases and replicas don't necessarily balance - though this is in principle possible here,
+# it requires sma and mma to work together. But in either configuration, leases and replicas
+# should ultimately stabilize.
+
+assertion type=steady ticks=5 stat=leases upper_bound=0.05
+----
+asserting: leases stays < 1.05*mean_{ticks} at each store
+
+assertion type=steady ticks=5 stat=replicas upper_bound=0.05
+----
+asserting: replicas stays < 1.05*mean_{ticks} at each store
+
+eval duration=40m cfgs=(sma-only,mma-only) metrics=(replicas,leases)
+----
+leases#1: first: [s1=300, s2=300, s3=300, s4=300] (stddev=0.00, mean=300.00, sum=1200)
+leases#1: last:  [s1=300, s2=300, s3=300, s4=300] (stddev=0.00, mean=300.00, sum=1200)
+replicas#1: first: [s1=300, s2=300, s3=300, s4=300] (stddev=0.00, mean=300.00, sum=1200)
+replicas#1: last:  [s1=300, s2=300, s3=300, s4=300] (stddev=0.00, mean=300.00, sum=1200)
+artifacts[sma-only]: 572287e9f402c2af
+failed assertion sample 1
+  balance stat=cpu threshold=(<1.10) ticks=5
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+leases#1: first: [s1=300, s2=300, s3=300, s4=300] (stddev=0.00, mean=300.00, sum=1200)
+leases#1: last:  [s1=377, s2=368, s3=372, s4=83] (stddev=125.33, mean=300.00, sum=1200)
+replicas#1: first: [s1=300, s2=300, s3=300, s4=300] (stddev=0.00, mean=300.00, sum=1200)
+replicas#1: last:  [s1=377, s2=368, s3=372, s4=83] (stddev=125.33, mean=300.00, sum=1200)
+artifacts[mma-only]: 285e01ed42d98e5d
