@@ -783,11 +783,17 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
-	// Randomly set a quantization interval since metamorphic settings
-	// don't extend to roachtests.
-	quantization := fmt.Sprintf("%ds", rand.Intn(30))
-	settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
-	t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
+	// Set cluster settings that we want to test metamorphically to random values
+	// since metamorphic settings don't extend to roachtests.
+	{
+		quantization := fmt.Sprintf("%ds", rand.Intn(30))
+		settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
+		t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
+
+		perTableTracking := fmt.Sprintf("%t", rand.Intn(2) == 0)
+		settings.ClusterSettings["changefeed.progress.per_table_tracking.enabled"] = perTableTracking
+		t.Status(fmt.Sprintf("changefeed.progress.per_table_tracking.enabled: %s", perTableTracking))
+	}
 
 	settings.Env = append(settings.Env, envVars...)
 
@@ -3106,7 +3112,6 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-
 	for _, perTablePTS := range []bool{false, true} {
 		for _, config := range []struct {
 			numTables    int
@@ -3138,17 +3143,30 @@ func registerCDC(r registry.Registry) {
 			})
 		}
 	}
-	for _, interval := range []string{"30s", "5m", "10m"} {
-		for _, perTableTracking := range []bool{false, true} {
+	for _, interval := range []string{
+		"5s",  // min interval
+		"30s", // default interval
+		"10m", // max interval
+	} {
+		for _, cfg := range []struct {
+			tables int
+			ranges int
+		}{
+			{tables: 1, ranges: 10_000},
+			{tables: 10, ranges: 1_000},
+			{tables: 100, ranges: 100},
+			{tables: 1_000, ranges: 10},
+			{tables: 10_000, ranges: 1},
+		} {
 			r.Add(registry.TestSpec{
 				Name: "cdc/frontier-persistence-benchmark" +
-					fmt.Sprintf("/interval=%s/per-table-tracking=%t", interval, perTableTracking),
+					fmt.Sprintf("/interval=%s/tables=%d/ranges=%d", interval, cfg.tables, cfg.ranges),
 				Owner:            registry.OwnerCDC,
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 				CompatibleClouds: registry.AllClouds,
 				Suites:           registry.Suites(registry.Nightly),
-				Timeout:          time.Hour,
+				Timeout:          2 * time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					ct := newCDCTester(ctx, t, c)
 					defer ct.Close()
@@ -3158,7 +3176,6 @@ func registerCDC(r registry.Registry) {
 					// Configure various cluster settings.
 					for name, value := range map[string]string{
 						"changefeed.progress.frontier_persistence.interval": fmt.Sprintf("'%s'", interval),
-						"changefeed.progress.per_table_tracking.enabled":    fmt.Sprintf("%t", perTableTracking),
 						// Disable span-level checkpointing since it's not necessary
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
@@ -3171,13 +3188,13 @@ func registerCDC(r registry.Registry) {
 						}
 					}
 
-					// Initialize bank workload with multiple tables.
-					numTables := 1_000
-					numRows := 1_000
-					numRanges := 10
+					// Initialize bank workload with multiple tables with multiple ranges.
+					// Each range will have a single row (or 2 when there's a single range)
+					// to maximize the likelihood of unmerged spans in the span frontier.
+					rows := max(cfg.ranges, 2)
 					initCmd := fmt.Sprintf(
-						"./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
-						numRows, numRanges, numTables, ct.crdbNodes.RandNode())
+						"./cockroach workload init bank --tables=%d --ranges=%d --rows=%d {pgurl%s}",
+						cfg.tables, cfg.ranges, rows, ct.crdbNodes.RandNode())
 					if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 						t.Fatalf("failed to initialize bank tables: %v", err)
 					}
@@ -3187,20 +3204,24 @@ func registerCDC(r registry.Registry) {
 					ct.mon.Go(func(ctx context.Context) error {
 						defer ct.workloadWg.Done()
 						workloadCmd := fmt.Sprintf(
-							"./cockroach workload run bank --rows=%d --duration=30m --tables=%d {pgurl%s}",
-							numRows, numTables, ct.crdbNodes)
+							"./cockroach workload run bank --tables=%d --ranges=%d --rows=%d --duration=30m {pgurl%s}",
+							cfg.tables, cfg.ranges, rows, ct.crdbNodes)
 						return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
 					})
 
 					// Create changefeed targeting all the bank tables.
-					targetNames := make([]string, 0, numTables)
-					for i := range numTables {
-						targetNames = append(targetNames, fmt.Sprintf("bank.bank_%d", i))
+					targets := make([]string, cfg.tables)
+					if cfg.tables == 1 {
+						targets[0] = "bank.bank"
+					} else {
+						for i := range targets {
+							targets[i] = fmt.Sprintf("bank.bank_%d", i)
+						}
 					}
 
 					feed := ct.newChangefeed(feedArgs{
 						sinkType: nullSink,
-						targets:  targetNames,
+						targets:  targets,
 						opts: map[string]string{
 							"initial_scan":             "'no'",
 							"resolved":                 "'3s'",
