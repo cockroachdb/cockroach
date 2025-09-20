@@ -123,6 +123,35 @@ $input
     $private
 )
 
+# PushOffsetIntoOrdinality is similar to PushLimitIntoOrdinality, but applies
+# to the Offset operator.
+[PushOffsetIntoOrdinality, Normalize]
+(Offset
+    (Ordinality $input:* $private:*)
+    $offset:*
+    $offsetOrdering:* &
+        (OrderingCanProjectCols
+            $offsetOrdering
+            (OutputCols $input)
+        ) &
+        (OrderingIntersects
+            (OrdinalityOrdering $private)
+            $offsetOrdering
+        )
+)
+=>
+(Ordinality
+    (Offset
+        $input
+        $offset
+        (OrderingIntersection
+            (OrdinalityOrdering $private)
+            $offsetOrdering
+        )
+    )
+    $private
+)
+
 # PushLimitIntoJoinLeft pushes a Limit into the left input of an InnerJoin or
 # LeftJoin when rows from the left input are guaranteed to be preserved by the
 # join. Since the join creates an output row for each left input row, we only
@@ -207,6 +236,64 @@ $input
     )
     $limitExpr
     $ordering
+)
+
+# PushOffsetIntoJoinLeft is similar to PushLimitIntoJoinLeft, but applies to
+# Offset operators. It has the additional restriction that the join must not
+# duplicate rows from the left input. This restriction allows the original
+# Offset to be removed after pushing it into the left input, which in return
+# is necessary to avoid incorrectly pushing the Offset multiple times. Limit
+# operators don't have the same problem because repeated applications of the
+# same limit have no effect.
+[PushOffsetIntoJoinLeft, Normalize]
+(Offset
+    $input:(InnerJoin | LeftJoin
+            $left:* & ^(HasOuterCols $left)
+            $right:*
+            $on:*
+            $private:*
+        ) &
+        (JoinDoesNotDuplicateLeftRows $input) &
+        (JoinPreservesLeftRows $input)
+    $offsetExpr:(Const $offset:*) & (IsPositiveInt $offset)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $left)
+        )
+)
+=>
+((OpName $input)
+    (Offset $left $offsetExpr (PruneOrdering $ordering $cols))
+    $right
+    $on
+    $private
+)
+
+# PushOffsetIntoJoinRight mirrors PushOffsetIntoJoinLeft.
+[PushOffsetIntoJoinRight, Normalize]
+(Offset
+    $input:(InnerJoin
+            $left:*
+            $right:* & ^(HasOuterCols $right)
+            $on:*
+            $private:*
+        ) &
+        (JoinDoesNotDuplicateRightRows $input) &
+        (JoinPreservesRightRows $input)
+    $offsetExpr:(Const $offset:*) & (IsPositiveInt $offset)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $right)
+        )
+)
+=>
+((OpName $input)
+    $left
+    (Offset $right $offsetExpr (PruneOrdering $ordering $cols))
+    $on
+    $private
 )
 
 # FoldLimits replaces a Limit on top of a Limit with a single Limit operator
@@ -367,3 +454,35 @@ $input
 )
 =>
 (Lock (Offset $input $offset $ordering) $private)
+
+# PushLimitOrOffsetIntoGroupBy moves a Limit or Offset into the input of a
+# GroupBy or DistinctOn operator that collapses the row count back to what it
+# was before one or more "growing" joins. This situation can arise during
+# decorrelation. See the PushLimitOrOffsetIntoGroupBy function for more details.
+#
+# Avoid matching when the GroupBy has outer columns, to avoid interfering with
+# decorrelation.
+[PushLimitOrOffsetIntoGroupBy, Normalize]
+(Limit | Offset
+    $grouping:(GroupBy | DistinctOn
+            $input:*
+            $aggs:*
+            $private:*
+        ) &
+        ^(HasOuterCols $input)
+    $limitOrOffsetExpr:(Const $limitOrOffsetVal:*) &
+        (IsPositiveInt $limitOrOffsetVal)
+    $ordering:* &
+        (Let
+            ($newInput $ok):(TryPushLimitOrOffsetIntoGroupByInput
+                (OpName)
+                $input
+                (GroupingCols $private)
+                $limitOrOffsetExpr
+                $ordering
+            )
+            $ok
+        )
+)
+=>
+((OpName $grouping) $newInput $aggs $private)

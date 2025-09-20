@@ -202,7 +202,7 @@ RESET distribute_group_by_row_count_threshold;
 query T
 SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-distribution: full
+distribution: local
 
 # Hash join over large inputs - distribute.
 query T
