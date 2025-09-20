@@ -180,7 +180,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		case scheduledProcessorWithUnbufferedSender:
 			s = NewUnbufferedSender(testServerStream)
 		case scheduledProcessorWithBufferedSender:
-			s = NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+			s = NewBufferedSender(testServerStream, NewBufferedSenderMetrics(), 1000)
 		default:
 			t.Fatalf("unknown rangefeed test type %v", rt)
 		}

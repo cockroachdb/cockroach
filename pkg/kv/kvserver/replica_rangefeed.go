@@ -93,6 +93,15 @@ var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", true),
 )
 
+var RangefeedSingleBufferedSenderQueueMaxSize = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.buffered_sender_queue.max_size",
+	"max size of the buffered sender queue",
+	// what should we set here a single buffered sender here for one Rangefeed
+	// call
+	2048,
+)
+
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
 	kvserverbase.RangeFeedRefreshInterval = RangeFeedRefreshInterval

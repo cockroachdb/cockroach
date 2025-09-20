@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -56,8 +57,10 @@ type BufferedSender struct {
 	// queueMu protects the buffer queue.
 	queueMu struct {
 		syncutil.Mutex
-		stopped bool
-		buffer  *eventQueue
+		stopped  bool
+		buffer   *eventQueue
+		capacity int64
+		overflow bool
 	}
 
 	// notifyDataC is used to notify the BufferedSender.run goroutine that there
@@ -72,7 +75,7 @@ type BufferedSender struct {
 }
 
 func NewBufferedSender(
-	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics,
+	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics, maxQueueSize int64,
 ) *BufferedSender {
 	bs := &BufferedSender{
 		sender:  sender,
@@ -80,6 +83,8 @@ func NewBufferedSender(
 	}
 	bs.queueMu.buffer = newEventQueue()
 	bs.notifyDataC = make(chan struct{}, 1)
+	bs.queueMu.buffer = newEventQueue()
+	bs.queueMu.capacity = maxQueueSize
 	return bs
 }
 
@@ -94,6 +99,15 @@ func (bs *BufferedSender) sendBuffered(
 	defer bs.queueMu.Unlock()
 	if bs.queueMu.stopped {
 		return errors.New("stream sender is stopped")
+	}
+	if bs.queueMu.overflow {
+		// Is this too spammy
+		log.Dev.Error(context.Background(), "buffer capacity exceeded")
+		return newRetryErrBufferCapacityExceeded()
+	}
+	if bs.queueMu.buffer.len() >= bs.queueMu.capacity {
+		bs.queueMu.overflow = true
+		return newRetryErrBufferCapacityExceeded()
 	}
 	// TODO(wenyihu6): pass an actual context here
 	alloc.Use(context.Background())
@@ -130,7 +144,7 @@ func (bs *BufferedSender) run(
 			return nil
 		case <-bs.notifyDataC:
 			for {
-				e, success := bs.popFront()
+				e, success, overflowed, remains := bs.popFront()
 				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				if !success {
 					break
@@ -143,6 +157,9 @@ func (bs *BufferedSender) run(
 				if err != nil {
 					return err
 				}
+				if overflowed && remains == int64(0) {
+					return newRetryErrBufferCapacityExceeded()
+				}
 			}
 		}
 	}
@@ -150,11 +167,16 @@ func (bs *BufferedSender) run(
 
 // popFront pops the front event from the buffer queue. It returns the event and
 // a boolean indicating if the event was successfully popped.
-func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
+func (bs *BufferedSender) popFront() (
+	e sharedMuxEvent,
+	success bool,
+	overflowed bool,
+	remains int64,
+) {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.popFront()
-	return event, ok
+	return event, ok, bs.queueMu.overflow, bs.queueMu.buffer.len()
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
