@@ -3138,7 +3138,11 @@ func registerCDC(r registry.Registry) {
 			})
 		}
 	}
-	for _, interval := range []string{"30s", "5m", "10m"} {
+	for _, interval := range []string{
+		"5s",  // min interval
+		"30s", // default interval
+		"10m", // max interval
+	} {
 		for _, perTableTracking := range []bool{false, true} {
 			r.Add(registry.TestSpec{
 				Name: "cdc/frontier-persistence-benchmark" +
@@ -3148,7 +3152,7 @@ func registerCDC(r registry.Registry) {
 				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 				CompatibleClouds: registry.AllClouds,
 				Suites:           registry.Suites(registry.Nightly),
-				Timeout:          time.Hour,
+				Timeout:          2 * time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					ct := newCDCTester(ctx, t, c)
 					defer ct.Close()
@@ -3172,7 +3176,7 @@ func registerCDC(r registry.Registry) {
 					}
 
 					// Initialize bank workload with multiple tables.
-					numTables := 1_000
+					numTables := 10_000
 					numRows := 1_000
 					numRanges := 10
 					initCmd := fmt.Sprintf(
