@@ -1101,7 +1101,9 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 			*kvpb.GetRequest, *kvpb.ResolveIntentRequest, *kvpb.DeleteRequest, *kvpb.PutRequest:
 			// Accepted point requests that can be in batches with limit. No
 			// need to set disallowedReq.
-
+		case *kvpb.FlushLockTableRequest:
+			// FlushLockTableRequest handles limits itself. It is also an isAlone request so
+			// most of these checks should not be relevant.
 		default:
 			disallowedReq = inner.Method().String()
 		}

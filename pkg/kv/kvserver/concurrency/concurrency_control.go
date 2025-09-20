@@ -270,7 +270,7 @@ type LockManager interface {
 
 	// ExportUnreplicatedLocks runs exporter on each held, unreplicated lock
 	// in the given span.
-	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition))
+	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool)
 }
 
 // TransactionManager is concerned with tracking transactions that have their
@@ -781,7 +781,7 @@ type lockTable interface {
 	// Note that the caller is responsible for acquiring latches across the span
 	// it is exporting if it needs to be sure that the exported locks won't be
 	// updated in the lock table while it is still referencing them.
-	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition))
+	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool)
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics

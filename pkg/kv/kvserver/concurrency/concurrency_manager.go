@@ -619,7 +619,9 @@ func (m *managerImpl) QueryLockTableState(
 }
 
 // ExportUnreplicatedLocks implements the LockManager interface.
-func (m *managerImpl) ExportUnreplicatedLocks(span roachpb.Span, f func(*roachpb.LockAcquisition)) {
+func (m *managerImpl) ExportUnreplicatedLocks(
+	span roachpb.Span, f func(*roachpb.LockAcquisition) bool,
+) {
 	m.lt.ExportUnreplicatedLocks(span, f)
 }
 
@@ -734,9 +736,10 @@ func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int
 	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
 	approximateBatchSize := int64(0)
 	acquistions := make([]*roachpb.LockAcquisition, 0)
-	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) {
+	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) bool {
 		approximateBatchSize += storage.ApproximateLockTableSize(acq)
 		acquistions = append(acquistions, acq)
+		return true
 	})
 	return acquistions, approximateBatchSize
 }

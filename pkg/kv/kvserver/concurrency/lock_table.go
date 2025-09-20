@@ -4746,7 +4746,7 @@ func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 // TODO(ssd): Once we have the full set of functions we need for lock flushing, we
 // should do a refactoring pass to reduce some of the duplication.
 func (t *lockTableImpl) ExportUnreplicatedLocks(
-	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool,
 ) {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
@@ -4757,12 +4757,12 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 	t.locks.mu.RLock()
 	defer t.locks.mu.RUnlock()
 
-	exportKeyLocks := func(l *keyLocks) {
+	exportKeyLocks := func(l *keyLocks) bool {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 
 		if !l.key.Less(span.EndKey) {
-			return
+			return false
 		}
 
 		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
@@ -4777,7 +4777,7 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 
 			for _, str := range unreplicatedHolderStrengths {
 				if tl.unreplicatedInfo.held(str) {
-					exporter(&roachpb.LockAcquisition{
+					keepGoing := exporter(&roachpb.LockAcquisition{
 						Span: roachpb.Span{
 							Key: l.key,
 						},
@@ -4786,14 +4786,20 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 						Strength:       str,
 						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
 					})
+					if !keepGoing {
+						return false
+					}
 				}
 			}
 		}
+		return true
 	}
 
 	iter := t.locks.MakeIter()
 	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
-		exportKeyLocks(iter.Cur())
+		if !exportKeyLocks(iter.Cur()) {
+			break
+		}
 	}
 }
 

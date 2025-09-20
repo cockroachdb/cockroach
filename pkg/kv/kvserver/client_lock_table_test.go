@@ -163,6 +163,8 @@ func TestClientLockTableDataDriven(t *testing.T) {
 				startKey := evalCtx.getNamedKey("start", d)
 				endKey := evalCtx.getNamedKey("end", d)
 				b := db.NewBatch()
+				b.Header.MaxSpanRequestKeys = int64(evalCtx.getInt(d, "max-keys"))
+				b.Header.TargetBytes = int64(evalCtx.getInt(d, "target-bytes"))
 				b.AddRawRequest(&kvpb.FlushLockTableRequest{
 					RequestHeader: kvpb.RequestHeader{
 						Key:    startKey,
@@ -302,6 +304,15 @@ func (e *evalCtx) getLockWaitPolicy(d *datadriven.TestData) lock.WaitPolicy {
 	} else {
 		return lock.WaitPolicy_Block
 	}
+}
+
+func (e *evalCtx) getInt(d *datadriven.TestData, name string) int {
+	if d.HasArg(name) {
+		var i int
+		d.ScanArgs(e.t, name, &i)
+		return i
+	}
+	return 0
 }
 
 func (e *evalCtx) cmdInBatch(cmdStr string, b *kv.Batch) error {
