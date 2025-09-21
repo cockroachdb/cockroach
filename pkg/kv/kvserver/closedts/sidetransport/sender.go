@@ -261,6 +261,120 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 					// Loop around to use the updated timer.
 					continue
 				case <-s.stopper.ShouldQuiesce():
+					// Iterate over all the connections and close them.
+					s.connsMu.Lock()
+					for _, c := range s.connsMu.conns {
+						c.(*rpcConn).cleanupStream(nil /* err */)
+					}
+					s.connsMu.Unlock()
+					return
+				}
+			}
+		})
+
+	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport sender worker",
+		func(ctx context.Context) {
+
+			// TODO(ibrahim): Make an entry per connection to log the connection status.
+			everyN := log.Every(10 * time.Second)
+
+			// TODO(ibrahim): Add quarantine to the connection.
+			// errSleepTime := sleepOnErr
+
+			for {
+				// wait until s.buf is signaled.
+				s.buf.mu.Lock()
+				ch := s.buf.mu.bcastCh
+				s.buf.mu.Unlock()
+
+				select {
+				case <-ch:
+					log.Dev.Infof(ctx, "side-transport sender worker received update")
+
+					s.connsMu.Lock()
+					// Copy all the connections and release the lock.
+					conns := make(map[roachpb.NodeID]conn, len(s.connsMu.conns))
+					for k, v := range s.connsMu.conns {
+						conns[k] = v
+					}
+					s.connsMu.Unlock()
+
+					for nodeID, c := range conns {
+						rpcConn := c.(*rpcConn)
+
+						// if rpcConn.testingKnobs.sleepOnErrOverride > 0 {
+						// 	errSleepTime = rpcConn.testingKnobs.sleepOnErrOverride
+						// }
+
+						for {
+
+							if atomic.LoadInt32(&rpcConn.closed) > 0 {
+								// If the connection is closed, it will be removed from the map.
+								// We don't need to process it anymore.
+								break
+							}
+
+							if err := rpcConn.maybeConnect(ctx, s.stopper); err != nil {
+								if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
+									log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", nodeID, err)
+								}
+								// time.Sleep(errSleepTime)
+								// TODO(ibrahim): Add quarantine to the connection.
+								// For now, when we can't connect, move on now and will try again on the
+								// next event.
+								break
+							}
+
+							msg, ok, future := rpcConn.producer.buf.MaybeGetBySeq(ctx, rpcConn.lastSent+1)
+							// We can be signaled to stop in two ways: the buffer can be closed (in
+							// which case all connections must exit), or this connection was closed
+							// via close(). In either case, we quit.
+							if !ok {
+								break
+							}
+
+							if future {
+								// No new messages to send.
+								break
+							}
+
+							if msg == nil {
+								// The sequence number we've requested is no longer in the buffer. We
+								// need to generate a snapshot in order to re-initialize the stream.
+								// The snapshot will give us the sequence number to use for future
+								// incrementals.
+								msg = rpcConn.producer.GetSnapshot()
+							}
+
+							rpcConn.lastSent = msg.SeqNum
+
+							if fn := rpcConn.testingKnobs.beforeSend; fn != nil {
+								fn(rpcConn.nodeID, msg)
+							}
+							if err := rpcConn.stream.Send(msg); err != nil {
+								log.Dev.Infof(ctx, "side-transport failed to send message %+v to n%d: %s", msg, rpcConn.nodeID, err)
+								if err != io.EOF && everyN.ShouldLog() {
+									log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+										rpcConn.lastSent, rpcConn.nodeID, err)
+								}
+								// Keep track of the fact that we need a new connection.
+								//
+								// TODO(andrei): Instead of simply trying to establish a connection
+								// again when the next message needs to be sent and get rejected by
+								// the circuit breaker if the remote node is still unreachable, we
+								// should have a blocking version of Dial() that we just leave hanging
+								// and get a notification when it succeeds.
+								rpcConn.cleanupStream(err)
+								break
+								// time.Sleep(errSleepTime)
+							} else {
+								log.Dev.Infof(ctx, "side-transport sent message %+v to n%d", msg, rpcConn.nodeID)
+
+							}
+						}
+					}
+
+				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
@@ -471,7 +585,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			// connection to ourselves if we find such replicas.
 			if _, ok := s.connsMu.conns[nodeID]; !ok {
 				c := s.connFactory.new(s, nodeID)
-				c.run(ctx, s.stopper)
+				// c.run(ctx, s.stopper)
 				s.connsMu.conns[nodeID] = c
 			}
 		})
@@ -552,6 +666,8 @@ type updatesBuf struct {
 		head, tail int
 		// closed is set by the producer to signal the consumers to exit.
 		closed bool
+
+		bcastCh chan struct{}
 	}
 }
 
@@ -563,6 +679,7 @@ func newUpdatesBuf() *updatesBuf {
 	buf := &updatesBuf{}
 	buf.mu.updated.L = &buf.mu
 	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
+	buf.mu.bcastCh = make(chan struct{})
 	return buf
 }
 
@@ -590,6 +707,9 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
 	b.mu.updated.Broadcast()
+
+	close(b.mu.bcastCh)
+	b.mu.bcastCh = make(chan struct{})
 }
 
 func (b *updatesBuf) lastIdxLocked() int {
@@ -638,6 +758,38 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 		}
 		idx := (b.mu.head + (int)(seqNum-firstSeq)) % len(b.mu.data)
 		return b.mu.data[idx], true
+	}
+}
+
+func (b *updatesBuf) MaybeGetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Update, bool, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Loop until the requested seqNum is added to the buffer.
+	for {
+		if b.mu.closed {
+			return nil, false, false
+		}
+
+		var firstSeq, lastSeq ctpb.SeqNum
+		if b.sizeLocked() == 0 {
+			firstSeq, lastSeq = 0, 0
+		} else {
+			firstSeq, lastSeq = b.mu.data[b.mu.head].SeqNum, b.mu.data[b.lastIdxLocked()].SeqNum
+		}
+		if seqNum < firstSeq {
+			// Requesting a message that's not in the buffer any more.
+			return nil, true, false
+		}
+		// If the requested msg has not been produced yet, block.
+		if seqNum == lastSeq+1 {
+			return nil, true, true
+		}
+		if seqNum > lastSeq+1 {
+			log.Dev.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
+		}
+		idx := (b.mu.head + (int)(seqNum-firstSeq)) % len(b.mu.data)
+		return b.mu.data[idx], true, false
 	}
 }
 
