@@ -5,9 +5,8 @@
 # (2) Where its possible to shed leases from the CPU overloaded store, so we
 #     should observe a period of lease transfers before any replica based
 #     rebalancing away from the store occurs.
-gen_cluster nodes=5 node_cpu_rate_capacity=90000
+gen_cluster nodes=5 node_cpu_rate_capacity=9000000000
 ----
-WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 setting split_queue_enabled=false
 ----
@@ -41,7 +40,7 @@ eval duration=30m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,cpu_util,write_
 ----
 cpu#1: last:  [s1=260292000, s2=300156000, s3=320067000, s4=299992333, s5=319992666] (stddev=21813256.71, mean=300099999.80, sum=1500499999)
 cpu#1: thrash_pct: [s1=12%, s2=23%, s3=23%, s4=24%, s5=25%]  (sum=108%)
-cpu_util#1: last:  [s1=2892.13, s2=3335.07, s3=3556.30, s4=3333.25, s5=3555.47] (stddev=242.37, mean=3334.44, sum=16672)
+cpu_util#1: last:  [s1=0.03, s2=0.03, s3=0.04, s4=0.03, s5=0.04] (stddev=0.00, mean=0.03, sum=0)
 cpu_util#1: thrash_pct: [s1=12%, s2=23%, s3=23%, s4=24%, s5=25%]  (sum=108%)
 leases#1: first: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
 leases#1: last:  [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
@@ -51,7 +50,7 @@ replicas#1: last:  [s1=13, s2=15, s3=16, s4=15, s5=16] (stddev=1.10, mean=15.00,
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 write_bytes_per_second#1: last:  [s1=520, s2=600, s3=640, s4=599, s5=639] (stddev=43.64, mean=599.60, sum=2998)
 write_bytes_per_second#1: thrash_pct: [s1=45%, s2=21%, s3=24%, s4=26%, s5=24%]  (sum=139%)
-artifacts[mma-only]: 7b916677983dfc02
+artifacts[mma-only]: e970081fb35d1d29
 ==========================
 
 # TODO(kvoli): Case (2)
