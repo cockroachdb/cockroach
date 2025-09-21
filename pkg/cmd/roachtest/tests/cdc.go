@@ -3151,7 +3151,9 @@ func registerCDC(r registry.Registry) {
 			ranges int
 		}{
 			{tables: 1, ranges: 10_000},
+			{tables: 10, ranges: 1_000},
 			{tables: 100, ranges: 100},
+			{tables: 1_000, ranges: 10},
 			{tables: 10_000, ranges: 1},
 		} {
 			r.Add(registry.TestSpec{
