@@ -3185,9 +3185,9 @@ func registerCDC(r registry.Registry) {
 					}
 
 					// Initialize bank workload with multiple tables with multiple ranges.
-					// Each range will have a single row to maximize the likelihood of
-					// unmerged spans in the span frontier.
-					rows := cfg.ranges
+					// Each range will have a single row (or 2 when there's a single range)
+					// to maximize the likelihood of unmerged spans in the span frontier.
+					rows := max(cfg.ranges, 2)
 					initCmd := fmt.Sprintf(
 						"./cockroach workload init bank --tables=%d --ranges=%d --rows=%d {pgurl%s}",
 						cfg.tables, cfg.ranges, rows, ct.crdbNodes.RandNode())
