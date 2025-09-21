@@ -46,6 +46,7 @@ go_test(
     ],
     embed = [":colexecproj"],  # keep
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
@@ -64,6 +65,7 @@ go_test(
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",

@@ -29,6 +29,7 @@ func TestMain(m *testing.M) {
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
 		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
 	)()
+	defer serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabled)()
 
 	os.Exit(m.Run())
 }

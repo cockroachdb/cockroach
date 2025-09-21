@@ -43,6 +43,7 @@ go_test(
     ],
     embed = [":colexecspan"],  # keep
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
@@ -66,6 +67,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/span",
         "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/intsets",
         "//pkg/util/leaktest",

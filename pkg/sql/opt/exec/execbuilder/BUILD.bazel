@@ -75,6 +75,7 @@ go_test(
     ],
     embed = [":execbuilder"],
     deps = [
+        "//pkg/base",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

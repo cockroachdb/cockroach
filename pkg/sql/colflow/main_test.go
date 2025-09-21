@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -54,6 +55,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(func() int {
+		defer serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabled)()
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 		testMemMonitor = execinfra.NewTestMemMonitor(ctx, st)
