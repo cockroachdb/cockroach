@@ -3200,8 +3200,8 @@ func registerCDC(r registry.Registry) {
 					ct.mon.Go(func(ctx context.Context) error {
 						defer ct.workloadWg.Done()
 						workloadCmd := fmt.Sprintf(
-							"./cockroach workload run bank --tables=%d --rows=%d --duration=30m {pgurl%s}",
-							cfg.tables, rows, ct.crdbNodes)
+							"./cockroach workload run bank --tables=%d --ranges=%d --rows=%d --duration=30m {pgurl%s}",
+							cfg.tables, cfg.ranges, rows, ct.crdbNodes)
 						return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
 					})
 
