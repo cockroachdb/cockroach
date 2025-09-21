@@ -239,16 +239,21 @@ func RandDatumWithNullChance(
 		}
 		return tree.NewDJsonpath(*jp.AST)
 	case types.TupleFamily:
+		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		if nullChance == 0 {
+			// Even if nullOk=false (which is when nullChance=0), we still want
+			// to generate a NULL _element_ in 10% of cases.
 			nullChance = 10
 		}
-		datums := make([]tree.Datum, len(typ.TupleContents()))
 		for i := range typ.TupleContents() {
-			datums[i] = RandDatumWithNullChance(
+			tuple.D[i] = RandDatumWithNullChance(
 				rng, typ.TupleContents()[i], nullChance, favorCommonData, targetColumnIsUnique,
 			)
 		}
-		return tree.NewDTuple(typ, datums...)
+		// Calling ResolvedType causes the internal TupleContents types to be
+		// populated (as well as resolves the type of each tuple element).
+		tuple.ResolvedType()
+		return &tuple
 	case types.BitFamily:
 		width := typ.Width()
 		if width == 0 {
