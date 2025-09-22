@@ -88,7 +88,8 @@ type Sender struct {
 	// will continuously try to reconnect.
 	connsMu struct {
 		syncutil.Mutex
-		conns map[roachpb.NodeID]conn
+		conns      map[roachpb.NodeID]conn
+		quarantine map[roachpb.NodeID]hlc.Timestamp
 	}
 }
 
@@ -218,6 +219,7 @@ func newSenderWithConnFactory(
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
 	s.connsMu.conns = make(map[roachpb.NodeID]conn)
+	s.connsMu.quarantine = make(map[roachpb.NodeID]hlc.Timestamp)
 	return s
 }
 
@@ -236,6 +238,145 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 		}
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
+	nomWorkers := 4
+	var workerWg sync.WaitGroup
+	workerWg.Add(nomWorkers)
+
+	// Create 4 worker goroutines to process connections in parallel
+	for workerID := 0; workerID < nomWorkers; workerID++ {
+		_ /* err */ = s.stopper.RunAsyncTask(ctx, fmt.Sprintf("closedts side-transport sender worker %d", workerID),
+			func(ctx context.Context) {
+				defer workerWg.Done()
+
+				errSleepTime := sleepOnErr
+				conns := make(map[roachpb.NodeID]conn, 1000)
+				quarantine := make(map[roachpb.NodeID]hlc.Timestamp, 1000)
+
+				for {
+					// wait until s.buf is signaled.
+					s.buf.mu.Lock()
+					ch := s.buf.mu.bcastCh
+					s.buf.mu.Unlock()
+
+					select {
+					case <-ch:
+						// log.Dev.Infof(ctx, "side-transport sender worker %d received update", workerID)
+
+						s.connsMu.Lock()
+						// Clear maps before repopulating
+						for k := range conns {
+							delete(conns, k)
+						}
+						for k := range quarantine {
+							delete(quarantine, k)
+						}
+						// Copy all the connections and release the lock.
+						for k, v := range s.connsMu.conns {
+							conns[k] = v
+						}
+						for k, v := range s.connsMu.quarantine {
+							quarantine[k] = v
+						}
+						s.connsMu.Unlock()
+
+						// Process connections assigned to this worker using modulo distribution
+						for nodeID, c := range conns {
+							if int(nodeID)%nomWorkers != workerID {
+								continue
+							}
+
+							// Check if nodeID is in quarantine without checking the time yet.
+							if quarantineUntil, ok := quarantine[nodeID]; ok {
+								if s.clock.Now().Less(quarantineUntil) {
+									continue
+								}
+								delete(quarantine, nodeID)
+							}
+
+							// log.Dev.Infof(ctx, "side-transport sender worker %d processing connection to n%d", workerID, nodeID)
+
+							rpcConn := c.(*rpcConn)
+
+							if rpcConn.testingKnobs.sleepOnErrOverride > 0 {
+								errSleepTime = rpcConn.testingKnobs.sleepOnErrOverride
+							}
+
+							for {
+								if atomic.LoadInt32(&rpcConn.closed) > 0 {
+									// If the connection is closed, it will be removed from the map.
+									// We don't need to process it anymore.
+									break
+								}
+
+								if err := rpcConn.maybeConnect(ctx, s.stopper); err != nil {
+									if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && rpcConn.everyN.ShouldLog() {
+										log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", nodeID, err)
+									}
+
+									s.connsMu.Lock()
+									s.connsMu.quarantine[nodeID] = s.clock.Now().AddDuration(errSleepTime)
+									s.connsMu.Unlock()
+									break
+								}
+
+								msg, ok, future := rpcConn.producer.buf.MaybeGetBySeq(ctx, rpcConn.lastSent+1)
+								// log.Dev.Infof(ctx, "side-transport sender worker %d got message %+v from n%d", workerID, msg, rpcConn.nodeID)
+								// We can be signaled to stop in two ways: the buffer can be closed (in
+								// which case all connections must exit), or this connection was closed
+								// via close(). In either case, we quit.
+								if !ok {
+									break
+								}
+
+								if future {
+									// No new messages to send.
+									break
+								}
+
+								if msg == nil {
+									// The sequence number we've requested is no longer in the buffer. We
+									// need to generate a snapshot in order to re-initialize the stream.
+									// The snapshot will give us the sequence number to use for future
+									// incrementals.
+									msg = rpcConn.producer.GetSnapshot()
+								}
+
+								rpcConn.lastSent = msg.SeqNum
+
+								if fn := rpcConn.testingKnobs.beforeSend; fn != nil {
+									fn(rpcConn.nodeID, msg)
+								}
+								if err := rpcConn.stream.Send(msg); err != nil {
+									// log.Dev.Infof(ctx, "side-transport failed to send message %+v to n%d: %s", msg, rpcConn.nodeID, err)
+									if err != io.EOF && rpcConn.everyN.ShouldLog() {
+										log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+											rpcConn.lastSent, rpcConn.nodeID, err)
+									}
+									// Keep track of the fact that we need a new connection.
+									//
+									// TODO(andrei): Instead of simply trying to establish a connection
+									// again when the next message needs to be sent and get rejected by
+									// the circuit breaker if the remote node is still unreachable, we
+									// should have a blocking version of Dial() that we just leave hanging
+									// and get a notification when it succeeds.
+									rpcConn.cleanupStream(err)
+									s.connsMu.Lock()
+									s.connsMu.quarantine[rpcConn.nodeID] = s.clock.Now().AddDuration(errSleepTime)
+									s.connsMu.Unlock()
+									break
+								} else {
+									// log.Dev.Infof(ctx, "side-transport sent message %+v to n%d", msg, rpcConn.nodeID)
+								}
+							}
+						}
+
+					case <-s.stopper.ShouldQuiesce():
+						return
+					}
+				}
+			})
+	}
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
@@ -261,120 +402,15 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 					// Loop around to use the updated timer.
 					continue
 				case <-s.stopper.ShouldQuiesce():
-					// Iterate over all the connections and close them.
+					// First wait for all workers to finish
+					workerWg.Wait()
+
+					// Then iterate over all the connections and close them.
 					s.connsMu.Lock()
 					for _, c := range s.connsMu.conns {
 						c.(*rpcConn).cleanupStream(nil /* err */)
 					}
 					s.connsMu.Unlock()
-					return
-				}
-			}
-		})
-
-	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport sender worker",
-		func(ctx context.Context) {
-
-			// TODO(ibrahim): Make an entry per connection to log the connection status.
-			everyN := log.Every(10 * time.Second)
-
-			// TODO(ibrahim): Add quarantine to the connection.
-			// errSleepTime := sleepOnErr
-
-			for {
-				// wait until s.buf is signaled.
-				s.buf.mu.Lock()
-				ch := s.buf.mu.bcastCh
-				s.buf.mu.Unlock()
-
-				select {
-				case <-ch:
-					log.Dev.Infof(ctx, "side-transport sender worker received update")
-
-					s.connsMu.Lock()
-					// Copy all the connections and release the lock.
-					conns := make(map[roachpb.NodeID]conn, len(s.connsMu.conns))
-					for k, v := range s.connsMu.conns {
-						conns[k] = v
-					}
-					s.connsMu.Unlock()
-
-					for nodeID, c := range conns {
-						rpcConn := c.(*rpcConn)
-
-						// if rpcConn.testingKnobs.sleepOnErrOverride > 0 {
-						// 	errSleepTime = rpcConn.testingKnobs.sleepOnErrOverride
-						// }
-
-						for {
-
-							if atomic.LoadInt32(&rpcConn.closed) > 0 {
-								// If the connection is closed, it will be removed from the map.
-								// We don't need to process it anymore.
-								break
-							}
-
-							if err := rpcConn.maybeConnect(ctx, s.stopper); err != nil {
-								if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
-									log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", nodeID, err)
-								}
-								// time.Sleep(errSleepTime)
-								// TODO(ibrahim): Add quarantine to the connection.
-								// For now, when we can't connect, move on now and will try again on the
-								// next event.
-								break
-							}
-
-							msg, ok, future := rpcConn.producer.buf.MaybeGetBySeq(ctx, rpcConn.lastSent+1)
-							// We can be signaled to stop in two ways: the buffer can be closed (in
-							// which case all connections must exit), or this connection was closed
-							// via close(). In either case, we quit.
-							if !ok {
-								break
-							}
-
-							if future {
-								// No new messages to send.
-								break
-							}
-
-							if msg == nil {
-								// The sequence number we've requested is no longer in the buffer. We
-								// need to generate a snapshot in order to re-initialize the stream.
-								// The snapshot will give us the sequence number to use for future
-								// incrementals.
-								msg = rpcConn.producer.GetSnapshot()
-							}
-
-							rpcConn.lastSent = msg.SeqNum
-
-							if fn := rpcConn.testingKnobs.beforeSend; fn != nil {
-								fn(rpcConn.nodeID, msg)
-							}
-							if err := rpcConn.stream.Send(msg); err != nil {
-								log.Dev.Infof(ctx, "side-transport failed to send message %+v to n%d: %s", msg, rpcConn.nodeID, err)
-								if err != io.EOF && everyN.ShouldLog() {
-									log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
-										rpcConn.lastSent, rpcConn.nodeID, err)
-								}
-								// Keep track of the fact that we need a new connection.
-								//
-								// TODO(andrei): Instead of simply trying to establish a connection
-								// again when the next message needs to be sent and get rejected by
-								// the circuit breaker if the remote node is still unreachable, we
-								// should have a blocking version of Dial() that we just leave hanging
-								// and get a notification when it succeeds.
-								rpcConn.cleanupStream(err)
-								break
-								// time.Sleep(errSleepTime)
-							} else {
-								log.Dev.Infof(ctx, "side-transport sent message %+v to n%d", msg, rpcConn.nodeID)
-
-							}
-						}
-					}
-
-				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
@@ -571,6 +607,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			if !nodesWithFollowers.Contains(int(nodeID)) {
 				delete(s.connsMu.conns, nodeID)
 				c.close()
+				c.(*rpcConn).cleanupStream(nil /* err */)
 			}
 		}
 
@@ -876,6 +913,8 @@ type rpcConn struct {
 	cancelStreamCtx context.CancelFunc
 	closed          int32 // atomic
 
+	everyN log.EveryN
+
 	mu struct {
 		syncutil.Mutex
 		state connState
@@ -890,6 +929,7 @@ func newRPCConn(
 		producer:     producer,
 		nodeID:       nodeID,
 		testingKnobs: testingKnobs,
+		everyN:       log.Every(10 * time.Second),
 	}
 	r.mu.state.connected = false
 	r.AddLogTag("ctstream", nodeID)
@@ -934,6 +974,8 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		// Already connected.
 		return nil
 	}
+
+	log.Dev.Infof(ctx, "side-transport connecting to n%d", r.nodeID)
 
 	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
 	if err != nil {
