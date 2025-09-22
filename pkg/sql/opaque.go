@@ -430,6 +430,7 @@ func init() {
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowExternalConnections{},
 		&tree.ShowHistogram{},
+		&tree.ShowInspectErrors{},
 		&tree.ShowTableStats{},
 		&tree.ShowTenant{},
 		&tree.ShowTraceForSession{},

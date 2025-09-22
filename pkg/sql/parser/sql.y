@@ -451,6 +451,9 @@ func (u *sqlSymUnion) int32() int32 {
 func (u *sqlSymUnion) int64() int64 {
     return u.val.(int64)
 }
+func (u *sqlSymUnion) int64Ptr() *int64 {
+    return u.val.(*int64)
+}
 func (u *sqlSymUnion) seqOpt() tree.SequenceOption {
     return u.val.(tree.SequenceOption)
 }
@@ -932,6 +935,9 @@ func (u *sqlSymUnion) logicalReplicationResources() tree.LogicalReplicationResou
 func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOptions {
   return u.val.(*tree.LogicalReplicationOptions)
 }
+func (u *sqlSymUnion) tableNamePtr() *tree.TableName {
+  return u.val.(*tree.TableName)
+}
 func (u *sqlSymUnion) triggerActionTime() tree.TriggerActionTime {
   return u.val.(tree.TriggerActionTime)
 }
@@ -1007,8 +1013,8 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISABLE DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> EACH ELSE ENABLE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
-%token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
+%token <str> EACH ELSE ENABLE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ERRORS ESCAPE
+%token <str> EXCEPT EXCLUDE EXCLUDING EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
@@ -1069,7 +1075,7 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATED REPLICATION
 %token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION_HISTORY
-%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
+%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
 %token <str> SEARCH SECOND SECONDARY SECURITY SECURITY_INVOKER SELECT SEQUENCE SEQUENCES
@@ -1119,7 +1125,8 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
 // - TENANT_ALL is used to differentiate `ALTER TENANT <id>` from
 // `ALTER TENANT ALL`. Ditto `CLUSTER_ALL` and `CLUSTER ALL`.
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
-%token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING CREATE_CHANGEFEED_FOR_DATABASE
+%token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING CREATE_CHANGEFEED_FOR_DATABASE FOR_TABLE
+%token FOR_JOB
 
 %union {
   id    int32
@@ -1433,6 +1440,10 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
 %type <tree.Statement> show_completions_stmt
 %type <tree.Statement> show_logical_replication_jobs_stmt opt_show_logical_replication_jobs_options show_logical_replication_jobs_options
 %type <tree.Statement> show_policies_stmt
+%type <tree.Statement> show_inspect_errors_stmt
+%type <*tree.TableName> opt_for_table_clause
+%type <*int64> opt_for_job_clause
+%type <bool> opt_with_details
 
 %type <str> statements_or_queries
 
@@ -4896,7 +4907,7 @@ logical_replication_options:
   {
     $$.val = &tree.LogicalReplicationOptions{DefaultFunction: $4.expr()}
   }
-| FUNCTION db_object_name FOR TABLE db_object_name
+| FUNCTION db_object_name FOR_TABLE TABLE db_object_name
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
   }
@@ -6256,7 +6267,7 @@ create_stats_option:
 //
 // sink: data capture stream destination (Enterprise only)
 create_changefeed_stmt:
-  CREATE CHANGEFEED FOR changefeed_table_targets opt_changefeed_sink opt_with_options
+  CREATE CHANGEFEED for_with_lookahead_variants changefeed_table_targets opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       TableTargets: $4.changefeedTableTargets(),
@@ -6294,7 +6305,7 @@ create_changefeed_stmt:
       },
     }
   }
-| EXPERIMENTAL CHANGEFEED FOR changefeed_table_targets opt_with_options
+| EXPERIMENTAL CHANGEFEED for_with_lookahead_variants changefeed_table_targets opt_with_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateChangefeed{
@@ -7928,6 +7939,53 @@ inspect_option:
     $$.val = &tree.InspectOptionIndex{IndexNames: $3.newTableIndexNames()}
   }
 
+// %Help: SHOW INSPECT ERRORS - list errors recorded by one INSPECT run
+// %Category: Misc
+// %Text:
+// SHOW INSPECT ERRORS [FOR TABLE table_name] [FOR JOB job_id] [WITH DETAILS]
+// %SeeAlso: INSPECT
+show_inspect_errors_stmt:
+  SHOW INSPECT ERRORS opt_for_table_clause opt_for_job_clause opt_with_details
+  {
+      $$.val = &tree.ShowInspectErrors{
+        TableName:  $4.tableNamePtr(),
+        JobID:      $5.int64Ptr(),
+        WithDetails: $6.bool(),
+      }
+  }
+
+opt_for_table_clause:
+  FOR_TABLE TABLE table_name
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &name
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.TableName)(nil)
+  }
+
+opt_for_job_clause:
+  FOR_JOB JOB iconst64
+  {
+    jobID := $3.int64()
+    $$.val = &jobID
+  }
+| /* EMPTY */
+  {
+    $$.val = (*int64)(nil)
+  }
+
+opt_with_details:
+  WITH DETAILS
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
 // %Text: SET CLUSTER SETTING <var> { TO | = } <value>
@@ -7939,7 +7997,6 @@ set_csetting_stmt:
     $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
-
 
 // %Help: ALTER VIRTUAL CLUSTER - alter configuration of virtual clusters
 // %Category: Group
@@ -8489,7 +8546,8 @@ zone_value:
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
 // SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW COMMIT TIMESTAMP,
-// SHOW FULL TABLE SCANS, SHOW CREATE EXTERNAL CONNECTIONS, SHOW EXTERNAL CONNECTIONS
+// SHOW FULL TABLE SCANS, SHOW CREATE EXTERNAL CONNECTIONS, SHOW EXTERNAL CONNECTIONS,
+// SHOW INSPECT ERRORS
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
@@ -8542,6 +8600,7 @@ show_stmt:
 | show_full_scans_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
 | show_completions_stmt
+| show_inspect_errors_stmt // EXTEND WITH HELP: SHOW INSPECT ERRORS
 
 // %Help: CLOSE - close SQL cursor
 // %Category: Misc
@@ -8569,7 +8628,7 @@ close_cursor_stmt:
 declare_cursor_stmt:
   // TODO(jordan): the options here should be supported in any order, not just
   // the fixed one here.
-	DECLARE cursor_name opt_binary opt_sensitivity opt_scroll CURSOR opt_hold FOR select_stmt
+	DECLARE cursor_name opt_binary opt_sensitivity opt_scroll CURSOR opt_hold for_with_lookahead_variants select_stmt
 	{
 	  $$.val = &tree.DeclareCursor{
 	    Binary: $3.bool(),
@@ -8849,14 +8908,14 @@ session_var_parts:
 //
 // %SeeAlso: SHOW HISTOGRAM
 show_stats_stmt:
-  SHOW STATISTICS FOR TABLE table_name opt_with_options
+  SHOW STATISTICS FOR_TABLE TABLE table_name opt_with_options
   {
       $$.val = &tree.ShowTableStats{
         Table:   $5.unresolvedObjectName(),
         Options: $6.kvOptions(),
       }
   }
-| SHOW STATISTICS USING JSON FOR TABLE table_name opt_with_options
+| SHOW STATISTICS USING JSON FOR_TABLE TABLE table_name opt_with_options
   {
     /* SKIP DOC */
     $$.val = &tree.ShowTableStats{
@@ -10106,7 +10165,14 @@ show_zone_stmt:
 
 from_with_implicit_for_alias:
   FROM
-| FOR { /* SKIP DOC */ }
+| for_with_lookahead_variants { /* SKIP DOC */ }
+
+// For clauses where the optional qualifier prevents the lexer from doing
+// its lookahead (e.g. `FOR [TABLE] t`).
+for_with_lookahead_variants:
+  FOR
+| FOR_TABLE
+| FOR_JOB { /* SKIP DOC */ }
 
 // %Help: SHOW RANGE - show range information for a row
 // %Category: Misc
@@ -18479,6 +18545,7 @@ unreserved_keyword:
 | ENCRYPTION_INFO_DIR
 | ENUM
 | ENUMS
+| ERRORS
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
@@ -18737,6 +18804,7 @@ unreserved_keyword:
 | ROUTINES
 | ROWS
 | RULE
+| RUN
 | RUNNING
 | SCHEDULE
 | SCHEDULES
@@ -19013,6 +19081,7 @@ bare_label_keywords:
 | END
 | ENUM
 | ENUMS
+| ERRORS
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
@@ -19323,6 +19392,7 @@ bare_label_keywords:
 | ROW
 | ROWS
 | RULE
+| RUN
 | RUNNING
 | SAVEPOINT
 | SCANS
