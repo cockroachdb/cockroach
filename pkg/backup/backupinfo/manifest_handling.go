@@ -1307,17 +1307,15 @@ func CheckForPreviousBackup(
 	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, _, err := defaultStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
-	if err == nil {
-		r.Close(ctx)
-		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file",
-			redactedURI, backupbase.DeprecatedBackupManifestName)
-	}
-
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+	exists, err := ContainsManifest(ctx, defaultStore)
+	if err != nil {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
+			redactedURI, backupbase.DeprecatedBackupManifestName)
+	}
+	if exists {
+		return pgerror.Newf(pgcode.FileAlreadyExists,
+			"%s already contains a %s file",
 			redactedURI, backupbase.DeprecatedBackupManifestName)
 	}
 
