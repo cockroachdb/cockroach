@@ -113,6 +113,9 @@ func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 
 // Reset resets the StatsCollector with a new flushTarget (the session's current
 // application stats), and a new copy of the sessionphase.Times.
+// TODO(alyshan): Session Phase Times are set throughout the conn executor, it is
+// a tedious process to track when and where these times are set.
+// Found a bug again? Consider refactoring.
 func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sessionphase.Times) {
 	s.flushTarget = appStats
 	s.stmtFingerprintID = 0
