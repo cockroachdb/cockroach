@@ -13,6 +13,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -120,6 +121,7 @@ func executeRPC[TReq, TResp protoutil.Message](
 ) error {
 	ctx := req.Context()
 	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, req)
+	ctx = rpc.MarkDRPCGatewayRequest(ctx)
 
 	if err := decoder.Decode(rpcReq, req.URL.Query()); err != nil {
 		return err

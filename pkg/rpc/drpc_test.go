@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"storj.io/drpc"
 )
@@ -76,4 +77,55 @@ func TestMakeStopperInterceptors(t *testing.T) {
 	})
 	require.ErrorIs(t, err, stop.ErrUnavailable)
 	require.False(t, called)
+}
+
+func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// With gateway metadata - should recover from panic
+	t.Run("with gateway metadata", func(t *testing.T) {
+		ctx := MarkDRPCGatewayRequest(context.Background())
+
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			panic("test panic")
+		}
+
+		resp, err := DRPCGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
+
+		require.Nil(t, resp)
+		require.ErrorContains(t, err, "unexpected error occurred")
+	})
+
+	// Without gateway metadata - should not recover from panic
+	t.Run("without gateway metadata", func(t *testing.T) {
+		ctx := context.Background()
+
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			panic("test panic")
+		}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected panic to propagate, got none")
+			}
+		}()
+
+		_, _ = DRPCGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
+	})
+
+	// With gateway metadata but no panic - should pass through normally
+	t.Run("with gateway metadata no panic", func(t *testing.T) {
+		ctx := MarkDRPCGatewayRequest(context.Background())
+
+		expectedResp := "success"
+		expectedErr := errors.New("expected error")
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return expectedResp, expectedErr
+		}
+
+		resp, err := DRPCGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
+
+		require.Equal(t, expectedResp, resp)
+		require.ErrorIs(t, err, expectedErr)
+	})
 }
