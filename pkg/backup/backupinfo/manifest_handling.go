@@ -168,6 +168,18 @@ func ReadBackupManifestFromStore(
 	return manifest, memSize, nil
 }
 
+func ContainsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
+	r, _, err := exportStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	r.Close(ctx)
+	return true, nil
+}
+
 // compressData compresses data buffer and returns compressed
 // bytes (i.e. gzip format).
 func compressData(descBuf []byte) ([]byte, error) {
