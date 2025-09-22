@@ -57,10 +57,10 @@ type BufferedSender struct {
 	// queueMu protects the buffer queue.
 	queueMu struct {
 		syncutil.Mutex
-		stopped  bool
-		buffer   *eventQueue
-		capacity int64
-		overflow bool
+		stopped    bool
+		buffer     *eventQueue
+		capacity   int64
+		overflowed bool
 	}
 
 	// notifyDataC is used to notify the BufferedSender.run goroutine that there
@@ -100,13 +100,13 @@ func (bs *BufferedSender) sendBuffered(
 	if bs.queueMu.stopped {
 		return errors.New("stream sender is stopped")
 	}
-	if bs.queueMu.overflow {
+	if bs.queueMu.overflowed {
 		// Is this too spammy
 		log.Dev.Error(context.Background(), "buffer capacity exceeded")
 		return newRetryErrBufferCapacityExceeded()
 	}
 	if bs.queueMu.buffer.len() >= bs.queueMu.capacity {
-		bs.queueMu.overflow = true
+		bs.queueMu.overflowed = true
 		return newRetryErrBufferCapacityExceeded()
 	}
 	// TODO(wenyihu6): pass an actual context here
@@ -176,7 +176,7 @@ func (bs *BufferedSender) popFront() (
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.popFront()
-	return event, ok, bs.queueMu.overflow, bs.queueMu.buffer.len()
+	return event, ok, bs.queueMu.overflowed, bs.queueMu.buffer.len()
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
