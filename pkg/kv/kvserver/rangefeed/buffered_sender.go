@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -57,8 +56,23 @@ type BufferedSender struct {
 	// queueMu protects the buffer queue.
 	queueMu struct {
 		syncutil.Mutex
-		stopped    bool
-		buffer     *eventQueue
+		stopped bool
+		buffer  *eventQueue
+		// capacity is the maximum number of events that can be buffered. It
+		// dynamically scales based on the number of active registrations.
+		//
+		// The capacity is calculated as:
+		// - Minimum: minBufferedSenderQueueCapacity (20 registrations)
+		// - Active streams: perUnbufferedRegCapacity * number of active
+		// registrations
+		//
+		// This scaling is based on the intuition that each stream should have
+		// equivalent buffer space to what unbuffered registrations receive (4096
+		// events per registration). Since all registrations share the same buffered
+		// sender, registrations may affect each other.
+		//
+		// Note that when capacity shrinks, events already buffered will not be
+		// dropped. Capacity is not adjusted during shutdown.
 		capacity   int64
 		overflowed bool
 	}
@@ -74,8 +88,14 @@ type BufferedSender struct {
 	metrics *BufferedSenderMetrics
 }
 
+// TODO(wenyihu6): This value is set to the same value as
+// https://github.com/cockroachdb/cockroach/blob/5536f0828f50bb21ec1577c77d388c4303d124a4/pkg/kv/kvserver/replica_rangefeed.go#L121.
+// Should I move this const to kvserverbase and import this value?
+const perUnbufferedRegCapacity = int64(4096)
+const minBufferedSenderQueueCapacity = int64(4096 * 20)
+
 func NewBufferedSender(
-	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics, maxQueueSize int64,
+	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics,
 ) *BufferedSender {
 	bs := &BufferedSender{
 		sender:  sender,
@@ -84,7 +104,7 @@ func NewBufferedSender(
 	bs.queueMu.buffer = newEventQueue()
 	bs.notifyDataC = make(chan struct{}, 1)
 	bs.queueMu.buffer = newEventQueue()
-	bs.queueMu.capacity = maxQueueSize
+	bs.queueMu.capacity = minBufferedSenderQueueCapacity
 	return bs
 }
 
@@ -101,8 +121,6 @@ func (bs *BufferedSender) sendBuffered(
 		return errors.New("stream sender is stopped")
 	}
 	if bs.queueMu.overflowed {
-		// Is this too spammy
-		log.Dev.Error(context.Background(), "buffer capacity exceeded")
 		return newRetryErrBufferCapacityExceeded()
 	}
 	if bs.queueMu.buffer.len() >= bs.queueMu.capacity {
@@ -190,7 +208,17 @@ func (bs *BufferedSender) cleanup(ctx context.Context) {
 	bs.metrics.BufferedSenderQueueSize.Dec(remaining)
 }
 
-// Used for testing only.
+// onStreamConnectOrDisconnect is called when a stream is added or removed. This
+// is currently used to dynamically adjust its queue capacity based on number of
+// active registrations. Note that this is not called during shutdown, so strict
+// dependency on this contract is discouraged. And note that we do not drop
+// events if the capacity is shrunk.
+func (bs *BufferedSender) onStreamConnectOrDisconnect(activeStreamCount int64) {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	bs.queueMu.capacity = max(minBufferedSenderQueueCapacity, activeStreamCount*perUnbufferedRegCapacity)
+}
+
 func (bs *BufferedSender) len() int {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
