@@ -207,26 +207,29 @@ func setupDev(p perturbation) variations {
 }
 
 func registerLatencyTests(r registry.Registry) {
-	// NB: If these tests fail because they are flaky, increase the numbers
-	// until they pass. Additionally add the seed (from the log) that caused
-	// them to fail as a comment in the test.
-	addMetamorphic(r, &restart{}, math.Inf(1))
-	addMetamorphic(r, &partition{}, math.Inf(1))
-	addMetamorphic(r, addNode{}, 5.0)
-	addMetamorphic(r, &decommission{}, 5.0)
-	addMetamorphic(r, backfill{}, 40.0)
-	addMetamorphic(r, &slowDisk{}, math.Inf(1))
-	addMetamorphic(r, elasticWorkload{}, math.Inf(1))
+	const notSkipped = ""
+	const skippedByBankruptcy = "#149662"
 
-	// NB: If these tests fail, it likely signals a regression. Investigate the
-	// history of the test on roachperf to see what changed.
-	addFull(r, &restart{cleanRestart: true}, math.Inf(1))
-	addFull(r, &partition{partitionSite: true}, math.Inf(1))
-	addFull(r, addNode{}, 5.0)
-	addFull(r, &decommission{drain: true}, 5.0)
-	addFull(r, backfill{}, 40.0)
-	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
-	addFull(r, elasticWorkload{}, math.Inf(1))
+	// All metamorphic perturbation tests are currently disabled. See
+	// https://github.com/cockroachdb/cockroach/issues/142148.
+	addMetamorphic(r, &restart{}, math.Inf(1), skippedByBankruptcy)
+	addMetamorphic(r, &partition{}, math.Inf(1), skippedByBankruptcy)
+	addMetamorphic(r, addNode{}, 5.0, skippedByBankruptcy)
+	addMetamorphic(r, &decommission{}, 5.0, skippedByBankruptcy)
+	addMetamorphic(r, backfill{}, 40.0, skippedByBankruptcy)
+	addMetamorphic(r, &slowDisk{}, math.Inf(1), skippedByBankruptcy)
+	addMetamorphic(r, elasticWorkload{}, math.Inf(1), skippedByBankruptcy)
+
+	// TODO(ssd): We skipped the majority of these tests so that we can focus on
+	// one at a time. These are vaguely ordered by their previous pass rate
+	// (highest first).
+	addFull(r, &restart{cleanRestart: true}, math.Inf(1), notSkipped)
+	addFull(r, &partition{partitionSite: true}, math.Inf(1), skippedByBankruptcy)
+	addFull(r, addNode{}, 5.0, skippedByBankruptcy)
+	addFull(r, &decommission{drain: true}, 5.0, skippedByBankruptcy)
+	addFull(r, backfill{}, 40.0, notSkipped)
+	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1), skippedByBankruptcy)
+	addFull(r, elasticWorkload{}, math.Inf(1), skippedByBankruptcy)
 
 	// NB: These tests will never fail and are not enabled, but they are useful
 	// for development.
@@ -252,13 +255,16 @@ func (v variations) perturbationName() string {
 	return t.Name()
 }
 
-func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float64) {
+func addMetamorphic(
+	r registry.Registry, p perturbation, acceptableChange float64, skipReason string,
+) {
 	v := setupMetamorphic(p)
 	v.acceptableChange = acceptableChange
 	// TODO(baptist): Make the cloud be metamorphic for repeatable results with
 	// a given seed.
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
+		Skip:             skipReason,
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Perturbation),
 		Owner:            registry.OwnerKV,
@@ -269,11 +275,12 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 	})
 }
 
-func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
+func addFull(r registry.Registry, p perturbation, acceptableChange float64, skipReason string) {
 	v := setupFull(p)
 	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
+		Skip:             skipReason,
 		CompatibleClouds: v.cloud,
 		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerKV,
