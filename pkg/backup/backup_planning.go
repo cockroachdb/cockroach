@@ -49,6 +49,8 @@ const (
 	deprecatedPrivilegesRestorePreamble = "The existing privileges are being deprecated " +
 		"in favour of a fine-grained privilege model explained here " +
 		"https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run"
+
+	deprecatedIncrementalLocationMessage = "the incremental_location option is deprecated and will be removed in a future release"
 )
 
 type tableAndIndex struct {
@@ -440,6 +442,10 @@ func backupPlanHook(
 	)
 	if err != nil {
 		return nil, nil, false, err
+	}
+
+	if len(incrementalStorage) > 0 {
+		p.BufferClientNotice(ctx, pgnotice.Newf(deprecatedIncrementalLocationMessage))
 	}
 
 	var revisionHistory bool

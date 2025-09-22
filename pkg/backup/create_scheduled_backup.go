@@ -339,6 +339,7 @@ func doCreateBackupSchedules(
 
 		var incDests []string
 		if eval.incrementalStorage != nil {
+			p.BufferClientNotice(ctx, pgnotice.Newf(deprecatedIncrementalLocationMessage))
 			incDests = eval.incrementalStorage
 			for _, incDest := range incDests {
 				backupNode.Options.IncrementalStorage = append(backupNode.Options.IncrementalStorage, tree.NewStrVal(incDest))
