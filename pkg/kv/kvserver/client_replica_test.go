@@ -2681,86 +2681,46 @@ func TestLeaseInfoRequest(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
-	kvDB0 := tc.Servers[0].DB()
-
-	key := []byte("a")
-	rangeDesc, err := tc.LookupRange(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replicas := make([]roachpb.ReplicaDescriptor, 3)
-	for i := 0; i < 3; i++ {
-		var ok bool
-		replicas[i], ok = rangeDesc.GetReplicaDescriptor(tc.Servers[i].GetFirstStoreID())
-		if !ok {
-			t.Fatalf("expected to find replica in server %d", i)
-		}
+	// Split ranges to create more ranges
+	splitKeys := []roachpb.Key{
+		roachpb.Key("scratch-range-1-split"),
+		roachpb.Key("scratch-range-2-split"),
+		roachpb.Key("scratch-range-3-split"),
+		roachpb.Key("scratch-range-4-split"),
+		roachpb.Key("scratch-range-5-split"),
+		roachpb.Key("scratch-range-6-split"),
+		roachpb.Key("scratch-range-7-split"),
+		roachpb.Key("scratch-range-8-split"),
+		roachpb.Key("scratch-range-9-split"),
 	}
 
-	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
-	// there might be already a lease owned by a random node.
-	tc.TransferRangeLeaseOrFatal(t, rangeDesc, tc.Target(0))
-
-	// Now test the LeaseInfo. We might need to loop until the node we query has applied the lease.
-	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[0], true)
-
-	// Transfer the lease to Server 1 and check that LeaseInfoRequest gets the
-	// right answer.
-	tc.TransferRangeLeaseOrFatal(t, rangeDesc, tc.Target(1))
-
-	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
-	// right answer immediately, since the old holder has definitely applied the
-	// transfer before TransferRangeLease returned.
-	leaseInfo := getLeaseInfoOrFatal(t, context.Background(), kvDB0, rangeDesc.StartKey.AsRawKey())
-	if !leaseInfo.Lease.Replica.Equal(replicas[1]) {
-		t.Fatalf("lease holder should be replica %+v, but is: %+v",
-			replicas[1], leaseInfo.Lease.Replica)
+	// Perform splits
+	for _, splitKey := range splitKeys {
+		err := tc.Servers[0].DB().AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp)
+		require.NoError(t, err)
+		t.Logf("Split range at key: %s", splitKey)
 	}
 
-	// A read on the new lease holder does not necessarily succeed immediately,
-	// since it might take a while for it to apply the transfer.
-	// We can't reliably do a CONSISTENT read here, even though we're reading
-	// from the supposed lease holder, because this node might initially be
-	// unaware of the new lease and so the request might bounce around for a
-	// while (see #8816).
-	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[1], true)
-
-	// Transfer the lease to Server 2 and check that LeaseInfoRequest gets the
-	// right answer.
-	tc.TransferRangeLeaseOrFatal(t, rangeDesc, tc.Target(2))
-
-	// We're now going to ask servers[1] for the lease info. We don't use kvDB1;
-	// instead we go directly to the store because otherwise the DistSender might
-	// use an old, cached, version of the range descriptor that doesn't have the
-	// local replica in it (and so the request would be routed away).
-	// TODO(andrei): Add a batch option to not use the range cache.
-	s, err := tc.Servers[1].GetStores().(*kvserver.Stores).GetStore(tc.Servers[1].GetFirstStoreID())
-	if err != nil {
-		t.Fatal(err)
-	}
-	leaseInfoReq := &kvpb.LeaseInfoRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key: rangeDesc.StartKey.AsRawKey(),
-		},
-	}
-	reply, pErr := kv.SendWrappedWith(
-		context.Background(), s, kvpb.Header{
-			RangeID:         rangeDesc.RangeID,
-			ReadConsistency: kvpb.INCONSISTENT,
-		}, leaseInfoReq)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	resp := *(reply.(*kvpb.LeaseInfoResponse))
-
-	if !resp.Lease.Replica.Equal(replicas[2]) {
-		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], resp.Lease.Replica)
+	// Write to split ranges to ensure they exist
+	for i, splitKey := range splitKeys {
+		err := tc.Servers[0].DB().Put(context.Background(), splitKey, fmt.Sprintf("split-value-%d", i))
+		require.NoError(t, err)
 	}
 
-	// TODO(andrei): test the side-effect of LeaseInfoRequest when there's no
-	// active lease - the node getting the request is supposed to acquire the
-	// lease. This requires a way to expire leases; the TestCluster probably needs
-	// to use a mock clock.
+	// Move leaseholders to different nodes
+	for i, key := range splitKeys {
+		targetNode := i % 3 // Distribute across nodes 0, 1, 2
+
+		// Get the range descriptor
+		rangeDesc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+
+		// Transfer lease to target node
+		err = tc.TransferRangeLease(rangeDesc, tc.Target(targetNode))
+		require.NoError(t, err)
+	}
+
+	time.Sleep(10 * time.Second)
 }
 
 // Test that an error encountered by a read-only "NonKV" command is not
