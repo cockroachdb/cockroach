@@ -195,12 +195,13 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 		require.NoError(t, bs.sendBuffered(muxEv, nil))
 	}
 	require.Equal(t, queueCap, int64(bs.len()))
-	e, success, overflowed, remains := bs.popFront()
+	buf, remains, overflowed := bs.popEvents(nil, 1)
+	require.Equal(t, 1, len(buf))
+
 	require.Equal(t, sharedMuxEvent{
 		ev:    muxEv,
 		alloc: nil,
-	}, e)
-	require.True(t, success)
+	}, buf[0])
 	require.False(t, overflowed)
 	require.Equal(t, queueCap-1, remains)
 	require.Equal(t, queueCap-1, int64(bs.len()))
@@ -266,11 +267,11 @@ func TestBufferedSenderOnStreamShutdown(t *testing.T) {
 
 	require.NoError(t, sm.sender.sendBuffered(muxEv, nil))
 	// At this point we actually have sent 2 events. 1 checkpoint event sent by
-	// register and 1 event sent on the line above. We wait for 1 of these events
-	// to be pulled off the queue and block in the sender, leaving 1 in the queue.
-	waitForQueueLen(1)
-	// Now fill the rest of the queue.
-	for range queueCap - 1 {
+	// register and 1 event sent on the line above. We wait for these events to be
+	// pulled off the queue and block in the sender.
+	waitForQueueLen(0)
+	// Fill up the queue.
+	for range queueCap {
 		require.NoError(t, sm.sender.sendBuffered(muxEv, nil))
 	}
 

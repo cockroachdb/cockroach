@@ -167,6 +167,9 @@ func (bs *BufferedSender) sendUnbuffered(ev *kvpb.MuxRangeFeedEvent) error {
 func (bs *BufferedSender) run(
 	ctx context.Context, stopper *stop.Stopper, onError func(streamID int64),
 ) error {
+	const bufSize = 64
+	eventsBuf := make([]sharedMuxEvent, 0, bufSize)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -179,19 +182,29 @@ func (bs *BufferedSender) run(
 			return nil
 		case <-bs.notifyDataC:
 			for {
-				e, success, overflowed, remains := bs.popFront()
-				if !success {
+				var remains int64
+				var overflowed bool
+				eventsBuf, remains, overflowed = bs.popEvents(eventsBuf[:0], bufSize)
+				if len(eventsBuf) == 0 {
 					break
 				}
-				bs.metrics.BufferedSenderQueueSize.Dec(1)
-				err := bs.sender.Send(e.ev)
-				e.alloc.Release(ctx)
-				if e.ev.Error != nil {
-					onError(e.ev.StreamID)
+				bs.metrics.BufferedSenderQueueSize.Dec(int64(len(eventsBuf)))
+
+				for _, evt := range eventsBuf {
+					// TODO(ssd): This might be another location where we could transform
+					// multiple events into BulkEvents. We can't just throw them all in a
+					// bulk event though since we are processing events for different
+					// streams here.
+					err := bs.sender.Send(evt.ev)
+					evt.alloc.Release(ctx)
+					if evt.ev.Error != nil {
+						onError(evt.ev.StreamID)
+					}
+					if err != nil {
+						return err
+					}
 				}
-				if err != nil {
-					return err
-				}
+				clear(eventsBuf)
 				if overflowed && remains == int64(0) {
 					return newRetryErrBufferCapacityExceeded()
 				}
@@ -200,18 +213,17 @@ func (bs *BufferedSender) run(
 	}
 }
 
-// popFront pops the front event from the buffer queue. It returns the event and
-// a boolean indicating if the event was successfully popped.
-func (bs *BufferedSender) popFront() (
-	e sharedMuxEvent,
-	success bool,
-	overflowed bool,
-	remains int64,
-) {
+// popEvents appends up to eventsToPop events into dest, returning the new
+// slice, the remaining queue length, and a bool indicating whether the queue is
+// in an overflow state.
+func (bs *BufferedSender) popEvents(
+	dest []sharedMuxEvent, eventsToPop int,
+) ([]sharedMuxEvent, int64, bool) {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
-	event, ok := bs.queueMu.buffer.popFront()
-	return event, ok, bs.queueMu.overflowed, bs.queueMu.buffer.len()
+
+	dest = bs.queueMu.buffer.popFrontInto(dest, eventsToPop)
+	return dest, bs.queueMu.buffer.len(), bs.queueMu.overflowed
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
