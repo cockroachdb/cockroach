@@ -23,10 +23,12 @@ eval duration=5m seed=42 metrics=(leases) cfgs=(sma-count,mma-only)
 ----
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
 leases#1: last:  [s1=1, s2=1, s3=1, s4=1, s5=1, s6=1, s7=1, s8=1, s9=1, s10=1, s11=1, s12=1, s13=1, s14=1] (stddev=0.00, mean=1.00, sum=14)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=25%, s9=25%, s10=0%, s11=25%, s12=0%, s13=50%, s14=25%]  (sum=150%)
 artifacts[sma-count]: 6322c40ff6c7b47c
 ==========================
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
 leases#1: last:  [s1=4, s2=1, s3=0, s4=0, s5=0, s6=1, s7=0, s8=0, s9=1, s10=1, s11=1, s12=1, s13=2, s14=2] (stddev=1.07, mean=1.00, sum=14)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%, s11=25%, s12=0%, s13=0%, s14=0%]  (sum=25%)
 artifacts[mma-only]: ed1b3ca87bbb8148
 failed assertion sample 1
   balance stat=leases threshold=(≤1.00) ticks=6

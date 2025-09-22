@@ -32,10 +32,14 @@ setting split_queue_enabled=false
 eval duration=40m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,cpu_util,leases,replicas)
 ----
 cpu#1: last:  [s1=36277802, s2=33539839, s3=31138221, s4=499392, s5=499392, s6=499392, s7=0, s8=0, s9=0] (stddev=15793888.65, mean=11383782.00, sum=102454038)
+cpu#1: thrash_pct: [s1=8%, s2=32%, s3=30%, s4=1%, s5=1%, s6=1%, s7=0%, s8=0%, s9=0%]  (sum=75%)
 cpu_util#1: last:  [s1=725.56, s2=670.80, s3=622.76, s4=9.99, s5=9.99, s6=9.99, s7=0.00, s8=0.00, s9=0.00] (stddev=315.88, mean=227.68, sum=2049)
+cpu_util#1: thrash_pct: [s1=8%, s2=32%, s3=30%, s4=1%, s5=1%, s6=1%, s7=0%, s8=0%, s9=0%]  (sum=75%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
 leases#1: last:  [s1=36, s2=33, s3=31, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.76, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
 replicas#1: last:  [s1=69, s2=100, s3=31, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=44.65, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 artifacts[mma-only]: b333fa70b27337e7
 ==========================

@@ -28,9 +28,12 @@ eval duration=60m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,cpu_util,leases
 ----
 disk_fraction_used#1: first: [s1=0.61, s2=0.61, s3=0.00, s4=0.61, s5=0.61, s6=0.61, s7=0.00, s8=0.00, s9=0.00] (stddev=0.30, mean=0.34, sum=3)
 disk_fraction_used#1: last:  [s1=0.49, s2=0.49, s3=0.24, s4=0.61, s5=0.61, s6=0.61, s7=0.00, s8=0.00, s9=0.00] (stddev=0.26, mean=0.34, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=25%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=25%)
 leases#1: first: [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=3.14, mean=1.11, sum=10)
 leases#1: last:  [s1=7, s2=0, s3=3, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=2.28, mean=1.11, sum=10)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 replicas#1: first: [s1=10, s2=10, s3=0, s4=10, s5=10, s6=10, s7=0, s8=0, s9=0] (stddev=4.97, mean=5.56, sum=50)
 replicas#1: last:  [s1=8, s2=8, s3=4, s4=10, s5=10, s6=10, s7=0, s8=0, s9=0] (stddev=4.30, mean=5.56, sum=50)
+replicas#1: thrash_pct: [s1=25%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=25%)
 artifacts[mma-only]: 512bcb3481322125
 ==========================

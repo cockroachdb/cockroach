@@ -29,10 +29,14 @@ gen_load rate=5000 rw_ratio=0.95 min_block=128 max_block=128 request_cpu_per_acc
 eval duration=15m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=54846934, s2=52921485, s3=51803135, s4=51267081, s5=50804428, s6=50881755, s7=50647282, s8=50525189, s9=50888708, s10=50590849] (stddev=1308023.95, mean=51517684.60, sum=515176846)
+cpu#1: thrash_pct: [s1=14%, s2=52%, s3=49%, s4=25%, s5=8%, s6=9%, s7=7%, s8=17%, s9=18%, s10=8%]  (sum=208%)
 leases#1: first: [s1=37, s2=22, s3=14, s4=13, s5=11, s6=11, s7=10, s8=11, s9=10, s10=11] (stddev=8.07, mean=15.00, sum=150)
 leases#1: last:  [s1=15, s2=15, s3=15, s4=16, s5=15, s6=15, s7=15, s8=15, s9=14, s10=15] (stddev=0.45, mean=15.00, sum=150)
+leases#1: thrash_pct: [s1=0%, s2=41%, s3=38%, s4=16%, s5=0%, s6=0%, s7=0%, s8=9%, s9=9%, s10=0%]  (sum=112%)
 replicas#1: first: [s1=80, s2=70, s3=51, s4=42, s5=37, s6=35, s7=34, s8=33, s9=34, s10=34] (stddev=16.02, mean=45.00, sum=450)
 replicas#1: last:  [s1=80, s2=59, s3=47, s4=42, s5=38, s6=38, s7=36, s8=36, s9=38, s10=36] (stddev=13.51, mean=45.00, sum=450)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=4%, s5=0%, s6=0%, s7=0%, s8=5%, s9=0%, s10=0%]  (sum=9%)
 write_bytes_per_second#1: last:  [s1=39525, s2=26018, s3=18332, s4=15205, s5=12566, s6=12630, s7=11413, s8=11354, s9=12670, s10=11323] (stddev=8639.53, mean=17103.60, sum=171036)
+write_bytes_per_second#1: thrash_pct: [s1=228%, s2=149%, s3=128%, s4=81%, s5=42%, s6=46%, s7=44%, s8=36%, s9=48%, s10=43%]  (sum=845%)
 artifacts[mma-only]: afc46481b131af63
 ==========================

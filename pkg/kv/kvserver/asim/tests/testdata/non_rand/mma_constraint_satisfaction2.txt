@@ -27,9 +27,11 @@ eval duration=30m samples=1 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
 ----
 replicas#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
 replicas#1: last:  [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 artifacts[sma-count]: e0019a867ce3dce5
 ==========================
 replicas#1: first: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
 replicas#1: last:  [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 artifacts[mma-only]: e0019a867ce3dce5
 ==========================
