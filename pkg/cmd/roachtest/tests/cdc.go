@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2085,7 +2084,7 @@ CONFIGURE ZONE USING
 		Name:      "cdc/initial-scan-only",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		// This test uses google cloudStorageSink because it is the fastest,
 		// but it is not a requirement for this test. The sink could be
 		// chosen on a per cloud basis if we want to run this on other clouds.
@@ -2266,7 +2265,7 @@ CONFIGURE ZONE USING
 		Name:      "cdc/initial-scan-only/parquet",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		// This test uses google cloudStorageSink because it is the fastest,
 		// but it is not a requirement for this test. The sink could be
 		// chosen on a per cloud basis if we want to run this on other clouds.
@@ -2295,7 +2294,7 @@ CONFIGURE ZONE USING
 		Skip:             "#119295",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2757,7 +2756,7 @@ CONFIGURE ZONE USING
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-auth-msk",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.OnlyAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -2792,7 +2791,7 @@ CONFIGURE ZONE USING
 		Owner:     `cdc`,
 		Benchmark: true,
 		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
-		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
@@ -2839,7 +2838,7 @@ CONFIGURE ZONE USING
 	r.Add(registry.TestSpec{
 		Name:    "cdc/kafka-topics",
 		Owner:   `cdc`,
-		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
@@ -2969,7 +2968,7 @@ CONFIGURE ZONE USING
 		Owner:            `cdc`,
 		CompatibleClouds: registry.OnlyAzure,
 		// The Azure CLI only packages AMD64 binaries in its deb installer, so lock to AMD64.
-		Cluster: r.MakeClusterSpec(2, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster: r.MakeClusterSpec(2, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		Suites:  registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
