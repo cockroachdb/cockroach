@@ -622,3 +622,228 @@ func TestJobProgressAndStatusAccessors(t *testing.T) {
 		sql.CheckQueryResults(t, fmt.Sprintf("SELECT status from system.job_status where job_id = %d", job4.ID()), [][]string{{"c"}})
 	})
 }
+
+func TestStorageRejectsInvalidJobID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := s.InternalDB().(isql.DB)
+
+	t.Run("ProgressStorage", func(t *testing.T) {
+		progressStorage := jobs.ProgressStorage(jobspb.InvalidJobID)
+
+		t.Run("Get", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, _, _, err := progressStorage.Get(ctx, txn)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Set", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				err := progressStorage.Set(ctx, txn, 0.5, hlc.Timestamp{})
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+	})
+
+	t.Run("StatusStorage", func(t *testing.T) {
+		statusStorage := jobs.StatusStorage(jobspb.InvalidJobID)
+
+		t.Run("Get", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, _, err := statusStorage.Get(ctx, txn)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Set", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				err := statusStorage.Set(ctx, txn, "test status")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Clear", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				err := statusStorage.Clear(ctx, txn)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+	})
+
+	t.Run("MessageStorage", func(t *testing.T) {
+		messageStorage := jobs.MessageStorage(jobspb.InvalidJobID)
+
+		t.Run("Record", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				err := messageStorage.Record(ctx, txn, "test", "test message")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Fetch", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, err := messageStorage.Fetch(ctx, txn)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+	})
+
+	t.Run("InfoStorage", func(t *testing.T) {
+		t.Run("Get", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				_, _, err := infoStorage.Get(ctx, "test-op", "test-key")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Write", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.Write(ctx, "test-key", []byte("test-value"))
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("WriteFirstKey", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.WriteFirstKey(ctx, "test-key", []byte("test-value"))
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Delete", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.Delete(ctx, "test-key")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("DeleteRange", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.DeleteRange(ctx, "start", "end", 0)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Count", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				_, err := infoStorage.Count(ctx, "start", "end")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("Iterate", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.Iterate(ctx, "prefix", func(key string, value []byte) error {
+					return nil
+				})
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("GetLast", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.GetLast(ctx, "prefix", func(key string, value []byte) error {
+					return nil
+				})
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("GetLegacyPayload", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				_, _, err := infoStorage.GetLegacyPayload(ctx, "test-op")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("WriteLegacyPayload", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.WriteLegacyPayload(ctx, []byte("test-payload"))
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("GetLegacyProgress", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				_, _, err := infoStorage.GetLegacyProgress(ctx, "test-op")
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+
+		t.Run("WriteLegacyProgress", func(t *testing.T) {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				infoStorage := jobs.InfoStorageForJob(txn, jobspb.InvalidJobID)
+				err := infoStorage.WriteLegacyProgress(ctx, []byte("test-progress"))
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "invalid job ID")
+				return nil
+			}))
+		})
+	})
+
+	// Verify no rows were created in any of the job tables.
+	sqlDB := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	sqlDB.CheckQueryResults(t,
+		"SELECT count(*) FROM system.job_progress WHERE job_id = 0", [][]string{{"0"}})
+	sqlDB.CheckQueryResults(t,
+		"SELECT count(*) FROM system.job_progress_history WHERE job_id = 0", [][]string{{"0"}})
+	sqlDB.CheckQueryResults(t,
+		"SELECT count(*) FROM system.job_status WHERE job_id = 0", [][]string{{"0"}})
+	sqlDB.CheckQueryResults(t,
+		"SELECT count(*) FROM system.job_message WHERE job_id = 0", [][]string{{"0"}})
+	sqlDB.CheckQueryResults(t,
+		"SELECT count(*) FROM system.job_info WHERE job_id = 0", [][]string{{"0"}})
+}
