@@ -4467,6 +4467,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			IsFullScan:     query.isFullScan,
 			PlanGist:       query.planGist,
 			Database:       query.database,
+			IsolationLevel: activeTxnInfo.IsolationLevel,
 		})
 	}
 	lastActiveQuery := ""
