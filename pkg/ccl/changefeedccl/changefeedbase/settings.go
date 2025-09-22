@@ -232,7 +232,7 @@ var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
 	"changefeed.protected_timestamp.per_table.enabled",
 	"if true, creates separate protected timestamp records for each table in a changefeed; "+
 		"if false, uses a single protected timestamp record for all tables",
-	metamorphic.ConstantWithTestBool("changefeed.protected_timestamp.per_table.enabled", true))
+	metamorphic.ConstantWithTestBool("changefeed.protected_timestamp.per_table.enabled", false))
 
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
