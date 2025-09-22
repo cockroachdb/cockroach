@@ -475,7 +475,7 @@ func computeSSTStatsDiffWithFallback(
 	stats, err := storage.ComputeSSTStatsDiff(
 		ctx, sst, readWriter, nowNanos, start, end)
 	if errors.IsAny(err, storage.ComputeSSTStatsDiffReaderHasRangeKeys, storage.ComputeStatsDiffViolation) {
-		log.Dev.Warningf(ctx, "computing SST stats as estimates because of ComputeSSTStatsDiff error: %s", err)
+		log.KvExec.Warningf(ctx, "computing SST stats as estimates because of ComputeSSTStatsDiff error: %s", err)
 		sstStats, err := computeSSTStats(ctx, sst, nowNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "error computing SST stats during fallback")
