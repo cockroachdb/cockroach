@@ -632,7 +632,7 @@ func (ex *connExecutor) execDescribe(
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
 		res.SetInferredTypes(ps.InferredTypes)
-		if stmtHasNoData(ast) {
+		if stmtHasNoData(ast, ps.Columns) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPrepStmtOutput(ctx, ps.Columns)
@@ -661,7 +661,7 @@ func (ex *connExecutor) execDescribe(
 		if isAbortedTxn && !ex.isAllowedInAbortedTxn(ast) {
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
-		if stmtHasNoData(ast) {
+		if stmtHasNoData(ast, portal.Stmt.Columns) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
