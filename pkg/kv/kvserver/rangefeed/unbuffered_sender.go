@@ -186,4 +186,7 @@ func (ubs *UnbufferedSender) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
-func (ubs *UnbufferedSender) cleanup(context.Context) {}
+// The following methods are no-op implementations to satisfy the sender
+// interface.
+func (ubs *UnbufferedSender) cleanup(context.Context)             {}
+func (ubs *UnbufferedSender) onStreamConnectOrDisconnect(_ int64) { return }
