@@ -30,6 +30,7 @@ go_library(
 
 go_test(
     name = "tests_test",
+    size = "large",
     srcs = [
         "datadriven_simulation_test.go",
         "helpers_test.go",
