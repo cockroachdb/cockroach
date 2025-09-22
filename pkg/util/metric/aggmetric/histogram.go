@@ -357,3 +357,220 @@ func (sch *SQLChildHistogram) RecordValue(v int64) {
 func (sch *SQLChildHistogram) Value() metric.HistogramSnapshot {
 	return sch.h.CumulativeSnapshot()
 }
+
+// HighCardinalityHistogram is similar to AggHistogram but uses cache storage instead of B-tree,
+// allowing for automatic eviction of less frequently used child metrics.
+// This is useful when dealing with high cardinality metrics that might exceed resource limits.
+type HighCardinalityHistogram struct {
+	h      metric.IHistogram
+	create func() metric.IHistogram
+	childSet
+	labelSliceCache *metric.LabelSliceCache
+	ticker          struct {
+		// We use a RWMutex, because we don't want child histograms to contend when
+		// recording values, unless we're rotating histograms for the parent & children.
+		// In this instance, the "writer" for the RWMutex is the ticker, and the "readers"
+		// are all the child histograms recording their values.
+		syncutil.RWMutex
+		*tick.Ticker
+	}
+}
+
+var _ metric.Iterable = (*HighCardinalityHistogram)(nil)
+var _ metric.PrometheusEvictable = (*HighCardinalityHistogram)(nil)
+var _ metric.WindowedHistogram = (*HighCardinalityHistogram)(nil)
+var _ metric.CumulativeHistogram = (*HighCardinalityHistogram)(nil)
+
+// NewHighCardinalityHistogram constructs a new HighCardinalityHistogram that uses cache storage
+// with eviction for child metrics.
+func NewHighCardinalityHistogram(
+	opts metric.HistogramOptions, childLabels ...string,
+) *HighCardinalityHistogram {
+	create := func() metric.IHistogram {
+		return metric.NewHistogram(opts)
+	}
+	h := &HighCardinalityHistogram{
+		h:      create(),
+		create: create,
+	}
+	h.ticker.Ticker = tick.NewTicker(
+		now(),
+		opts.Duration/metric.WindowedHistogramWrapNum,
+		func() {
+			// Atomically rotate the histogram window for the
+			// parent histogram, and all the child histograms.
+			h.h.Tick()
+			h.childSet.apply(func(childItem MetricItem) {
+				childHist, ok := childItem.(*HighCardinalityChildHistogram)
+				if !ok {
+					panic(errors.AssertionFailedf(
+						"unable to assert type of child for histogram %q when rotating histogram windows",
+						opts.Metadata.Name))
+				}
+				childHist.h.Tick()
+			})
+		})
+	h.initWithCacheStorageType(childLabels, opts.Metadata.Name)
+	return h
+}
+
+// GetName is part of the metric.Iterable interface.
+func (h *HighCardinalityHistogram) GetName(useStaticLabels bool) string {
+	return h.h.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (h *HighCardinalityHistogram) GetHelp() string { return h.h.GetHelp() }
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (h *HighCardinalityHistogram) GetMeasurement() string { return h.h.GetMeasurement() }
+
+// GetUnit is part of the metric.Iterable interface.
+func (h *HighCardinalityHistogram) GetUnit() metric.Unit { return h.h.GetUnit() }
+
+// GetMetadata is part of the metric.Iterable interface.
+func (h *HighCardinalityHistogram) GetMetadata() metric.Metadata { return h.h.GetMetadata() }
+
+// Inspect is part of the metric.Iterable interface.
+func (h *HighCardinalityHistogram) Inspect(f func(interface{})) {
+	func() {
+		h.ticker.Lock()
+		defer h.ticker.Unlock()
+		tick.MaybeTick(&h.ticker)
+	}()
+	f(h)
+}
+
+// CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+func (h *HighCardinalityHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return h.h.CumulativeSnapshot()
+}
+
+// WindowedSnapshot is part of the metric.WindowedHistogram interface.
+func (h *HighCardinalityHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return h.h.WindowedSnapshot()
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (h *HighCardinalityHistogram) GetType() *prometheusgo.MetricType {
+	return h.h.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (h *HighCardinalityHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
+	return h.h.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (h *HighCardinalityHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	return h.h.ToPrometheusMetric()
+}
+
+// RecordValue records the histogram value for the given label values. If a
+// histogram with the given label values doesn't exist yet, it creates a new
+// histogram and records against it. RecordValue records value in parent metrics as well.
+func (h *HighCardinalityHistogram) RecordValue(v int64, labelValues ...string) {
+	childMetric := h.GetOrAddChild(labelValues...)
+
+	h.ticker.RLock()
+	defer h.ticker.RUnlock()
+
+	h.h.RecordValue(v)
+	if childMetric != nil {
+		childMetric.RecordValue(v)
+	}
+}
+
+// Each is part of the metric.PrometheusIterable interface.
+func (h *HighCardinalityHistogram) Each(
+	labels []*prometheusgo.LabelPair, f func(metric *prometheusgo.Metric),
+) {
+	h.EachWithLabels(labels, f, h.labelSliceCache)
+}
+
+// InitializeMetrics is part of the PrometheusEvictable interface.
+func (h *HighCardinalityHistogram) InitializeMetrics(labelCache *metric.LabelSliceCache) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.labelSliceCache = labelCache
+}
+
+// GetOrAddChild returns the existing child histogram for the given label values,
+// or creates a new one if it doesn't exist. This is the preferred method for
+// cache-based storage to avoid panics on existing keys.
+func (h *HighCardinalityHistogram) GetOrAddChild(
+	labelVals ...string,
+) *HighCardinalityChildHistogram {
+	if len(labelVals) == 0 {
+		return nil
+	}
+
+	// Create a LabelSliceCacheKey from the labelVals.
+	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+
+	child := h.getOrAddWithLabelSliceCache(h.GetMetadata().Name, h.createHighCardinalityChildHistogram, h.labelSliceCache, labelVals...)
+
+	h.labelSliceCache.Upsert(key, &metric.LabelSliceCacheValue{
+		LabelValues: labelVals,
+	})
+
+	return child.(*HighCardinalityChildHistogram)
+}
+
+func (h *HighCardinalityHistogram) createHighCardinalityChildHistogram(
+	key uint64, cache *metric.LabelSliceCache,
+) LabelSliceCachedChildMetric {
+	return &HighCardinalityChildHistogram{
+		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
+		LabelSliceCache:    cache,
+		h:                  h.create(),
+		createdAt:          timeutil.Now(),
+	}
+}
+
+// HighCardinalityChildHistogram is a child of a HighCardinalityHistogram. When metrics are
+// collected by prometheus, each of the children will appear with a distinct label,
+// however, when cockroach internally collects metrics, only the parent is collected.
+type HighCardinalityChildHistogram struct {
+	metric.LabelSliceCacheKey
+	h metric.IHistogram
+	*metric.LabelSliceCache
+	createdAt time.Time
+}
+
+func (h *HighCardinalityChildHistogram) CreatedAt() time.Time {
+	return h.createdAt
+}
+
+func (h *HighCardinalityChildHistogram) DecrementLabelSliceCacheReference() {
+	h.LabelSliceCache.DecrementAndDeleteIfZero(h.LabelSliceCacheKey)
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this HighCardinalityChildHistogram.
+func (h *HighCardinalityChildHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	return h.h.ToPrometheusMetric()
+}
+
+func (h *HighCardinalityChildHistogram) labelValues() []string {
+	lv, ok := h.LabelSliceCache.Get(h.LabelSliceCacheKey)
+	if !ok {
+		return nil
+	}
+	return lv.LabelValues
+}
+
+// RecordValue records the histogram value.
+func (h *HighCardinalityChildHistogram) RecordValue(v int64) {
+	h.h.RecordValue(v)
+}
+
+// CumulativeSnapshot returns the cumulative histogram snapshot.
+func (h *HighCardinalityChildHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return h.h.CumulativeSnapshot()
+}
+
+// WindowedSnapshot returns the windowed histogram snapshot.
+func (h *HighCardinalityChildHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return h.h.WindowedSnapshot()
+}

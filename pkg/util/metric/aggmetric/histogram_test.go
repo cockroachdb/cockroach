@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -19,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/crlib/testutils/require"
 	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSQLHistogram(t *testing.T) {
@@ -85,4 +86,85 @@ func TestSQLHistogram(t *testing.T) {
 		testFile = "SQLHistogram_post_eviction_hdr.txt"
 	}
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+}
+
+func TestHighCardinalityHistogram(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const cacheSize = 10
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	h := NewHighCardinalityHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name: "histo_gram",
+		},
+		Duration:     base.DefaultHistogramWindowInterval(),
+		MaxVal:       100,
+		SigFigs:      1,
+		BucketConfig: metric.Percent100Buckets,
+	}, "database", "application_name")
+
+	h.mu.children = &UnorderedCacheWrapper{
+		cache: initialiseCacheStorageForTesting(),
+	}
+	r.AddMetric(h)
+
+	// Initialize with a label slice cache to test eviction
+	labelSliceCache := metric.NewLabelSliceCache()
+	h.InitializeMetrics(labelSliceCache)
+
+	for i := 0; i < cacheSize+5; i++ {
+		h.RecordValue(int64(i+1), "1", strconv.Itoa(i))
+	}
+
+	// Wait more than cache eviction time to make sure that keys are not evicted based on only cache size.
+	time.Sleep(6 * time.Second)
+
+	testFile := "HighCardinalityHistogram_pre_eviction.txt"
+	if metric.HdrEnabled() {
+		testFile = "HighCardinalityHistogram_pre_eviction_hdr.txt"
+	}
+
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+	for i := 0; i < cacheSize+5; i++ {
+		metricKey := metric.LabelSliceCacheKey(metricKey("1", strconv.Itoa(i)))
+		labelSliceValue, ok := labelSliceCache.Get(metricKey)
+		require.True(t, ok, "missing labelSliceValue in label slice cache")
+		require.Equal(t, int64(1), labelSliceValue.Counter.Load(), "the value should be 1")
+		require.Equal(t, []string{"1", strconv.Itoa(i)}, labelSliceValue.LabelValues, "label values are mismatching")
+
+	}
+
+	for i := 0 + cacheSize; i < cacheSize+5; i++ {
+		h.RecordValue(int64(i+10), "2", strconv.Itoa(i))
+	}
+
+	testFile = "HighCardinalityHistogram_post_eviction.txt"
+	if metric.HdrEnabled() {
+		testFile = "HighCardinalityHistogram_post_eviction_hdr.txt"
+	}
+	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+	for i := 0; i < 5; i++ {
+		metricKey := metric.LabelSliceCacheKey(metricKey("1", strconv.Itoa(i)))
+		_, ok := labelSliceCache.Get(metricKey)
+		require.False(t, ok, "labelSliceValue should not be present.")
+	}
+
+	for i := 10; i < 15; i++ {
+		metricKey := metric.LabelSliceCacheKey(metricKey("1", strconv.Itoa(i)))
+		labelSliceValue, ok := labelSliceCache.Get(metricKey)
+		require.True(t, ok, "missing labelSliceValue in label slice cache")
+		require.Equal(t, int64(1), labelSliceValue.Counter.Load(), "the value should be 1")
+		require.Equal(t, []string{"1", strconv.Itoa(i)}, labelSliceValue.LabelValues, "label values are mismatching")
+	}
+
+	for i := 10; i < 15; i++ {
+		metricKey := metric.LabelSliceCacheKey(metricKey("2", strconv.Itoa(i)))
+		labelSliceValue, ok := labelSliceCache.Get(metricKey)
+		require.True(t, ok, "missing labelSliceValue in label slice cache")
+		require.Equal(t, int64(1), labelSliceValue.Counter.Load(), "the value should be 1")
+		require.Equal(t, []string{"2", strconv.Itoa(i)}, labelSliceValue.LabelValues, "label values are mismatching")
+	}
 }
