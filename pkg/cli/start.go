@@ -264,40 +264,44 @@ func initTempStorageConfig(
 		}
 	}
 
-	// Initialize a base.TempStorageConfig based on first store's spec and
-	// cli flags.
-	tempStorageConfig := base.TempStorageConfigFromEnv(
-		ctx,
-		st,
-		useStore,
-		startCtx.tempDir,
-		tempStorageMaxSizeBytes,
-	)
+	// If all stores are in-memory and no temp dir was specified, the temp
+	// store will also be in memory. This is a testing scenario.
+	if startCtx.tempDir == "" && useStore.InMemory {
+		return base.NewTempStorageConfig(
+			ctx,
+			st,
+			true, // inMem
+			"",   // path
+			useStore.EncryptionOptions,
+			tempStorageMaxSizeBytes,
+			"", // tempDirsRecordPath
+		), nil
+	}
 
 	// Set temp directory to first store's path if the temp storage is not
 	// in memory.
-	tempDir := startCtx.tempDir
-	if tempDir == "" && !tempStorageConfig.InMemory {
-		tempDir = useStore.Path
+	parentDir := startCtx.tempDir
+	if parentDir == "" {
+		parentDir = useStore.Path
 	}
 
-	tmpPath, unlockDirFn, err := fs.CreateTempDir(tempDir, server.TempDirPrefix)
+	tmpPath, unlockDirFn, err := fs.CreateTempDir(parentDir, server.TempDirPrefix)
 	if err != nil {
 		return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 	}
-	tempStorageConfig.Path = tmpPath
 
+	recordPath := ""
 	if useStore.InMemory {
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
 			// Remove the temp directory directly since there is no record file.
-			if err := os.RemoveAll(tempStorageConfig.Path); err != nil {
+			if err := os.RemoveAll(tmpPath); err != nil {
 				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
 	} else {
-		recordPath := filepath.Join(useStore.Path, server.TempDirsRecordFilename)
-		if err := fs.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
+		recordPath = filepath.Join(useStore.Path, server.TempDirsRecordFilename)
+		if err := fs.RecordTempDir(recordPath, tmpPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
@@ -312,7 +316,18 @@ func initTempStorageConfig(
 			}
 		}))
 	}
-	return tempStorageConfig, nil
+
+	// Initialize a base.TempStorageConfig based on first store's spec and
+	// cli flags.
+	return base.NewTempStorageConfig(
+		ctx,
+		st,
+		false, // inMem
+		tmpPath,
+		useStore.EncryptionOptions,
+		tempStorageMaxSizeBytes,
+		recordPath,
+	), nil
 }
 
 type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error)

@@ -725,8 +725,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up the DistSQL temp engine.
 
-	useStoreSpec := cfg.TempStorageConfig.Spec
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, useStoreSpec, cfg.DiskWriteStats)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, cfg.DiskWriteStats)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}

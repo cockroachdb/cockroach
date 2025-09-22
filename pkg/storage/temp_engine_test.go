@@ -31,7 +31,7 @@ func TestNewTempEngine(t *testing.T) {
 	db, filesystem, err := NewTempEngine(context.Background(), base.TempStorageConfig{
 		Path:     tempDir,
 		Settings: cluster.MakeTestingClusterSettings(),
-	}, base.StoreSpec{Path: tempDir}, diskWriteStats)
+	}, diskWriteStats)
 	if err != nil {
 		t.Fatalf("error encountered when invoking NewTempEngine: %+v", err)
 	}

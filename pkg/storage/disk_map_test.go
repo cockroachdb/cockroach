@@ -177,7 +177,7 @@ func TestTempEngineMap(t *testing.T) {
 	e, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestPebbleMultiMap(t *testing.T) {
 	e, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestPebbleMapClose(t *testing.T) {
 	e, _, err := newTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func BenchmarkPebbleMapWrite(b *testing.B) {
 	tempEngine, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 	tempEngine, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		b.Fatal(err)
 	}
