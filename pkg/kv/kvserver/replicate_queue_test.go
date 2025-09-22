@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1967,19 +1968,19 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			0: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n1"},
+					Type: storageconfig.InMemoryStore, Attributes: []string{"n1"},
 				}},
 			},
 			1: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n2"},
+					Type: storageconfig.InMemoryStore, Attributes: []string{"n2"},
 				}},
 			},
 			2: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n3"},
+					Type: storageconfig.InMemoryStore, Attributes: []string{"n3"},
 				}},
 			},
 		},

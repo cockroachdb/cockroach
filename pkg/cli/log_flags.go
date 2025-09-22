@@ -253,7 +253,7 @@ func getDefaultLogDirFromStores() (dir *string, ambiguousLogDirs bool) {
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store.
 	for _, spec := range serverCfg.Stores.Specs {
-		if spec.InMemory {
+		if spec.InMemory() {
 			continue
 		}
 		if dir != nil {

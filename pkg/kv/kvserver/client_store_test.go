@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -150,7 +151,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 				},
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:    true,
+						Type:        storageconfig.InMemoryStore,
 						StickyVFSID: "test",
 					},
 				},

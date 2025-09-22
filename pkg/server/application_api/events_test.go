@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,7 +43,7 @@ func TestAdminAPIEvents(t *testing.T) {
 			// Below parameters are required to make tc.Restart work
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: "1",
 				},
 			},

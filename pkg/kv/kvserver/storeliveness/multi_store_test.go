@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -152,7 +153,7 @@ func makeMultiStoreArgs(storeKnobs *kvserver.StoreTestingKnobs) base.TestCluster
 			id := strconv.Itoa(srvIdx*numStoresPerNode + storeIdx + 1)
 			serverArgs.StoreSpecs = append(
 				serverArgs.StoreSpecs,
-				base.StoreSpec{InMemory: true, StickyVFSID: id},
+				base.StoreSpec{Type: storageconfig.InMemoryStore, StickyVFSID: id},
 			)
 		}
 		clusterArgs.ServerArgsPerNode[srvIdx] = serverArgs

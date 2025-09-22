@@ -284,8 +284,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	// Validate the store specs.
 	for _, storeSpec := range params.StoreSpecs {
-		if storeSpec.InMemory {
-			if storeSpec.Size.Percent > 0 {
+		if storeSpec.InMemory() {
+			if storeSpec.Size.IsPercent() {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", base.StoreSpecCmdLineString(storeSpec)))
 			}
 		} else {

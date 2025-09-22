@@ -1926,7 +1926,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
-		if specs.InMemory && specs.StickyVFSID == "" {
+		if specs.InMemory() && specs.StickyVFSID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky VFS", i)
 		}
 	}

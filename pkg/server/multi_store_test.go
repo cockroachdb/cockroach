@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -69,7 +70,7 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 				id := fmt.Sprintf("s%d.%d", srvIdx+1, storeIdx+1)
 				serverArgs.StoreSpecs = append(
 					serverArgs.StoreSpecs,
-					base.StoreSpec{InMemory: true, StickyVFSID: id},
+					base.StoreSpec{Type: storageconfig.InMemoryStore, StickyVFSID: id},
 				)
 			}
 			tcArgs.ServerArgsPerNode[srvIdx] = serverArgs
@@ -147,7 +148,7 @@ func TestMultiStoreIDAlloc(t *testing.T) {
 	numStoresPerNode := 3
 	var storeSpecs []base.StoreSpec
 	for i := 0; i < numStoresPerNode; i++ {
-		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+		storeSpecs = append(storeSpecs, base.StoreSpec{Type: storageconfig.InMemoryStore})
 	}
 	tcArgs := base.TestClusterArgs{
 		ParallelStart:   true,

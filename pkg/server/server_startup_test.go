@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +47,7 @@ func TestStartupInjectedFailureSingleNode(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: "1",
 				},
 			},

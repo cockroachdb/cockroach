@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -162,7 +163,7 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:    true,
+						Type:        storageconfig.InMemoryStore,
 						StickyVFSID: "1",
 					},
 				},
@@ -470,7 +471,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -840,7 +841,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -1181,7 +1182,7 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},

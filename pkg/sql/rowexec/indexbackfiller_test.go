@@ -125,7 +125,7 @@ func BenchmarkIndexBackfill(b *testing.B) {
 				},
 			},
 		},
-		StoreSpecs: []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}},
+		StoreSpecs: []base.StoreSpec{{Path: filepath.Join(dir, "testserver")}},
 	})
 	defer srv.Stopper().Stop(ctx)
 

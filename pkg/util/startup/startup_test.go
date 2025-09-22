@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -161,7 +162,7 @@ func runCircuitBreakerTestForKey(
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},

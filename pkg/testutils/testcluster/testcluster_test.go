@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -318,7 +319,7 @@ func TestRestart(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: "TestRestart" + strconv.FormatInt(int64(i), 10),
 				},
 			},

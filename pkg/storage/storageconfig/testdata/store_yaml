@@ -1,0 +1,102 @@
+to-yaml basic
+----
+path: /mnt/data1
+size: 1 GiB
+
+to-yaml mem
+----
+type: mem
+size: 1 GiB
+sticky-vfs-id: foo
+
+to-yaml misc
+----
+path: /mnt/data1
+ballast-size: 10%
+attrs: [foo, bar]
+provisioned-rate: bandwidth=1,000KiB/s
+
+to-yaml pebble-opts
+----
+path: /mnt/data1
+pebble: |-
+    [Options]
+    l0_compaction_threshold=2
+    l0_stop_writes_threshold=10
+
+from-yaml
+path: foo
+size: 12345678
+ballast-size: 1024B
+provisioned-rate: bandwidth=12345
+attrs:
+ - foo
+ - bar
+ - baz
+----
+path: foo
+size: 12,345,678 B
+ballast-size: 1 KiB
+attrs: [foo, bar, baz]
+provisioned-rate: bandwidth=12,345B/s
+
+from-yaml
+path: foo
+size: 50%
+ballast-size: 1GiB
+provisioned-rate: bandwidth=1GiB/s
+----
+path: foo
+size: 50%
+ballast-size: 1 GiB
+provisioned-rate: bandwidth=1GiB/s
+
+from-yaml
+path: foo
+size: 50%
+invalid-field: foo
+----
+yaml: unmarshal errors:
+  line 3: field invalid-field not found in type storageconfig.Store
+
+validate
+path: foo
+size: 0
+----
+store size (0 B) must be at least 640 MiB
+
+validate
+path: foo
+size: 50MiB
+----
+store size (50 MiB) must be at least 640 MiB
+
+validate
+path: foo
+size: 0.9%
+----
+store size (0.9%) must be at least 1%
+
+validate
+path: foo
+type: mem
+----
+path specified for in memory store
+
+validate
+type: mem
+size: 90%
+ballast-size: 5%
+----
+ballast-size specified for in memory store
+
+validate
+size: 90%
+----
+no path specified
+
+validate
+path: foo
+sticky-vfs-id: foo
+----
+on-disk store cannot use a sticky VFS ID

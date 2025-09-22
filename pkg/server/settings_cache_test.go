@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -68,7 +69,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	serverArgs := base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, StickyVFSID: "1"},
+			{Type: storageconfig.InMemoryStore, StickyVFSID: "1"},
 		},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{

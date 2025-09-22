@@ -105,6 +105,7 @@ go_test(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/storage/storageconfig",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/listenerutil",

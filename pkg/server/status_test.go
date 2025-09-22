@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -56,7 +57,7 @@ func TestDetailsRemoteNode(t *testing.T) {
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Use in-memory stores
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			StoreSpecs: []base.StoreSpec{{Type: storageconfig.InMemoryStore}},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

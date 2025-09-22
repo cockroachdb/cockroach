@@ -33,7 +33,7 @@ func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
 	spec := cfg.Stores.Specs[0]
 	fs := vfs.Default
 	path := spec.Path
-	if spec.InMemory {
+	if spec.InMemory() {
 		path = ""
 		if spec.StickyVFSID != "" {
 			if cfg.TestingKnobs.Server == nil {

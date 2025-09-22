@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -105,7 +106,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:    true,
+						Type:        storageconfig.InMemoryStore,
 						StickyVFSID: "1",
 					},
 				},
@@ -232,7 +233,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 				},
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:    true,
+						Type:        storageconfig.InMemoryStore,
 						StickyVFSID: "1",
 					},
 				},
@@ -356,7 +357,7 @@ func TestRestoreReplicas(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -665,7 +666,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				stickyServerArgs[i] = base.TestServerArgs{
 					StoreSpecs: []base.StoreSpec{
 						{
-							InMemory:    true,
+							Type:        storageconfig.InMemoryStore,
 							StickyVFSID: strconv.FormatInt(int64(i), 10),
 						},
 					},
@@ -1711,7 +1712,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -1794,7 +1795,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -1900,7 +1901,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 					Settings: settings,
 					StoreSpecs: []base.StoreSpec{
 						{
-							InMemory:    true,
+							Type:        storageconfig.InMemoryStore,
 							StickyVFSID: strconv.FormatInt(int64(i), 10),
 						},
 					},
@@ -2200,7 +2201,7 @@ func TestProgressWithDownNode(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -2282,7 +2283,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -2379,7 +2380,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -3541,7 +3542,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -3885,7 +3886,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -3982,7 +3983,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 		stickyServerArgs[i] = base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -5020,7 +5021,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 			Settings: st,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
@@ -5382,7 +5383,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 					Settings: st,
 					StoreSpecs: []base.StoreSpec{
 						{
-							InMemory:    true,
+							Type:        storageconfig.InMemoryStore,
 							StickyVFSID: strconv.FormatInt(int64(i), 10),
 						},
 					},

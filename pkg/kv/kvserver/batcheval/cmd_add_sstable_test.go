@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -1219,7 +1220,7 @@ func TestDBAddSSTable(t *testing.T) {
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		storeSpec := base.DefaultTestStoreSpec
-		storeSpec.InMemory = false
+		storeSpec.Type = storageconfig.OnDiskStore
 		storeSpec.Path = t.TempDir()
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{storeSpec},

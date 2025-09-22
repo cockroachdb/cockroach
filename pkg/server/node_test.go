@@ -149,8 +149,8 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	specs := []base.StoreSpec{
 		{Path: path},
-		{InMemory: true},
-		{InMemory: true},
+		{Type: storageconfig.InMemoryStore},
+		{Type: storageconfig.InMemoryStore},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: specs,
@@ -189,26 +189,9 @@ func TestStartManyStores(t *testing.T) {
 
 	specs := []base.StoreSpec{
 		{Path: path},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
-		{InMemory: true},
+	}
+	for range 20 {
+		specs = append(specs, base.StoreSpec{Type: storageconfig.InMemoryStore})
 	}
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -249,8 +232,8 @@ func TestNodeJoin(t *testing.T) {
 	perNode := map[int]base.TestServerArgs{}
 	perNode[0] = base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true},
-			{InMemory: true},
+			{Type: storageconfig.InMemoryStore},
+			{Type: storageconfig.InMemoryStore},
 		},
 	}
 	perNode[1] = perNode[0]
@@ -543,7 +526,7 @@ func TestNodeEmitsLowDiskSpaceEvents(t *testing.T) {
 		},
 		StoreSpecs: []base.StoreSpec{
 			{
-				InMemory:    true,
+				Type:        storageconfig.InMemoryStore,
 				StickyVFSID: "foo",
 			},
 		},
@@ -1037,8 +1020,8 @@ func TestGetTenantWeights(t *testing.T) {
 	ctx := context.Background()
 
 	specs := []base.StoreSpec{
-		{InMemory: true},
-		{InMemory: true},
+		{Type: storageconfig.InMemoryStore},
+		{Type: storageconfig.InMemoryStore},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: specs,

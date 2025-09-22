@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -673,7 +674,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 				Settings: settings,
 				StoreSpecs: []base.StoreSpec{
 					{
-						InMemory:    true,
+						Type:        storageconfig.InMemoryStore,
 						StickyVFSID: strconv.FormatInt(int64(i), 10),
 					},
 				},
@@ -1747,7 +1748,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 			Settings: settings,
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:    true,
+					Type:        storageconfig.InMemoryStore,
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},

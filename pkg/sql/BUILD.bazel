@@ -932,6 +932,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/storageconfig",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/jobutils",
