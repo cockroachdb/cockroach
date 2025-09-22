@@ -195,12 +195,13 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 		require.NoError(t, bs.sendBuffered(muxEv, nil))
 	}
 	require.Equal(t, queueCap, int64(bs.len()))
-	e, success, overflowed, remains := bs.popFront()
+	buf, remains, overflowed := bs.popEvents(nil, 1)
+	require.Equal(t, 1, len(buf))
+
 	require.Equal(t, sharedMuxEvent{
 		ev:    muxEv,
 		alloc: nil,
-	}, e)
-	require.True(t, success)
+	}, buf[0])
 	require.False(t, overflowed)
 	require.Equal(t, queueCap-1, remains)
 	require.Equal(t, queueCap-1, int64(bs.len()))

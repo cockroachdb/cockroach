@@ -62,6 +62,58 @@ func TestEventQueue(t *testing.T) {
 		require.True(t, q.empty())
 	})
 
+	t.Run("popFrontInto: empty queue", func(t *testing.T) {
+		q := newEventQueue()
+		defer q.free()
+		dest := make([]sharedMuxEvent, 0, 1)
+		require.Equal(t, 0, len(q.popFrontInto(dest, 4)))
+	})
+
+	t.Run("popFrontInto: multiple events", func(t *testing.T) {
+		q := newEventQueue()
+		defer q.free()
+		dest := make([]sharedMuxEvent, 0, 4)
+		q.pushBack(sharedMuxEvent{})
+		q.pushBack(sharedMuxEvent{})
+		q.pushBack(sharedMuxEvent{})
+		q.pushBack(sharedMuxEvent{})
+		q.pushBack(sharedMuxEvent{})
+		require.Equal(t, int64(5), q.len())
+		require.Equal(t, 4, len(q.popFrontInto(dest[:0], 4)))
+		require.Equal(t, int64(1), q.len())
+		require.Equal(t, 1, len(q.popFrontInto(dest[:0], 4)))
+		require.Equal(t, int64(0), q.len())
+	})
+
+	t.Run("popFrontInto: pops up to page boundary", func(t *testing.T) {
+		q := newEventQueue()
+		defer q.free()
+		bufSize := eventQueueChunkSize + 100
+		dest := make([]sharedMuxEvent, 0, bufSize)
+		// Push 2 pages of events
+		for range eventQueueChunkSize * 2 {
+			q.pushBack(sharedMuxEvent{})
+		}
+
+		require.Equal(t, int64(eventQueueChunkSize*2), q.len())
+		require.Equal(t, eventQueueChunkSize, len(q.popFrontInto(dest[:0], bufSize)))
+		require.Equal(t, int64(eventQueueChunkSize), q.len())
+		require.Equal(t, eventQueueChunkSize, len(q.popFrontInto(dest[:0], bufSize)))
+		require.Equal(t, int64(0), q.len())
+	})
+
+	t.Run("popFrontInto: empty queue", func(t *testing.T) {
+		q := newEventQueue()
+		defer q.free()
+
+		require.True(t, q.empty())
+		q.pushBack(sharedMuxEvent{})
+		require.False(t, q.empty())
+		_, ok := q.popFront()
+		require.True(t, ok)
+		require.True(t, q.empty())
+	})
+
 	t.Run("repeatedly popping empty queue should be fine", func(t *testing.T) {
 		q := newEventQueue()
 		defer q.free()
