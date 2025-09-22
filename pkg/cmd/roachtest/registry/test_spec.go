@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"slices"
 )
 
 // LibGEOS is a list of native libraries for libgeos.
