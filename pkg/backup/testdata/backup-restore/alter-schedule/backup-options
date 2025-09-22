@@ -74,6 +74,7 @@ exec-sql
 alter backup schedule $incID set with encryption_passphrase = '';
 alter backup schedule $incID set with kms = ('aws:///key1?region=r1', 'aws:///key2?region=r2'), set with incremental_location = 'inc';
 ----
+NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 query-sql
 with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
