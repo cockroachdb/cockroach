@@ -4255,6 +4255,9 @@ func TestProxyTracing(t *testing.T) {
 
 		var p rpc.Partitioner
 		tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+			},
 			ServerArgsPerNode: func() map[int]base.TestServerArgs {
 				perNode := make(map[int]base.TestServerArgs)
 				for i := 0; i < numServers; i++ {
