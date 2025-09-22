@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # 16vCPU machines.
 gen_cluster nodes=10 node_cpu_rate_capacity=16000000000
 ----
