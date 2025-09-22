@@ -14,18 +14,12 @@ import (
 // a slice of values).
 type thrashing struct {
 	vs []float64 // the time series input
-	// Runs are the maximal-length subsequences (computed in slice order) of
-	// values within which all first differences have the same sign. For example,
-	// the sequence [1,2,3,2,3,2,1] has the runs [1,2,3], [2,3], [2,1].
-	// The number of runs equals one plus the number of sign changes in the first
-	// differences.
-	runs int
+
 	// tdtv is the trend-discounting total variation. It's close to the total
 	// variation if the time series has no preferred trend (i.e. upwards or
 	// downwards), but if there is a clear trend, the tdtv will be much smaller,
 	// counting mainly the movement against the trend. see tdtv for details.
-	tdtv       float64
-	uptv, dntv float64 // upwards and downwards total variations (both nonnegative)
+	tdtv float64
 	// normTV is a normalization factor for the total variation. By default, it is
 	// initialized to the range of the input values, i.e. max - min (or 1 if max
 	// == min). `tdtv/normTV` then measures how many times thrashing has "swept out"
@@ -33,8 +27,19 @@ type thrashing struct {
 	// `tdtv/normTV` can grow arbitrarily large if the time series oscillates
 	// frequently (and enough datapoints are present). To get a sense of a
 	// "thrashing rate", `tdtv/(normTV*T)` or `tdtv/(normTV*runs) could be of
-	// interest.
+	// interest in the future.
 	normTV float64
+
+	// uptv and dntv are the upwards and downwards total variations (both
+	// nonnegative). They're kept for informational purposes only.
+	uptv, dntv float64
+	// Runs are the maximal-length subsequences (computed in slice order) of
+	// values within which all first differences have the same sign. For example,
+	// the sequence [1,2,3,2,3,2,1] has the runs [1,2,3], [2,3], [2,1].
+	// The number of runs equals one plus the number of sign changes in the first
+	// differences.
+	// This is for informational purposes only.
+	runs int
 }
 
 func (th thrashing) String() string {
@@ -163,6 +168,10 @@ func extrema(vs []float64) (vmin, vmax, vrange float64) {
 // assumed to be for the same metric.
 type ThrashingSlice []thrashing
 
+// normalize installs a common normTV for all thrashing structs in the slice by
+// computing the extrema (min/max) over all of the datapoints in the underlying
+// time series data. Each thrashing's normTV is replaced by this common
+// normalization factor.
 func (ths ThrashingSlice) normalize() {
 	vmin := math.Inf(1)
 	vmax := math.Inf(-1)
