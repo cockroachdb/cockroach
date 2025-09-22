@@ -1668,7 +1668,9 @@ func TestProcessorMemoryAccountingOnError(t *testing.T) {
 	fb := newTestBudget(math.MaxInt64)
 	testServerStream := newTestServerStream()
 	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
-
+	// This test depends on knowing exactly when the buffer will be full, so
+	// setting bufSize to 1 helps.
+	bs.sendBufSize = 1
 	smMetrics := NewStreamManagerMetrics()
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
