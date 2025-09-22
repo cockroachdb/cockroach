@@ -617,8 +617,8 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		l.Printf("waiting for tenant features to be enabled")
 		<-tenantFeaturesEnabled
 
-		//randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
-		cmd := tpccImportCmdWithCockroachBinary(h.CockroachBinaryForWorkload(t), "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", c.WorkloadNode()))
+		randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
+		cmd := tpccImportCmdWithCockroachBinary(h.CockroachBinaryForWorkload(t), "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
@@ -638,7 +638,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 			Flag("seed", 4).
 			Flag("db", "bigbank").
 			String()
-		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
+		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
 	// We don't run this in the background using the Workload() wrapper. We want
