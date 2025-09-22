@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS bench.bank (
   balance INT NOT NULL
 )`
 		db.Exec(b, schema)
+		db.Exec(b, "ALTER TABLE bench.bank SET (schema_locked = false);")
 		db.Exec(b, "TRUNCATE TABLE bench.bank")
+		db.Exec(b, "ALTER TABLE bench.bank SET (schema_locked = true);")
 
 		var placeholders bytes.Buffer
 		var values []interface{}
