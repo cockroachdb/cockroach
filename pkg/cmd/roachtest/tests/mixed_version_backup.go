@@ -2966,8 +2966,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   the cluster relatively busy while the backup and restores
 			//   take place. Its schema is also more complex, and the
 			//   operations more closely resemble a customer workload.
-			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, false /* overrideBinary */)
-			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
+			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun)
+			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)

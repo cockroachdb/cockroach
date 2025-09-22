@@ -262,10 +262,10 @@ func (lm *ldrMixed) SetupHook(ctx context.Context, t test.Test) {
 
 func (lm *ldrMixed) WorkloadHook(ctx context.Context, t test.Test) {
 	leftWorkloadCmd := workloadRunCmd(lm.sp.LeftNodesList())
-	lm.leftWorkloadStopper = lm.leftMvt.Workload("kv", lm.c.WorkloadNode(), nil, leftWorkloadCmd, false /* overrideBinary */)
+	lm.leftWorkloadStopper = lm.leftMvt.Workload("kv", lm.c.WorkloadNode(), nil, leftWorkloadCmd)
 
 	rightWorkloadCmd := workloadRunCmd(lm.sp.RightNodesList())
-	lm.rightWorkloadStopper = lm.rightMvt.Workload("kv", lm.c.WorkloadNode(), nil, rightWorkloadCmd, false /* overrideBinary */)
+	lm.rightWorkloadStopper = lm.rightMvt.Workload("kv", lm.c.WorkloadNode(), nil, rightWorkloadCmd)
 }
 
 func (lm *ldrMixed) LatencyHook(ctx context.Context) {

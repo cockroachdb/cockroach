@@ -278,7 +278,7 @@ func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 		Arg("{pgurl%s}", cm.c.Range(1, cm.sp.srcNodes)).
 		Option("tolerate-errors").
 		Flag("warehouses", 500)
-	cm.workloadStopper = cm.sourceMvt.Workload("tpcc", cm.c.WorkloadNode(), tpccInitCmd, tpccRunCmd, false /* overrideBinary */)
+	cm.workloadStopper = cm.sourceMvt.Workload("tpcc", cm.c.WorkloadNode(), tpccInitCmd, tpccRunCmd)
 
 	readerTenantName := fmt.Sprintf("%s-readonly", destTenantName)
 
@@ -288,7 +288,7 @@ func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 		Flag("warehouses", 500).
 		Flag("mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1")
 
-	cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd, false /* overrideBinary */)
+	cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd)
 
 }
 

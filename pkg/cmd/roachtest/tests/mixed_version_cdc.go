@@ -598,7 +598,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.OnStartup("init workload", tester.initWorkload)
 
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
-	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd, false)
+	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd)
 	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
 
 	// NB: mvt.InMixedVersion will run these hooks multiple times at various points during the rolling upgrade, but

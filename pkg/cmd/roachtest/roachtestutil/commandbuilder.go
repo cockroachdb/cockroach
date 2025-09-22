@@ -19,8 +19,8 @@ type Command struct {
 	Arguments []string
 	Flags     map[string]*string
 	UseEquals bool
-	// InlineEnvVarAssignment e.g. COCKROACH_RANDOM_SEED=%d ./workload ...
-	InlineEnvVarAssignments map[string]*string
+	// EnvVars e.g. COCKROACH_RANDOM_SEED=%d ./workload ...
+	EnvVars map[string]*string
 }
 
 // NewCommand builds a command. The format parameter can take
@@ -34,10 +34,10 @@ func NewCommand(format string, args ...interface{}) *Command {
 	cmd := fmt.Sprintf(format, args...)
 	parts := strings.Fields(cmd)
 	return &Command{
-		Binary:                  parts[0],
-		Arguments:               parts[1:],
-		Flags:                   make(map[string]*string),
-		InlineEnvVarAssignments: make(map[string]*string),
+		Binary:    parts[0],
+		Arguments: parts[1:],
+		Flags:     make(map[string]*string),
+		EnvVars:   make(map[string]*string),
 	}
 }
 
@@ -98,7 +98,7 @@ func (c *Command) ITEFlag(condition bool, name string, trueVal, falseVal interfa
 }
 
 func (c *Command) InlineEnvVarAssignment(name string, val interface{}) *Command {
-	c.InlineEnvVarAssignments[name] = stringP(fmt.Sprint(val))
+	c.EnvVars[name] = stringP(fmt.Sprint(val))
 	return c
 }
 
@@ -107,7 +107,7 @@ func (c *Command) InlineEnvVarAssignment(name string, val interface{}) *Command 
 func (c *Command) String() string {
 	flags := make([]string, 0, len(c.Flags))
 	names := make([]string, 0, len(c.Flags))
-	envVars := make([]string, 0, len(c.InlineEnvVarAssignments))
+	envVars := make([]string, 0, len(c.EnvVars))
 	for name := range c.Flags {
 		names = append(names, name)
 	}
@@ -133,7 +133,7 @@ func (c *Command) String() string {
 		flags = append(flags, strings.Join(parts, flagJoinSymbol))
 	}
 
-	for name, val := range c.InlineEnvVarAssignments {
+	for name, val := range c.EnvVars {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", name, *val))
 	}
 

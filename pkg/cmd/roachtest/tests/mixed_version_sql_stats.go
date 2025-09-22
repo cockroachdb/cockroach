@@ -75,7 +75,7 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 	}
 
 	mvt.OnStartup("set cluster settings", setClusterSettings)
-	stopTpcc := mvt.Workload("tpcc", c.WorkloadNode(), initWorkload, runWorkload, false /* overrideBinary */)
+	stopTpcc := mvt.Workload("tpcc", c.WorkloadNode(), initWorkload, runWorkload)
 	defer stopTpcc()
 
 	requestTypes := map[string]serverpb.CombinedStatementsStatsRequest_StatsType{

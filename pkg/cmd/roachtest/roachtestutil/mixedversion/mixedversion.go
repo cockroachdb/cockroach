@@ -846,16 +846,9 @@ func (t *Test) BackgroundCommand(
 //
 // By default, the binary used to run the command(s) will be the same as the
 // the current version of the cluster at the time this hook is executed.
-// This is because the binary version is no longer backwards compatible as of
-// v25.3
-//
-// If overrideBinary is true, the binary used to run the command(s) will be
-// roachtestutil.Command.Binary. Assumes binary is already staged.
+// We do this because we assume the binary is not backwards compatible.
 func (t *Test) Workload(
-	name string,
-	node option.NodeListOption,
-	initCmd, runCmd *roachtestutil.Command,
-	overrideBinary bool,
+	name string, node option.NodeListOption, initCmd, runCmd *roachtestutil.Command,
 ) StopFunc {
 	seed := uint64(t.prng.Int63())
 	addSeed := func(cmd *roachtestutil.Command) {
@@ -866,9 +859,7 @@ func (t *Test) Workload(
 	if initCmd != nil {
 		addSeed(initCmd)
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-			if !overrideBinary {
-				initCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
-			}
+			initCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
 			l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
 			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
 		})
@@ -876,9 +867,7 @@ func (t *Test) Workload(
 
 	addSeed(runCmd)
 	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-		if !overrideBinary {
-			runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
-		}
+		runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
 		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
 		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
 	})

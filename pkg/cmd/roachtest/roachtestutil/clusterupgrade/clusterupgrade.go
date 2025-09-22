@@ -243,9 +243,10 @@ func UploadWorkload(
 // exists, assume the binary has already been uploaded previously. Returns the
 // path of the uploaded binaries on the nodes.
 //
-// If --versions-binary-override option is set and if version v is contained in
-// the override map, use that version's value, which is a local binary path as
-// the source binary to upload instead of using roachprod to stage.
+// If cockroach is the target binary and if --versions-binary-override option
+// is set and if version v is contained in the override map, use that version's
+// value, which is a local binary path as the source binary to upload instead
+// of using roachprod to stage.
 func uploadBinaryVersion(
 	ctx context.Context,
 	t test.Test,
