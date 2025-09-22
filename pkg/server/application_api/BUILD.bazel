@@ -92,6 +92,7 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randident",
         "//pkg/util/randutil",
+        "//pkg/rpc/rpcbase",
         "//pkg/util/safesql",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
