@@ -650,8 +650,9 @@ func importPlanHook(
 		// Check if the table has any vector indexes
 		for _, idx := range found.NonDropIndexes() {
 			if idx.GetType() == idxtype.VECTOR {
-				return unimplemented.NewWithIssueDetail(145227, "import.vector-index",
-					"IMPORT INTO is not supported for tables with vector indexes")
+				return errors.WithHint(unimplemented.NewWithIssueDetail(145227, "import.vector-index",
+					"IMPORT INTO is not supported for tables with vector indexes"),
+					"Consider dropping the vector index before importing, then recreating it afterwards.")
 			}
 		}
 
