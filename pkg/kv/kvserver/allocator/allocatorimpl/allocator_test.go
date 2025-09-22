@@ -6139,6 +6139,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	EnableLoadBasedLeaseRebalancing.Override(ctx, &st.SV, true)
 	stopper, g, _, storePool, _ := storepool.CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
