@@ -427,11 +427,12 @@ func backup(
 		}
 	}
 
-	// TODO(msbutler): version gate writing the old manifest once we can guarantee
-	// a cluster version that will not read the old manifest.
-	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.DeprecatedBackupManifestName,
-		encryption, &kmsEnv, backupManifest); err != nil {
-		return roachpb.RowCount{}, 0, err
+	// SHOULD WE KEEP DUAL WRITING FOR ANOTHER RELEASE?
+	if backupManifest.ClusterVersion.Less(clusterversion.V25_4.Version()) {
+		if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.DeprecatedBackupManifestName,
+			encryption, &kmsEnv, backupManifest); err != nil {
+			return roachpb.RowCount{}, 0, err
+		}
 	}
 
 	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,

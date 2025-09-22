@@ -130,11 +130,13 @@ func LegacyFindPriorBackups(
 
 	var prev []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.DeprecatedBackupManifestName, p)
+		// DeprecatedBackupManifestName and BackupMetadataName both begin with
+		// "BACKUP_M".
+		matchesGlob, err := path.Match(incBackupSubdirGlob+"BACKUP_M*", p)
 		if err != nil {
 			return err
 		} else if !matchesGlob {
-			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.DeprecatedBackupManifestName, p)
+			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+"BACKUP_M*", p)
 			if err != nil {
 				return err
 			}
@@ -143,6 +145,7 @@ func LegacyFindPriorBackups(
 		if matchesGlob {
 			if !includeManifest {
 				p = strings.TrimSuffix(p, "/"+backupbase.DeprecatedBackupManifestName)
+				p = strings.TrimSuffix(p, "/"+backupbase.BackupMetadataName)
 			}
 			prev = append(prev, p)
 			return nil
