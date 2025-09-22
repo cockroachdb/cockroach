@@ -9,10 +9,8 @@ import (
 	"context"
 	"net/url"
 	"sort"
-	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -46,10 +44,6 @@ const (
 	backupJobEventType          eventpb.RecoveryEventType = "backup_job"
 	scheduledBackupJobEventType eventpb.RecoveryEventType = "scheduled_backup_job"
 	restoreJobEventType         eventpb.RecoveryEventType = "restore_job"
-
-	latestSubdirType   = "latest"
-	standardSubdirType = "standard"
-	customSubdirType   = "custom"
 
 	// Currently the telemetry event payload only contains keys of options. Future
 	// changes to telemetry should refrain from adding values to the payload
@@ -100,21 +94,6 @@ func createBackupRecoveryEvent(
 		}
 	}
 
-	timeBaseSubdir := true
-	var subdirType string
-	if _, err := time.Parse(backupbase.DateBasedIntoFolderName,
-		initialDetails.Destination.Subdir); err != nil {
-		timeBaseSubdir = false
-	}
-
-	if strings.EqualFold(initialDetails.Destination.Subdir, backupbase.LatestFileName) {
-		subdirType = latestSubdirType
-	} else if !timeBaseSubdir {
-		subdirType = customSubdirType
-	} else {
-		subdirType = standardSubdirType
-	}
-
 	authTypes := make(map[string]struct{})
 	storageTypes := make(map[string]struct{})
 	defaultURI, urisByLocalityKV, err := backupdest.GetURIsByLocalityKV(initialDetails.Destination.To, "")
@@ -156,14 +135,12 @@ func createBackupRecoveryEvent(
 		TargetScope:             largestScope.String(),
 		IsMultiregionTarget:     multiRegion,
 		TargetCount:             uint32(targetCount),
-		DestinationSubdirType:   subdirType,
 		IsLocalityAware:         isLocalityAware,
 		WithRevisionHistory:     initialDetails.RevisionHistory,
 		HasEncryptionPassphrase: passphrase,
 		KMSType:                 kms,
 		KMSCount:                uint32(kmsCount),
 		JobID:                   uint64(jobID),
-		AsOfInterval:            initialDetails.AsOfInterval,
 		Options:                 options,
 		ApplicationName:         initialDetails.ApplicationName,
 	}
@@ -245,25 +222,6 @@ func parseStorageAndAuth(uri string) (string, string, error) {
 	return storageType, authType, nil
 }
 
-func loggedSubdirType(subdir string) string {
-	timeBaseSubdir := true
-	var subdirType string
-	if _, err := time.Parse(backupbase.DateBasedIntoFolderName,
-		subdir); err != nil {
-		timeBaseSubdir = false
-	}
-
-	if strings.EqualFold(subdir, backupbase.LatestFileName) {
-		subdirType = latestSubdirType
-	} else if !timeBaseSubdir {
-		subdirType = customSubdirType
-	} else {
-		subdirType = standardSubdirType
-	}
-
-	return subdirType
-}
-
 // logCreateScheduleTelemetry publishes an eventpb.RecoveryEvent about a created
 // backup schedule.
 func logCreateScheduleTelemetry(
@@ -296,8 +254,6 @@ func logCreateScheduleTelemetry(
 	backupEvent.RecurringCron = recurringCron
 	backupEvent.FullBackupCron = fullCron
 	backupEvent.CustomFirstRunTime = firstRunNanos
-	backupEvent.OnPreviousRunning = jobspb.ScheduleDetails_WaitBehavior_name[int32(details.Wait)]
-	backupEvent.OnExecutionFailure = jobspb.ScheduleDetails_ErrorHandlingBehavior_name[int32(details.OnError)]
 	backupEvent.IgnoreExistingBackup = ignoreExisting
 
 	log.StructuredEvent(ctx, severity.INFO, &backupEvent)
@@ -312,7 +268,6 @@ func logRestoreTelemetry(
 	intoDB string,
 	newDBName string,
 	subdir string,
-	asOfInterval int64,
 	opts tree.RestoreOptions,
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
@@ -410,9 +365,7 @@ func logRestoreTelemetry(
 		TargetScope:             largestScope.String(),
 		TargetCount:             uint32(targetCount),
 		IsMultiregionTarget:     multiRegion,
-		DestinationSubdirType:   loggedSubdirType(subdir),
 		IsLocalityAware:         localityAware,
-		AsOfInterval:            asOfInterval,
 		HasEncryptionPassphrase: passphrase,
 		KMSType:                 kmsType,
 		KMSCount:                uint32(kmsCount),
