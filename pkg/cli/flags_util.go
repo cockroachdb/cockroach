@@ -706,3 +706,28 @@ func getAbsoluteFSPath(fieldName string, p string) (string, error) {
 	}
 	return ret, nil
 }
+
+// walFailoverWrapper implements pflag.Value for the wal failover flag.
+type walFailoverWrapper struct {
+	cfg *storageconfig.WALFailover
+}
+
+var _ pflag.Value = (*walFailoverWrapper)(nil)
+
+// Type implements the pflag.Value interface.
+func (c *walFailoverWrapper) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (c *walFailoverWrapper) String() string {
+	return c.cfg.String()
+}
+
+// Set implements the pflag.Value interface.
+func (c *walFailoverWrapper) Set(s string) error {
+	cfg, err := storageconfig.ParseWALFailover(s)
+	if err != nil {
+		return err
+	}
+	*c.cfg = cfg
+	return nil
+}

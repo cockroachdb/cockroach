@@ -29,10 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -1862,4 +1864,21 @@ func TestParseEncryptionSpec(t *testing.T) {
 				storeEncryptionSpec, storeEncryptionSpec2)
 		}
 	}
+}
+
+func TestWALFailoverWrapperRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal-failover-config"), func(t *testing.T, d *datadriven.TestData) string {
+		var buf bytes.Buffer
+		for _, l := range strings.Split(d.Input, "\n") {
+			cfg := walFailoverWrapper{cfg: &storageconfig.WALFailover{}}
+			if err := cfg.Set(l); err != nil {
+				fmt.Fprintf(&buf, "err: %s\n", err)
+				continue
+			}
+			fmt.Fprintln(&buf, cfg.String())
+		}
+		return buf.String()
+	})
 }
