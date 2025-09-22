@@ -37,7 +37,7 @@ func TestMakeTestRegistry(t *testing.T) {
 	require.EqualValues(t, 4, s.CPUs)
 	require.True(t, s.TerminateOnMigration)
 
-	s = r.MakeClusterSpec(10, spec.CPU(16), spec.Arch(vm.ArchARM64))
+	s = r.MakeClusterSpec(10, spec.CPU(16), spec.Arch(registry.OnlyARM64))
 	require.EqualValues(t, 10, s.NodeCount)
 	require.EqualValues(t, 16, s.CPUs)
 	require.EqualValues(t, vm.ArchARM64, s.Arch)
