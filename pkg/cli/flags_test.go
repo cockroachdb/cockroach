@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1730,4 +1731,135 @@ func TestTenantIDFromFile(t *testing.T) {
 			require.Eventually(t, func() bool { return watcherEventCount.Load() > 0 }, 10*time.Second, 10*time.Millisecond)
 			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, 10*time.Second, 10*time.Millisecond)
 		})
+}
+
+// TestParseEncryptionSpec verifies that the --enterprise-encryption arguments
+// are correctly parsed into storeEncryptionSpecs.
+func TestParseEncryptionSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	absDataPath, err := filepath.Abs("data")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		value       string
+		expectedErr string
+		expected    storeEncryptionSpec
+	}{
+		// path
+		{",", "no path specified", storeEncryptionSpec{}},
+		{"", "no path specified", storeEncryptionSpec{}},
+		{"/mnt/hda1", "field not in the form <key>=<value>: /mnt/hda1", storeEncryptionSpec{}},
+		{"path=", "no value specified for path", storeEncryptionSpec{}},
+		{"path=~/data", "path cannot start with '~': ~/data", storeEncryptionSpec{}},
+		{"path=data,path=data2", "path field was used twice in encryption definition", storeEncryptionSpec{}},
+
+		// The same logic applies to key and old-key, don't repeat everything.
+		{"path=data", "no key specified", storeEncryptionSpec{}},
+		{"path=data,key=new.key", "no old-key specified", storeEncryptionSpec{}},
+
+		// Rotation period.
+		{"path=data,key=new.key,old-key=old.key,rotation-period", "field not in the form <key>=<value>: rotation-period", storeEncryptionSpec{}},
+		{"path=data,key=new.key,old-key=old.key,rotation-period=", "no value specified for rotation-period", storeEncryptionSpec{}},
+		{"path=data,key=new.key,old-key=old.key,rotation-period=1", `could not parse rotation-duration value: 1: time: missing unit in duration "1"`, storeEncryptionSpec{}},
+		{"path=data,key=new.key,old-key=old.key,rotation-period=1d", `could not parse rotation-duration value: 1d: time: unknown unit "d" in duration "1d"`, storeEncryptionSpec{}},
+
+		// Good values. Note that paths get absolutized so we start most of them
+		// with / so we can used fixed expected values.
+		{
+			"path=/data,key=/new.key,old-key=/old.key", "",
+			storeEncryptionSpec{Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:              &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(storageconfig.DefaultRotationPeriod / time.Second),
+				},
+			},
+		},
+		{
+			"path=/data,key=/new.key,old-key=/old.key,rotation-period=1h", "",
+			storeEncryptionSpec{Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:              &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(time.Hour / time.Second),
+				},
+			},
+		},
+		{
+			"path=/data,key=plain,old-key=/old.key,rotation-period=1h", "",
+			storeEncryptionSpec{Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:              &storageconfig.EncryptionKeyFiles{CurrentKey: "plain", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(time.Hour / time.Second),
+				},
+			},
+		},
+		{
+			"path=/data,key=/new.key,old-key=plain,rotation-period=1h", "",
+			storeEncryptionSpec{Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:              &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "plain"},
+					DataKeyRotationPeriod: int64(time.Hour / time.Second),
+				},
+			},
+		},
+
+		// One relative path to test absolutization.
+		{
+			"path=data,key=/new.key,old-key=/old.key", "",
+			storeEncryptionSpec{Path: absDataPath,
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:              &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(storageconfig.DefaultRotationPeriod / time.Second),
+				},
+			},
+		},
+
+		// Special path * is not absolutized.
+		{
+			"path=*,key=/new.key,old-key=/old.key", "",
+			storeEncryptionSpec{Path: "*",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:              &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					DataKeyRotationPeriod: int64(storageconfig.DefaultRotationPeriod / time.Second),
+				},
+			},
+		},
+	}
+
+	for i, testCase := range testCases {
+		storeEncryptionSpec, err := parseStoreEncryptionSpec(testCase.value)
+		if err != nil {
+			if len(testCase.expectedErr) == 0 {
+				t.Errorf("%d(%s): no expected error, got %s", i, testCase.value, err)
+			}
+			if testCase.expectedErr != fmt.Sprint(err) {
+				t.Errorf("%d(%s): expected error \"%s\" does not match actual \"%s\"", i, testCase.value,
+					testCase.expectedErr, err)
+			}
+			continue
+		}
+		if len(testCase.expectedErr) > 0 {
+			t.Errorf("%d(%s): expected error %s but there was none", i, testCase.value, testCase.expectedErr)
+			continue
+		}
+		if !reflect.DeepEqual(testCase.expected, storeEncryptionSpec) {
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %+v\nexpected: %+v", i,
+				testCase.value, storeEncryptionSpec, testCase.expected)
+		}
+
+		// Now test String() to make sure the result can be parsed.
+		storeEncryptionSpecString := storeEncryptionSpec.String()
+		storeEncryptionSpec2, err := parseStoreEncryptionSpec(storeEncryptionSpecString)
+		if err != nil {
+			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
+			continue
+		}
+		// Compare strings to deal with floats not matching exactly.
+		if !reflect.DeepEqual(storeEncryptionSpecString, storeEncryptionSpec2.String()) {
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %#+v\nexpected: %#+v", i, testCase.value,
+				storeEncryptionSpec, storeEncryptionSpec2)
+		}
+	}
 }
