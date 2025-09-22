@@ -3430,8 +3430,16 @@ func (ex *connExecutor) execCopyIn(
 
 // stmtHasNoData returns true if describing a result of the input statement
 // type should return NoData.
-func stmtHasNoData(stmt tree.Statement) bool {
-	return stmt == nil || stmt.StatementReturnType() != tree.Rows
+func stmtHasNoData(stmt tree.Statement, resultColumns colinfo.ResultColumns) bool {
+	if stmt == nil {
+		return true
+	}
+	if stmt.StatementReturnType() == tree.Rows {
+		return false
+	}
+	// The statement may not always return rows (e.g. EXECUTE), but if it does,
+	// resultColumns will be non-empty.
+	return len(resultColumns) == 0
 }
 
 // commitPrepStmtNamespace deallocates everything in
