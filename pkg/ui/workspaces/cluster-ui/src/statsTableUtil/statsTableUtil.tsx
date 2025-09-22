@@ -38,6 +38,7 @@ export const statisticsColumnLabels = {
   memUsage: "Memory Usage",
   mostRecentStatement: "Most Recent Statement",
   networkBytes: "Network",
+  isolationLevel: "Default Isolation Level",
   numRetries: "Retries",
   numStatements: "Statements Run",
   regions: "Regions",
@@ -232,6 +233,17 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={"The user that opened the session."}
       >
         {getLabel("username")}
+      </Tooltip>
+    );
+  },
+  isolationLevel: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The isolation level of the session."}
+      >
+        {getLabel("isolationLevel")}
       </Tooltip>
     );
   },
