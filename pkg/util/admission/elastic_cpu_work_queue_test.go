@@ -126,10 +126,6 @@ type testElasticCPUGranter struct {
 
 var _ granter = &testElasticCPUGranter{}
 
-func (t *testElasticCPUGranter) grantKind() grantKind {
-	return token
-}
-
 func (t *testElasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	panic("unimplemented")
 }

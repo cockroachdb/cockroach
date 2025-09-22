@@ -380,9 +380,6 @@ func newTestReplicatedWriteGranter(
 		buf: buf,
 	}
 }
-func (tg *testReplicatedWriteGranter) grantKind() grantKind {
-	return token
-}
 
 func (tg *testReplicatedWriteGranter) tryGet(_ burstQualification, count int64) bool {
 	if count > tg.tokens {
