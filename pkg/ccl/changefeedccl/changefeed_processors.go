@@ -1820,7 +1820,8 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	}
 
 	if updateCheckpoint || updateHighWater {
-		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
+		if cf.knobs.ShouldCheckpointToJobRecord != nil &&
+			!cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
 			return false, nil
 		}
 		checkpointStart := timeutil.Now()
@@ -1830,7 +1831,12 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
 	}
 
-	if err := cf.maybePersistFrontier(ctx); err != nil {
+	persistedFrontier, err := cf.maybePersistFrontier(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if err := cf.maybeManageProtectedTimestamps(ctx, persistedFrontier); err != nil {
 		return false, err
 	}
 
@@ -1844,6 +1850,7 @@ const changefeedJobProgressTxnName = "changefeed job progress"
 func (cf *changeFrontier) checkpointJobProgress(
 	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
 ) error {
+	// lint:ignore SA4006 in case ctx is used again in the future
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
@@ -1860,7 +1867,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 	cf.metrics.FrontierUpdates.Inc(1)
 	if cf.js.job != nil {
-		var ptsUpdated bool
 		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -1878,14 +1884,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
-			// TODO(#153299): Make sure we only updated per-table PTS if we persisted
-			// the span frontier. We'll probably want to move this code out of
-			// checkpointJobProgress and into maybeCheckpointJob.
-			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
-				log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
-				return err
-			}
-
 			if updateRunStatus {
 				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
 			}
@@ -1895,9 +1893,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 			return nil
 		}); err != nil {
 			return err
-		}
-		if ptsUpdated {
-			cf.lastProtectedTimestampUpdate = timeutil.Now()
 		}
 		if log.V(2) {
 			log.Changefeed.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
@@ -1911,24 +1906,64 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return nil
 }
 
-func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
+func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) (bool, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
 	defer sp.Finish()
 
 	if cf.spec.JobID == 0 ||
 		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
 		!cf.frontierPersistenceLimiter.canSave(ctx) {
-		return nil
+		return false, nil
 	}
 
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
 	}); err != nil {
-		return err
+		return false, err
 	}
 	persistDuration := timer()
 	cf.frontierPersistenceLimiter.doneSave(persistDuration)
+	return true, nil
+}
+
+func (cf *changeFrontier) maybeManageProtectedTimestamps(
+	ctx context.Context, persistedFrontier bool,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_mange_protected_timestamps")
+	defer sp.Finish()
+
+	if cf.spec.JobID == 0 {
+		// Jobless changefeeds do not save PTS records.
+		return nil
+	}
+
+	if cf.spec.ProgressConfig.PerTableProtectedTimestamps && !persistedFrontier {
+		// It's not safe to update per-table PTS records until the frontier has
+		// been persisted.
+		return nil
+	}
+
+	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
+	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
+		// It's too soon to update PTS again.
+		return nil
+	}
+
+	var ptsUpdated bool
+	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn); err != nil {
+			log.Changefeed.Warningf(ctx, "error managing protected timestamp record: %v", err)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if ptsUpdated {
+		cf.lastProtectedTimestampUpdate = timeutil.Now()
+	}
 	return nil
 }
 
@@ -1939,15 +1974,10 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 // NOTE: this method may be retried by `txn`, so don't mutate any state that
 // would interfere with that.
 func (cf *changeFrontier) manageProtectedTimestamps(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
+	ctx context.Context, txn isql.Txn,
 ) (updated bool, err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.manage_protected_timestamps")
 	defer sp.Finish()
-
-	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
-	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
-		return false, nil
-	}
 
 	recordPTSMetricsTime := cf.sliMetrics.Timers.PTSManage.Start()
 	recordPTSMetricsErrorTime := cf.sliMetrics.Timers.PTSManageError.Start()
@@ -1973,6 +2003,8 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 		return cf.frontier.Frontier()
 	}()
+
+	progress := cf.js.job.Details().(*jobspb.ChangefeedProgress)
 
 	if cf.spec.ProgressConfig.PerTableProtectedTimestamps {
 		newPTS, updatedPerTablePTS, err := cf.managePerTableProtectedTimestamps(ctx, txn, &ptsEntries, highwater)
