@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -253,7 +254,9 @@ func RangesInfoWithDistribution(
 func ClusterInfoWithDistribution(
 	nodeCount int, storesPerNode int, regions []string, regionNodeWeights []float64,
 ) ClusterInfo {
-	ret := ClusterInfo{}
+	ret := ClusterInfo{
+		NodeCPURateCapacityNanos: []uint64{config.DefaultNodeCPURateCapacityNanos},
+	}
 
 	ret.Regions = make([]Region, len(regions))
 	availableNodes := nodeCount

@@ -68,7 +68,7 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 5571782338101878760
-	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], [0,160411): 563(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -79,7 +79,7 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 4299969443970870044
-	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], [0,9542): 299(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -90,7 +90,7 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 4157513341729910236
-	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:2, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], [0,82660): 521(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:

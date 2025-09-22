@@ -44,5 +44,5 @@ disk_fraction_used#1: thrash_pct: [s1=37%, s2=35%, s3=37%, s4=33%, s5=174%]  (su
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
 replicas#1: last:  [s1=327, s2=326, s3=328, s4=323, s5=196] (stddev=52.03, mean=300.00, sum=1500)
 replicas#1: thrash_pct: [s1=280%, s2=266%, s3=277%, s4=248%, s5=181%]  (sum=1252%)
-artifacts[mma-and-count]: 670053d42d66d1e6
+artifacts[mma-and-count]: 2a17b81d800bb09
 ==========================

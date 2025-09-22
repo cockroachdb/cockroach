@@ -73,7 +73,7 @@ eval verbose=(config_gen)
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -82,7 +82,7 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -91,7 +91,7 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -174,7 +174,7 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -185,7 +185,7 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -196,7 +196,7 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -227,7 +227,7 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -243,7 +243,7 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:
@@ -259,7 +259,7 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
-	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8cpu-sec/sec]
+	[nodes: 3, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 8 cpu-sec/sec]
 	[0,200000): 10(rf=3), 0MiB
 	[0,200000): write-only [1B/op, 0ops/s]
 	scheduled_event:

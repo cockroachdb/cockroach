@@ -27,7 +27,7 @@ func NewStateWithDistribution(
 	// Currently multi-store is not tested for correctness. Default to a single
 	// store per node.
 	clusterInfo := ClusterInfoWithStoreCount(numNodes, 1 /* storesPerNode */)
-	clusterInfo.NodeCPURateCapacityNanos = config.DefaultNodeCPURateCapacityNanos
+	clusterInfo.NodeCPURateCapacityNanos = []uint64{config.DefaultNodeCPURateCapacityNanos}
 	s := LoadClusterInfo(clusterInfo, settings)
 
 	stores := make([]StoreID, numNodes)
