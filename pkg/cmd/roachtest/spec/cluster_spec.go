@@ -37,6 +37,129 @@ const (
 	RoachtestBranch = "roachtest-branch"
 )
 
+// ArchSet represents a set of CPU architectures.
+//
+// N.B. We call this a set to mirror how we represent other sets (e.g. clouds, suites),
+// but we cannot use a map directly since we compare cluster specs for reusability.
+type ArchSet struct {
+	amd64 bool
+	arm64 bool
+	fips  bool
+}
+
+// AllArchs contains all supported architectures.
+//
+// We omit s390x here as it is only supported iff the cloud is IBM.
+var AllArchs = Archs(vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS)
+
+// OnlyAMD64 contains only the AMD64 architecture.
+var OnlyAMD64 = Archs(vm.ArchAMD64)
+
+var AllExceptFIPS = AllArchs.remove(vm.ArchFIPS)
+
+// Archs creates an ArchSet for the given architectures.
+func Archs(archs ...vm.CPUArch) ArchSet {
+	if len(archs) == 0 {
+		return ArchSet{}
+	}
+
+	as := ArchSet{}
+	for _, arch := range archs {
+		switch arch {
+		case vm.ArchAMD64:
+			as.amd64 = true
+		case vm.ArchARM64:
+			as.arm64 = true
+		case vm.ArchFIPS:
+			as.fips = true
+		default:
+			panic(fmt.Sprintf("unknown architecture %q", arch))
+		}
+	}
+	return as
+}
+
+// NoAMD64 removes the AMD64 architecture and returns the new set.
+func (as ArchSet) NoAMD64() ArchSet {
+	return as.remove(vm.ArchAMD64)
+}
+
+// NoARM64 removes the ARM64 architecture and returns the new set.
+func (as ArchSet) NoARM64() ArchSet {
+	return as.remove(vm.ArchARM64)
+}
+
+// NoFIPS removes the FIPS architecture and returns the new set.
+func (as ArchSet) NoFIPS() ArchSet {
+	return as.remove(vm.ArchFIPS)
+}
+
+// remove returns a new ArchSet with the specified architecture removed.
+func (as ArchSet) remove(arch vm.CPUArch) ArchSet {
+	result := as
+	switch arch {
+	case vm.ArchAMD64:
+		result.amd64 = false
+	case vm.ArchARM64:
+		result.arm64 = false
+	case vm.ArchFIPS:
+		result.fips = false
+	default:
+		panic(fmt.Sprintf("unknown architecture %q", arch))
+	}
+	return result
+}
+
+// Contains returns true if the set contains the given architecture.
+func (as ArchSet) Contains(arch vm.CPUArch) bool {
+	switch arch {
+	case vm.ArchAMD64:
+		return as.amd64
+	case vm.ArchARM64:
+		return as.arm64
+	case vm.ArchFIPS:
+		return as.fips
+	default:
+		panic(fmt.Sprintf("unknown architecture %q", arch))
+	}
+}
+
+func (as ArchSet) List() []vm.CPUArch {
+	var archs []vm.CPUArch
+	if as.amd64 {
+		archs = append(archs, vm.ArchAMD64)
+	}
+	if as.arm64 {
+		archs = append(archs, vm.ArchARM64)
+	}
+	if as.fips {
+		archs = append(archs, vm.ArchFIPS)
+	}
+	return archs
+}
+
+func (as ArchSet) String() string {
+	var elems []string
+	if as.amd64 {
+		elems = append(elems, string(vm.ArchAMD64))
+	}
+	if as.arm64 {
+		elems = append(elems, string(vm.ArchARM64))
+	}
+	if as.fips {
+		elems = append(elems, string(vm.ArchFIPS))
+	}
+	if len(elems) == 0 {
+		return "<none>"
+	}
+	return strings.Join(elems, ",")
+}
+
+// IsEmpty returns true if the set contains no architectures.
+func (as ArchSet) IsEmpty() bool {
+	return !(as.amd64 || as.arm64 || as.fips)
+}
+
 type MemPerCPU int
 
 const (
@@ -97,8 +220,8 @@ const (
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
-	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
-	NodeCount int
+	CompatibleArchs ArchSet // The set of all valid architectures to choose from.
+	NodeCount       int
 	// WorkloadNode indicates if we are using workload nodes.
 	// WorkloadNodeCount indicates count of the last few node of the cluster
 	// treated as workload node. Defaults to a VM with 4 CPUs if not specified
