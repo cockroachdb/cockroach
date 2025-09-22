@@ -1208,6 +1208,27 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedPerTablePTSNotUpdatedWithoutFrontierPersistence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// Set cluster settings so that we save per-table PTS really frequently.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			ctx, &s.Server.ClusterSettings().SV, false)
+		changefeedbase.ProtectTimestampInterval.Override(
+			ctx, &s.Server.ClusterSettings().SV, time.Nanosecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			ctx, &s.Server.ClusterSettings().SV, time.Nanosecond)
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+
+	// TODO set the gc.ttlseconds really low and update a row a bunch of times
+}
+
 func fetchRoleMembers(
 	ctx context.Context, execCfg *sql.ExecutorConfig, ts hlc.Timestamp,
 ) ([][]string, error) {
