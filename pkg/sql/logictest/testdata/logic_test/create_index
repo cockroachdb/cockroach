@@ -694,3 +694,14 @@ tbl_with_collate  CREATE TABLE public.tbl_with_collate (
                   ) WITH (schema_locked = true);
 
 subtest end
+
+
+subtest index_name_conflicts_with_primary_key
+
+statement ok
+CREATE TABLE t_index_name_conflicts_with_primary_key (a INT PRIMARY KEY, b INT);
+
+statement error pgcode 42P07 index with name \"t_index_name_conflicts_with_primary_key_pkey\" already exists
+CREATE INDEX t_index_name_conflicts_with_primary_key_pkey ON t_index_name_conflicts_with_primary_key (a);
+
+subtest end

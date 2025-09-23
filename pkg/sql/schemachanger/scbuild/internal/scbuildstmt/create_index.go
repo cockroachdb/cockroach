@@ -119,13 +119,23 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"%q is not a table or materialized view", n.Table.ObjectName))
 	}
 	// Resolve the index name and make sure it doesn't exist yet.
-	{
+	if len(n.Name) > 0 {
 		indexElements := b.ResolveIndex(idxSpec.secondary.TableID, n.Name, ResolveParams{
 			IsExistenceOptional: true,
 			RequiredPrivilege:   privilege.CREATE,
 		})
-		if _, target, sec := scpb.FindSecondaryIndex(indexElements); sec != nil {
+		skipCreation := false
+		indexElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+			switch e.(type) {
+			// Names can conflict on either primary or secondary indexes.
+			case *scpb.PrimaryIndex:
+			case *scpb.SecondaryIndex:
+			default:
+				// No index element that we care about.
+				return
+			}
 			if n.IfNotExists {
+				skipCreation = true
 				return
 			}
 			if target == scpb.ToAbsent {
@@ -133,6 +143,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 					"index %q being dropped, try again later", n.Name.String()))
 			}
 			panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
+		})
+		if skipCreation {
+			return
+
 		}
 	}
 	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
