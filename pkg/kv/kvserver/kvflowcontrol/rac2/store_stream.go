@@ -238,11 +238,11 @@ func (b *blockedStreamLogger) willLog() bool {
 
 func (b *blockedStreamLogger) flushLogs() {
 	if b.blockedRegularCount > 0 {
-		log.Dev.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
+		log.KvDistribution.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
 			b.blockedRegularCount, b.metricType, redact.SafeString(b.regBuf.String()))
 	}
 	if b.blockedElasticCount > 0 {
-		log.Dev.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
+		log.KvDistribution.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
 			b.blockedElasticCount, b.metricType, redact.SafeString(b.elaBuf.String()))
 	}
 	b.elaBuf.Reset()
@@ -321,9 +321,9 @@ func (b *blockedStreamLogger) observeStream(
 		}
 		deductionKindFunc("regular", regularStats)
 		deductionKindFunc("elastic", elasticStats)
-		log.Dev.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
+		log.KvDistribution.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
 	} else if b.blockedCount == streamStatsCountCap+1 {
-		log.Dev.Infof(context.Background(), "skipped logging some streams that were blocked")
+		log.KvDistribution.Infof(context.Background(), "skipped logging some streams that were blocked")
 	}
 }
 
@@ -487,7 +487,7 @@ func (w *sendStreamTokenWatcher) add(
 			"flow-control-send-stream-token-watcher", w.run); err == nil {
 			w.mu.started = true
 		} else {
-			log.Dev.Warningf(ctx, "failed to start send stream token watcher: %v", err)
+			log.KvDistribution.Warningf(ctx, "failed to start send stream token watcher: %v", err)
 		}
 	}
 
@@ -567,7 +567,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 		// unblocked and confirmed that there are tokens available. Notify the next
 		// handle in line.
 		if grant, found := w.nextGrant(); found {
-			log.Dev.VInfof(ctx, 4,
+			log.KvDistribution.VInfof(ctx, 4,
 				"notifying %v of available tokens for stream %v", grant, w.tc.stream)
 			grant.Notify(ctx)
 		}
