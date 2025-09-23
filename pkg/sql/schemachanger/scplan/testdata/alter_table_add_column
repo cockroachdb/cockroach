@@ -1021,7 +1021,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, Usage: REGULAR}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, ReferencedColumnIDs: [1], Usage: REGULAR}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1106,7 +1106,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, Usage: REGULAR}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, ReferencedColumnIDs: [1], Usage: REGULAR}, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -1123,7 +1123,7 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, Usage: REGULAR}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, ReferencedColumnIDs: [1], Usage: REGULAR}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC

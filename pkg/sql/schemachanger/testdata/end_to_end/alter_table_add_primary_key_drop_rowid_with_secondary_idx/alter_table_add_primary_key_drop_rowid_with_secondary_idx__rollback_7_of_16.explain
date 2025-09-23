@@ -59,7 +59,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 12 (t_pkey-)}
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-)}
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_a_shard_10-), TypeName: "INT8"}
-      │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), Usage: REGULAR}
+      │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), ReferencedColumnIDs: [1], Usage: REGULAR}
       │    └── 8 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":104}
