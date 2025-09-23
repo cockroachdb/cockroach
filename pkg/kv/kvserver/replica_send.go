@@ -194,9 +194,9 @@ func (r *Replica) SendWithWriteBytes(
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		log.Dev.Fatalf(ctx, "empty batch")
+		log.KvExec.Fatalf(ctx, "empty batch")
 	} else {
-		log.Dev.Fatalf(ctx, "don't know how to handle command %s", ba)
+		log.KvExec.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
 	if pErr != nil {
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
@@ -607,7 +607,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// for those locks and release latches.
 			requestEvalKind = concurrency.PessimisticAfterFailedOptimisticEval
 		default:
-			log.Dev.Fatalf(ctx, "unexpected concurrency retry error %T", t)
+			log.KvExec.Fatalf(ctx, "unexpected concurrency retry error %T", t)
 		}
 		// Retry...
 	}

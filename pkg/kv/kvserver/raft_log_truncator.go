@@ -324,7 +324,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 		After: alreadyTruncIndex, Last: pendingTrunc.Index,
 	}); err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
-		log.Dev.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
+		log.KvExec.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
 		pendingTrunc.isDeltaTrusted = false
 	} else if entries != 0 {
 		pendingTrunc.logDeltaBytes -= size
@@ -523,7 +523,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	stateLoader := r.getStateLoader()
 	as, err := stateLoader.LoadRangeAppliedState(ctx, reader)
 	if err != nil {
-		log.Dev.Errorf(ctx, "error loading RangeAppliedState, dropping all pending log truncations: %s",
+		log.KvExec.Errorf(ctx, "error loading RangeAppliedState, dropping all pending log truncations: %s",
 			err)
 		pendingTruncs.reset()
 		return
@@ -551,7 +551,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
 		stateLoader.StateLoader, batch,
 	); err != nil {
-		log.Dev.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
+		log.KvExec.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()
 		return
 	}
@@ -570,7 +570,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// so that the subsequent removals from the sideloaded storage are safe.
 	sync := pendingTruncs.mu.truncs[enactIndex].hasSideloaded
 	if err := batch.Commit(sync); err != nil {
-		log.Dev.Fatalf(ctx, "while committing batch to truncate raft log: %+v", err)
+		log.KvExec.Fatalf(ctx, "while committing batch to truncate raft log: %+v", err)
 		return
 	}
 	r.finalizeTruncation(ctx)
