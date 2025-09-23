@@ -508,7 +508,7 @@ func (m *managerImpl) HandleLockConflictError(
 	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
-		log.Dev.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
+		log.KvExec.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
@@ -538,7 +538,7 @@ func (m *managerImpl) HandleLockConflictError(
 		foundLock := &t.Locks[i]
 		added, err := m.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
-			log.Dev.Fatalf(ctx, "%v", err)
+			log.KvExec.Fatalf(ctx, "%v", err)
 		}
 		if !added {
 			log.VEventf(ctx, 2,
@@ -584,14 +584,14 @@ func (m *managerImpl) HandleTransactionPushError(
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
 	if err := m.lt.AcquireLock(acq); err != nil {
 		if errors.IsAssertionFailure(err) {
-			log.Dev.Fatalf(ctx, "%v", err)
+			log.KvExec.Fatalf(ctx, "%v", err)
 		}
 		// It's reasonable to expect benign errors here that the layer above
 		// (command evaluation) isn't equipped to deal with. As long as we're not
 		// violating any assertions, we simply log and move on. One benign case is
 		// when an unreplicated lock is being acquired by a transaction at an older
 		// epoch.
-		log.Dev.Errorf(ctx, "%v", err)
+		log.KvExec.Errorf(ctx, "%v", err)
 	}
 }
 
@@ -600,14 +600,14 @@ func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquis
 	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
 		// We don't currently expect any errors other than assertion failures that represent
 		// programming errors from this method.
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
 	if err := m.lt.UpdateLocks(up); err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
