@@ -282,7 +282,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 	r.mu.AssertHeld()
 	if r.startKey != nil {
-		log.Dev.Fatalf(
+		log.KvExec.Fatalf(
 			r.AnnotateCtx(context.Background()),
 			"start key written twice: was %s, now %s", r.startKey, startKey,
 		)
@@ -430,17 +430,17 @@ func (r *Replica) setDescRaftMuLocked(ctx context.Context, desc *roachpb.RangeDe
 
 func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	if desc.RangeID != r.RangeID {
-		log.Dev.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
+		log.KvExec.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.shMu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		log.Dev.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
+		log.KvExec.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.shMu.state.Desc, desc)
 	}
 	if r.shMu.state.Desc.IsInitialized() &&
 		!r.shMu.state.Desc.StartKey.Equal(desc.StartKey) {
-		log.Dev.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
+		log.KvExec.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
 			r.shMu.state.Desc.StartKey, desc.StartKey)
 	}
 
@@ -457,7 +457,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	//   3) Various unit tests do not provide a valid descriptor.
 	replDesc, found := desc.GetReplicaDescriptor(r.StoreID())
 	if found && replDesc.ReplicaID != r.replicaID {
-		log.Dev.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
+		log.KvExec.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
 			r.replicaID, replDesc.ReplicaID)
 	}
 
@@ -467,7 +467,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	if desc.IsInitialized() && r.mu.tenantID == (roachpb.TenantID{}) {
 		_, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey())
 		if err != nil {
-			log.Dev.Fatalf(ctx, "failed to decode tenant prefix from key for "+
+			log.KvExec.Fatalf(ctx, "failed to decode tenant prefix from key for "+
 				"replica %v: %v", r, err)
 		}
 		r.mu.tenantID = tenantID
@@ -502,7 +502,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	for _, span := range []roachpb.Span{keys.NodeLivenessSpan, keys.MetaSpan} {
 		rspan, err := keys.SpanAddr(span)
 		if err != nil {
-			log.Dev.Fatalf(ctx, "can't resolve system span %s: %s", span, err)
+			log.KvExec.Fatalf(ctx, "can't resolve system span %s: %s", span, err)
 		}
 		if _, err := desc.RSpan().Intersect(rspan); err == nil {
 			r.store.scheduler.AddPriorityID(desc.RangeID)

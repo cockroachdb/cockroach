@@ -1950,7 +1950,7 @@ func TestLeaseConcurrent(t *testing.T) {
 				// Morally speaking, this is an error, but reproposals can
 				// happen and so we warn (in case this trips the test up
 				// in more unexpected ways).
-				log.Dev.Infof(ctx, "reproposal of %+v", ll)
+				log.KvExec.Infof(ctx, "reproposal of %+v", ll)
 			}
 			// Wait for all lease requests to join the same LeaseRequest command.
 			wg.Wait()
@@ -7747,7 +7747,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	}
 	tc.repl.mu.RUnlock()
 
-	log.Dev.Infof(ctx, "test begins")
+	log.KvExec.Infof(ctx, "test begins")
 
 	ba := &kvpb.BatchRequest{}
 	ba.RangeID = 1
@@ -7823,7 +7823,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	abandoned := make(map[kvserverbase.CmdIDKey]struct{}) // protected by repl.mu
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if _, ok := abandoned[p.idKey]; ok {
-			log.Dev.Infof(p.Context(), "abandoning command")
+			log.KvExec.Infof(p.Context(), "abandoning command")
 			return true, nil
 		}
 		return false, nil
@@ -7856,7 +7856,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		repl.mu.Unlock()
 	}
 
-	log.Dev.Infof(ctx, "waiting on %d chans", len(chs))
+	log.KvExec.Infof(ctx, "waiting on %d chans", len(chs))
 	for _, ch := range chs {
 		if rwe := <-ch; rwe.Err != nil {
 			t.Fatal(rwe.Err)

@@ -833,7 +833,7 @@ func logSummary(
 		summary.WriteString("\n")
 	}
 	summary.WriteString(fmt.Sprintf("overall-mean: %s", mean))
-	log.Dev.Infof(ctx, "generated random store list:\n%s", summary.String())
+	log.KvDistribution.Infof(ctx, "generated random store list:\n%s", summary.String())
 }
 
 func TestChooseRangeToRebalanceRandom(t *testing.T) {
@@ -943,7 +943,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			for _, target := range nonVoterTargets {
 				rebalancedNonVoterStores = append(rebalancedNonVoterStores, target.StoreID)
 			}
-			log.Dev.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"rebalanced voters from %v to %v: %s -> %s",
 				voterStores,
@@ -951,7 +951,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				meanLoad(voterStores),
 				meanLoad(rebalancedVoterStores),
 			)
-			log.Dev.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"rebalanced non-voters from %v to %v: %s -> %s",
 				nonVoterStores,
@@ -964,7 +964,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			}
 			previousMean := meanLoad(append(voterStores, nonVoterStores...))
 			newMean := meanLoad(append(rebalancedVoterStores, rebalancedNonVoterStores...))
-			log.Dev.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"rebalanced range from stores with %s average load to %s average load",
 				previousMean,

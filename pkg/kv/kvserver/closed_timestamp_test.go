@@ -770,7 +770,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 			// Wait for the RHS to enter the subsumed state.
 			select {
 			case freezeStartTimestamp = <-mergeBlocker.WaitCh():
-				log.Dev.Infof(ctx, "test: merge blocked. Freeze time: %s", freezeStartTimestamp)
+				log.KvDistribution.Infof(ctx, "test: merge blocked. Freeze time: %s", freezeStartTimestamp)
 			case err := <-mergeErrCh:
 				t.Fatal(err)
 			case <-time.After(45 * time.Second):
@@ -780,19 +780,19 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 			var rhsLeaseStart hlc.Timestamp
 			if test.transferLease != nil {
 				// Transfer the RHS lease while the RHS is subsumed.
-				log.Dev.Infof(ctx, "test: transferring RHS lease...")
+				log.KvDistribution.Infof(ctx, "test: transferring RHS lease...")
 				rightLeaseholder, rhsLeaseStart = test.transferLease(ctx, t, tc, rightDesc, rightLeaseholder, manual)
 				// Sanity check.
 				require.True(t, freezeStartTimestamp.Less(rhsLeaseStart))
-				log.Dev.Infof(ctx, "test: transferring RHS lease... done")
+				log.KvDistribution.Infof(ctx, "test: transferring RHS lease... done")
 			}
 
 			// Sleep a bit and assert that the closed timestamp has not advanced while
 			// we were sleeping. We need to sleep sufficiently to give the side
 			// transport a chance to publish updates.
-			log.Dev.Infof(ctx, "test: sleeping...")
+			log.KvDistribution.Infof(ctx, "test: sleeping...")
 			time.Sleep(5 * closedts.SideTransportCloseInterval.Get(&tc.Server(0).ClusterSettings().SV))
-			log.Dev.Infof(ctx, "test: sleeping... done")
+			log.KvDistribution.Infof(ctx, "test: sleeping... done")
 
 			store, err := getTargetStore(tc, rightLeaseholder)
 			require.NoError(t, err)
@@ -817,7 +817,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 			require.NotNil(t, pErr)
 			require.Regexp(t, "NotLeaseHolderError", pErr.String())
 
-			log.Dev.Infof(ctx, "test: unblocking merge")
+			log.KvDistribution.Infof(ctx, "test: unblocking merge")
 			mergeBlocker.Unblock()
 			require.NoError(t, g.Wait())
 
@@ -971,7 +971,7 @@ func (filter *mergeFilter) SuspendMergeTrigger(
 			}
 
 			freezeStart := et.InternalCommitTrigger.MergeTrigger.FreezeStart
-			log.Dev.Infof(ctx, "suspending the merge txn with FreezeStart: %s", freezeStart)
+			log.KvDistribution.Infof(ctx, "suspending the merge txn with FreezeStart: %s", freezeStart)
 
 			// We block the LHS leaseholder from applying the merge trigger. Note
 			// that RHS followers will have already caught up to the leaseholder
