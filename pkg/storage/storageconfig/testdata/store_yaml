@@ -15,6 +15,10 @@ path: /mnt/data1
 ballast-size: 10%
 attrs: [foo, bar]
 provisioned-rate: bandwidth=1,000KiB/s
+encryption:
+    key: /path/to/current-key
+    old-key: /path/to/old-key
+    rotation-period: 1h0m0s
 
 to-yaml pebble-opts
 ----
@@ -50,6 +54,17 @@ path: foo
 size: 50%
 ballast-size: 1 GiB
 provisioned-rate: bandwidth=1GiB/s
+
+from-yaml
+path: /mnt/data1
+encryption:
+    key: /path/to/current-key
+    old-key: plain
+----
+path: /mnt/data1
+encryption:
+    key: /path/to/current-key
+    old-key: plain
 
 from-yaml
 path: foo
@@ -100,3 +115,57 @@ path: foo
 sticky-vfs-id: foo
 ----
 on-disk store cannot use a sticky VFS ID
+
+validate
+path: /mnt/data1
+encryption:
+    key: /some/file
+    old-key: /some/other/file
+----
+path: /mnt/data1
+encryption:
+    key: /some/file
+    old-key: /some/other/file
+    rotation-period: 168h0m0s
+
+validate
+path: /mnt/data1
+encryption:
+    key: plain
+    old-key: plain
+----
+path: /mnt/data1
+encryption:
+    key: plain
+    old-key: plain
+    rotation-period: 168h0m0s
+
+validate
+path: /mnt/data1
+encryption:
+    old-key: plain
+----
+invalid encryption options: no key specified
+
+validate
+path: /mnt/data1
+encryption:
+    key: plain
+----
+invalid encryption options: no old key specified
+
+validate
+path: /mnt/data1
+encryption:
+    key: ~/bad/path
+    old-key: plain
+----
+invalid encryption options: key "~/bad/path" cannot start with '~'
+
+validate
+path: /mnt/data1
+encryption:
+    key: plain
+    old-key: ~/bad/path
+----
+invalid encryption options: old key "~/bad/path" cannot start with '~'

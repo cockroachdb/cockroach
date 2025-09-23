@@ -530,22 +530,13 @@ func (es storeEncryptionSpec) PathMatches(path string) bool {
 	return es.Path == path || es.Path == "*"
 }
 
-// Special value of key paths to mean "no encryption". We do not accept empty fields.
-const plaintextFieldValue = "plain"
-
 // parseStoreEncryptionSpec parses the string passed in and returns a new
 // storeEncryptionSpec if parsing succeeds.
 // TODO(mberhault): we should share the parsing code with the StoreSpec.
 func parseStoreEncryptionSpec(value string) (storeEncryptionSpec, error) {
 	const pathField = "path"
-	es := storeEncryptionSpec{
-		Path: "",
-		Options: storageconfig.EncryptionOptions{
-			KeySource:      storageconfig.EncryptionKeyFromFiles,
-			KeyFiles:       &storageconfig.EncryptionKeyFiles{},
-			RotationPeriod: storageconfig.DefaultRotationPeriod,
-		},
-	}
+	var es storeEncryptionSpec
+	es.Options.KeyFiles = &storageconfig.EncryptionKeyFiles{}
 
 	used := make(map[string]struct{})
 	for _, split := range strings.Split(value, ",") {
@@ -582,25 +573,9 @@ func parseStoreEncryptionSpec(value string) (storeEncryptionSpec, error) {
 				}
 			}
 		case "key":
-			if value == plaintextFieldValue {
-				es.Options.KeyFiles.CurrentKey = plaintextFieldValue
-			} else {
-				var err error
-				es.Options.KeyFiles.CurrentKey, err = getAbsoluteFSPath("key", value)
-				if err != nil {
-					return storeEncryptionSpec{}, err
-				}
-			}
+			es.Options.KeyFiles.CurrentKey = value
 		case "old-key":
-			if value == plaintextFieldValue {
-				es.Options.KeyFiles.OldKey = plaintextFieldValue
-			} else {
-				var err error
-				es.Options.KeyFiles.OldKey, err = getAbsoluteFSPath("old-key", value)
-				if err != nil {
-					return storeEncryptionSpec{}, err
-				}
-			}
+			es.Options.KeyFiles.OldKey = value
 		case "rotation-period":
 			dur, err := time.ParseDuration(value)
 			if err != nil {
@@ -616,11 +591,8 @@ func parseStoreEncryptionSpec(value string) (storeEncryptionSpec, error) {
 	if es.Path == "" {
 		return storeEncryptionSpec{}, fmt.Errorf("no path specified")
 	}
-	if es.Options.KeyFiles.CurrentKey == "" {
-		return storeEncryptionSpec{}, fmt.Errorf("no key specified")
-	}
-	if es.Options.KeyFiles.OldKey == "" {
-		return storeEncryptionSpec{}, fmt.Errorf("no old-key specified")
+	if err := es.Options.Validate(); err != nil {
+		return storeEncryptionSpec{}, err
 	}
 
 	return es, nil
