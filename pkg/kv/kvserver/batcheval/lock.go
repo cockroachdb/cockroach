@@ -54,7 +54,7 @@ func CollectIntentRows(
 		if err != nil {
 			if errors.HasType(err, (*kvpb.LockConflictError)(nil)) ||
 				errors.HasType(err, (*kvpb.ReadWithinUncertaintyIntervalError)(nil)) {
-				log.Dev.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
+				log.KvExec.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
 			}
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func readProvisionalVal(
 		return roachpb.KeyValue{}, err
 	}
 	if len(res.KVs) > 1 {
-		log.Dev.Fatalf(ctx, "multiple key-values returned from single-key scan: %+v", res.KVs)
+		log.KvExec.Fatalf(ctx, "multiple key-values returned from single-key scan: %+v", res.KVs)
 	} else if len(res.KVs) == 0 {
 		// Intent is a deletion.
 		return roachpb.KeyValue{}, nil
