@@ -77,7 +77,7 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 	desc := repl.Desc()
 	conf, err := repl.SpanConfig()
 	if err != nil {
-		log.Dev.Fatalf(ctx, "conf not found err=%v", err)
+		log.KvDistribution.Fatalf(ctx, "conf not found err=%v", err)
 	}
 	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s", desc, conf)
 
@@ -154,7 +154,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		}
 		change, err := rq.planner.PlanOneChange(ctx, repl, desc, conf, plan.PlannerOptions{})
 		if err != nil {
-			log.Dev.Errorf(ctx, "error planning change %s", err.Error())
+			log.KvDistribution.Errorf(ctx, "error planning change %s", err.Error())
 			continue
 		}
 
