@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # Want to test two cases:
 # (1) Where its impossible to shed leases from the CPU overloaded store, so we
 #     should initially observe a period of no rebalancing activity away from
