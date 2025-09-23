@@ -77,6 +77,10 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 	} else {
 		r.CodeBlock("", data.CondensedMessage.Digest(50))
 	}
+	if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+		r.Escaped("Cluster Node to Ip Mapping:")
+		r.CodeBlock("", nodeIpMap.NodeToIpMapping)
+	}
 
 	if len(data.Parameters) != 0 {
 		params := make([]string, 0, len(data.Parameters))
