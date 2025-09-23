@@ -2852,7 +2852,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	}
 
 	for i, tc := range testCases2 {
-		log.Dev.Infof(ctx, "case #%d", i)
+		log.KvDistribution.Infof(ctx, "case #%d", i)
 		var rangeUsageInfo allocator.RangeUsageInfo
 		result, _, details, ok := a.RebalanceVoter(
 			ctx,
@@ -8764,13 +8764,13 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64, qps float64, do Disk
 	// almost out of disk. (In a real allocator this is, for example, in
 	// rankedCandidateListFor{Allocation,Rebalancing}).
 	if !do.maxCapacityCheck(ots.StoreDescriptor) {
-		log.Dev.Infof(
+		log.KvDistribution.Infof(
 			context.Background(),
 			"s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity,
 		)
 		return
 	}
-	log.Dev.Infof(context.Background(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
+	log.KvDistribution.Infof(context.Background(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
 	ts.Capacity.RangeCount--
 	ts.Capacity.QueriesPerSecond -= qps
 	if ts.immediateCompaction {
@@ -8801,7 +8801,7 @@ func Example_rangeCountRebalancing() {
 			alloc.ScorerOptions(ctx),
 		)
 		if ok {
-			log.Dev.Infof(ctx, "rebalancing to %v; details: %s", target, details)
+			log.KvDistribution.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 			ts.rebalance(
 				&testStores[int(target.StoreID)],
 				alloc.randGen.Int63n(1<<20),
@@ -8916,7 +8916,7 @@ func qpsBasedRebalanceFn(
 		opts,
 	)
 	if ok {
-		log.Dev.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
+		log.KvDistribution.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
 		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS, opts.BaseScorerOptions.DiskCapacity)
 	}
 }
