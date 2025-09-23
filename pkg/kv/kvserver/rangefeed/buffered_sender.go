@@ -93,21 +93,7 @@ type BufferedSender struct {
 		syncutil.Mutex
 		stopped bool
 		buffer  *eventQueue
-		// capacity is the maximum number of events that can be buffered. It
-		// dynamically scales based on the number of active registrations.
-		//
-		// The capacity is calculated as:
-		// - Minimum: minBufferedSenderQueueCapacity (20 registrations)
-		// - Active streams: perUnbufferedRegCapacity * number of active
-		// registrations
-		//
-		// This scaling is based on the intuition that each stream should have
-		// equivalent buffer space to what unbuffered registrations receive (4096
-		// events per registration). Since all registrations share the same buffered
-		// sender, registrations may affect each other.
-		//
-		// Note that when capacity shrinks, events already buffered will not be
-		// dropped. Capacity is not adjusted during shutdown.
+		// capacity is the maximum number of events that can be buffered.
 		capacity   int64
 		overflowed bool
 	}
