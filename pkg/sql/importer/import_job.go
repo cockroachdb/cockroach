@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -797,62 +796,6 @@ func emitImportJobEvent(
 	}
 }
 
-func writeNonDropDatabaseChange(
-	ctx context.Context,
-	desc *dbdesc.Mutable,
-	txn isql.Txn,
-	descsCol *descs.Collection,
-	p sql.JobExecContext,
-	jobDesc string,
-) ([]jobspb.JobID, error) {
-	var job *jobs.Job
-	var err error
-	if job, err = createNonDropDatabaseChangeJob(ctx, p.User(), desc.ID, jobDesc, p, txn); err != nil {
-		return nil, err
-	}
-
-	queuedJob := []jobspb.JobID{job.ID()}
-	b := txn.KV().NewBatch()
-	err = descsCol.WriteDescToBatch(
-		ctx,
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		desc,
-		b,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return queuedJob, txn.KV().Run(ctx, b)
-}
-
-func createNonDropDatabaseChangeJob(
-	ctx context.Context,
-	user username.SQLUsername,
-	databaseID descpb.ID,
-	jobDesc string,
-	p sql.JobExecContext,
-	txn isql.Txn,
-) (*jobs.Job, error) {
-	jobRecord := jobs.Record{
-		Description: jobDesc,
-		Username:    user,
-		Details: jobspb.SchemaChangeDetails{
-			DescID:        databaseID,
-			FormatVersion: jobspb.DatabaseJobFormatVersion,
-		},
-		Progress:      jobspb.SchemaChangeProgress{},
-		NonCancelable: true,
-	}
-
-	jobID := p.ExecCfg().JobRegistry.MakeJobID()
-	return p.ExecCfg().JobRegistry.CreateJobWithTxn(
-		ctx,
-		jobRecord,
-		jobID,
-		txn,
-	)
-}
-
 // OnFailOrCancel is part of the jobs.Resumer interface. Removes data that has
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
@@ -886,34 +829,13 @@ func (r *importResumer) OnFailOrCancel(
 	}
 
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
-	var jobsToRunAfterTxnCommit []jobspb.JobID
 	if err := sql.DescsTxn(ctx, cfg, func(
 		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
-			log.Dev.Errorf(ctx, "drop tables failed: %s", err.Error())
-			return err
-		}
-
-		// Drop all the schemas which may have been created during a bundle import.
-		// These schemas should now be empty as all the tables in them would be new
-		// tables created during the import, and therefore dropped by the above
-		// dropTables method. This allows us to avoid "collecting" objects in the
-		// schema before dropping the descriptor.
-		var err error
-		jobsToRunAfterTxnCommit, err = r.dropSchemas(ctx, txn, descsCol, cfg, p)
-		return err
+		return r.dropTables(ctx, txn, descsCol, cfg)
 	}); err != nil {
+		log.Dev.Errorf(ctx, "drop tables failed: %s", err.Error())
 		return err
-	}
-
-	// Run any jobs which might have been queued when dropping the schemas.
-	// This would be a job to drop all the schemas, and a job to update the parent
-	// database descriptor.
-	if len(jobsToRunAfterTxnCommit) != 0 {
-		if err := p.ExecCfg().JobRegistry.Run(ctx, jobsToRunAfterTxnCommit); err != nil {
-			return errors.Wrap(err, "failed to run jobs that drop the imported schemas")
-		}
 	}
 
 	// Emit to the event log that the job has completed reverting.
@@ -1001,44 +923,6 @@ func (r *importResumer) dropTables(
 		return err
 	}
 	return errors.Wrap(txn.KV().Run(ctx, b), "putting IMPORT INTO table back online")
-}
-
-func (r *importResumer) dropSchemas(
-	ctx context.Context,
-	txn isql.Txn,
-	descsCol *descs.Collection,
-	execCfg *sql.ExecutorConfig,
-	p sql.JobExecContext,
-) ([]jobspb.JobID, error) {
-	details := r.job.Details().(jobspb.ImportDetails)
-
-	// If the prepare step of the import job was not completed then the
-	// descriptors do not need to be rolled back as the txn updating them never
-	// completed.
-	if !details.PrepareComplete {
-		return nil, nil
-	}
-
-	// Resolve the database descriptor.
-	desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, details.ParentID)
-	if err != nil {
-		return nil, err
-	}
-
-	dbDesc, ok := desc.(*dbdesc.Mutable)
-	if !ok {
-		return nil, errors.Newf("expected ID %d to refer to the database being imported into",
-			details.ParentID)
-	}
-
-	// Write out the change to the database. This only creates a job record to be
-	// run after the txn commits.
-	queuedJob, err := writeNonDropDatabaseChange(ctx, dbDesc, txn, descsCol, p, "")
-	if err != nil {
-		return nil, err
-	}
-
-	return queuedJob, nil
 }
 
 // ReportResults implements JobResultsReporter interface.
