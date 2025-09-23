@@ -193,7 +193,7 @@ func (t *Transport) stream(stream slpb.RPCStoreLiveness_StreamStream) error {
 func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 	handler, ok := t.handlers.Load(msg.To.StoreID)
 	if !ok {
-		log.Dev.Warningf(
+		log.KvExec.Warningf(
 			ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
 			msg, msg.From, msg.To,
 		)
@@ -201,7 +201,7 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 	}
 	if err := (*handler).HandleMessage(msg); err != nil {
 		if logQueueFullEvery.ShouldLog() {
-			log.Dev.Warningf(
+			log.KvExec.Warningf(
 				t.AnnotateCtx(context.Background()),
 				"error handling message to store %v: %v", msg.To, err,
 			)
@@ -254,7 +254,7 @@ func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (enqueued b
 		return true
 	default:
 		if logQueueFullEvery.ShouldLog() {
-			log.Dev.Warningf(
+			log.KvExec.Warningf(
 				t.AnnotateCtx(context.Background()),
 				"store liveness send queue to n%d is full", toNodeID,
 			)
@@ -306,7 +306,7 @@ func (t *Transport) startProcessNewQueue(
 	worker := func(ctx context.Context) {
 		q, existingQueue := t.getQueue(toNodeID)
 		if !existingQueue {
-			log.Dev.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
+			log.KvExec.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
 		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, toNodeID, connClass)
@@ -319,12 +319,12 @@ func (t *Transport) startProcessNewQueue(
 
 		stream, err := client.Stream(streamCtx) // closed via cancellation
 		if err != nil {
-			log.Dev.Warningf(ctx, "creating stream client for node %d failed: %s", toNodeID, err)
+			log.KvExec.Warningf(ctx, "creating stream client for node %d failed: %s", toNodeID, err)
 			return
 		}
 
 		if err = t.processQueue(q, stream); err != nil {
-			log.Dev.Warningf(ctx, "processing outgoing queue to node %d failed: %s:", toNodeID, err)
+			log.KvExec.Warningf(ctx, "processing outgoing queue to node %d failed: %s:", toNodeID, err)
 		}
 	}
 	err := t.stopper.RunAsyncTask(
