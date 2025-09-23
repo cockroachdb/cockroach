@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -45,6 +48,38 @@ import (
 //               BufferedPerRangeEventSink.Send    BufferedPerRangeEventSink.SendError
 //
 
+// RangefeedSingleBufferedSenderQueueMaxSize is the maximum number of events
+// that the buffered sender will buffer before it starts returning capacity
+// exceeded errors. Updates to this setting are only applied to need
+// MuxRangefeedCalls, existing streams will use the previous value until
+// restarted.
+//
+// # The main goal of this limit is to provide a backstop against the
+//
+// The default here has been somewhat arbitrarily chosen considering that:
+//
+//   - We want to avoid capacity exceeded errors that wouldn't have occurred
+//     when the buffered registrations were in use.
+//
+//   - We don't want to drastically increase the amount of queueing allowed for a
+//     single registration.
+//
+//   - One buffered sender is feeding a single gRPC client.
+//
+//   - Events emitted during catchup scans have their own per-registration buffer
+//     still.
+//
+// TODO(ssd): This is a bit of a stop-gap so that we have a knob to turn if we
+// need to. We probably want each buffered sender (or each consumerID) to be
+// able to hold up to some fraction of the total rangefeed budget. But we are
+// starting here for now.
+var RangefeedSingleBufferedSenderQueueMaxSize = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.buffered_sender.queue_max_size",
+	"max size of a buffered senders event queue (0 for no max)",
+	kvserverbase.DefaultRangefeedEventCap*8,
+)
+
 // BufferedSender is embedded in every rangefeed.BufferedPerRangeEventSink,
 // serving as a helper which buffers events before forwarding events to the
 // underlying gRPC stream.
@@ -58,21 +93,7 @@ type BufferedSender struct {
 		syncutil.Mutex
 		stopped bool
 		buffer  *eventQueue
-		// capacity is the maximum number of events that can be buffered. It
-		// dynamically scales based on the number of active registrations.
-		//
-		// The capacity is calculated as:
-		// - Minimum: minBufferedSenderQueueCapacity (20 registrations)
-		// - Active streams: perUnbufferedRegCapacity * number of active
-		// registrations
-		//
-		// This scaling is based on the intuition that each stream should have
-		// equivalent buffer space to what unbuffered registrations receive (4096
-		// events per registration). Since all registrations share the same buffered
-		// sender, registrations may affect each other.
-		//
-		// Note that when capacity shrinks, events already buffered will not be
-		// dropped. Capacity is not adjusted during shutdown.
+		// capacity is the maximum number of events that can be buffered.
 		capacity   int64
 		overflowed bool
 	}
@@ -88,14 +109,8 @@ type BufferedSender struct {
 	metrics *BufferedSenderMetrics
 }
 
-// TODO(wenyihu6): This value is set to the same value as
-// https://github.com/cockroachdb/cockroach/blob/5536f0828f50bb21ec1577c77d388c4303d124a4/pkg/kv/kvserver/replica_rangefeed.go#L121.
-// Should I move this const to kvserverbase and import this value?
-const perUnbufferedRegCapacity = int64(4096)
-const minBufferedSenderQueueCapacity = int64(4096 * 20)
-
 func NewBufferedSender(
-	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics,
+	sender ServerStreamSender, settings *cluster.Settings, bsMetrics *BufferedSenderMetrics,
 ) *BufferedSender {
 	bs := &BufferedSender{
 		sender:  sender,
@@ -104,7 +119,7 @@ func NewBufferedSender(
 	bs.queueMu.buffer = newEventQueue()
 	bs.notifyDataC = make(chan struct{}, 1)
 	bs.queueMu.buffer = newEventQueue()
-	bs.queueMu.capacity = minBufferedSenderQueueCapacity
+	bs.queueMu.capacity = RangefeedSingleBufferedSenderQueueMaxSize.Get(&settings.SV)
 	return bs
 }
 
@@ -123,7 +138,7 @@ func (bs *BufferedSender) sendBuffered(
 	if bs.queueMu.overflowed {
 		return newRetryErrBufferCapacityExceeded()
 	}
-	if bs.queueMu.buffer.len() >= bs.queueMu.capacity {
+	if bs.queueMu.capacity > 0 && bs.queueMu.buffer.len() >= bs.queueMu.capacity {
 		bs.queueMu.overflowed = true
 		return newRetryErrBufferCapacityExceeded()
 	}
@@ -208,21 +223,16 @@ func (bs *BufferedSender) cleanup(ctx context.Context) {
 	bs.metrics.BufferedSenderQueueSize.Dec(remaining)
 }
 
-// onStreamConnectOrDisconnect is called when a stream is added or removed. This
-// is currently used to dynamically adjust its queue capacity based on number of
-// active registrations. Note that this is not called during shutdown, so strict
-// dependency on this contract is discouraged. And note that we do not drop
-// events if the capacity is shrunk.
-func (bs *BufferedSender) onStreamConnectOrDisconnect(activeStreamCount int64) {
-	bs.queueMu.Lock()
-	defer bs.queueMu.Unlock()
-	bs.queueMu.capacity = max(minBufferedSenderQueueCapacity, activeStreamCount*perUnbufferedRegCapacity)
-}
-
 func (bs *BufferedSender) len() int {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	return int(bs.queueMu.buffer.len())
+}
+
+func (bs *BufferedSender) overflowed() bool {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	return bs.queueMu.overflowed
 }
 
 // Used for testing only.
