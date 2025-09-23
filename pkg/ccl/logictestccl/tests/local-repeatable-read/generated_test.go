@@ -1162,6 +1162,13 @@ func TestRepeatableReadLogic_jsonb_path_exists(
 	runLogicTest(t, "jsonb_path_exists")
 }
 
+func TestRepeatableReadLogic_jsonb_path_exists_index_acceleration(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists_index_acceleration")
+}
+
 func TestRepeatableReadLogic_jsonb_path_match(
 	t *testing.T,
 ) {
