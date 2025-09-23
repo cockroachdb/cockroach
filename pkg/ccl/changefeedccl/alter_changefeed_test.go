@@ -1349,7 +1349,8 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			return nil
 		}
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '1s', no_initial_scan`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`)
 		jobFeed := testFeed.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
