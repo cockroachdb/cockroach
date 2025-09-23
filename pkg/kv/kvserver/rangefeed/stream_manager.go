@@ -78,12 +78,6 @@ type sender interface {
 	// cleanup is called when the sender is stopped. It is expected to clean up
 	// any resources used by the sender.
 	cleanup(ctx context.Context)
-	// onStreamConnectOrDisconnect is called when a stream is added or removed.
-	// This is currently used for buffered sender to dynamically adjust its queue
-	// capacity based on number of active registrations. Note that this is not
-	// called during shutdown, so strict dependency on this contract is
-	// discouraged.
-	onStreamConnectOrDisconnect(activeStreamCount int64)
 }
 
 func NewStreamManager(sender sender, metrics *StreamManagerMetrics) *StreamManager {
@@ -114,18 +108,12 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 // streamID to avoid metrics inaccuracy when the error is sent before the stream
 // is added to the StreamManager.
 func (sm *StreamManager) OnError(streamID int64) {
-	func() {
-		sm.streams.Lock()
-		defer sm.streams.Unlock()
-		if _, ok := sm.streams.m[streamID]; ok {
-			delete(sm.streams.m, streamID)
-			sm.metrics.ActiveMuxRangeFeed.Dec(1)
-		}
-	}()
-
-	// Call onStreamConnectOrDisconnect regardless of whether ActiveMuxRangeFeed
-	// has changed for simplicity.
-	sm.sender.onStreamConnectOrDisconnect(sm.metrics.ActiveMuxRangeFeed.Value())
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	if _, ok := sm.streams.m[streamID]; ok {
+		delete(sm.streams.m, streamID)
+		sm.metrics.ActiveMuxRangeFeed.Dec(1)
+	}
 }
 
 // DisconnectStream disconnects the stream with the given streamID.
@@ -150,27 +138,19 @@ func (sm *StreamManager) AddStream(streamID int64, d Disconnector) {
 	// At this point, the stream had been registered with the processor and
 	// started receiving events. We need to lock here to avoid race conditions
 	// with a disconnect error passing through before the stream is added.
-	func() {
-		sm.streams.Lock()
-		defer sm.streams.Unlock()
-		if d.IsDisconnected() {
-			// If the stream is already disconnected, we don't add it to streams. The
-			// registration will have already sent an error to the client.
-			return
-		}
-		if _, ok := sm.streams.m[streamID]; ok {
-			log.KvDistribution.Fatalf(context.Background(), "stream %d already exists", streamID)
-		}
-		sm.streams.m[streamID] = d
-		sm.metrics.ActiveMuxRangeFeed.Inc(1)
-		sm.metrics.NumMuxRangeFeed.Inc(1)
-	}()
-
-	// TODO(during review) Is it okay to trust the metrics gauge value here? We
-	// can maintain our own counter here as well
-	// Call onStreamConnectOrDisconnect regardless of whether ActiveMuxRangeFeed
-	// has changed for simplicity.
-	sm.sender.onStreamConnectOrDisconnect(sm.metrics.ActiveMuxRangeFeed.Value())
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	if d.IsDisconnected() {
+		// If the stream is already disconnected, we don't add it to streams. The
+		// registration will have already sent an error to the client.
+		return
+	}
+	if _, ok := sm.streams.m[streamID]; ok {
+		log.KvDistribution.Fatalf(context.Background(), "stream %d already exists", streamID)
+	}
+	sm.streams.m[streamID] = d
+	sm.metrics.ActiveMuxRangeFeed.Inc(1)
+	sm.metrics.NumMuxRangeFeed.Inc(1)
 }
 
 // Start launches sender.run in the background if no error is returned.
@@ -206,8 +186,6 @@ func (sm *StreamManager) Start(ctx context.Context, stopper *stop.Stopper) error
 func (sm *StreamManager) Stop(ctx context.Context) {
 	sm.taskCancel()
 	sm.wg.Wait()
-	// Since this is called during shutdown, sm.sender.onStreamConnectOrDisconnect
-	// is not being called explicitly to update the queue capacity.
 	sm.sender.cleanup(ctx)
 	sm.streams.Lock()
 	defer sm.streams.Unlock()

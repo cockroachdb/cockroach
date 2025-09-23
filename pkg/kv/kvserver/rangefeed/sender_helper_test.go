@@ -35,6 +35,9 @@ type testServerStream struct {
 	eventsSent int
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
+
+	// t can optionally set for additional logging.
+	t *testing.T
 }
 
 var _ ServerStreamSender = &testServerStream{}
@@ -121,6 +124,9 @@ func (s *testServerStream) SendIsThreadSafe() {}
 // Send mocks grpc.ServerStream Send method. It only counts events and stores
 // events by streamID in streamEvents.
 func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	if s.t != nil {
+		s.t.Logf("Sending event for StreamID %d: %v", e.StreamID, e)
+	}
 	s.Lock()
 	defer s.Unlock()
 	s.eventsSent++
