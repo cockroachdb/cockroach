@@ -121,6 +121,7 @@ func TestCreatePostRequest(t *testing.T) {
 	type githubIssueOpts struct {
 		failures        []failure
 		loadTeamsFailed bool
+		message         string
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "github"), func(t *testing.T, path string) {
@@ -168,7 +169,7 @@ func TestCreatePostRequest(t *testing.T) {
 					// on where this test is run and prone to flaking.
 					fmt.Fprintf(&b, "%v", f.squashedErr)
 				}
-				message := b.String()
+				message := b.String() + testCase.message
 
 				params := getTestParameters(ti, issueInfo.cluster, issueInfo.vmCreateOpts)
 				req, err := github.createPostRequest(
@@ -225,10 +226,7 @@ func TestCreatePostRequest(t *testing.T) {
 							// Lose the error object which should make our flake detection fail.
 							refError = errors.Newf("%s", redact.SafeString(refError.Error()))
 						case "node-fatal":
-							refError = errors.Newf(`(monitor.go:267).Wait: monitor failure: dial tcp 127.0.0.1:29000: connect: connection refused
-test artifacts and logs in: artifacts/roachtest/manual/monitor/test-failure/node-fatal-explicit-monitor/cpu_arch=arm64/run_1
-F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n1,client=127.0.0.1:54552,hostssl,user=‹roachprod›] 250  force_log_fatal(): ‹oops›
-`)
+							refError = errors.Newf(`(monitor.go:267).Wait: monitor failure: dial tcp 127.0.0.1:29000: connect: connection refused`)
 						}
 					}
 				}
@@ -251,6 +249,18 @@ F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n
 				ti.spec.CockroachBinary = registry.RuntimeAssertionsCockroach
 			case "set-coverage-enabled-build":
 				ti.goCoverEnabled = true
+			case "add-additional-info":
+				msg_type := d.CmdArgs[0].Vals[0]
+				switch msg_type {
+				case "ip-node-info":
+					testCase.message = fmt.Sprintf("%s\n%s", testCase.message, `| Node | Public IP | Private IP |
+| --- | --- | --- |
+| teamcity-1758834520-01-n1cpu4-0001 | 34.139.44.53 | 10.142.0.2 |`)
+				case "fatal-logs":
+					testCase.message = fmt.Sprintf("%s\n%s", testCase.message, `F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n1,client=127.0.0.1:54552,hostssl,user=‹roachprod›] 250  force_log_fatal(): ‹oops›`)
+				default:
+					return fmt.Sprintf("unknown additional info argument: %s", msg_type)
+				}
 			}
 
 			return "ok"
