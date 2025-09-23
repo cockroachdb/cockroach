@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -138,8 +139,9 @@ func TestReadCommittedImplicitPartitionUpsert(t *testing.T) {
 	// If test is in Ready state, transition to ReadDone and wait for conflict.
 	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
-			AfterArbiterRead: func() {
-				if mu.state != Ready {
+			AfterArbiterRead: func(query string) {
+				// Only wait for arbiter operations on the upsert table.
+				if mu.state != Ready || !strings.Contains(query, "d.upsert") {
 					return
 				}
 				setState(ReadDone)

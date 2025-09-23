@@ -2017,7 +2017,7 @@ type ExecutorTestingKnobs struct {
 
 	// AfterArbiterRead, if set, will be called after each row read from an arbiter index
 	// for an UPSERT or INSERT.
-	AfterArbiterRead func()
+	AfterArbiterRead func(query string)
 
 	// BeforeIndexSplitAndScatter is invoked with the split and scatter of an index
 	// occurs.
