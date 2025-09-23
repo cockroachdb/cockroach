@@ -53,7 +53,7 @@ func relocateAndCheck(
 			)
 		if err != nil {
 			if every.ShouldLog() {
-				log.Dev.Infof(context.Background(), "AdminRelocateRange failed with error: %s", err)
+				log.KvExec.Infof(context.Background(), "AdminRelocateRange failed with error: %s", err)
 			}
 			retries++
 		}
