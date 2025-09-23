@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -395,7 +396,9 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 			lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.FlowCtx.ID, lrw.agg)
 
 	case stats := <-lrw.rangeStatsCh:
-		meta, err := lrw.newRangeStatsProgressMeta(stats)
+		meta, err := replicationutils.StreamRangeStatsToProgressMeta(
+			lrw.FlowCtx, lrw.ProcessorID, stats,
+		)
 		if err != nil {
 			lrw.MoveToDrainingAndLogError(err)
 			return nil, lrw.DrainHelper()

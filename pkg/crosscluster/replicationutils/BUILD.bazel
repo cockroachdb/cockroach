@@ -18,6 +18,8 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
@@ -28,8 +30,10 @@ go_library(
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
@@ -40,6 +44,7 @@ go_test(
     deps = [
         "//pkg/clusterversion",
         "//pkg/kv/kvpb",
+        "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
