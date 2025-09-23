@@ -485,7 +485,7 @@ func makeMVCCGCQueueScoreImpl(
 	isGCScoreMet := func(score float64, minThreshold, maxThreshold float64, cooldown time.Duration) bool {
 		if minThreshold > maxThreshold {
 			if util.RaceEnabled {
-				log.Dev.Fatalf(ctx,
+				log.KvDistribution.Fatalf(ctx,
 					"invalid cooldown score thresholds. min (%f) must be less or equal to max (%f)",
 					minThreshold, maxThreshold)
 			}
@@ -602,7 +602,7 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	b.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
 
 	if err := r.repl.store.cfg.DB.Run(ctx, &b); err != nil {
-		log.Dev.Infof(ctx, "%s", err)
+		log.KvDistribution.Infof(ctx, "%s", err)
 		return err
 	}
 	return nil
@@ -789,9 +789,9 @@ func (mgcq *mvccGCQueue) process(
 		// prevents the GC threshold from advancing. In that case, not only did we
 		// run a GC cycle without improving anything, but we also pile up a stats
 		// recomputation. This is hopefully too rare to matter.
-		log.Dev.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
-		log.Dev.Infof(ctx, "old score %s", r)
-		log.Dev.Infof(ctx, "new score %s", scoreAfter)
+		log.KvDistribution.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
+		log.KvDistribution.Infof(ctx, "old score %s", r)
+		log.KvDistribution.Infof(ctx, "new score %s", scoreAfter)
 		req := kvpb.RecomputeStatsRequest{
 			RequestHeader: kvpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
 		}
@@ -799,7 +799,7 @@ func (mgcq *mvccGCQueue) process(
 		b.AddRawRequest(&req)
 		err := repl.store.db.Run(ctx, &b)
 		if err != nil {
-			log.Dev.Errorf(ctx, "failed to recompute stats with error=%s", err)
+			log.KvDistribution.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
 
@@ -841,7 +841,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
 			return ctx.Err()
 		}); err != nil {
-			log.Dev.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
+			log.KvDistribution.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
 		}
 		// Set flag indicating that we are already collecting high priority to avoid
 		// rescanning and re-enqueueing ranges multiple times.
@@ -893,7 +893,7 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 		}
 		return true
 	})
-	log.Dev.Infof(ctx, "mvcc gc scan for range delete hints found %d replicas", foundReplicas)
+	log.KvDistribution.Infof(ctx, "mvcc gc scan for range delete hints found %d replicas", foundReplicas)
 }
 
 // timer returns a constant duration to space out GC processing

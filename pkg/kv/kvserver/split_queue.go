@@ -153,7 +153,7 @@ func shouldSplitRange(
 ) (shouldQ bool, priority float64) {
 	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
 	if err != nil {
-		log.Dev.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
+		log.KvDistribution.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
 		return false, 0
 	}
 	if needsSplit {
@@ -226,7 +226,7 @@ func (sq *splitQueue) process(
 		// attempts because splits can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
-		log.Dev.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying; err: %v", err)
+		log.KvDistribution.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying; err: %v", err)
 		sq.MaybeAddAsync(ctx, r, sq.store.Clock().NowAsClockTimestamp())
 		return false, nil
 	}
@@ -266,9 +266,9 @@ func (sq *splitQueue) processAttemptWithTracing(
 		}
 	}
 	if err != nil {
-		log.Dev.Infof(ctx, "error during range split: %v%s", err, traceOutput)
+		log.KvDistribution.Infof(ctx, "error during range split: %v%s", err, traceOutput)
 	} else if exceededDuration {
-		log.Dev.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
+		log.KvDistribution.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
 			processDuration, sq.logTracesThreshold, traceOutput)
 	}
 
