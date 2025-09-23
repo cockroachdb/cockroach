@@ -476,7 +476,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		if buildutil.CrdbTestBuild {
 			// This testing knob allows us to suspend execution to force a race condition.
 			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn()
+				fn(params.p.stmt.SQL)
 			}
 		}
 

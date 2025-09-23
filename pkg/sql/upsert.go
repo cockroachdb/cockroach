@@ -207,7 +207,7 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	if buildutil.CrdbTestBuild {
 		// This testing knob allows us to suspend execution to force a race condition.
 		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-			fn()
+			fn(params.p.stmt.SQL)
 		}
 	}
 
