@@ -304,7 +304,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			return errors.AssertionFailedf("must not specify ForceFlushIndex")
 		}
 		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
-			log.Dev.Fatalf(context.TODO(), "unhandled EvalResult: %s",
+			log.KvExec.Fatalf(context.TODO(), "unhandled EvalResult: %s",
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
 		}
 		q.Replicated.State = nil
@@ -499,7 +499,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	q.LogicalOpLog = nil
 
 	if !q.IsZero() {
-		log.Dev.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))
+		log.KvExec.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))
 	}
 
 	return nil
