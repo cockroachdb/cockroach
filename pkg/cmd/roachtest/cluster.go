@@ -3189,7 +3189,7 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 		validArchs = testSpec.Cluster.CompatibleArchs
 	}
 
-	arch := randomArch(ctx, l, validArchs, prng)
+	arch := randomArch(ctx, l, validArchs, prng, roachtestflags.ARM64Probability, roachtestflags.FIPSProbability)
 
 	if roachtestflags.Cloud == spec.GCE && arch == vm.ArchARM64 {
 		// N.B. T2A support is rather limited, both in terms of supported
@@ -3211,19 +3211,22 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 }
 
 // randomArch chooses a random architecture, respecting the set of valid architectures
-// specified by the test as well as the global architecture probability flags for the
-// entire run.
+// specified by the test as well as the provided architecture probability flags.
 func randomArch(
-	ctx context.Context, l *logger.Logger, validArchs spec.ArchSet, prng *rand.Rand,
+	ctx context.Context,
+	l *logger.Logger,
+	validArchs spec.ArchSet,
+	prng *rand.Rand,
+	arm64Probability, fipsProbability float64,
 ) vm.CPUArch {
 	baseProbabilities := map[vm.CPUArch]float64{
-		vm.ArchAMD64: (1.0 - roachtestflags.ARM64Probability) * (1.0 - roachtestflags.FIPSProbability),
-		vm.ArchARM64: roachtestflags.ARM64Probability,
+		vm.ArchAMD64: (1.0 - arm64Probability) * (1.0 - fipsProbability),
+		vm.ArchARM64: arm64Probability,
 		// N.B. FIPS is only supported on 'amd64' at this time:
 		// FIPS is taken with probability
 		//   (1 - arm64Probability) * fipsProbability
 		// 	 which is P(fips & amd64)
-		vm.ArchFIPS: (1.0 - roachtestflags.ARM64Probability) * roachtestflags.FIPSProbability,
+		vm.ArchFIPS: (1.0 - arm64Probability) * fipsProbability,
 	}
 
 	// Calculate total weight for valid architectures only.
