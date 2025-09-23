@@ -280,9 +280,12 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 
 // Close frees the resources used by the ColumnBackfiller.
 func (cb *ColumnBackfiller) Close(ctx context.Context) {
-	cb.fetcher.Close(ctx)
 	if cb.mon != nil {
+		// fetcher is only initialized when mon has been set. If mon is nil,
+		// then Close has already been called.
+		cb.fetcher.Close(ctx)
 		cb.mon.Stop(ctx)
+		cb.mon = nil
 	}
 }
 
