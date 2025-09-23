@@ -55,6 +55,13 @@ type FatalNodeRoachtest struct {
 	FatalLogs string
 }
 
+// NodeToIpMappingRoachtest contains the node to ip mapping from a roachtest
+// cluster
+type NodeToIpMappingRoachtest struct {
+	Message,
+	NodeToIpMapping string
+}
+
 // A CondensedMessage is a test log output garnished with useful helper methods
 // that extract concise information for seamless debugging.
 type CondensedMessage string
@@ -68,6 +75,7 @@ var crasherRE = regexp.MustCompile(`(?s)( *rsg_test.go:\d{3}: Crash detected:.*?
 var reproRE = regexp.MustCompile(`(?s)( *rsg_test.go:\d{3}: To reproduce, use schema:)`)
 
 var roachtestNodeFatalRE = regexp.MustCompile(`(?ms)\A(.*?\n)((?:^F\d{6}\b[^\n]*(?:\n|$))+)`)
+var roachtestNodeToIpRE = regexp.MustCompile(`(?ms)^Name[[:space:]]+DNS.*\n(?:^\S+[[:space:]]+\S+[[:space:]]+(?:[0-9]{1,3}\.){3}[0-9]{1,3}[[:space:]]+(?:[0-9]{1,3}\.){3}[0-9]{1,3}.*\n?)+`)
 
 // FatalOrPanic constructs a FatalOrPanic. If no fatal or panic occurred in the
 // test, ok=false is returned.
@@ -121,6 +129,22 @@ func (s CondensedMessage) FatalNodeRoachtest() (fnr FatalNodeRoachtest, ok bool)
 		return fnr, true
 	}
 	return FatalNodeRoachtest{}, false
+}
+
+// NodeToIpMappingRoachtest constructs a NodeToIpMappingRoachtest which is
+// used to construct an issue that contains cluster information
+func (s CondensedMessage) NodeToIpMappingRoachtest() (nodeIpMap NodeToIpMappingRoachtest, ok bool) {
+	ss := string(s)
+	if matches := roachtestNodeToIpRE.FindStringSubmatchIndex(ss); matches != nil {
+		if len(matches) != 2 {
+			// only expecting a single match
+			return NodeToIpMappingRoachtest{}, false
+		}
+		nodeIpMap.Message = ss[0 : matches[0]-1]
+		nodeIpMap.NodeToIpMapping = ss[matches[0]:matches[1]]
+		return nodeIpMap, true
+	}
+	return NodeToIpMappingRoachtest{}, false
 }
 
 // String calls .Digest(30).
