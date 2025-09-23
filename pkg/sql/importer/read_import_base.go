@@ -74,7 +74,7 @@ func runImport(
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
-	// Install type metadata in all of the import tables.
+	// Install type metadata in the import table.
 	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
 	importResolver := crosscluster.MakeCrossClusterTypeResolver(spec.Types)
 	table := getTableFromSpec(spec)

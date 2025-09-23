@@ -707,7 +707,7 @@ message ImportDetails {
   ];
 
   bool prepare_complete = 12;
-  bool tables_published = 13;
+  bool table_published = 13;
 
   // If the database being imported into is a multi-region database, then this
   // field stores the databases' primary region.
