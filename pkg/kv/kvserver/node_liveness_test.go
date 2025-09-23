@@ -128,7 +128,7 @@ func TestNodeLiveness(t *testing.T) {
 				break
 			}
 			if errors.Is(err, liveness.ErrEpochIncremented) {
-				log.Dev.Warningf(context.Background(), "retrying after %s", err)
+				log.KvExec.Warningf(context.Background(), "retrying after %s", err)
 				continue
 			}
 

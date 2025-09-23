@@ -3770,7 +3770,7 @@ func (h *flowControlTestHelper) comment(comment string) {
 
 func (h *flowControlTestHelper) log(msg string) {
 	if log.ShowLogs() {
-		log.Dev.Infof(context.Background(), "%s", msg)
+		log.KvExec.Infof(context.Background(), "%s", msg)
 	}
 }
 

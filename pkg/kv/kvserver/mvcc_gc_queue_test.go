@@ -117,7 +117,7 @@ func TestMVCCGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
-			log.Dev.Warningf(ctx, "failing on ttl=%d, timePassed=%s, gcBytes=%d, gcByteAge=%d:\n%s",
+			log.KvExec.Warningf(ctx, "failing on ttl=%d, timePassed=%s, gcBytes=%d, gcByteAge=%d:\n%s",
 				ttlSec, timePassed, gcBytes, gcByteAge, r)
 		}
 		return result
