@@ -103,7 +103,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 12 (t_pkey-)}
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-)}
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_a_shard_10-), TypeName: "INT8"}
-      │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), Usage: REGULAR}
+      │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), ReferencedColumnIDs: [1], Usage: REGULAR}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 6 (idx_b-)}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 8 (idx_c-)}
       │    └── 10 Mutation operations

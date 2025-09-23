@@ -16,7 +16,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 5 (crdb_internal_j_shard_3+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_j_shard_3+), TypeName: "INT8"}
- │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), Usage: REGULAR}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), ReferencedColumnIDs: [3], Usage: REGULAR}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), IndexID: 8 (t_pkey+)}
  │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx+), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16), IndexID: 4 (t_i_j_idx+)}
@@ -70,7 +70,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 5 (crdb_internal_j_shard_3+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_j_shard_3+), TypeName: "INT8"}
- │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), Usage: REGULAR}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), ReferencedColumnIDs: [3], Usage: REGULAR}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), IndexID: 8 (t_pkey+)}
  │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx+), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16), IndexID: 4 (t_i_j_idx+)}
@@ -101,7 +101,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 5 (crdb_internal_j_shard_3+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_j_shard_3+), TypeName: "INT8"}
- │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), Usage: REGULAR}
+ │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), ReferencedColumnIDs: [3], Usage: REGULAR}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3+), IndexID: 8 (t_pkey+)}
  │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx+), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16), IndexID: 4 (t_i_j_idx+)}

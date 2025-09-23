@@ -314,6 +314,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
 		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
+		rel.EntityAttr(ReferencedColumnIDs, "ReferencedColumnIDs"),
 		rel.EntityAttr(Usage, "Usage"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnNotNull)(nil)),

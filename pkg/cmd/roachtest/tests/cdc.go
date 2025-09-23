@@ -2924,7 +2924,7 @@ func registerCDC(r registry.Registry) {
 				logSearchStr := `(client/metadata fetching metadata for|updating kafka metadata for topics|fetching metadata to learn its partitions|waiting for metadata for new topic)`
 				results, checkLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
 					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
-					fmt.Sprintf(`grep -E "%s" logs/cockroach.log`, logSearchStr))
+					fmt.Sprintf(`grep -E "%s" logs/cockroach-changefeed.log`, logSearchStr))
 				if checkLogsErr != nil {
 					t.Fatal(checkLogsErr)
 				}
