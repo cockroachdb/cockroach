@@ -1837,7 +1837,7 @@ func runCDCMultiTablePTSBenchmark(
 		numRanges = params.numRanges
 	}
 
-	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
 		t.Fatalf("failed to set per-table protected timestamps: %v", err)
 	}
 
@@ -3180,7 +3180,7 @@ func registerCDC(r registry.Registry) {
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
 						// Disable per-table PTS to avoid impact on results.
-						"changefeed.protected_timestamp.per_table.enabled": "false",
+						"changefeed.protect_timestamp.per_table.enabled": "false",
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {
