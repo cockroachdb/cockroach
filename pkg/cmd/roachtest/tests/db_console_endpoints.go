@@ -132,8 +132,7 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 
 func runDBConsole(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	initTpcc := "./cockroach workload init tpcc --drop {pgurl:1}"
-	if err := initializeSchemaAndIDs(ctx, c, t.L(), initTpcc); err != nil {
+	if err := initializeSchemaAndIDs(ctx, c, t.L(), "./cockroach"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -277,16 +276,16 @@ func withRetries(ctx context.Context, opts retry.Options, f func() error) error 
 func initializeSchemaAndIDsMixedVersion(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, h *mixedversion.Helper, t test.Test,
 ) error {
-	initTpcc := fmt.Sprintf("%s workload init tpcc --drop {pgurl:1}", h.CockroachBinaryForWorkload(t))
-	return initializeSchemaAndIDs(ctx, c, l, initTpcc)
+	return initializeSchemaAndIDs(ctx, c, l, h.CockroachBinaryForWorkload(t))
 }
 
 // initializeSchemaAndIDs ensures schema objects are created in the cluster, and determines
 // the various IDs that will be used as placeholders for the endpoints.
 func initializeSchemaAndIDs(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, initTpcc string,
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, binaryPath string,
 ) error {
 	// Initialize some schema objects.
+	initTpcc := fmt.Sprintf("%s workload init tpcc --drop {pgurl:1}", binaryPath)
 	c.Run(ctx, option.WithNodes([]int{1}), initTpcc)
 
 	// Get SQL connection to query for a tableID, databaseID and fingerprintID.

@@ -579,7 +579,11 @@ func WithTag(tag string) CustomOption {
 	}
 }
 
-// WithWorkloadNodes allows callers to specify workload nodes which
+// WithWorkloadNodes tells the mixedversion framework that this test's cluster
+// includes workload node(s) so the framework can stage all the cockroach
+// binaries included in the upgrade plan on the workload node so the test can
+// use versioned workload commands without the test itself having to stage
+// those binaries.
 func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
 	return func(opts *testOptions) {
 		opts.workloadNodes = nodes
@@ -872,50 +876,6 @@ func (t *Test) Workload(
 		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
 	})
 }
-
-// DepricatedWorkload is this needed?  TODO remove if not needed
-//func (t *Test) DepricatedWorkload(
-//	name string,
-//	node option.NodeListOption,
-//	initCmd, runCmd *roachtestutil.Command,
-//	overrideBinary bool,
-//) StopFunc {
-//	seed := uint64(t.prng.Int63())
-//	addSeed := func(cmd *roachtestutil.Command) {
-//		if !cmd.HasFlag("seed") {
-//			cmd.Flag("seed", seed)
-//		}
-//	}
-//	if initCmd != nil {
-//		addSeed(initCmd)
-//		t.OnStartup(fmt.Sprintf("initialize %s workload using (depricated) dedicated workload binary", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-//			if !overrideBinary {
-//				binaryPath, _, err := clusterupgrade.UploadWorkload(
-//					ctx, t.rt, l, t.cluster, node, h.System.FromVersion)
-//				if err != nil {
-//					return err
-//				}
-//				initCmd.Binary = binaryPath
-//			}
-//			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
-//		})
-//	}
-//
-//	addSeed(runCmd)
-//	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-//		if !overrideBinary {
-//			binaryPath, _, err := clusterupgrade.UploadWorkload(
-//				ctx, t.rt, l, t.cluster, node, h.System.FromVersion)
-//			if err != nil {
-//				return err
-//			}
-//			//runCmd.Binary = clusterupgrade.BinaryPathForVersion(t.rt, h.System.FromVersion, "cockroach")
-//			runCmd.Binary = binaryPath
-//		}
-//		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
-//		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
-//	})
-//}
 
 // Run is like RunE, except it fatals the test if any error occurs.
 func (t *Test) Run() {
