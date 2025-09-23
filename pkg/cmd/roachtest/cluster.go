@@ -333,7 +333,10 @@ func initBinariesAndLibraries() {
 	cockroachPath := roachtestflags.CockroachPath
 	cockroachEAPath := roachtestflags.CockroachEAPath
 	workloadPath := roachtestflags.WorkloadPath
-	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
+	// Skip cockroach binary validation if using --cockroach-stage
+	if roachtestflags.CockroachStage == "" {
+		cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
+	}
 	// Let the test runner verify the workload binary exists if TestSpec.RequiresDeprecatedWorkload is true.
 	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, false, false)
 	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
@@ -344,7 +347,9 @@ func initBinariesAndLibraries() {
 	if roachtestflags.ARM64Probability > 0 && defaultArch != vm.ArchARM64 {
 		fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOSName, vm.ArchARM64)
 		// We need to verify we have all the required binaries for arm64.
-		cockroach[vm.ArchARM64], _ = resolveBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
+		if roachtestflags.CockroachStage == "" {
+			cockroach[vm.ArchARM64], _ = resolveBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
+		}
 		workload[vm.ArchARM64], _ = resolveBinary("workload", workloadPath, vm.ArchARM64, true, false)
 		cockroachEA[vm.ArchARM64], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchARM64, false, true)
 		if err != nil {
@@ -354,7 +359,9 @@ func initBinariesAndLibraries() {
 	if roachtestflags.FIPSProbability > 0 && defaultArch != vm.ArchFIPS {
 		fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOSName, vm.ArchFIPS)
 		// We need to verify we have all the required binaries for fips.
-		cockroach[vm.ArchFIPS], _ = resolveBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
+		if roachtestflags.CockroachStage == "" {
+			cockroach[vm.ArchFIPS], _ = resolveBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
+		}
 		workload[vm.ArchFIPS], _ = resolveBinary("workload", workloadPath, vm.ArchFIPS, true, false)
 		cockroachEA[vm.ArchFIPS], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchFIPS, false, true)
 		if err != nil {
