@@ -157,6 +157,7 @@ BACKUP DATABASE d INTO 'external://full';
 exec-sql
 BACKUP DATABASE d INTO LATEST IN 'external://full' WITH incremental_location = 'external://inc';
 ----
+NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 query-sql
 SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN 'external://full' WITH
@@ -182,6 +183,7 @@ BACKUP DATABASE d INTO 'external://full/nested';
 exec-sql
 BACKUP DATABASE d INTO LATEST IN 'external://full/nested' WITH incremental_location = 'external://inc/nested';
 ----
+NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 query-sql
 SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN 'external://full/nested'
