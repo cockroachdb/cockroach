@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,7 +36,8 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	st := cluster.MakeTestingClusterSettings()
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
@@ -88,7 +90,8 @@ func TestBufferedSenderChaosWithStop(t *testing.T) {
 	testServerStream := newTestServerStream()
 
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	st := cluster.MakeTestingClusterSettings()
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 
@@ -176,18 +179,22 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
-	require.Equal(t, minBufferedSenderQueueCapacity, bs.queueMu.capacity)
+	st := cluster.MakeTestingClusterSettings()
+
+	queueCap := int64(24)
+	RangefeedSingleBufferedSenderQueueMaxSize.Override(ctx, &st.SV, queueCap)
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+	require.Equal(t, queueCap, bs.queueMu.capacity)
 
 	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1 := new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
 	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
 
-	for i := int64(0); i < minBufferedSenderQueueCapacity; i++ {
+	for range queueCap {
 		require.NoError(t, bs.sendBuffered(muxEv, nil))
 	}
-	require.Equal(t, minBufferedSenderQueueCapacity, int64(bs.len()))
+	require.Equal(t, queueCap, int64(bs.len()))
 	e, success, overflowed, remains := bs.popFront()
 	require.Equal(t, sharedMuxEvent{
 		ev:    muxEv,
@@ -195,10 +202,10 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	}, e)
 	require.True(t, success)
 	require.False(t, overflowed)
-	require.Equal(t, minBufferedSenderQueueCapacity-1, remains)
-	require.Equal(t, minBufferedSenderQueueCapacity-1, int64(bs.len()))
+	require.Equal(t, queueCap-1, remains)
+	require.Equal(t, queueCap-1, int64(bs.len()))
 	require.NoError(t, bs.sendBuffered(muxEv, nil))
-	require.Equal(t, minBufferedSenderQueueCapacity, int64(bs.len()))
+	require.Equal(t, queueCap, int64(bs.len()))
 
 	// Overflow now.
 	require.Equal(t, bs.sendBuffered(muxEv, nil).Error(),
@@ -207,7 +214,6 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 
 // TestBufferedSenderOnStreamShutdown tests that BufferedSender and
 // StreamManager handle overflow and shutdown properly.
-
 func TestBufferedSenderOnStreamShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -217,8 +223,13 @@ func TestBufferedSenderOnStreamShutdown(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
-	require.Equal(t, minBufferedSenderQueueCapacity, bs.queueMu.capacity)
+	st := cluster.MakeTestingClusterSettings()
+
+	queueCap := int64(24)
+	RangefeedSingleBufferedSenderQueueMaxSize.Override(ctx, &st.SV, queueCap)
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+	require.Equal(t, queueCap, bs.queueMu.capacity)
+
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
@@ -231,87 +242,36 @@ func TestBufferedSenderOnStreamShutdown(t *testing.T) {
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
 	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
 
-	// Add 21 streams and overflow the buffer.
-	t.Run("add 21 streams", func(t *testing.T) {
-		numStreams := int64(21)
-		expectedCapacity := perUnbufferedRegCapacity * numStreams
-		// Block the stream to help the queue to overflow.
-		unblock := testServerStream.BlockSend()
-		for id := int64(0); id < numStreams; id++ {
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-				sm.NewStream(id, 1 /*rangeID*/))
-			require.True(t, registered)
-			sm.AddStream(id, d)
-		}
-		require.Equal(t, expectedCapacity, bs.queueMu.capacity)
-		for int64(bs.len()) != expectedCapacity {
-			require.NoError(t, sm.sender.sendBuffered(muxEv, nil))
-		}
-		require.Equal(t, expectedCapacity, int64(bs.len()))
-		require.Equal(t, bs.sendBuffered(muxEv, nil).Error(),
-			newRetryErrBufferCapacityExceeded().Error())
-		require.True(t, bs.queueMu.overflowed)
-		unblock()
-	})
+	// Add our stream to the stream manager.
+	id := int64(42)
+	registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
+		sm.NewStream(id, 1 /*rangeID*/))
+	require.True(t, registered)
+	sm.AddStream(id, d)
 
-	t.Run("overflow clean up", func(t *testing.T) {
-		// All events buffered should still be sent to the stream.
-		testutils.SucceedsSoon(t, func() error {
-			if bs.len() == 0 {
-				return nil
-			}
-			return errors.Newf("expected 0 registrations, found %d", bs.len())
-		})
-		// Overflow cleanup.
-		err := <-sm.Error()
-		require.Equal(t, newRetryErrBufferCapacityExceeded().Error(), err.Error())
-		// Note that we expect the stream manager to shut down here, but no actual
-		// error events would be sent during the shutdown.
-		require.Equal(t, bs.sendBuffered(muxEv, nil).Error(), newRetryErrBufferCapacityExceeded().Error())
-	})
-}
-
-// TestBufferedSenderOnStreamDisconnect tests that BufferedSender dynamically
-// adjusts its capacity when streams are connected or disconnected.
-func TestBufferedSenderOnStreamDisconnect(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	testServerStream := newTestServerStream()
-	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
-	require.Equal(t, minBufferedSenderQueueCapacity, bs.queueMu.capacity)
-
-	sm := NewStreamManager(bs, smMetrics)
-	require.NoError(t, sm.Start(ctx, stopper))
-
-	p, h, pStopper := newTestProcessor(t, withRangefeedTestType(scheduledProcessorWithBufferedSender))
-	defer pStopper.Stop(ctx)
-	defer sm.Stop(ctx)
-
-	numStreams := int64(21)
-	expectedCapacity := perUnbufferedRegCapacity * numStreams
-	for id := int64(0); id < numStreams; id++ {
-		registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-			sm.NewStream(id, 1 /*rangeID*/))
-		require.True(t, registered)
-		sm.AddStream(id, d)
+	// Block the stream to help the queue to overflow.
+	unblock := testServerStream.BlockSend()
+	for int64(bs.len()) != queueCap {
+		require.NoError(t, sm.sender.sendBuffered(muxEv, nil))
 	}
-	require.Equal(t, expectedCapacity, bs.queueMu.capacity)
-	sm.DisconnectStream(int64(0), newErrBufferCapacityExceeded())
-	testServerStream.waitForEvent(t, makeMuxRangefeedErrorEvent(0, 1, newErrBufferCapacityExceeded()))
+	require.Equal(t, queueCap, int64(bs.len()))
+	require.Equal(t, bs.sendBuffered(muxEv, nil).Error(),
+		newRetryErrBufferCapacityExceeded().Error())
+	require.True(t, bs.queueMu.overflowed)
+	unblock()
+
+	// All events buffered should still be sent to the stream.
 	testutils.SucceedsSoon(t, func() error {
-		bs.queueMu.Lock()
-		defer bs.queueMu.Unlock()
-		if bs.queueMu.capacity == expectedCapacity-perUnbufferedRegCapacity {
+		if bs.len() == 0 {
 			return nil
 		}
-		return errors.Newf("expected %d cap to be %d", bs.queueMu.capacity,
-			expectedCapacity-perUnbufferedRegCapacity)
+		return errors.Newf("expected 0 registrations, found %d", bs.len())
 	})
+	// Overflow cleanup.
+	err := <-sm.Error()
+	require.Equal(t, newRetryErrBufferCapacityExceeded().Error(), err.Error())
+	// Note that we expect the stream manager to shut down here, but no actual
+	// error events would be sent during the shutdown.
+	require.Equal(t, bs.sendBuffered(muxEv, nil).Error(), newRetryErrBufferCapacityExceeded().Error())
 }
