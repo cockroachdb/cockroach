@@ -188,7 +188,7 @@ func Subsume(
 		durabilityUpgradeLimit := concurrency.GetMaxLockFlushSize(&cArgs.EvalCtx.ClusterSettings().SV)
 		acquisitions, approxSize := cArgs.EvalCtx.GetConcurrencyManager().OnRangeSubsumeEval()
 		if approxSize > durabilityUpgradeLimit {
-			log.Dev.Warningf(ctx,
+			log.KvExec.Warningf(ctx,
 				"refusing to upgrade lock durability of %d locks since approximate lock size of %d byte exceeds %d bytes",
 				len(acquisitions),
 				approxSize,
