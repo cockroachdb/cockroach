@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,7 +35,9 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	st := cluster.MakeTestingClusterSettings()
+
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 
@@ -106,7 +109,8 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	st := cluster.MakeTestingClusterSettings()
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
