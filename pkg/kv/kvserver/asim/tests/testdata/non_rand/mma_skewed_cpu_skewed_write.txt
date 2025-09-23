@@ -35,7 +35,7 @@ gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=
 setting split_queue_enabled=false
 ----
 
-eval duration=60m samples=1 seed=42 cfgs=(mma-only,mma-and-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases) full=true
+eval duration=60m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases) full=true
 ----
 cpu#1: last:  [s1=832615034, s2=830099242, s3=833159174, s4=830633175, s5=843839094, s6=831645833] (stddev=4670012.58, mean=833665258.67, sum=5001991552)
 cpu#1: thrash_pct: [s1=9%, s2=38%, s3=55%, s4=24%, s5=17%, s6=16%]  (sum=160%)
@@ -63,7 +63,7 @@ replicas#1: last:  [s1=35, s2=36, s3=35, s4=37, s5=37, s6=36] (stddev=0.82, mean
 replicas#1: thrash_pct: [s1=418%, s2=417%, s3=518%, s4=368%, s5=352%, s6=333%]  (sum=2407%)
 write_bytes_per_second#1: last:  [s1=10029554, s2=9475135, s3=9474543, s4=9976329, s5=10530498, s6=10530099] (stddev=431163.47, mean=10002693.00, sum=60016158)
 write_bytes_per_second#1: thrash_pct: [s1=57%, s2=62%, s3=69%, s4=216%, s5=203%, s6=180%]  (sum=787%)
-artifacts[mma-and-count]: 7db51f72e3606b0d
+artifacts[mma-count]: 7db51f72e3606b0d
 ==========================
 Cluster Set Up
 	n1(AU_EAST,AU_EAST_1,5vcpu): {s1:(256GiB)}

@@ -20,9 +20,11 @@ set_span_config
 assertion type=conformance unavailable=0 under=0 over=0  violating=0
 ----
 
-eval duration=2m samples=1 seed=42 cfgs=(sma-count,mma-only)
+eval duration=2m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count)
 ----
 artifacts[sma-count]: c2ff48b799d10135
 ==========================
 artifacts[mma-only]: c2ff48b799d10135
+==========================
+artifacts[mma-count]: c2ff48b799d10135
 ==========================

@@ -28,9 +28,11 @@ set_span_config
 assertion type=conformance lease-violating=1 lease-less-preferred=1
 ----
 
-eval duration=10m cfgs=(sma-count,mma-only)
+eval duration=10m cfgs=(sma-count,mma-only,mma-count)
 ----
 artifacts[sma-count]: 35051da9f3ec651d
 ==========================
 artifacts[mma-only]: 5c6a18fd5194eefd
+==========================
+artifacts[mma-count]: d100e4e1cff2828d
 ==========================

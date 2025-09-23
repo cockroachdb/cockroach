@@ -28,7 +28,7 @@ asserting: |replicas(t)/mean_{T}(replicas) - 1| = 0.00 ∀ t∈T and each store 
 # Examine the number of replicas. Here there were 5 load based splits. This
 # roughly lines up with expectations, given a rate of 10,000 QPS and 2,500 QPS
 # split threshold.
-eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
+eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only,mma-count)
 ----
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
@@ -46,6 +46,14 @@ replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
 artifacts[mma-only]: 7f8cb11357cb8494
 ==========================
+replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#1: thrash_pct: [s1=0%]  (sum=0%)
+replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#2: thrash_pct: [s1=0%]  (sum=0%)
+artifacts[mma-count]: a851ba80a6edc423
+==========================
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
 # Now the load based splitter must find a split key from a skewed distribution
@@ -55,7 +63,7 @@ artifacts[mma-only]: 7f8cb11357cb8494
 gen_load rate=10000 rw_ratio=1.0 access_skew=true replace=true
 ----
 
-eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
+eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only,mma-count)
 ----
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
@@ -72,4 +80,12 @@ replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
 artifacts[mma-only]: 78253b79ec7c7d5a
+==========================
+replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+replicas#1: thrash_pct: [s1=0%]  (sum=0%)
+replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
+replicas#2: thrash_pct: [s1=0%]  (sum=0%)
+artifacts[mma-count]: f7e0109322e2ee3c
 ==========================
