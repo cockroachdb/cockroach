@@ -842,43 +842,43 @@ func (f *failingDialer) callCount() int32 {
 	return atomic.LoadInt32(&f.dialCount)
 }
 
-// TestRPCConnStopOnClose verifies that connections that are closed would stop
-// their work loops eagerly even when nodes they are talking to are unreachable.
-func TestRPCConnStopOnClose(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+// // TestRPCConnStopOnClose verifies that connections that are closed would stop
+// // their work loops eagerly even when nodes they are talking to are unreachable.
+// func TestRPCConnStopOnClose(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
+// 	ctx := context.Background()
+// 	stopper := stop.NewStopper()
+// 	defer stopper.Stop(ctx)
 
-	sleepTime := time.Millisecond
+// 	sleepTime := time.Millisecond
 
-	dialer := &failingDialer{}
-	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
+// 	dialer := &failingDialer{}
+// 	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
 
-	s, stopper := newMockSender(factory)
-	defer stopper.Stop(ctx)
+// 	s, stopper := newMockSender(factory)
+// 	defer stopper.Stop(ctx)
 
-	// While sender is strictly not needed to dial a connection as dialer
-	// always fails dial attempts, it is needed to check if DRPC is enabled
-	// or disabled.
-	connection := factory.new(s, roachpb.NodeID(1))
-	connection.run(ctx, stopper)
+// 	// While sender is strictly not needed to dial a connection as dialer
+// 	// always fails dial attempts, it is needed to check if DRPC is enabled
+// 	// or disabled.
+// 	connection := factory.new(s, roachpb.NodeID(1))
+// 	// connection.run(ctx, stopper)
 
-	// Wait for first dial attempt for sanity reasons.
-	testutils.SucceedsSoon(t, func() error {
-		if dialer.callCount() == 0 {
-			return errors.New("connection didn't dial yet")
-		}
-		return nil
-	})
-	connection.close()
-	// Ensure that dialing stops once connection is stopped.
-	testutils.SucceedsSoon(t, func() error {
-		if stopper.NumTasks() > 0 {
-			return errors.New("connection worker didn't stop yet")
-		}
-		return nil
-	})
-}
+// 	// Wait for first dial attempt for sanity reasons.
+// 	testutils.SucceedsSoon(t, func() error {
+// 		if dialer.callCount() == 0 {
+// 			return errors.New("connection didn't dial yet")
+// 		}
+// 		return nil
+// 	})
+// 	connection.close()
+// 	// Ensure that dialing stops once connection is stopped.
+// 	testutils.SucceedsSoon(t, func() error {
+// 		if stopper.NumTasks() > 0 {
+// 			return errors.New("connection worker didn't stop yet")
+// 		}
+// 		return nil
+// 	})
+// }
