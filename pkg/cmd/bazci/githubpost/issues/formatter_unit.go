@@ -84,7 +84,7 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		r.Escaped("Cluster Node to Ip Mapping:")
 		r.CodeBlock("", nodeIpMap.NodeToIpMapping)
 	} else {
-		r.CodeBlock("", data.CondensedMessage.Digest(50)) // need to fix this part
+		r.CodeBlock("", data.CondensedMessage.Digest(50))
 	}
 
 	if len(data.Parameters) != 0 {
