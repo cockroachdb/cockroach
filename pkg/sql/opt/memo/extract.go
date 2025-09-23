@@ -8,9 +8,12 @@ package memo
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -539,4 +542,127 @@ func ExtractTailCalls(expr opt.Expr, tailCalls map[opt.ScalarExpr]struct{}) {
 			tailCalls[t] = struct{}{}
 		}
 	}
+}
+
+// ExtractExactScalarExprsForColumns extracts scalar expressions that tightly
+// constrain the given columns from the given filters. Unlike constraint
+// builder, this function:
+//   - constrains to scalar expressions instead of constants
+//   - always constrains tightly
+//   - in fact, always constrains _exactly_ (that is, to scalar expressions that
+//     produce not only equivalent values, but _exactly_ the same bytes)
+//
+// If a filter does not exactly constrain one of the given columns, or
+// references more than one of the given columns, the filter will be added to
+// remainingFilters. ExtractExactScalarExprsForColumns returns the mapping from
+// constrained columns to scalar expressions, the remaining filters, and a
+// boolean indicating whether all columns were constrained.
+func ExtractExactScalarExprsForColumns(
+	cols opt.ColSet,
+	filters FiltersExpr,
+	evalCtx *eval.Context,
+	md *opt.Metadata,
+	constructIsNotNull func(opt.ColumnID) FiltersItem,
+	constructFiltersItem func(opt.ScalarExpr) FiltersItem,
+) (constraints map[opt.ColumnID]opt.ScalarExpr, remainingFilters FiltersExpr, ok bool) {
+	constraints = make(map[opt.ColumnID]opt.ScalarExpr)
+
+	// useExprAsConstraint adds the scalar expression to the constraints map.
+	useExprAsConstraint := func(col opt.ColumnID, e opt.ScalarExpr) bool {
+		// Filters on other columns become remainingFilters.
+		if !cols.Contains(col) {
+			return false
+		}
+		// Only use the first constraining filter found. If there is already a
+		// constraining filter, any additional filters become part of
+		// remainingFilters.
+		if _, ok := constraints[col]; ok {
+			return false
+		}
+		// In the general case, the = operator (SQL equivalence) does not imply
+		// exactly the same bytes. The scalar expression is exactly the same when:
+		// - the column does not have composite type
+		// - the scalar type is identical to the column type OR the scalar is NULL
+		colType := md.ColumnMeta(col).Type
+		if colinfo.CanHaveCompositeKeyEncoding(colType) {
+			// TODO(michae2): If ExtractConstDatum(e) returns a non-composite datum,
+			// we could still constrain using this expression.
+			return false
+		}
+		if !e.DataType().Identical(colType) && e.DataType().Family() != types.UnknownFamily {
+			// TODO(michae2): Explore whether we can use identical canonical types
+			// here. Also add support for tuples.
+			return false
+		}
+		// If this expression references other columns we're trying to constrain, it
+		// will have to be a remainingFilter.
+		var sharedProps props.Shared
+		BuildSharedProps(e, &sharedProps, evalCtx)
+		if sharedProps.OuterCols.Intersects(cols) {
+			return false
+		}
+		constraints[col] = e
+		return true
+	}
+
+	// constrainColsInExpr walks a filter predicate, adding scalar expressions for
+	// any columns constrained to a single value by the predicate.
+	var constrainColsInExpr func(opt.ScalarExpr)
+	constrainColsInExpr = func(e opt.ScalarExpr) {
+		switch t := e.(type) {
+		case *VariableExpr:
+			// `WHERE col` will be true if col is a boolean-typed column that has the
+			// value True.
+			if md.ColumnMeta(t.Col).Type.Family() == types.BoolFamily {
+				if useExprAsConstraint(t.Col, TrueSingleton) {
+					return
+				}
+			}
+		case *NotExpr:
+			// `WHERE NOT col` will be true if col is a boolean-typed column that has
+			// the value False.
+			if v, ok := t.Input.(*VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					if useExprAsConstraint(v.Col, FalseSingleton) {
+						return
+					}
+				}
+			}
+		case *AndExpr:
+			constrainColsInExpr(t.Left)
+			constrainColsInExpr(t.Right)
+			return
+		case *EqExpr:
+			if v, ok := t.Left.(*VariableExpr); ok {
+				// `WHERE col = <expr>` will be true if col has the value <expr> and
+				// <expr> IS NOT NULL.
+				if useExprAsConstraint(v.Col, t.Right) {
+					// Because NULL = NULL evaluates to NULL, rather than true, we must
+					// also guard against the scalar expression evaluating to NULL.
+					remainingFilters = append(remainingFilters, constructIsNotNull(v.Col))
+					return
+				}
+			}
+			// TODO(michae2): Handle tuple of variables on LHS of EqExpr.
+		case *IsExpr:
+			if v, ok := t.Left.(*VariableExpr); ok {
+				// `WHERE col IS NOT DISTINCT FROM <expr>` will be true if col has the
+				// value <expr>.
+				if useExprAsConstraint(v.Col, t.Right) {
+					return
+				}
+			}
+			// TODO(michae2): Handle tuple of variables on LHS of IsExpr.
+		}
+		// TODO(michae2): Add case for *InExpr.
+
+		// If the filter did not constrain a column, add it to remainingFilters.
+		remainingFilters = append(remainingFilters, constructFiltersItem(e))
+	}
+
+	for i := range filters {
+		constrainColsInExpr(filters[i].Condition)
+	}
+
+	return constraints, remainingFilters, len(constraints) == cols.Len()
 }
