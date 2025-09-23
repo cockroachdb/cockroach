@@ -247,7 +247,7 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
-	log.Dev.Info(ctx, "beginning range descriptor iteration")
+	log.KvExec.Info(ctx, "beginning range descriptor iteration")
 
 	// We are going to find all range descriptor keys. This code is equivalent to
 	// using MVCCIterate on all range-local keys in Inconsistent mode and with
@@ -277,7 +277,7 @@ func IterateRangeDescriptorsFromDisk(
 		const reportPeriod = 10 * time.Second
 		if timeutil.Since(lastReportTime) >= reportPeriod {
 			stats := iter.Stats().Stats
-			log.Dev.Infof(ctx, "range descriptor iteration in progress: %d range descriptors, %d intents, %d tombstones; stats: %s",
+			log.KvExec.Infof(ctx, "range descriptor iteration in progress: %d range descriptors, %d intents, %d tombstones; stats: %s",
 				descriptorCount, intentCount, tombstoneCount, stats.String())
 		}
 
@@ -371,7 +371,7 @@ func IterateRangeDescriptorsFromDisk(
 	}
 
 	stats := iter.Stats().Stats
-	log.Dev.Infof(ctx, "range descriptor iteration done: %d range descriptors, %d intents, %d tombstones; stats: %s",
+	log.KvExec.Infof(ctx, "range descriptor iteration done: %d range descriptors, %d intents, %d tombstones; stats: %s",
 		descriptorCount, intentCount, tombstoneCount, stats.String())
 	return nil
 }
@@ -490,7 +490,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 			return keys.RaftReplicaIDKey(rangeID)
 		}, &msg, func(rangeID roachpb.RangeID) error {
 			if logEvery.ShouldLog() && i > 0 { // only log if slow
-				log.Dev.Infof(ctx, "loaded replica ID for %d/%d replicas", i, len(s))
+				log.KvExec.Infof(ctx, "loaded replica ID for %d/%d replicas", i, len(s))
 			}
 			i++
 			s.setReplicaID(rangeID, msg.ReplicaID)
@@ -498,7 +498,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 		}); err != nil {
 			return nil, err
 		}
-		log.Dev.Infof(ctx, "loaded replica ID for %d/%d replicas", len(s), len(s))
+		log.KvExec.Infof(ctx, "loaded replica ID for %d/%d replicas", len(s), len(s))
 
 		logEvery = log.Every(10 * time.Second)
 		i = 0
@@ -507,7 +507,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 			return keys.RaftHardStateKey(rangeID)
 		}, &hs, func(rangeID roachpb.RangeID) error {
 			if logEvery.ShouldLog() && i > 0 { // only log if slow
-				log.Dev.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
+				log.KvExec.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
 			}
 			i++
 			s.setHardState(rangeID, hs)
@@ -515,7 +515,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 		}); err != nil {
 			return nil, err
 		}
-		log.Dev.Infof(ctx, "loaded Raft state for %d/%d replicas", len(s), len(s))
+		log.KvExec.Infof(ctx, "loaded Raft state for %d/%d replicas", len(s), len(s))
 	}
 	sl := make([]Replica, 0, len(s))
 	for _, repl := range s {
@@ -542,7 +542,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 	if err != nil {
 		return nil, err
 	}
-	log.Dev.Infof(ctx, "loaded %d replicas", len(sl))
+	log.KvExec.Infof(ctx, "loaded %d replicas", len(sl))
 
 	// Check invariants.
 	//
@@ -552,7 +552,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		// Log progress regularly, but not for the first replica (we only want to
 		// log when this is slow). The last replica is logged after iteration.
 		if logEvery.ShouldLog() && i > 0 {
-			log.Dev.Infof(ctx, "verified %d/%d replicas", i, len(sl))
+			log.KvExec.Infof(ctx, "verified %d/%d replicas", i, len(sl))
 		}
 
 		// INVARIANT: a Replica always has a replica ID.
@@ -573,7 +573,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			}
 		}
 	}
-	log.Dev.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
+	log.KvExec.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
 
 	return sl, nil
 }
