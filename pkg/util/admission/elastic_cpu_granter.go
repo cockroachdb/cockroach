@@ -140,11 +140,6 @@ func (e *elasticCPUGranter) setRequester(requester requester) {
 	e.requester = requester
 }
 
-// grantKind implements granter.
-func (e *elasticCPUGranter) grantKind() grantKind {
-	return token
-}
-
 // tryGet implements granter.
 func (e *elasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	e.mu.Lock()

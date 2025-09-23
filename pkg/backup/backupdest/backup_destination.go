@@ -54,19 +54,6 @@ const (
 // will contain one.
 var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
 
-// TODO(adityamaru): Move this to the soon to be `backupinfo` package.
-func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, _, err := exportStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
-	if err != nil {
-		if errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	r.Close(ctx)
-	return true, nil
-}
-
 // ResolvedDestination encapsulates information that is populated while
 // resolving the destination of a backup.
 type ResolvedDestination struct {
@@ -148,7 +135,7 @@ func ResolveDest(
 		return ResolvedDestination{}, err
 	}
 	defer defaultStore.Close()
-	exists, err := containsManifest(ctx, defaultStore)
+	exists, err := backupinfo.ContainsManifest(ctx, defaultStore)
 	if err != nil {
 		return ResolvedDestination{}, err
 	}

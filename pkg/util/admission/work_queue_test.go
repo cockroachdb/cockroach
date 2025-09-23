@@ -58,7 +58,6 @@ func (b *builderWithMu) stringAndReset() string {
 }
 
 type testGranter struct {
-	gk   grantKind
 	name string
 	buf  *builderWithMu
 	r    requester
@@ -69,10 +68,6 @@ type testGranter struct {
 }
 
 var _ granterWithStoreReplicatedWorkAdmitted = &testGranter{}
-
-func (tg *testGranter) grantKind() grantKind {
-	return tg.gk
-}
 
 func (tg *testGranter) tryGet(_ burstQualification, count int64) bool {
 	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
@@ -192,7 +187,7 @@ func TestWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{gk: slot, buf: &buf}
+				tg = &testGranter{buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
@@ -375,7 +370,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var buf builderWithMu
-	tg := &testGranter{gk: slot, buf: &buf}
+	tg := &testGranter{buf: &buf}
 	st := cluster.MakeTestingClusterSettings()
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
@@ -566,8 +561,8 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg[admissionpb.RegularWorkClass] = &testGranter{gk: token, name: " regular", buf: &buf}
-				tg[admissionpb.ElasticWorkClass] = &testGranter{gk: token, name: " elastic", buf: &buf}
+				tg[admissionpb.RegularWorkClass] = &testGranter{name: " regular", buf: &buf}
+				tg[admissionpb.ElasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
 				opts.usesTokens = true
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))

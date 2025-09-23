@@ -168,6 +168,18 @@ func ReadBackupManifestFromStore(
 	return manifest, memSize, nil
 }
 
+func ContainsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
+	r, _, err := exportStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	r.Close(ctx)
+	return true, nil
+}
+
 // compressData compresses data buffer and returns compressed
 // bytes (i.e. gzip format).
 func compressData(descBuf []byte) ([]byte, error) {
@@ -1295,17 +1307,15 @@ func CheckForPreviousBackup(
 	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, _, err := defaultStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
-	if err == nil {
-		r.Close(ctx)
-		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file",
-			redactedURI, backupbase.DeprecatedBackupManifestName)
-	}
-
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+	exists, err := ContainsManifest(ctx, defaultStore)
+	if err != nil {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
+			redactedURI, backupbase.DeprecatedBackupManifestName)
+	}
+	if exists {
+		return pgerror.Newf(pgcode.FileAlreadyExists,
+			"%s already contains a %s file",
 			redactedURI, backupbase.DeprecatedBackupManifestName)
 	}
 
