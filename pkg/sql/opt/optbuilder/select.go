@@ -1200,6 +1200,35 @@ func (b *Builder) buildSelectStmtWithoutParens(
 	return outScope
 }
 
+const (
+	jsonPathQueryFuncName  = `jsonb_path_query`
+	jsonPathExistsFuncName = `jsonb_path_exists`
+)
+
+// getWhereFromSelectExpr transforms jsonb_path_query functions in SELECT expressions
+// into jsonb_path_exists predicates in the WHERE clause for inverted index optimization.
+func getWhereFromSelectExpr(exprs tree.SelectExprs, where *tree.Where) *tree.Where {
+	res := where
+	for _, expr := range exprs {
+		if funcExpr, ok := expr.Expr.(*tree.FuncExpr); ok {
+			if funcExpr.Func.FunctionReference.String() == jsonPathQueryFuncName {
+				jsonPathExistsFunc := &tree.FuncExpr{
+					Exprs: funcExpr.Exprs,
+					Func: tree.ResolvableFunctionReference{
+						FunctionReference: tree.NewUnresolvedName(jsonPathExistsFuncName),
+					},
+				}
+				if where == nil {
+					res = tree.NewWhere(tree.AstWhere, jsonPathExistsFunc)
+				} else {
+					res = tree.NewWhere(tree.AstWhere, &tree.AndExpr{Left: where.Expr, Right: jsonPathExistsFunc})
+				}
+			}
+		}
+	}
+	return res
+}
+
 // buildSelectClause builds a set of memo groups that represent the given
 // select clause. We pass the entire select statement rather than just the
 // select clause in order to handle ORDER BY scoping rules. ORDER BY can sort
@@ -1215,6 +1244,7 @@ func (b *Builder) buildSelectClause(
 	desiredTypes []*types.T,
 	inScope *scope,
 ) (outScope *scope) {
+	// TODO: should i put the where determination here?
 	if sel.Where != nil {
 		lockCtx.safeUpdate = true
 	}
@@ -1222,7 +1252,8 @@ func (b *Builder) buildSelectClause(
 	fromScope := b.buildFrom(sel.From, lockCtx, inScope)
 
 	b.processWindowDefs(sel, fromScope)
-	b.buildWhere(sel.Where, fromScope, nil /* colRefs */)
+	whereClause := getWhereFromSelectExpr(sel.Exprs, sel.Where)
+	b.buildWhere(whereClause, fromScope, nil /* colRefs */)
 
 	projectionsScope := fromScope.replace()
 
