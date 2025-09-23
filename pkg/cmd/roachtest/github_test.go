@@ -230,6 +230,12 @@ func TestCreatePostRequest(t *testing.T) {
 test artifacts and logs in: artifacts/roachtest/manual/monitor/test-failure/node-fatal-explicit-monitor/cpu_arch=arm64/run_1
 F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n1,client=127.0.0.1:54552,hostssl,user=‹roachprod›] 250  force_log_fatal(): ‹oops›
 `)
+						case "error-with-ip-node-info":
+							refError = errors.Newf(`(roachtest.go:93).func6: manual failure
+test artifacts and logs in: artifacts/roachtest/manual/fail/run_1
+Name                                DNS                                                                Private IP    Public IP       Machine Type   CPU Arch  CPU Family  Provision Model  
+willchoe-1758655052-01-n1cpu4-0001  willchoe-1758655052-01-n1cpu4-0001.us-east1-c.cockroach-ephemeral  10.142.0.181  34.148.166.222  n2-standard-4  amd64     ice lake    ondemand         
+`)
 						}
 					}
 				}
