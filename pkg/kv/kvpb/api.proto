@@ -2802,6 +2802,7 @@ message Header {
   // - ResolveIntentRangeRequest
   // - QueryLocksRequest
   // - IsSpanEmptyRequest
+  // - FlushLockTableRequest
   //
   // The following request types are also allowed in the batch. These requests
   // do not consume any keys from the limit; however, they may fail to be

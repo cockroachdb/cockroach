@@ -118,7 +118,7 @@ func (v verifyingLockTable) QueryLockTableState(
 }
 
 func (v verifyingLockTable) ExportUnreplicatedLocks(
-	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool,
 ) {
 	v.lt.ExportUnreplicatedLocks(span, exporter)
 }
