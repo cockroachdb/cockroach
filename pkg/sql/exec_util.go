@@ -2101,6 +2101,9 @@ type InspectTestingKnobs struct {
 	// OnInspectJobStart is called just before the inspect job begins execution.
 	// If it returns an error, the job fails immediately.
 	OnInspectJobStart func() error
+	// OnInspectAfterProtectedTimestamp is called after the protected timestamp
+	// has been created (if applicable). If it returns an error, the job fails.
+	OnInspectAfterProtectedTimestamp func() error
 	// InspectIssueLogger is an override to the default issue logger.
 	InspectIssueLogger interface{}
 }
