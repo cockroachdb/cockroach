@@ -52,7 +52,7 @@ const (
 // On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
 // omit a leading slash. However, backups in a subdirectory of a base bucket
 // will contain one.
-var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
+var deprecatedBackupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
 
 // ResolvedDestination encapsulates information that is populated while
 // resolving the destination of a backup.
@@ -483,7 +483,7 @@ func ListFullBackupsInCollection(
 
 	var backupPaths []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
-		if backupPathRE.MatchString(f) {
+		if deprecatedBackupPathRE.MatchString(f) {
 			backupPaths = append(backupPaths, f)
 		}
 		return nil

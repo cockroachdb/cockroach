@@ -169,15 +169,22 @@ func ReadBackupManifestFromStore(
 }
 
 func ContainsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, _, err := exportStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
-	if err != nil {
-		if errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return false, nil
+	containsManifestWithFilename := func(filename string) (bool, error) {
+		r, _, err := exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
+		if err != nil {
+			if errors.Is(err, cloud.ErrFileDoesNotExist) {
+				return false, nil
+			}
+			return false, err
 		}
-		return false, err
+		r.Close(ctx)
+		return true, nil
 	}
-	r.Close(ctx)
-	return true, nil
+	exists, err := containsManifestWithFilename(backupbase.BackupMetadataName)
+	if exists || err != nil {
+		return exists, err
+	}
+	return containsManifestWithFilename(backupbase.DeprecatedBackupManifestName)
 }
 
 // compressData compresses data buffer and returns compressed
@@ -1310,13 +1317,13 @@ func CheckForPreviousBackup(
 	exists, err := ContainsManifest(ctx, defaultStore)
 	if err != nil {
 		return errors.Wrapf(err,
-			"%s returned an unexpected error when checking for the existence of %s file",
-			redactedURI, backupbase.DeprecatedBackupManifestName)
+			"%s returned an unexpected error when checking for the existence of manifest",
+			redactedURI)
 	}
 	if exists {
 		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file",
-			redactedURI, backupbase.DeprecatedBackupManifestName)
+			"%s already contains a manifest",
+			redactedURI)
 	}
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
