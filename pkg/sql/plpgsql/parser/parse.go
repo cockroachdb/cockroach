@@ -133,6 +133,15 @@ func (p *Parser) parse(
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
+//
+// Note that most callers ignore the number of annotations set in the
+// PLpgStatement. (Annotations are used for different object names like table
+// names and type names.) Ignoring them is usually safe for different reasons
+// (depending on the context):
+// - in some cases (like in the optbuilder), we will replace the annotated node
+// during type checking with an expression that has resolved types;
+// - in other cases (like when operating on descriptors / with backups), we
+// operate with table OIDTypeReferences.
 func Parse(sql string) (statements.PLpgStatement, error) {
 	var p Parser
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
