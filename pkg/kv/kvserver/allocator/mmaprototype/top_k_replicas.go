@@ -40,7 +40,7 @@ func (t *topKReplicas) addReplica(
 	msgStoreID roachpb.StoreID,
 ) {
 	if loadValue < t.threshold {
-		log.Dev.VInfof(ctx, 3, "(r%d,s%d,lhs%d): load%v<threshold%v, skipping for dim %s",
+		log.KvDistribution.VInfof(ctx, 3, "(r%d,s%d,lhs%d): load%v<threshold%v, skipping for dim %s",
 			rangeID, replicaStoreID, msgStoreID, loadValue, t.threshold, t.dim)
 		return
 	}
