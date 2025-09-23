@@ -122,6 +122,9 @@ func FindAllIncrementalPaths(
 //
 // Note: store should be rooted at the directory containing the incremental
 // backups (i.e. gs://my-bucket/backup/incrementals/2025/07/29-123456.00/)
+//
+// TODO (msbutler): we didn't bother to update this to use the up to date
+// manifest as this will eventually be deleted when all reads use the index.
 func LegacyFindPriorBackups(
 	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
 ) ([]string, error) {
