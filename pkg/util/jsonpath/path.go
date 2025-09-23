@@ -10,8 +10,12 @@ import (
 	"regexp/syntax"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -61,6 +65,37 @@ func (k Key) ToString(sb *strings.Builder, inKey, _ bool) {
 
 func (k Key) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
+}
+
+// isKey returns true if a Path is a Key.
+func isKey(p Path) bool {
+	_, ok := p.(Key)
+	return ok
+}
+
+// lastKeyIndex returns the index of the component which is the last Key
+// component in the paths. We traverse the path components, looking for
+// the rightmost Key component. For Filter components, it also checks
+// the left side of the condition for Key components. Returns -1 if no
+// Key component is found.
+func lastKeyIndex(ps []Path) int {
+	if len(ps) == 0 {
+		return -1
+	}
+	for i := len(ps) - 1; i >= 0; i-- {
+		switch pt := ps[i].(type) {
+		case Key:
+			return i
+		case Filter:
+			left := pt.Condition.(Operation).Left.(Paths)
+			for j := len(left) - 1; j >= 0; j-- {
+				if isKey(left[j]) {
+					return i
+				}
+			}
+		}
+	}
+	return -1
 }
 
 type Wildcard struct{}
@@ -276,4 +311,286 @@ func (a AnyKey) ToString(sb *strings.Builder, inKey, _ bool) {
 
 func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
+}
+
+// isSupportedPathPattern returns true if the given paths matches one of
+// the following patterns, which can be supported by the inverted index:
+// - keychain mode: $.[key|wildcard].[key|wildcard]...
+// - end value mode: $.[key|wildcard]? (@.[key|wildcard].[key|wildcard]... == [string|number|null|boolean])
+// We might call this function recursively if a Path is a Filter, which contains
+// child Paths. If isSupportedPathPattern is called within a Filter, atRoot
+// is set false.
+func isSupportedPathPattern(ps []Path, atRoot bool) bool {
+	// Wildcard components do not contribute to filtering, so we skip them.
+	notWildCardPathCount := 0
+	for _, p := range ps {
+		if _, ok := p.(Wildcard); !ok {
+			notWildCardPathCount++
+		}
+	}
+	// If the path is empty or essentially only contains the root, no filtering
+	// can be done, and thus there is no point in leveraging the inverted index.
+	if notWildCardPathCount <= 1 {
+		return false
+	}
+
+	// For `$`.
+	if atRoot {
+		if _, ok := ps[0].(Root); !ok {
+			return false
+		}
+	} else {
+		// For `@`.
+		if _, ok := ps[0].(Current); !ok {
+			return false
+		}
+	}
+
+	for i := 1; i < len(ps); i++ {
+		switch pt := ps[i].(type) {
+		case Wildcard, Key:
+		case Filter:
+			// For `?`.
+			if pt.Condition == nil {
+				return false
+			}
+			op, ok := pt.Condition.(Operation)
+			if !ok {
+				return false
+			}
+			if op.Type != OpCompEqual {
+				return false
+			}
+			// This should not happen, but just in case.
+			if op.Left == nil || op.Right == nil {
+				return false
+			}
+			leftPaths, ok := op.Left.(Paths)
+			if !ok || len(leftPaths) == 0 {
+				return false
+			}
+			if !isSupportedPathPattern(leftPaths, false /* atRoot */) {
+				return false
+			}
+			rightPaths, ok := op.Right.(Paths)
+			if !ok || len(rightPaths) != 1 {
+				return false
+			}
+			rightScalar, ok := rightPaths[0].(Scalar)
+			if !ok {
+				return false
+			}
+			if rightScalar.Type == ScalarVariable {
+				return false
+			}
+			return true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// buildInvertedIndexSpans recursively constructs inverted index
+// expressions for JSON path queries. It processes path components
+// sequentially, building up encoded key prefixes until reaching
+// terminal conditions, i.e. currentIndex == finalKeyIndex.
+//
+// filterValue stands for the right-hand side value for filter
+// expressions (nil for non-filter paths). When filterValue is non-nil,
+// it indicates that we should generate a single value span.
+//
+// The function handles two main scenarios:
+//  1. Terminal case: when we reach the last Key component, we generate
+//     the final spans
+//  2. Recursive case: when processing intermediate components, we build
+//     prefixes and recurse
+//
+// For Key components, we encode both object and array representations:
+// - Direct object property: {"key": "value"}
+// - Array element: {"key": ["value"]}
+//
+// Filter expressions are handled by recursively processing the
+// left-hand path with the right-hand value.
+//
+// Example: For path $.f1.mclaren[?(@.driver == "Piastri")]
+//
+// Initial call:
+//
+//	prefixBytes: [encoded_json_prefix]
+//	pathComponents: [Root, Key("f1"), Key("mclaren"), Filter(...)]
+//	currentIndex: 0, finalKeyIndex: 3 (last Key is "[?(@.driver == "Piastri")]")
+//
+// Iteration 0 (Root component ($)):
+//   - Skip Root, advance to currentIndex=1
+//   - Recurse with same prefixBytes
+//
+// Iteration 1 (Key "f1"):
+//   - Build object prefix: encoded_json_prefix + "f1" -> f1_obj_prefix
+//   - Build array prefix: encoded_json_prefix + "f1" + array_marker -> f1_arr_prefix
+//   - Recurse with prefixBytes: [f1_obj_prefix, f1_arr_prefix], currentIndex=2
+//
+// Iteration 2 (Key "mclaren"):
+//   - f1_obj_prefix + "mclaren" -> f1_obj_mclaren_obj_prefix
+//   - f1_arr_prefix + "mclaren" -> f1_arr_mclaren_obj_prefix
+//   - f1_obj_prefix + "mclaren" + array_marker -> f1_obj_mclaren_arr_prefix
+//   - f1_arr_prefix + "mclaren" + array_marker -> f1_arr_mclaren_arr_prefix
+//   - Recurse with prefixBytes:
+//     > f1_obj_mclaren_obj_prefix
+//     > f1_arr_mclaren_obj_prefix
+//     > f1_obj_mclaren_arr_prefix
+//     > f1_arr_mclaren_arr_prefix
+//   - currentIndex=2
+//
+// Iteration 3 (Filter - terminal case):
+//   - Extract left path (@.driver) and right value ("Piastri")
+//   - We now construct the new start and new last key index with the left path
+//   - currentIndex: 0, finalKeyIndex: 2 (last Key is "Piastri")
+//
+// > Iteration 3.0 (Current component (@)):
+//   - Skip Current, advance to currentIndex=1
+//   - Recurse with same prefixBytes
+//
+// > Iteration 3.1 (Key "driver"):
+//   - Similar to Iteration 1 and 2, the prefix are built for driver, so we should have
+//     prefixes like f1_obj_mclaren_obj_prefix + {"driver", "driver"+array_marker} , etc.
+//
+// > Iteration 3.2 (Scalar "Piastri" - terminal case):
+//   - We are at terminal, thus generate single value spans with each of
+//     the prefixes built so far + "Piastri".
+//   - Eventually, we returns the concatenation (OR) of 8 (2^3) spans:
+//     > f1_obj_mclaren_obj_driver_obj_Piastri
+//     > f1_arr_mclaren_obj_driver_obj_Piastri
+//     > f1_obj_mclaren_arr_driver_obj_Piastri
+//     > f1_arr_mclaren_obj_driver_obj_Piastri
+//     > f1_obj_mclaren_obj_driver_arr_Piastri
+//     > f1_arr_mclaren_obj_driver_arr_Piastri
+//     > f1_obj_mclaren_arr_driver_arr_Piastri
+//     > f1_arr_mclaren_obj_driver_arr_Piastri
+func buildInvertedIndexSpans(
+	prefixBytes [][]byte,
+	pathComponents []Path,
+	currentIndex int,
+	finalKeyIndex int,
+	filterValue Path,
+) inverted.Expression {
+	if len(pathComponents) == 0 || currentIndex == len(pathComponents) {
+		return nil
+	}
+	// Terminal case: we've reached the last Key component in the path.
+	if currentIndex == finalKeyIndex {
+		var resultExpression inverted.Expression
+		for _, prefix := range prefixBytes {
+			var spans []inverted.Span
+			switch pathType := pathComponents[currentIndex].(type) {
+			case Key, Current:
+				var baseKey []byte
+				key, isKey := pathType.(Key)
+				encodedKeys := make([][]byte, 0)
+				if isKey {
+					// Build the key by appending to the current prefix
+					baseKey = append(prefix[:len(prefix):len(prefix)], []byte(key)...)
+				}
+				if filterValue != nil {
+					// Meaning this is of the end value mode. (See isSupportedPathPattern).
+					if rightPaths, ok := filterValue.(Paths); ok {
+						if len(rightPaths) > 0 {
+							scalar, ok := rightPaths[0].(Scalar)
+							if ok {
+								// Encode for direct object property: {"key": "value"}
+								objectKeys, err := scalar.Value.EncodeInvertedIndexKeys(baseKey[:len(baseKey):len(baseKey)])
+								if err != nil {
+									panic(err)
+								}
+								encodedKeys = append(encodedKeys, objectKeys[0])
+
+								// Encode for array element: {"key": ["value"]}
+								arrayKeys, err := scalar.Value.EncodeInvertedIndexKeys(encoding.EncodeArrayAscending(encoding.AddJSONPathSeparator(baseKey[:len(baseKey):len(baseKey)])))
+								if err != nil {
+									panic(err)
+								}
+								encodedKeys = append(encodedKeys, arrayKeys[0])
+							}
+						}
+					}
+				} else {
+					// Meaning this is of the keychain mode. (See isSupportedPathPattern).
+					encodedKeys = append(encodedKeys, baseKey)
+				}
+
+				for _, encodedKey := range encodedKeys {
+					if filterValue != nil {
+						// Exact match for filter expressions.
+						spans = append(spans, inverted.MakeSingleValSpan(encodedKey))
+					} else {
+						// Prefix match for general path traversal.
+						spans = append(spans, inverted.Span{
+							Start: encodedKey,
+							End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(encodedKey)),
+						})
+					}
+				}
+
+			case Filter:
+				operation := pathType.Condition.(Operation)
+				leftPaths := operation.Left.(Paths)
+				// Recursively process the filter's left path with the right-hand value as the filter.
+				return buildInvertedIndexSpans(prefixBytes, leftPaths, 0, lastKeyIndex(leftPaths), operation.Right)
+			}
+
+			// Combine all spans into a single OR expression
+			for _, span := range spans {
+				if resultExpression == nil {
+					resultExpression = inverted.ExprForSpan(span, true /* tight */)
+				} else {
+					resultExpression = inverted.Or(resultExpression, inverted.ExprForSpan(span, true /* tight */))
+				}
+			}
+		}
+
+		return resultExpression
+	}
+
+	// Recursive case: build prefixes for the current path component and continue
+	nextPrefixes := make([][]byte, 0)
+	if isKey(pathComponents[currentIndex]) {
+		// For Key components, encode both object and array prefixes
+		keyName := string(pathComponents[currentIndex].(Key))
+		for _, prefix := range prefixBytes {
+			// Encode as object property: {"key": ...}
+			nextPrefixes = append(nextPrefixes, encoding.EncodeJSONKeyStringAscending(prefix[:len(prefix):len(prefix)], keyName, false /* end */))
+			// Encode as array element: {"key": [...]}
+			nextPrefixes = append(nextPrefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(prefix[:len(prefix):len(prefix)], keyName, false /* end */)))
+		}
+	} else {
+		// For non-Key components (like wildcards), pass through existing prefixes unchanged
+		nextPrefixes = prefixBytes
+	}
+
+	// Continue recursion with the updated prefixes and next index
+	return buildInvertedIndexSpans(nextPrefixes, pathComponents, currentIndex+1, finalKeyIndex, filterValue)
+}
+
+// EncodeJsonPathInvertedIndexSpans returns an inverted expression for the given
+// json path expression.
+func EncodeJsonPathInvertedIndexSpans(
+	b []byte, p Path,
+) (invertedExpr inverted.Expression, err error) {
+	var ps Paths
+	var right Path
+	switch t := p.(type) {
+	case Paths:
+		ps = t
+	default:
+		return nil, errors.AssertionFailedf("unsupported json path type %T for inverted index", p)
+	}
+
+	if !isSupportedPathPattern(ps, true /* atRoot */) {
+		return nil, errors.AssertionFailedf("unsupported json path pattern for inverted index: %T", p)
+	}
+
+	if len(ps) == 0 {
+		return nil, errors.AssertionFailedf("empty json path for inverted index")
+	}
+	return buildInvertedIndexSpans([][]byte{encoding.EncodeJSONAscending(b)}, ps, 0, lastKeyIndex(ps), right), nil
 }

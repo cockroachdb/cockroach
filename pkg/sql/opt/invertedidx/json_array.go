@@ -18,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
 
@@ -412,6 +414,19 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		}
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
+	case *memo.FunctionExpr:
+		if t.Properties.Category == builtinconstants.CategoryJsonpath {
+			if len(t.Args) > 1 {
+				if ce, ok := t.Args[1].(*memo.ConstExpr); ok {
+					if ce != nil {
+						if dJsonPath, ok := ce.Value.(*tree.DJsonpath); ok {
+							jp := dJsonPath.Path
+							invertedExpr = j.extractJSONPathCondition(ctx, evalCtx, jp)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	if invertedExpr == nil {
@@ -476,6 +491,21 @@ func (j *jsonOrArrayFilterPlanner) extractJSONInCondition(
 
 	return invertedExpr
 
+}
+
+func (j *jsonOrArrayFilterPlanner) extractJSONPathCondition(
+	ctx context.Context, evalCtx *eval.Context, jp jsonpath.Path,
+) inverted.Expression {
+	res, err := jsonpath.EncodeJsonPathInvertedIndexSpans(nil, jp)
+	if err != nil {
+		// TODO(janexing): the caller logic, extractInvertedFilterCondition(), doesn't
+		// provide err handling, thus we have to no-op with err here. Actually,
+		// after reaching here, we will eventually reach the generic
+		// `index "xxx" is inverted and cannot be used for this query` error.
+		// Maybe we should surface the specific err here more explicitly.
+		return nil
+	}
+	return res
 }
 
 // extractArrayOverlapsCondition extracts an InvertedExpression
