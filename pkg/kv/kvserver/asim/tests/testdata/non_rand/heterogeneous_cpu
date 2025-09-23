@@ -21,7 +21,7 @@ assertion stat=cpu_util type=balance ticks=6 upper_bound=1.1
 ----
 asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.10 at each of last 6 ticks
 
-eval cfgs=(sma-count,mma-only) duration=10m metrics=(cpu,cpu_util)
+eval cfgs=(sma-count,mma-only,mma-count) duration=10m metrics=(cpu,cpu_util)
 ----
 cpu#1: last:  [s1=6700914166, s2=6696073333, s3=6603012499] (stddev=45053658.00, mean=6666666666.00, sum=19999999998)
 cpu#1: thrash_pct: [s1=185%, s2=170%, s3=189%]  (sum=544%)
@@ -42,6 +42,20 @@ cpu#1: thrash_pct: [s1=34%, s2=30%, s3=37%]  (sum=102%)
 cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.17, mean=0.68, sum=2)
 cpu_util#1: thrash_pct: [s1=8%, s2=7%, s3=4%]  (sum=20%)
 artifacts[mma-only]: 9d1c00f7d08f8c6d
+failed assertion sample 1
+  balance stat=cpu_util threshold=(≤1.10) ticks=6
+	max/mean=1.17 tick=0
+	max/mean=1.17 tick=1
+	max/mean=1.17 tick=2
+	max/mean=1.17 tick=3
+	max/mean=1.17 tick=4
+	max/mean=1.17 tick=5
+==========================
+cpu#1: last:  [s1=6397924999, s2=6398685833, s3=7202298517] (stddev=379006109.77, mean=6666303116.33, sum=19998909349)
+cpu#1: thrash_pct: [s1=33%, s2=37%, s3=40%]  (sum=110%)
+cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.16, mean=0.68, sum=2)
+cpu_util#1: thrash_pct: [s1=8%, s2=9%, s3=5%]  (sum=21%)
+artifacts[mma-count]: e783594cc55d9a0
 failed assertion sample 1
   balance stat=cpu_util threshold=(≤1.10) ticks=6
 	max/mean=1.17 tick=0
