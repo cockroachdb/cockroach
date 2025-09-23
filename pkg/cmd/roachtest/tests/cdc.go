@@ -1924,7 +1924,7 @@ func configureDBForMultiTablePTSBenchmark(db *gosql.DB) error {
 
 func getDiagramProcessors(ctx context.Context, db *gosql.DB) ([]any, error) {
 	var diagramURL string
-	diagramQuery := `SELECT value 
+	diagramQuery := `SELECT value
 	FROM system.job_info ji
 	INNER JOIN system.jobs j ON ji.job_id = j.id
 	WHERE j.job_type = 'CHANGEFEED' AND ji.info_key LIKE '~dsp-diag-url-%'`
@@ -2010,8 +2010,8 @@ func veryifyLeaseHolderDistribution(
 ) map[string]int {
 	var rows *gosql.Rows
 	// Get lease holders for all ranges in tpcc database.
-	leaseHolderQuery := `SELECT r.start_pretty, r.replicas, r.replica_localities, r.lease_holder 
-	FROM crdb_internal.ranges r 
+	leaseHolderQuery := `SELECT r.start_pretty, r.replicas, r.replica_localities, r.lease_holder
+	FROM crdb_internal.ranges r
 	JOIN crdb_internal.tables t ON r.start_pretty like concat('/Table/', t.table_id::STRING,'%')
 	WHERE t.database_name = 'tpcc'`
 	rows, err := db.Query(leaseHolderQuery)
@@ -2918,7 +2918,7 @@ func registerCDC(r registry.Registry) {
 				logSearchStr := `(client/metadata fetching metadata for|updating kafka metadata for topics|fetching metadata to learn its partitions|waiting for metadata for new topic)`
 				results, checkLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
 					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
-					fmt.Sprintf(`grep -E "%s" logs/cockroach.log`, logSearchStr))
+					fmt.Sprintf(`grep -E "%s" logs/cockroach-changefeed.log`, logSearchStr))
 				if checkLogsErr != nil {
 					t.Fatal(checkLogsErr)
 				}
