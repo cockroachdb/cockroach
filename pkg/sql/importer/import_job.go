@@ -141,7 +141,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 		) error {
-			preparedDetails, err := r.prepareTablesForIngestion(ctx, p, details, txn.KV(), descsCol)
+			preparedDetails, err := r.prepareTableForIngestion(ctx, p, details, txn.KV(), descsCol)
 			if err != nil {
 				return err
 			}
@@ -203,18 +203,17 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	// If details.Walltime is still 0, then it was not set during
-	// `prepareTablesForIngestion`. This indicates that we are in an IMPORT INTO,
-	// and that the walltime was not set in a previous run of IMPORT.
+	// `prepareTableForIngestion`.
 	//
-	// In the case of importing into existing tables we must wait for all nodes
+	// Since we're importing into an existing table, we must wait for all nodes
 	// to see the same version of the updated table descriptor, after which we
 	// shall choose a ts to import from.
 	if details.Walltime == 0 {
-		// Now that we know all the tables are offline, pick a walltime at which we
+		// Now that we know that the table is offline, pick a walltime at which we
 		// will write.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
 
-		// Check if the tables being imported into are starting empty, in which case
+		// Check if the table being imported into is starting empty, in which case
 		// we can cheaply clear-range instead of revert-range to cleanup (or if the
 		// cluster has finalized to 22.1, use DeleteRange without predicate
 		// filtering).
@@ -284,7 +283,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	setPublicTimestamp, err := r.publishTables(ctx, p.ExecCfg(), res)
+	setPublicTimestamp, err := r.publishTable(ctx, p.ExecCfg(), res)
 	if err != nil {
 		return err
 	}
@@ -334,10 +333,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	return nil
 }
 
-// prepareTablesForIngestion prepares table descriptors for the ingestion
-// step of import. The descriptors are in an IMPORTING state (offline) on
+// prepareTableForIngestion prepare the table descriptor for the ingestion
+// step of import. The descriptor is in an IMPORTING state (offline) on
 // successful completion of this method.
-func (r *importResumer) prepareTablesForIngestion(
+func (r *importResumer) prepareTableForIngestion(
 	ctx context.Context,
 	p sql.JobExecContext,
 	details jobspb.ImportDetails,
@@ -428,14 +427,14 @@ func bindTableDescImportProperties(
 	return nil
 }
 
-// publishTables updates the status of imported tables from OFFLINE to PUBLIC.
-func (r *importResumer) publishTables(
+// publishTable updates the status of the imported table from OFFLINE to PUBLIC.
+func (r *importResumer) publishTable(
 	ctx context.Context, execCfg *sql.ExecutorConfig, res kvpb.BulkOpSummary,
 ) (hlc.Timestamp, error) {
 	var setPublicTimestamp hlc.Timestamp
 	details := r.job.Details().(jobspb.ImportDetails)
-	// Tables should only be published once.
-	if details.TablesPublished {
+	// The table should only be published once.
+	if details.TablePublished {
 		return setPublicTimestamp, nil
 	}
 	tbl, err := getTable(details)
@@ -443,7 +442,7 @@ func (r *importResumer) publishTables(
 		return setPublicTimestamp, err
 	}
 
-	log.Event(ctx, "making tables live")
+	log.Event(ctx, "making the table imported into live")
 
 	var kvTxn *kv.Txn
 	if err := sql.DescsTxn(ctx, execCfg, func(
@@ -488,14 +487,14 @@ func (r *importResumer) publishTables(
 			return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
 		}
 		if err := kvTxn.Run(ctx, b); err != nil {
-			return errors.Wrap(err, "publishing tables")
+			return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
 		}
 
 		// Update job record to mark table published state as complete.
 		details.TablePublished = true
 		err = r.job.WithTxn(txn).SetDetails(ctx, details)
 		if err != nil {
-			return errors.Wrap(err, "updating job details after publishing tables")
+			return errors.Wrap(err, "updating job details after publishing the table")
 		}
 		return nil
 	}); err != nil {
@@ -814,9 +813,9 @@ func (r *importResumer) OnFailOrCancel(
 	if err := sql.DescsTxn(ctx, cfg, func(
 		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		return r.dropTables(ctx, txn, descsCol, cfg)
+		return r.dropTable(ctx, txn, descsCol, cfg)
 	}); err != nil {
-		log.Dev.Errorf(ctx, "drop tables failed: %s", err.Error())
+		log.Dev.Errorf(ctx, "drop table failed: %s", err.Error())
 		return err
 	}
 
@@ -831,8 +830,8 @@ func (r *importResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
 
-// dropTables implements the OnFailOrCancel logic.
-func (r *importResumer) dropTables(
+// dropTable implements the OnFailOrCancel logic.
+func (r *importResumer) dropTable(
 	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
@@ -855,7 +854,7 @@ func (r *importResumer) dropTables(
 	intoTable := desc.ImmutableCopy().(catalog.TableDescriptor)
 	// Clear table data from a rolling back IMPORT INTO cmd
 	//
-	// The walltime can be 0 if there is a failure between publishing the tables
+	// The walltime can be 0 if there is a failure between publishing the table
 	// as OFFLINE and then choosing a ingestion timestamp. This might happen
 	// while waiting for the descriptor version to propagate across the cluster
 	// for example.
@@ -864,7 +863,7 @@ func (r *importResumer) dropTables(
 	// not yet begun (since we have not chosen a timestamp at which to ingest.)
 	if details.Walltime != 0 && !tbl.WasEmpty {
 		// NB: if a revert fails it will abort the rest of this failure txn, which is
-		// also what brings tables back online. We _could_ change the error handling
+		// also what brings the table back online. We _could_ change the error handling
 		// or just move the revert into Resume()'s error return path, however it isn't
 		// clear that just bringing a table back online with partially imported data
 		// that may or may not be partially reverted is actually a good idea. It seems
