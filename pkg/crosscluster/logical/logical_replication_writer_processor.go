@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -50,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var logicalReplicationWriterResultType = []*types.T{
@@ -395,7 +395,9 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 			lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.FlowCtx.ID, lrw.agg)
 
 	case stats := <-lrw.rangeStatsCh:
-		meta, err := lrw.newRangeStatsProgressMeta(stats)
+		meta, err := replicationutils.StreamRangeStatsToProgressMeta(
+			lrw.FlowCtx, lrw.ProcessorID, stats,
+		)
 		if err != nil {
 			lrw.MoveToDrainingAndLogError(err)
 			return nil, lrw.DrainHelper()
@@ -577,23 +579,6 @@ func (lrw *logicalReplicationWriterProcessor) rangeStats(
 		// have exited based on an error.
 		return nil
 	}
-}
-
-func (lrw *logicalReplicationWriterProcessor) newRangeStatsProgressMeta(
-	stats *streampb.StreamEvent_RangeStats,
-) (*execinfrapb.ProducerMetadata, error) {
-	asAny, err := pbtypes.MarshalAny(stats)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to convert stats into any proto")
-	}
-	return &execinfrapb.ProducerMetadata{
-		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
-			NodeID:          lrw.FlowCtx.NodeID.SQLInstanceID(),
-			FlowID:          lrw.FlowCtx.ID,
-			ProcessorID:     lrw.ProcessorID,
-			ProgressDetails: *asAny,
-		},
-	}, nil
 }
 
 func (lrw *logicalReplicationWriterProcessor) checkpoint(
