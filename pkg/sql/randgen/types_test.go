@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -67,30 +66,7 @@ func TestCanonical(t *testing.T) {
 		datum := RandDatum(rng, typ, false)
 		datumTyp := datum.ResolvedType()
 		if !datumTyp.Equivalent(typ.Canonical()) {
-			var tupleHasNullElement func(tree.Datum) bool
-			tupleHasNullElement = func(d tree.Datum) bool {
-				tup, ok := d.(*tree.DTuple)
-				if !ok {
-					return false
-				}
-				for _, el := range tup.D {
-					if el == tree.DNull {
-						return true
-					}
-					if tupleHasNullElement(el) {
-						return true
-					}
-				}
-				return false
-			}
-			// If we have a tuple, then we might have included a NULL element.
-			// By construction in RandDatum, TupleContents[i] has been updated
-			// to types.Unknown. In such case, we give an exception and don't
-			// fail the test.
-			tupleException := tupleHasNullElement(datum)
-			if !tupleException {
-				t.Errorf("fail: canonical type of %+v is %+v and the datum's type is %+v", typ, typ.Canonical(), datumTyp)
-			}
+			t.Errorf("fail: canonical type of %+v is %+v and the datum's type is %+v", typ, typ.Canonical(), datumTyp)
 		}
 
 		if datumTyp.Oid() != typ.Canonical().Oid() {
