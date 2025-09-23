@@ -60,7 +60,7 @@ func registerRoachtest(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "roachtest/manual/monitor/test-failure/node-fatal-explicit-monitor",
 		Owner:            registry.OwnerTestEng,
-		Cluster:          r.MakeClusterSpec(3),
+		Cluster:          r.MakeClusterSpec(1),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

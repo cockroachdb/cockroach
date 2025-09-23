@@ -970,10 +970,8 @@ func (f *clusterFactory) newCluster(
 		if i > 1 {
 			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
-		retryStr = "-retry" + strconv.Itoa(i-1) // TODO remove this line, just want to see what this looks like
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, clusterCreateDir, genName+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
-		l.Printf("clusterFactory.newCluster: new cluster logPath %s", logPath)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}

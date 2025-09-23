@@ -1777,15 +1777,14 @@ func (r *testRunner) inspectArtifacts(
 // _runner-logs/cluster-create
 func gatherNodeIpMapping(t *testImpl, c *clusterImpl, testLogger *logger.Logger) (string, error) {
 
+	// Find the correct cluster creation log
 	filePattern := fmt.Sprintf("%s*.log", c.Name())
-
 	var artifactsDir string
 	if roachtestflags.LiteralArtifactsDir == "" {
 		artifactsDir = roachtestflags.ArtifactsDir
 	} else {
 		artifactsDir = roachtestflags.LiteralArtifactsDir
 	}
-
 	logPath := filepath.Join(artifactsDir, runnerLogsDir, clusterCreateDir, filePattern)
 	targetFiles, err := filepath.Glob(logPath)
 	if err != nil {
@@ -1813,9 +1812,11 @@ func gatherNodeIpMapping(t *testImpl, c *clusterImpl, testLogger *logger.Logger)
 	if len(targetFiles) == 1 {
 		targetFile = targetFiles[0]
 	} else {
-
 		targetFile = targetFiles[len(targetFiles)-2]
 	}
+
+	// regex looks for lines that contain Name, DNS header and
+	// lines that contain 2 nonspace tokens followed by 2 IP addresses
 	logPattern := `^(Name[[:space:]]+DNS|[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3})`
 	args := append([]string{"-E", "-m", "10", "-a", logPattern}, targetFile)
 	command := "grep"
