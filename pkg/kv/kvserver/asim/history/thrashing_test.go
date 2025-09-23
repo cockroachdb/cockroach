@@ -8,7 +8,6 @@ package history
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
@@ -23,14 +22,9 @@ import (
 )
 
 func tsFromFunc(ticks int, f func(tick int) float64) []float64 {
-	roundToSixDigits := func(num float64) float64 {
-		formatted := fmt.Sprintf("%.6f", num)
-		result, _ := strconv.ParseFloat(formatted, 64)
-		return result
-	}
 	vs := make([]float64, ticks)
 	for i := 0; i < ticks; i++ {
-		vs[i] = roundToSixDigits(f(i))
+		vs[i] = math.Round(f(i)*1e6) / 1e6
 	}
 	return vs
 }
