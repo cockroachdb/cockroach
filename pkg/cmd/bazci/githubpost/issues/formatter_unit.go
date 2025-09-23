@@ -74,12 +74,17 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		r.CodeBlock("", fnr.Message)
 		r.Escaped("Fatal entries found in Cockroach logs:")
 		r.CodeBlock("", fnr.FatalLogs)
-	} else {
-		r.CodeBlock("", data.CondensedMessage.Digest(50))
-	}
-	if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+		if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+			r.Escaped("Cluster Node to Ip Mapping:")
+			r.CodeBlock("", nodeIpMap.NodeToIpMapping)
+		}
+	} else if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+		r.Escaped("Failed with:")
+		r.CodeBlock("", nodeIpMap.Message)
 		r.Escaped("Cluster Node to Ip Mapping:")
 		r.CodeBlock("", nodeIpMap.NodeToIpMapping)
+	} else {
+		r.CodeBlock("", data.CondensedMessage.Digest(50)) // need to fix this part
 	}
 
 	if len(data.Parameters) != 0 {

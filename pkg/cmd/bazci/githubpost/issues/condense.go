@@ -58,6 +58,7 @@ type FatalNodeRoachtest struct {
 // NodeToIpMappingRoachtest contains the node to ip mapping from a roachtest
 // cluster
 type NodeToIpMappingRoachtest struct {
+	Message,
 	NodeToIpMapping string
 }
 
@@ -139,6 +140,7 @@ func (s CondensedMessage) NodeToIpMappingRoachtest() (nodeIpMap NodeToIpMappingR
 			// only expecting a single match
 			return NodeToIpMappingRoachtest{}, false
 		}
+		nodeIpMap.Message = ss[0 : matches[0]-1]
 		nodeIpMap.NodeToIpMapping = ss[matches[0]:matches[1]]
 		return nodeIpMap, true
 	}

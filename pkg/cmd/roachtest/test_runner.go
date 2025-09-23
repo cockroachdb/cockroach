@@ -1746,15 +1746,17 @@ func (r *testRunner) teardownTest(
 // teardownTest
 func (r *testRunner) inspectArtifacts(
 	ctx context.Context, t *testImpl, c *clusterImpl, testLogger *logger.Logger,
-) error {
+) (inspectArtifactsErr error) {
 
 	if t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		t.L().Printf("Attempting to gather node fatal level logs for triage.")
 		fatalOut, err := gatherFatalNodeLogs(t, testLogger)
 		if err != nil {
-			return err
-		}
-		if fatalOut == "" {
+			// even if we encounter an error continue on, this is best effort
+			if joinErr := errors.Join(inspectArtifactsErr, err); joinErr != nil {
+				return joinErr
+			}
+		} else if fatalOut == "" {
 			t.L().Printf("No fatal level logs found.")
 		} else {
 			testLogger.PrintfCtx(ctx, "CockroachDB contains Fatal level logs. Up to the first 10 "+
@@ -1765,12 +1767,14 @@ func (r *testRunner) inspectArtifacts(
 		t.L().Printf("Attempting to gather ip node mapping")
 		ipNodeMapOut, err := gatherNodeIpMapping(t, c, testLogger)
 		if err != nil {
-			return err
+			if joinErr := errors.Join(inspectArtifactsErr, err); joinErr != nil {
+				return joinErr
+			}
 		} else {
 			t.appendGithubIpToNodeMapping(ipNodeMapOut)
 		}
 	}
-	return nil
+	return inspectArtifactsErr
 }
 
 // gatherNodeIpMapping attempts to gather cluster node to ip map from
@@ -1847,8 +1851,9 @@ func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error)
 	if err != nil {
 		return "", err
 	} else if len(targetFiles) == 0 {
-		return "", errors.Newf("No matching log files found for log pattern: %s and file pattern: %s",
+		t.L().Printf("No matching log files found for log pattern: %s and file pattern: %s",
 			logPattern, filePattern)
+		return "", nil
 	}
 	args := append([]string{"-E", "-m", "10", "-a", logPattern}, targetFiles...)
 	command := "grep"
