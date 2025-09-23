@@ -168,7 +168,6 @@ query T
 SELECT jsonb_path_query('{"a": [1]}', 'strict $.b', '{}', true);
 ----
 
-
 query T rowsort
 SELECT jsonb_path_query('{"a": {"b": [1, 2, 3]}}', '$.a[*].b[*]');
 ----
@@ -2055,7 +2054,6 @@ query T
 SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line1\nLine2$" flag "mq"');
 ----
 false
-
 
 # If a key is accidentally a keyword, it won't be normalized.
 query T
