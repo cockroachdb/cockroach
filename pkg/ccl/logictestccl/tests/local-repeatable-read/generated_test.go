@@ -2987,3 +2987,10 @@ func TestRepeatableReadExecBuild_geospatial(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "geospatial")
 }
+
+func TestRepeatableReadExecBuild_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "jsonb_path_query")
+}

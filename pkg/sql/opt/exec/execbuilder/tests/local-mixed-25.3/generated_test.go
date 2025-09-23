@@ -91,3 +91,10 @@ func TestExecBuild_geospatial(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "geospatial")
 }
+
+func TestExecBuild_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "jsonb_path_query")
+}

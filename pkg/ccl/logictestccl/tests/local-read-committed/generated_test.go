@@ -3016,6 +3016,13 @@ func TestReadCommittedExecBuild_geospatial(
 	runExecBuildLogicTest(t, "geospatial")
 }
 
+func TestReadCommittedExecBuild_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "jsonb_path_query")
+}
+
 func TestReadCommittedExecBuild_select_for_update_read_committed(
 	t *testing.T,
 ) {
