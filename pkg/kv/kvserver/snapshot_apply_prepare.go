@@ -124,7 +124,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// we're applying a snapshot for another range (we don't do that either).
 	// Something is severely wrong for this to happen, so perform a sanity check.
 	if s.subsume[0].desc.StartKey.Compare(s.desc.StartKey) < 0 { // subsumedDescs are sorted by StartKey
-		log.Dev.Fatalf(ctx,
+		log.KvDistribution.Fatalf(ctx,
 			"subsuming replica to our left; subsumed desc start key: %v; snapshot desc start key %v",
 			s.subsume[0].desc.StartKey, s.desc.StartKey,
 		)
