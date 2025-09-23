@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -242,7 +243,7 @@ func TestPebbleEncryption(t *testing.T) {
 			CurrentKey: "16.key",
 			OldKey:     "plain",
 		},
-		DataKeyRotationPeriod: 1000, // arbitrary seconds
+		RotationPeriod: time.Hour,
 	}
 
 	func() {
@@ -385,7 +386,7 @@ func TestPebbleEncryption2(t *testing.T) {
 				CurrentKey: encKeyFile,
 				OldKey:     oldEncFileKey,
 			},
-			DataKeyRotationPeriod: 1000,
+			RotationPeriod: time.Hour,
 		}
 
 		// Initialize the filesystem env.
@@ -580,7 +581,7 @@ func makeEncryptedTestFS(t *testing.T, errorProb float64, errorRand *rand.Rand) 
 	//
 	// TODO(sumeer): Do deterministic data key rotation. Inject kmTimeNow and
 	// operations that advance time.
-	encOptions.DataKeyRotationPeriod = 100000
+	encOptions.RotationPeriod = 100000 * time.Second
 	etfs := &encryptedTestFS{
 		mem:        mem,
 		encOptions: &encOptions,
