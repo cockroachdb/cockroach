@@ -141,9 +141,13 @@ type testImpl struct {
 		// in case github issue posting is disabled.
 		extraParams map[string]string
 
-		// githubMessage contains additional message information that will be
-		// passed to github.MaybePost
-		githubMessage string
+		// githubFatalLogs contains node fatal logs that will be passed to
+		// github.MaybePost
+		githubFatalLogs string
+
+		// githubIpToNodeMapping contains the ip to node map that will be passed to
+		// github.MaybePost
+		githubIpToNodeMapping string
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -562,16 +566,28 @@ func (t *testImpl) failureMsg() string {
 	return b.String()
 }
 
-func (t *testImpl) getGithubMessage() string {
+func (t *testImpl) getGithubFatalLogs() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.mu.githubMessage
+	return t.mu.githubFatalLogs
 }
 
-func (t *testImpl) appendGithubMessage(msg string) {
+func (t *testImpl) appendGithubFatalLogs(msg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.githubMessage += msg
+	t.mu.githubFatalLogs += msg
+}
+
+func (t *testImpl) getGithubIpToNodeMapping() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.githubIpToNodeMapping
+}
+
+func (t *testImpl) appendGithubIpToNodeMapping(msg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.githubIpToNodeMapping += msg
 }
 
 // failuresMatchingError checks whether the first error in trees of
