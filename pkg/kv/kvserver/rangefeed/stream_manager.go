@@ -186,8 +186,6 @@ func (sm *StreamManager) Start(ctx context.Context, stopper *stop.Stopper) error
 func (sm *StreamManager) Stop(ctx context.Context) {
 	sm.taskCancel()
 	sm.wg.Wait()
-	// Since this is called during shutdown, sm.sender.onStreamConnectOrDisconnect
-	// is not being called explicitly to update the queue capacity.
 	sm.sender.cleanup(ctx)
 	sm.streams.Lock()
 	defer sm.streams.Unlock()
