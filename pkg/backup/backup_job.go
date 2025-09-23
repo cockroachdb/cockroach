@@ -428,7 +428,10 @@ func backup(
 	}
 
 	// TODO(msbutler): version gate writing the old manifest once we can guarantee
-	// a cluster version that will not read the old manifest.
+	// a cluster version that will not read the old manifest. This will occur when we delete
+	// LegacyFindPriorBackups and the fallback path in
+	// ListFullBackupsInCollection, which can occur when we completely rely on the
+	// backup index.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.DeprecatedBackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, 0, err
