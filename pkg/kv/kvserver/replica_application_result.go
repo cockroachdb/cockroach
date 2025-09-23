@@ -101,7 +101,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 
 	if cmd.Rejection != kvserverbase.ProposalRejectionPermanent && pErr == nil {
-		log.Dev.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
+		log.KvExec.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
 	}
 	if pErr != nil {
 		// A forced error was set (i.e. we did not apply the proposal,
@@ -220,7 +220,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				//
 				// For proposed simplifications, see:
 				// https://github.com/cockroachdb/cockroach/issues/97633
-				log.Dev.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
+				log.KvExec.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
 				// TODO(repl): we're replacing an error (illegal LAI) here with another error.
 				// A pattern where the error is assigned exactly once would be simpler to
 				// reason about. In particular, we want to make sure we never replace an
@@ -236,7 +236,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	} else if cmd.proposal.Local.Reply != nil {
 		cmd.response.Reply = cmd.proposal.Local.Reply
 	} else {
-		log.Dev.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
+		log.KvExec.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
 	}
 
 	// The current proposal has no error (and wasn't reproposed successfully or we
@@ -270,7 +270,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			resp.LeaseAppliedIndex = cmd.LeaseIndex
 			resp.RangeDesc = *r.Desc()
 		} else {
-			log.Dev.Fatalf(ctx, "PopulateBarrierResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+			log.KvExec.Fatalf(ctx, "PopulateBarrierResponse for %T", cmd.response.Reply.Responses[0].GetInner())
 		}
 	}
 
@@ -279,14 +279,14 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		if resp := cmd.response.Reply.Responses[0].GetSubsume(); resp != nil {
 			resp.LeaseAppliedIndex = cmd.LeaseIndex
 		} else {
-			log.Dev.Fatalf(ctx, "RepopulateSubsumeResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+			log.KvExec.Fatalf(ctx, "RepopulateSubsumeResponse for %T", cmd.response.Reply.Responses[0].GetInner())
 		}
 	}
 
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local
 	} else if cmd.localResult != nil {
-		log.Dev.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
+		log.KvExec.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
 	}
 }
 
@@ -479,7 +479,7 @@ func (r *Replica) handleMergeResult(ctx context.Context, merge *kvserverpb.Merge
 		merge.RightReadSummary,
 	); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
-		log.Dev.Fatalf(ctx, "failed to update store after merging range: %s", err)
+		log.KvExec.Fatalf(ctx, "failed to update store after merging range: %s", err)
 	}
 }
 
@@ -565,7 +565,7 @@ func (r *replicaLogStorage) finalizeApplySnapshotRaftMuLocked(ctx context.Contex
 	// sideloaded entries. Rather than remember the old last index, we instead
 	// clear the sideloaded storage entirely. This is equivalent.
 	if err := r.ls.Sideload.Clear(ctx); err != nil {
-		log.Dev.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
+		log.KvExec.Errorf(ctx, "while clearing sideloaded storage after snapshot: %+v", err)
 	}
 }
 
@@ -615,7 +615,7 @@ func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	if err := r.logStorage.ls.Sideload.TruncateTo(ctx, index); err != nil {
 		// We don't *have* to remove these entries for correctness. Log a loud
 		// error, but keep humming along.
-		log.Dev.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
+		log.KvExec.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
 	// NB: we don't sync the sideloaded entry files removal here for performance
 	// reasons.
@@ -640,7 +640,7 @@ func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) 
 
 func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Version) {
 	if (*version == roachpb.Version{}) {
-		log.Dev.Fatal(ctx, "not expecting empty replica version downstream of raft")
+		log.KvExec.Fatal(ctx, "not expecting empty replica version downstream of raft")
 	}
 	r.mu.Lock()
 	r.shMu.state.Version = version
@@ -651,7 +651,7 @@ func (r *Replica) handleComputeChecksumResult(ctx context.Context, cc *kvserverp
 	err := r.computeChecksumPostApply(ctx, *cc)
 	// Don't log errors caused by the store quiescing, they are expected.
 	if err != nil && !errors.Is(err, stop.ErrUnavailable) {
-		log.Dev.Errorf(ctx, "failed to start ComputeChecksum task %s: %v", cc.ChecksumID, err)
+		log.KvExec.Errorf(ctx, "failed to start ComputeChecksum task %s: %v", cc.ChecksumID, err)
 	}
 }
 
@@ -677,7 +677,7 @@ func (r *Replica) handleChangeReplicasResult(
 	// removal pending at this point then we know that this command must be
 	// responsible.
 	if log.V(1) {
-		log.Dev.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
+		log.KvExec.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
 
 	// This is currently executed before the conf change is applied to the Raft
@@ -692,14 +692,14 @@ func (r *Replica) handleChangeReplicasResult(
 			// We destroyed the data when the batch committed so don't destroy it again.
 			DestroyData: false,
 		}); err != nil {
-		log.Dev.Fatalf(ctx, "failed to remove replica: %v", err)
+		log.KvExec.Fatalf(ctx, "failed to remove replica: %v", err)
 	}
 
 	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
 	// be durably synced to disk, which we have.
 	// See replicaAppBatch.ApplyToStateMachine().
 	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
-		log.Dev.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
+		log.KvExec.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 
 	return true

@@ -174,7 +174,7 @@ func OverrideDefaultLeaseType(ctx context.Context, sv *settings.Values, typ roac
 		ExpirationLeasesOnly.Override(ctx, sv, false)
 		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 1.0)
 	default:
-		log.Dev.Fatalf(ctx, "unexpected lease type: %v", typ)
+		log.KvExec.Fatalf(ctx, "unexpected lease type: %v", typ)
 	}
 }
 
@@ -554,7 +554,7 @@ func (p *pendingLeaseRequest) requestLease(
 			err := p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, curLiveness)
 			if err != nil {
 				if logFailedHeartbeatOwnLiveness.ShouldLog() {
-					log.Dev.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
+					log.KvExec.Errorf(ctx, "failed to heartbeat own liveness record: %s", err)
 				}
 				return kvpb.NewNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.Desc(),
 					fmt.Sprintf("failed to manipulate liveness record: %s", err))
@@ -568,7 +568,7 @@ func (p *pendingLeaseRequest) requestLease(
 				return errors.NewAssertionErrorWithWrappedErrf(liveness.ErrRecordCacheMiss, "after heartbeat")
 			}
 			if l.Expiration.ToTimestamp().Less(nl.HeartbeatMinExpiration) {
-				log.Dev.Infof(ctx, "expiration of liveness record %s is not greater than "+
+				log.KvExec.Infof(ctx, "expiration of liveness record %s is not greater than "+
 					"expiration of the previous lease after liveness heartbeat, retrying...", l)
 				curLiveness = l.Liveness
 				continue
@@ -628,9 +628,9 @@ func (p *pendingLeaseRequest) requestLease(
 				// ErrEpochCondFailed indicates that someone else changed the liveness
 				// record while we were incrementing it. The node could still be
 				// alive, or someone else updated it. Don't log this as an error.
-				log.Dev.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
+				log.KvExec.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
 			} else {
-				log.Dev.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
+				log.KvExec.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
 			}
 		}
 		if err != nil {
@@ -1197,7 +1197,7 @@ func (r *Replica) leaseGoodToGoForStatus(
 			//
 			// However, this is possible if the `cockroach debug recover` command has
 			// been used, so this is just a logged error instead of a fatal assertion.
-			log.Dev.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
+			log.KvExec.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 				st.Lease, st.Lease.Replica)
 		}
 		// Otherwise, if the lease is currently held by another replica, redirect
@@ -1335,7 +1335,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					_, stillMember := r.shMu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
 					if !stillMember {
 						// See corresponding comment in leaseGoodToGoRLocked.
-						log.Dev.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
+						log.KvExec.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
@@ -1459,13 +1459,13 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", err)
 					return kvpb.NewError(err)
 				case <-slowTimer.C:
-					log.Dev.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
+					log.KvExec.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
 						base.SlowRequestThreshold, attempt)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					//nolint:deferloop
 					defer func(attempt int) {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
-						log.Dev.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
+						log.KvExec.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
 					}(attempt)
 				case <-ctx.Done():
 					llHandle.Cancel()
@@ -1535,7 +1535,7 @@ func (r *Replica) shouldRequestLeaseRLocked(
 		return false, false
 
 	default:
-		log.Dev.Fatalf(context.Background(), "invalid lease state %s", st.State)
+		log.KvExec.Fatalf(context.Background(), "invalid lease state %s", st.State)
 		return false, false
 	}
 }

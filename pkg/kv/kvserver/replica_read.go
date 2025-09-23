@@ -229,7 +229,7 @@ func (r *Replica) executeReadOnlyBatch(
 			intents,
 			allowSyncProcessing,
 		); err != nil {
-			log.Dev.Warningf(ctx, "%v", err)
+			log.KvExec.Warningf(ctx, "%v", err)
 		}
 	}
 
@@ -541,7 +541,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 	}
 
 	if !lResult.IsZero() {
-		log.Dev.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
+		log.KvExec.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 	return nil
 }

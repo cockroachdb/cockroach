@@ -82,7 +82,7 @@ func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) 
 	if event.Info != nil {
 		info = event.Info.String()
 	}
-	log.Dev.Infof(ctx, "Range Event: %q, range: %d, info: %s",
+	log.KvExec.Infof(ctx, "Range Event: %q, range: %d, info: %s",
 		event.EventType, event.RangeID, info)
 }
 
@@ -246,13 +246,13 @@ func writeToRangeLogTable(
 					if err := timeutil.RunWithTimeout(ctx, "rangelog-timeout", perAttemptTimeout, func(ctx context.Context) error {
 						return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn.DB(), logEvent)
 					}); err != nil {
-						log.Dev.Warningf(ctx, "error logging to system.rangelog: %v", err)
+						log.KvExec.Warningf(ctx, "error logging to system.rangelog: %v", err)
 						continue
 					}
 					break
 				}
 			}); err != nil {
-			log.Dev.Warningf(asyncCtx, "async task error while logging to system.rangelog: %v", err)
+			log.KvExec.Warningf(asyncCtx, "async task error while logging to system.rangelog: %v", err)
 			stopCancel()
 		}
 	}

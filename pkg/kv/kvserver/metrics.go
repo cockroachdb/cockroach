@@ -3515,11 +3515,11 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, m *tenantSto
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.mu.released.Load() {
-		log.Dev.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
+		log.KvExec.FatalfDepth(ctx, 1, "tenant metrics already released in:\n%s", m.mu.stack)
 	}
 	m.mu.refCount--
 	if n := m.mu.refCount; n < 0 {
-		log.Dev.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
+		log.KvExec.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", m.tenantID, n)
 	} else if n > 0 {
 		return
 	}
@@ -3609,7 +3609,7 @@ func (tm *tenantStorageMetrics) assert(ctx context.Context) {
 	if tm.mu.released.Load() {
 		tm.mu.Lock()
 		defer tm.mu.Unlock()
-		log.Dev.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
+		log.KvExec.Fatalf(ctx, "tenant metrics already released in:\n%s", tm.mu.stack)
 	}
 }
 
@@ -4461,7 +4461,7 @@ func (sm *StoreMetrics) updateDiskStats(
 		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
 	} else {
 		// Don't update cumulative stats to the useless zero value.
-		log.Dev.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
+		log.KvExec.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
 	}
 	maxRollingStats := rollingStats.Max()
 	// maxRollingStats is computed as the change in stats every 100ms
@@ -4503,7 +4503,7 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.SplitEstimatedTotalBytesDiff = 0
 
 	if metric != (result.Metrics{}) {
-		log.Dev.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
+		log.KvExec.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
 	}
 }
 
