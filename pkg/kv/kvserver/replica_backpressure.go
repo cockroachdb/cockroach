@@ -203,7 +203,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
 
 			if backpressureLogLimiter.ShouldLog() {
-				log.Dev.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
+				log.KvExec.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
 			}
 		}
 
