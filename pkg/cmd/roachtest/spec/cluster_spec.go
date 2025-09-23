@@ -55,6 +55,11 @@ var AllArchs = Archs(vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS)
 // OnlyAMD64 contains only the AMD64 architecture.
 var OnlyAMD64 = Archs(vm.ArchAMD64)
 
+var OnlyARM64 = Archs(vm.ArchARM64)
+
+// OnlyFIPS contains only the FIPS architecture.
+var OnlyFIPS = Archs(vm.ArchFIPS)
+
 var AllExceptFIPS = AllArchs.remove(vm.ArchFIPS)
 
 // Archs creates an ArchSet for the given architectures.
