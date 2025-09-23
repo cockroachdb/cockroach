@@ -123,7 +123,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	}
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		log.Dev.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
+		log.KvDistribution.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
 	isSuspect := replicaIsSuspect(repl)
@@ -299,7 +299,7 @@ func (rgcq *replicaGCQueue) process(
 			// snapshot for *each* of them. This typically happens for the last
 			// range:
 			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
-			log.Dev.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+			log.KvDistribution.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
