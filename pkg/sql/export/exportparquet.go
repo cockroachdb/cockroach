@@ -247,7 +247,9 @@ func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
 }
 
 // Close is part of the execinfra.Processor interface.
-func (*parquetWriterProcessor) Close(context.Context) {}
+func (sp *parquetWriterProcessor) Close(context.Context) {
+	sp.input.ConsumerClosed()
+}
 
 // Resume is part of the execinfra.Processor interface.
 func (sp *parquetWriterProcessor) testingKnobsOrNil() *TestingKnobs {

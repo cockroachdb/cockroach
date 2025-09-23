@@ -306,4 +306,6 @@ func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
 }
 
 // Close is part of the execinfra.Processor interface.
-func (*csvWriter) Close(context.Context) {}
+func (sp *csvWriter) Close(context.Context) {
+	sp.input.ConsumerClosed()
+}
