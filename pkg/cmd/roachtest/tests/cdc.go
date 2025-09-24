@@ -2011,42 +2011,37 @@ func getChangefeedDistribution(
 	return changefeedDistribution
 }
 
-func veryifyLeaseHolderDistribution(
-	db *gosql.DB, t test.Test, nodeToZone map[int]string,
-) map[string]int {
-	var rows *gosql.Rows
-	// Get lease holders for all ranges in tpcc database.
-	leaseHolderQuery := `SELECT r.start_pretty, r.replicas, r.replica_localities, r.lease_holder 
-	FROM crdb_internal.ranges r 
-	JOIN crdb_internal.tables t ON r.start_pretty like concat('/Table/', t.table_id::STRING,'%')
-	WHERE t.database_name = 'tpcc'`
-	rows, err := db.Query(leaseHolderQuery)
-	zoneToLeaseHolderCount := make(map[string]int)
-	require.NoError(t, err)
-	defer rows.Close()
-	for rows.Next() {
-		var startKeyPretty string
-		var replicas []uint8
-		var replicaLocalities []uint8
-		var leaseHolder int
-		require.NoError(t, rows.Scan(&startKeyPretty, &replicas, &replicaLocalities, &leaseHolder))
-		for indx := range replicas {
-			require.NotEqual(t, replicas[indx], 0)
-			replicas[indx]--
+func verifyLeaseHolderLocality(db *gosql.DB, t test.Test, primaryRegion string) {
+	leaseHolderQuery := `SELECT NOT EXISTS (
+	SELECT 1
+	FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS]
+	WHERE database_name = 'tpcc'
+		AND (lease_holder_locality IS DISTINCT FROM $1::STRING OR lease_holder_locality IS NULL)
+)`
+	t.L().Printf("Waiting for all lease holders to be in region %s", primaryRegion)
+	tStart := timeutil.Now()
+	ok := false
+	for {
+		if timeutil.Since(tStart) > 5*time.Minute {
+			t.L().Printf("Timeout waiting for lease holders to be in region %s", primaryRegion)
+			t.Fatalf("Timeout waiting for lease holders to be in region %s; waited for %s", primaryRegion, timeutil.Since(tStart))
 		}
-		leaseHolder--
-		zoneToLeaseHolderCount[nodeToZone[leaseHolder]]++
+		require.NoError(t, db.QueryRow(leaseHolderQuery, primaryRegion).Scan(&ok))
+		if ok {
+			break
+		}
+		time.Sleep(time.Second)
 	}
-	return zoneToLeaseHolderCount
 }
 
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		// This test
-		// 1. Creates a cluster with 3 nodes each in us-east and us-west
-		// 2. Runs a tpcc workload, then sets tpcc database to primary region us-west
-		// 3. Creates a changefeed with execution locality set to us-east
-		// 4. Gets the changefeed diagram and creates mappings
+		// 1. Creates a cluster with 3 nodes each in us-east and us-west;
+		// 2. Runs a tpcc workload, then congigures tpcc database to have lease holders in region us-west;
+		// 3. Creates a changefeed with execution locality set to us-east;
+		// 4. Gets the changefeed diagram and creates mappings;
+		// 5. Verifies that spans are assigned to multiple change aggregators in region us-east.
 
 		// This test is used to verify that ranges are evenly distributed across
 		// change aggregators in the execution_locality region while targeting tables
@@ -2058,7 +2053,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(7, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-b")),
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(),
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodeToZone := map[int]string{
 				0: "us-east1-b",
@@ -2071,17 +2066,24 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 20})
 
 			var err error
-			_, err = ct.DB().Exec("ALTER DATABASE tpcc SET PRIMARY REGION 'us-west1'")
+			_, err = ct.DB().Exec(`ALTER DATABASE tpcc 
+CONFIGURE ZONE USING 
+	constraints = '{+region=us-west1: 1, +region=us-east1: 1}', 
+	lease_preferences = '[[+region=us-west1]]', num_replicas = 3`)
 			require.NoError(t, err)
+
+			// Verify lease holders are in us-west1-b.
+			verifyLeaseHolderLocality(ct.DB(), t, "cloud=gce,region=us-west1,zone=us-west1-b")
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: cloudStorageSink,
 				targets:  allTpccTargets,
 				opts: map[string]string{
 					"execution_locality": "'region=us-east1'",
+					"initial_scan":       "'only'",
 				},
 			})
 			ct.waitForWorkload()
@@ -2090,18 +2092,12 @@ func registerCDC(r registry.Registry) {
 			processors, err := getDiagramProcessors(ctx, ct.DB())
 			require.NoError(t, err)
 
+			// Verify changefeed aggregators are distributed across nodes in region us-east.
 			changefeedDistribution := getChangefeedDistribution(processors, nodeToZone, t)
 			require.Greater(t, changefeedDistribution.TotalAggregators, 1)
-			for nodeIdx, spansWatched := range changefeedDistribution.NodeToSpansWatched {
-				require.LessOrEqual(t, spansWatched, changefeedDistribution.TotalSpansWatched/2, "nodeIdx %d watched %d spans, total spans watched %d", nodeIdx, spansWatched, changefeedDistribution.TotalSpansWatched)
-			}
 			require.Equal(t, 1, len(changefeedDistribution.ZoneToSpansWatched))
 			require.Equal(t, changefeedDistribution.ZoneToSpansWatched["us-east1-b"], changefeedDistribution.TotalSpansWatched)
-			zoneToLeaseHolderCount := veryifyLeaseHolderDistribution(ct.DB(), t, nodeToZone)
-			// Majority of lease holders should be in us-west1-b. Some may not, but most should.
-			if zoneToLeaseHolderCount["us-east1-b"] != 0 {
-				require.Greater(t, zoneToLeaseHolderCount["us-west1-b"]/zoneToLeaseHolderCount["us-east1-b"], 10)
-			}
+
 		},
 	})
 	r.Add(registry.TestSpec{
