@@ -6,10 +6,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,7 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/crlib/crstrings"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/ghemawat/stream"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -367,4 +374,77 @@ func TestIdProviderServerIdentityString(t *testing.T) {
 			assert.Equalf(t, tt.want, s.ServerIdentityString(tt.args.key), "ServerIdentityString(%v)", tt.args.key)
 		})
 	}
+}
+
+func TestCreateEngines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	specs := map[string]base.StoreSpec{}
+
+	datadriven.RunTest(t, "testdata/create_engines", func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "store-spec":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			spec := base.StoreSpec{}
+			spec.Path = name
+			for _, line := range crstrings.Lines(d.Input) {
+				parts := strings.SplitN(line, "=", 2)
+				switch parts[0] {
+				case "in-memory":
+					spec.InMemory = true
+				case "attrs":
+					spec.Attributes = strings.Split(parts[1], ":")
+				default:
+					return fmt.Sprintf("unknown field: %q", parts[0])
+				}
+			}
+			specs[name] = spec
+			return ""
+		case "create-engines":
+			var cfg Config
+			cfg.Settings = cluster.MakeTestingClusterSettings()
+
+			var pattern string
+			d.ScanArgs(t, "pattern", &pattern)
+			var specNames []string
+			d.ScanArgs(t, "specs", &specNames)
+			for _, specName := range specNames {
+				spec, ok := specs[specName]
+				if !ok {
+					return fmt.Sprintf("unknown store: %q", specName)
+				}
+				cfg.Stores.Specs = append(cfg.Stores.Specs, spec)
+			}
+			d.MaybeScanArgs(t, "CacheSize", &cfg.CacheSize)
+
+			engines, err := cfg.CreateEngines(context.Background())
+			if err != nil {
+				return fmt.Sprintf("failed to create engines: %v", err)
+			}
+			defer engines.Close()
+
+			var buf bytes.Buffer
+			for _, e := range engines {
+				buf.WriteString(strings.TrimSpace(e.GetPebbleOptions().String()))
+				buf.WriteString("\n")
+			}
+			return grepStr(&buf, pattern)
+		default:
+			return fmt.Sprintf("unknown command: %q", d.Cmd)
+		}
+	})
+}
+
+func grepStr(r io.Reader, pattern string) string {
+	var buf bytes.Buffer
+	if err := stream.Run(stream.Sequence(
+		stream.ReadLines(r),
+		stream.Grep(pattern),
+		stream.WriteLines(&buf),
+	)); err != nil {
+		return err.Error()
+	}
+	return buf.String()
 }
