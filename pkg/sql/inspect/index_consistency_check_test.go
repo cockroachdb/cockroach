@@ -128,6 +128,9 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 		splitRangeDDL string
 		// indexDDL is the DDL to create the indexes on the table.
 		indexDDL []string
+		// corruptionTargetIndex specifies which secondary index to corrupt (0-based position).
+		// If not specified, defaults to 0 (first index).
+		corruptionTargetIndex int
 		// missingIndexEntrySelector defines a SQL predicate that selects rows
 		// whose secondary index entries will be manually deleted to simulate
 		// missing index entries (i.e., present in the primary index but not in the
@@ -247,6 +250,57 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			danglingIndexEntryInsertQuery: "SELECT 15, 30, 300, 'corrupt', 'e_3', 300.5", // Add dangling entry after timestamp
 			useTimestampBeforeCorruption:  true,                                          // Use timestamp from before corruption
 		},
+		{
+			desc:          "2 indexes, corrupt second index, missing entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (500)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+				"CREATE INDEX idx_t_b ON test.t (b) STORING (e)",
+			},
+			corruptionTargetIndex:     1, // Target second index (idx_t_b)
+			missingIndexEntrySelector: "a = 7",
+			expectedIssues: []inspectIssue{
+				{
+					ErrorType:  "missing_secondary_index_entry",
+					PrimaryKey: "e'(7, \\'d_7\\')'",
+					Details: map[redact.RedactableString]interface{}{
+						"index_name": "idx_t_b",
+					},
+				},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+		{
+			desc:          "3 indexes, corrupt middle index, dangling entry",
+			splitRangeDDL: "ALTER TABLE test.t SPLIT AT VALUES (333),(666)",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+				"CREATE INDEX idx_t_b ON test.t (b) STORING (c)",
+				"CREATE INDEX idx_t_c ON test.t (c) STORING (f)",
+			},
+			corruptionTargetIndex:         1, // Target second index (middle one)
+			danglingIndexEntryInsertQuery: "SELECT 25, 50, 500, 'corrupt_middle', 'e_25', 125.5",
+			expectedIssues: []inspectIssue{
+				{
+					ErrorType:  "dangling_secondary_index_entry",
+					PrimaryKey: "e'(25, \\'corrupt_middle\\')'",
+					Details: map[redact.RedactableString]interface{}{
+						"index_name": "idx_t_b",
+					},
+				},
+			},
+			expectedErrRegex: expectedInspectFoundInconsistencies,
+		},
+		{
+			desc: "multiple indexes, no corruption - all should be checked",
+			indexDDL: []string{
+				"CREATE INDEX idx_t_a ON test.t (a)",
+				"CREATE INDEX idx_t_b ON test.t (b)",
+				"CREATE INDEX idx_t_c ON test.t (c)",
+			},
+			// No corruptionTargetIndex specified, no corruption
+			missingIndexEntrySelector: "", // No corruption
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			issueLogger.reset()
@@ -313,7 +367,14 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			}
 
 			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
-			secIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+
+			// Select target index based on corruptionTargetIndex with bounds checking
+			indexes := tableDesc.PublicNonPrimaryIndexes()
+			targetIndexPos := tc.corruptionTargetIndex
+			if targetIndexPos < 0 || targetIndexPos >= len(indexes) {
+				targetIndexPos = 0 // Default to first index for safety/backward compatibility
+			}
+			secIndex := indexes[targetIndexPos]
 
 			// Apply test-specific corruption based on configured selectors:
 			// - If missingIndexEntrySelector is set, we delete the secondary index entries
@@ -436,6 +497,21 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 							require.Regexp(t, expectedPattern, detailValue,
 								"detail %s should match pattern %s, got: %s", detailKey, expectedPattern, detailValue)
 						}
+					}
+				}
+
+				// Validate Details if provided in expected issue
+				if expectedIssue.Details != nil {
+					require.NotNil(t, foundIssue.Details, "issue should have details when expected")
+
+					// Check that all expected detail keys and values match
+					for expectedKey, expectedValue := range expectedIssue.Details {
+						require.Contains(t, foundIssue.Details, expectedKey,
+							"issue should contain detail key: %s", expectedKey)
+
+						actualValue := foundIssue.Details[expectedKey]
+						require.Equal(t, expectedValue, actualValue,
+							"detail %s should be %v, got %v", expectedKey, expectedValue, actualValue)
 					}
 				}
 			}
