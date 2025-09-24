@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -416,7 +417,6 @@ func TestStatusAPIStatements(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -536,8 +536,7 @@ func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
 	sqlStatsKnobs.SynchronousSQLStats = true
 	// Start the cluster.
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultDRPCOption: base.TestDRPCDisabled,
-		Insecure:          true,
+		Insecure: true,
 		Knobs: base.TestingKnobs{
 			SQLStatsKnobs: sqlStatsKnobs,
 		},
@@ -699,7 +698,6 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -868,7 +866,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -1040,7 +1037,6 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -1648,7 +1644,11 @@ func TestDrainSqlStatsPermissionDenied(t *testing.T) {
 	nonRootUser := apiconstants.TestingUserNameNoAdmin()
 	sqlutils.MakeSQLRunner(ts.SQLConn(t)).Exec(t, fmt.Sprintf("CREATE USER IF NOT EXISTS %s", nonRootUser))
 	ctx = authserver.ContextWithHTTPAuthInfo(ctx, nonRootUser.Normalized(), 1)
-	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, nil)
+	if rpcbase.DRPCEnabled(ctx, ts.ClusterSettings()) {
+		ctx = authserver.ForwardHTTPAuthInfoToDRPCCalls(ctx, nil)
+	} else {
+		ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, nil)
+	}
 
 	statusClient := ts.GetStatusClient(t)
 	defer ts.Stopper().Stop(ctx)

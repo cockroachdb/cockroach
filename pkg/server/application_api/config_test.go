@@ -8,6 +8,7 @@ package application_api_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"reflect"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	// To ensure the streaming replication cluster setting is defined.
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -88,6 +90,12 @@ func TestAdminAPISettings(t *testing.T) {
 		conn.Exec(t, fmt.Sprintf("GRANT %s TO %s", u.grantRole, u.userName))
 	}
 
+	var forwardAuthInfoFn func(ctx context.Context, r *http.Request) context.Context
+	if rpcbase.DRPCEnabled(ctx, ts.ClusterSettings()) {
+		forwardAuthInfoFn = authserver.ForwardHTTPAuthInfoToDRPCCalls
+	} else {
+		forwardAuthInfoFn = authserver.ForwardHTTPAuthInfoToRPCCalls
+	}
 	// Runs test cases on each user in testUsers twice, once with redact_sensitive_settings
 	// enabled and once with it disabled.
 	testutils.RunTrueAndFalse(t, "redact sensitive", func(t *testing.T, redactSensitive bool) {
@@ -98,7 +106,7 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		for _, u := range testUsers {
 			t.Run(u.userName, func(t *testing.T) {
-				authCtx := authserver.ForwardHTTPAuthInfoToRPCCalls(authserver.ContextWithHTTPAuthInfo(ctx, u.userName, 1), nil)
+				authCtx := forwardAuthInfoFn(authserver.ContextWithHTTPAuthInfo(ctx, u.userName, 1), nil)
 				resp, err := ts.GetAdminClient(t).Settings(authCtx, &serverpb.SettingsRequest{})
 				require.NoError(t, err)
 				var keys []settings.InternalKey
@@ -138,7 +146,7 @@ func TestAdminAPISettings(t *testing.T) {
 		t.Run("no permission", func(t *testing.T) {
 			userName := "no_permission"
 			conn.Exec(t, fmt.Sprintf("CREATE USER IF NOT EXISTS %s", userName))
-			authCtx := authserver.ForwardHTTPAuthInfoToRPCCalls(authserver.ContextWithHTTPAuthInfo(ctx, userName, 1), nil)
+			authCtx := forwardAuthInfoFn(authserver.ContextWithHTTPAuthInfo(ctx, userName, 1), nil)
 			_, err := ts.GetAdminClient(t).Settings(authCtx, &serverpb.SettingsRequest{})
 			require.Error(t, err)
 			grpcStatus, ok := status.FromError(err)

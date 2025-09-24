@@ -120,7 +120,7 @@ func executeRPC[TReq, TResp protoutil.Message](
 	rpcReq TReq,
 ) error {
 	ctx := req.Context()
-	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, req)
+	ctx = authserver.ForwardHTTPAuthInfoToDRPCCalls(ctx, req)
 	ctx = rpc.MarkDRPCGatewayRequest(ctx)
 
 	if err := decoder.Decode(rpcReq, req.URL.Query()); err != nil {

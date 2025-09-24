@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc/metadata"
+	"storj.io/drpc/drpcmetadata"
 )
 
 type webSessionUserKey struct{}
@@ -81,6 +82,19 @@ func ForwardSQLIdentityThroughRPCCalls(ctx context.Context) context.Context {
 	return ctx
 }
 
+// ForwardHTTPAuthInfoToDRPCCalls converts an internal HTTP API context, to one
+// that can issue outgoing DRPC requests under the same logged-in user.
+func ForwardHTTPAuthInfoToDRPCCalls(ctx context.Context, r *http.Request) context.Context {
+	md := make(map[string]string)
+	if user := ctx.Value(webSessionUserKey{}); user != nil {
+		md[webSessionUserKeyStr] = user.(string)
+	}
+	if sessionID := ctx.Value(webSessionIDKey{}); sessionID != nil {
+		md[webSessionIDKeyStr] = fmt.Sprintf("%v", sessionID)
+	}
+	return drpcmetadata.AddPairs(ctx, md)
+}
+
 // ForwardHTTPAuthInfoToRPCCalls converts an HTTP API (v1 or v2) context, to one that
 // can issue outgoing RPC requests under the same logged-in user.
 func ForwardHTTPAuthInfoToRPCCalls(ctx context.Context, r *http.Request) context.Context {
@@ -98,25 +112,31 @@ func ForwardHTTPAuthInfoToRPCCalls(ctx context.Context, r *http.Request) context
 // SQL identity via a special context key. See
 // userFromHTTPAuthInfoContext().
 func UserFromIncomingRPCContext(ctx context.Context) (res username.SQLUsername, err error) {
-	md, ok := grpcutil.FastFromIncomingContext(ctx)
-	if !ok {
+	var name string
+	// Extract user from incoming RPC context, supporting both gRPC and DRPC.
+	if md, ok := grpcutil.FastFromIncomingContext(ctx); ok {
+		usernames, ok := md[webSessionUserKeyStr]
+		if !ok {
+			// If the incoming context has metadata but no attached web session user,
+			// it's a gRPC / internal SQL connection which has root on the cluster.
+			// This assumption is a historical hiccup, and would be best described
+			// as a bug. See: https://github.com/cockroachdb/cockroach/issues/45018
+			return username.RootUserName(), nil
+		}
+		if len(usernames) != 1 {
+			log.Dev.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
+			return res, fmt.Errorf(
+				"context's incoming metadata contains unexpected number of usernames: %+v ", md)
+		}
+		name = usernames[0]
+	} else if v, ok := drpcmetadata.GetValue(ctx, webSessionUserKeyStr); ok {
+		name = v
+	} else {
 		return username.RootUserName(), nil
 	}
-	usernames, ok := md[webSessionUserKeyStr]
-	if !ok {
-		// If the incoming context has metadata but no attached web session user,
-		// it's a gRPC / internal SQL connection which has root on the cluster.
-		// This assumption is a historical hiccup, and would be best described
-		// as a bug. See: https://github.com/cockroachdb/cockroach/issues/45018
-		return username.RootUserName(), nil
-	}
-	if len(usernames) != 1 {
-		log.Dev.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
-		return res, fmt.Errorf(
-			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
-	}
+
 	// At this point the user is already logged in, so we can assume
 	// the username has been normalized already.
-	username := username.MakeSQLUsernameFromPreNormalizedString(usernames[0])
+	username := username.MakeSQLUsernameFromPreNormalizedString(name)
 	return username, nil
 }

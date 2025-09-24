@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -600,7 +601,12 @@ func TestStatusUpdateTableMetadataCache(t *testing.T) {
 	conn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	t.Run("gated on admin privilege", func(t *testing.T) {
-		authCtx := authserver.ForwardHTTPAuthInfoToRPCCalls(authserver.ContextWithHTTPAuthInfo(ctx, username.TestUser, 1), nil)
+		authCtx := authserver.ContextWithHTTPAuthInfo(ctx, username.TestUser, 1)
+		if rpcbase.DRPCEnabled(ctx, tc.ApplicationLayer(0).ClusterSettings()) {
+			authCtx = authserver.ForwardHTTPAuthInfoToDRPCCalls(authCtx, nil)
+		} else {
+			authCtx = authserver.ForwardHTTPAuthInfoToRPCCalls(authCtx, nil)
+		}
 		_, err := tc.Server(0).GetStatusClient(t).UpdateTableMetadataCache(authCtx,
 			&serverpb.UpdateTableMetadataCacheRequest{Local: false})
 		require.Truef(t, testutils.IsError(err, updateTableMetadataCachePermissionErrMsg), "received error: %v", err)
