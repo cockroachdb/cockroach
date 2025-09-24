@@ -55,19 +55,19 @@ write_bytes_per_second#1: last:  [s1=8367672, s2=10580757, s3=10581322, s4=10531
 write_bytes_per_second#1: thrash_pct: [s1=1%, s2=5%, s3=7%, s4=2%, s5=115%, s6=110%]  (sum=241%)
 artifacts[mma-only]: 31964600a8a5db0a
 ==========================
-cpu#1: last:  [s1=841345011, s2=829661182, s3=831709835, s4=831341614, s5=832801412, s6=828672611] (stddev=4142301.51, mean=832588610.83, sum=4995531665)
-cpu#1: thrash_pct: [s1=59%, s2=124%, s3=82%, s4=53%, s5=80%, s6=45%]  (sum=442%)
+cpu#1: last:  [s1=830551694, s2=843605039, s3=831306454, s4=831088101, s5=832966580, s6=830458451] (stddev=4668942.17, mean=833329386.50, sum=4999976319)
+cpu#1: thrash_pct: [s1=15%, s2=83%, s3=74%, s4=39%, s5=46%, s6=51%]  (sum=309%)
 cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
-cpu_util#1: thrash_pct: [s1=59%, s2=124%, s3=82%, s4=53%, s5=80%, s6=45%]  (sum=442%)
+cpu_util#1: thrash_pct: [s1=15%, s2=83%, s3=74%, s4=39%, s5=46%, s6=51%]  (sum=309%)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
-leases#1: last:  [s1=14, s2=15, s3=12, s4=15, s5=8, s6=8] (stddev=3.00, mean=12.00, sum=72)
-leases#1: thrash_pct: [s1=100%, s2=144%, s3=73%, s4=100%, s5=118%, s6=83%]  (sum=618%)
+leases#1: last:  [s1=11, s2=16, s3=11, s4=15, s5=11, s6=8] (stddev=2.71, mean=12.00, sum=72)
+leases#1: thrash_pct: [s1=53%, s2=75%, s3=79%, s4=76%, s5=79%, s6=89%]  (sum=451%)
 replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean=36.00, sum=216)
-replicas#1: last:  [s1=36, s2=34, s3=36, s4=37, s5=36, s6=37] (stddev=1.00, mean=36.00, sum=216)
-replicas#1: thrash_pct: [s1=727%, s2=949%, s3=564%, s4=820%, s5=709%, s6=475%]  (sum=4244%)
-write_bytes_per_second#1: last:  [s1=10579065, s2=9417136, s3=9967990, s4=10028094, s5=9970993, s6=10027141] (stddev=336259.66, mean=9998403.17, sum=59990419)
-write_bytes_per_second#1: thrash_pct: [s1=139%, s2=175%, s3=128%, s4=263%, s5=274%, s6=252%]  (sum=1231%)
-artifacts[mma-count]: 3f4bed5ffaca355f
+replicas#1: last:  [s1=38, s2=35, s3=35, s4=37, s5=35, s6=36] (stddev=1.15, mean=36.00, sum=216)
+replicas#1: thrash_pct: [s1=336%, s2=388%, s3=388%, s4=401%, s5=415%, s6=293%]  (sum=2221%)
+write_bytes_per_second#1: last:  [s1=10028292, s2=10525501, s3=9475047, s4=10022859, s5=9422060, s6=10524839] (stddev=440174.25, mean=9999766.33, sum=59998598)
+write_bytes_per_second#1: thrash_pct: [s1=62%, s2=88%, s3=98%, s4=192%, s5=204%, s6=186%]  (sum=830%)
+artifacts[mma-count]: b42b5562c69d2ae7
 ==========================
 Cluster Set Up
 	n1(AU_EAST,AU_EAST_1,5vcpu): {s1:(256GiB)}
