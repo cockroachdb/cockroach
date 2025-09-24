@@ -2494,7 +2494,7 @@ func (a *Allocator) TransferLeaseTarget(
 				continue
 			}
 			if a.CountBasedRebalancingOnlyEnabledByMMA() &&
-				a.as.IsInConflictWithMMA(source.StoreID, repl.StoreID, validTargetsStoreIDs, true /* cpuOnly */) {
+				a.as.IsInConflictWithMMA(usageInfo, source.StoreID, repl.StoreID, validTargetsStoreIDs, true /* cpuOnly */) {
 				continue
 			}
 			storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
@@ -3088,7 +3088,7 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 			targetsStoreIDs = append(targetsStoreIDs, repl.StoreID)
 		}
 		for _, replDesc := range existing {
-			if !a.as.IsInConflictWithMMA(source.StoreID, replDesc.StoreID, targetsStoreIDs, true /*cpuOnly*/) {
+			if !a.as.IsInConflictWithMMA(rangeUsageInfo, source.StoreID, replDesc.StoreID, targetsStoreIDs, true /*cpuOnly*/) {
 				atLeastOneGoodCandidate = true
 				break
 			}

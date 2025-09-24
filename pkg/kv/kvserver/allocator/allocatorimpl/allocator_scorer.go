@@ -337,7 +337,7 @@ type ScorerOptions interface {
 	// allocator should check with MMA to see if the change is in conflict with
 	// MMA's goal, thus preventing thrashing. Note that candidateSL may or may not
 	// include the existing store.
-	isInConflictWithMMA(existing roachpb.StoreID, candidate roachpb.StoreID, candidateSL storepool.StoreList) bool
+	isInConflictWithMMA(rangeUsageInfo allocator.RangeUsageInfo, existing roachpb.StoreID, candidate roachpb.StoreID, candidateSL storepool.StoreList) bool
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -413,7 +413,7 @@ func (bo BaseScorerOptions) adjustRangeCountForScoring(rangeCount int) int {
 }
 
 func (bo BaseScorerOptions) isInConflictWithMMA(
-	_ roachpb.StoreID, _ roachpb.StoreID, _ storepool.StoreList,
+	_ allocator.RangeUsageInfo, _ roachpb.StoreID, _ roachpb.StoreID, _ storepool.StoreList,
 ) bool {
 	return false
 }
@@ -609,13 +609,16 @@ var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
 // isInConflictWithMMA returns true if the change from existing to candidate
 // is in conflict with MMA's goal.
 func (lr LoadAwareRangeCountScorerOptions) isInConflictWithMMA(
-	existing roachpb.StoreID, cand roachpb.StoreID, candidateSL storepool.StoreList,
+	rangeUsageInfo allocator.RangeUsageInfo,
+	existing roachpb.StoreID,
+	cand roachpb.StoreID,
+	candidateSL storepool.StoreList,
 ) bool {
 	storeIDs := make([]roachpb.StoreID, 0, len(candidateSL.Stores))
 	for _, s := range candidateSL.Stores {
 		storeIDs = append(storeIDs, s.StoreID)
 	}
-	return lr.IsInConflictWithMMA(existing, cand, storeIDs, false /* cpuOnly */)
+	return lr.IsInConflictWithMMA(rangeUsageInfo, existing, cand, storeIDs, false /* cpuOnly */)
 }
 
 // LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
@@ -1880,7 +1883,7 @@ func rankedCandidateListForRebalancing(
 			// conflict with MMA's goal early. We should consider following the same
 			// pattern as overloaded by adding a field to candidate and filter out in
 			// the end
-			if options.isInConflictWithMMA(existing.store.StoreID, cand.store.StoreID, comparable.candidateSL) {
+			if options.isInConflictWithMMA(rangeUsageInfo, existing.store.StoreID, cand.store.StoreID, comparable.candidateSL) {
 				continue
 			}
 			// We already computed valid, necessary, fullDisk, and diversityScore

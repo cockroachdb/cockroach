@@ -192,7 +192,7 @@ type meanNodeLoad struct {
 }
 
 type storeLoadSummary struct {
-	worstDim                                               LoadDimension // for logging only
+	worstDim                                               LoadDimension
 	sls                                                    loadSummary
 	nls                                                    loadSummary
 	dimSummary                                             [NumLoadDimensions]loadSummary
