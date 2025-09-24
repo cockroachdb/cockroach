@@ -168,57 +168,60 @@ func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+		expectErrCreatingFeed(t, f,
+			`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`,
+			`database-level changefeed is not implemented yet`)
+		// sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		// sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
-		defer closeFeed(t, foo)
+		// foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+		// defer closeFeed(t, foo)
 
-		// 'initial' is skipped because only the latest value ('updated') is
-		// emitted by the initial scan.
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
-			`foo2: [0]->{"after": {"a": 0, "b": "updated"}}`,
-		})
+		// // 'initial' is skipped because only the latest value ('updated') is
+		// // emitted by the initial scan.
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		// 	`foo2: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		// })
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
-		})
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+		// 	`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		// })
 
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, foo, []string{
-			`foo2: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo2: [2]->{"after": {"a": 2, "b": "b"}}`,
-		})
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'a'), (2, 'b')`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo2: [1]->{"after": {"a": 1, "b": "a"}}`,
+		// 	`foo2: [2]->{"after": {"a": 2, "b": "b"}}`,
+		// })
 
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
-		assertPayloads(t, foo, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
-			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
-		})
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
+		// 	`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
+		// })
 
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (2, 'c'), (3, 'd')`)
-		assertPayloads(t, foo, []string{
-			`foo2: [2]->{"after": {"a": 2, "b": "c"}}`,
-			`foo2: [3]->{"after": {"a": 3, "b": "d"}}`,
-		})
+		// sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (2, 'c'), (3, 'd')`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo2: [2]->{"after": {"a": 2, "b": "c"}}`,
+		// 	`foo2: [3]->{"after": {"a": 3, "b": "d"}}`,
+		// })
 
-		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": null}`,
-		})
+		// sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [1]->{"after": null}`,
+		// })
 
-		sqlDB.Exec(t, `DELETE FROM foo2 WHERE a = 1`)
-		assertPayloads(t, foo, []string{
-			`foo2: [1]->{"after": null}`,
-		})
+		// sqlDB.Exec(t, `DELETE FROM foo2 WHERE a = 1`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo2: [1]->{"after": null}`,
+		// })
 	}
 
 	cdcTest(t, testFn)
@@ -229,25 +232,28 @@ func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		expectSuccess := func(stmt string) {
-			successfulFeed := feed(t, f, stmt)
-			defer closeFeed(t, successfulFeed)
-			_, err := successfulFeed.Next()
-			require.NoError(t, err)
-		}
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+		expectErrCreatingFeed(t, f,
+			`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`,
+			`database-level changefeed is not implemented yet`)
+		// expectSuccess := func(stmt string) {
+		// 	successfulFeed := feed(t, f, stmt)
+		// 	defer closeFeed(t, successfulFeed)
+		// 	_, err := successfulFeed.Next()
+		// 	require.NoError(t, err)
+		// }
+		// sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		// sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
 
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo,foo2`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
-		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.*`,
-			`at or near "*": syntax error`)
+		// expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`)
+		// expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo,foo2`)
+		// expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
+		// expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.*`,
+		// 	`at or near "*": syntax error`)
 		// TODO(#147421): Assert payload once the filter works
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
@@ -258,25 +264,29 @@ func TestDatabaseLevelChangefeedWithExcludeFilter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		expectSuccess := func(stmt string) {
-			successfulFeed := feed(t, f, stmt)
-			defer closeFeed(t, successfulFeed)
-			_, err := successfulFeed.Next()
-			require.NoError(t, err)
-		}
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+		expectErrCreatingFeed(t, f,
+			`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`,
+			`database-level changefeed is not implemented yet`)
 
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo,foo2`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
-		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo.*`,
-			`at or near "*": syntax error`)
+		// expectSuccess := func(stmt string) {
+		// 	successfulFeed := feed(t, f, stmt)
+		// 	defer closeFeed(t, successfulFeed)
+		// 	_, err := successfulFeed.Next()
+		// 	require.NoError(t, err)
+		// }
+		// sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		// sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+
+		// expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`)
+		// expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo,foo2`)
+		// expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
+		// expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo.*`,
+		// `at or near "*": syntax error`)
 		// TODO(#147421): Assert payload once the filter works
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
@@ -1033,65 +1043,68 @@ func TestDatabaseLevelChangefeedDiff(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
-		d := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH diff`)
-		defer closeFeed(t, d)
+		expectErrCreatingFeed(t, f,
+			`CREATE CHANGEFEED FOR DATABASE d with diff`,
+			`database-level changefeed is not implemented yet`)
+		// sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		// sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
+		// sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+		// d := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH diff`)
+		// defer closeFeed(t, d)
 
-		// 'initial' is skipped because only the latest value ('updated') is
-		// emitted by the initial scan.
-		assertPayloads(t, d, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
-			`foo2: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
-		})
+		// // 'initial' is skipped because only the latest value ('updated') is
+		// // emitted by the initial scan.
+		// assertPayloads(t, d, []string{
+		// 	`foo: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
+		// 	`foo2: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
+		// })
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, d, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
-		})
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, d, []string{
-			`foo2: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
-			`foo2: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
-		})
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		// assertPayloads(t, d, []string{
+		// 	`foo: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
+		// 	`foo: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
+		// })
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'a'), (2, 'b')`)
+		// assertPayloads(t, d, []string{
+		// 	`foo2: [1]->{"after": {"a": 1, "b": "a"}, "before": null}`,
+		// 	`foo2: [2]->{"after": {"a": 2, "b": "b"}, "before": null}`,
+		// })
 
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
-		assertPayloads(t, d, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
-			`foo: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
-		})
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		// assertPayloads(t, d, []string{
+		// 	`foo: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
+		// 	`foo: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
+		// })
 
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (2, 'c'), (3, 'd')`)
-		assertPayloads(t, d, []string{
-			`foo2: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
-			`foo2: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
-		})
+		// sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (2, 'c'), (3, 'd')`)
+		// assertPayloads(t, d, []string{
+		// 	`foo2: [2]->{"after": {"a": 2, "b": "c"}, "before": {"a": 2, "b": "b"}}`,
+		// 	`foo2: [3]->{"after": {"a": 3, "b": "d"}, "before": null}`,
+		// })
 
-		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
-		assertPayloads(t, d, []string{
-			`foo: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
-		})
+		// sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		// assertPayloads(t, d, []string{
+		// 	`foo: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
+		// })
 
-		sqlDB.Exec(t, `DELETE FROM foo2 WHERE a = 1`)
-		assertPayloads(t, d, []string{
-			`foo2: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
-		})
+		// sqlDB.Exec(t, `DELETE FROM foo2 WHERE a = 1`)
+		// assertPayloads(t, d, []string{
+		// 	`foo2: [1]->{"after": null, "before": {"a": 1, "b": "a"}}`,
+		// })
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'new a')`)
-		assertPayloads(t, d, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
-		})
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'new a')`)
+		// assertPayloads(t, d, []string{
+		// 	`foo: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
+		// })
 
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'new a')`)
-		assertPayloads(t, d, []string{
-			`foo2: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
-		})
+		// sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1, 'new a')`)
+		// assertPayloads(t, d, []string{
+		// 	`foo2: [1]->{"after": {"a": 1, "b": "new a"}, "before": null}`,
+		// })
 	}
 
 	cdcTest(t, testFn)
@@ -12528,23 +12541,26 @@ func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE DATABASE foo;`)
-		sqlDB.Exec(t, `CREATE TABLE foo.bar (id INT PRIMARY KEY);`)
-		sqlDB.Exec(t, `INSERT INTO foo.bar VALUES (1);`)
-		expectedRows := []string{
-			`bar: [1]->{"after": {"id": 1}}`,
-		}
-		feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`)
-		defer closeFeed(t, feed1)
-		assertPayloads(t, feed1, expectedRows)
+		expectErrCreatingFeed(t, f,
+			`CREATE CHANGEFEED FOR DATABASE d`,
+			`database-level changefeed is not implemented yet`)
+		// sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// sqlDB.Exec(t, `CREATE DATABASE foo;`)
+		// sqlDB.Exec(t, `CREATE TABLE foo.bar (id INT PRIMARY KEY);`)
+		// sqlDB.Exec(t, `INSERT INTO foo.bar VALUES (1);`)
+		// expectedRows := []string{
+		// 	`bar: [1]->{"after": {"id": 1}}`,
+		// }
+		// feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`)
+		// defer closeFeed(t, feed1)
+		// assertPayloads(t, feed1, expectedRows)
 
-		sqlDB.Exec(t, `ALTER DATABASE foo RENAME TO bar;`)
-		sqlDB.Exec(t, `INSERT INTO bar.bar VALUES (2);`)
-		expectedRows = []string{
-			`bar: [2]->{"after": {"id": 2}}`,
-		}
-		assertPayloads(t, feed1, expectedRows)
+		// sqlDB.Exec(t, `ALTER DATABASE foo RENAME TO bar;`)
+		// sqlDB.Exec(t, `INSERT INTO bar.bar VALUES (2);`)
+		// expectedRows = []string{
+		// 	`bar: [2]->{"after": {"id": 2}}`,
+		// }
+		// assertPayloads(t, feed1, expectedRows)
 	}
 	// TODO(#152196): Remove feedTestUseRootUserConnection once we have ALTER
 	// DEFAULT PRIVILEGES for databases
