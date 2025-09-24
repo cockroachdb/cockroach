@@ -5433,9 +5433,9 @@ var (
 		},
 	)
 
-	statementHintsComputeExpr = "fnv64(fingerprint)"
-
-	StatementHintsTable = makeSystemTable(
+	statementHintsComputeExpr                = "fnv64(fingerprint)"
+	StatementHintsHashIndexID descpb.IndexID = 2
+	StatementHintsTable                      = makeSystemTable(
 		StatementHintsTableSchema,
 		systemTable(
 			catconstants.StatementHintsTableName,
@@ -5465,7 +5465,7 @@ var (
 			},
 			descpb.IndexDescriptor{
 				Name:                "hash_idx",
-				ID:                  2,
+				ID:                  StatementHintsHashIndexID,
 				Unique:              false,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 				KeyColumnNames:      []string{"hash"},
