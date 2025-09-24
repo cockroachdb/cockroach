@@ -88,7 +88,8 @@ type Sender struct {
 	// will continuously try to reconnect.
 	connsMu struct {
 		syncutil.Mutex
-		conns map[roachpb.NodeID]conn
+		conns      map[roachpb.NodeID]conn
+		quarantine map[roachpb.NodeID]hlc.Timestamp
 	}
 }
 
@@ -218,6 +219,7 @@ func newSenderWithConnFactory(
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
 	s.connsMu.conns = make(map[roachpb.NodeID]conn)
+	s.connsMu.quarantine = make(map[roachpb.NodeID]hlc.Timestamp)
 	return s
 }
 
@@ -236,6 +238,154 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 		}
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
+	nomWorkers := 4
+	var workerWg sync.WaitGroup
+	workerWg.Add(nomWorkers)
+
+	// Create 4 worker goroutines to process connections in parallel
+	for workerID := 0; workerID < nomWorkers; workerID++ {
+		_ /* err */ = s.stopper.RunAsyncTask(ctx, fmt.Sprintf("closedts side-transport sender worker %d", workerID),
+			func(ctx context.Context) {
+				defer workerWg.Done()
+
+				errSleepTime := sleepOnErr
+				conns := make(map[roachpb.NodeID]conn, 1000)
+				quarantine := make(map[roachpb.NodeID]hlc.Timestamp, 1000)
+
+				for {
+					// wait until s.buf is signaled.
+					s.buf.mu.Lock()
+					ch := s.buf.mu.bcastCh
+					s.buf.mu.Unlock()
+
+					select {
+					case <-ch:
+						// log.Dev.Infof(ctx, "side-transport sender worker %d received update", workerID)
+
+						s.connsMu.Lock()
+						// Clear maps before repopulating
+						for k := range conns {
+							delete(conns, k)
+						}
+						for k := range quarantine {
+							delete(quarantine, k)
+						}
+						// Copy all the connections and release the lock.
+						for k, v := range s.connsMu.conns {
+							conns[k] = v
+						}
+						for k, v := range s.connsMu.quarantine {
+							quarantine[k] = v
+						}
+						s.connsMu.Unlock()
+
+						// Process connections assigned to this worker using modulo distribution
+						for nodeID, c := range conns {
+							if int(nodeID)%nomWorkers != workerID {
+								continue
+							}
+
+							// Check if nodeID is in quarantine without checking the time yet.
+							if quarantineUntil, ok := quarantine[nodeID]; ok {
+								if s.clock.Now().Less(quarantineUntil) {
+									continue
+								}
+								delete(quarantine, nodeID)
+							}
+
+							// log.Dev.Infof(ctx, "side-transport sender worker %d processing connection to n%d", workerID, nodeID)
+
+							rpcConn := c.(*rpcConn)
+
+							if rpcConn.mu.testingKnobs.sleepOnErrOverride > 0 {
+								errSleepTime = rpcConn.mu.testingKnobs.sleepOnErrOverride
+							}
+
+							for {
+								rpcConn.mu.Lock()
+								if atomic.LoadInt32(&rpcConn.mu.closed) > 0 {
+									// If the connection is closed, it will be removed from the map.
+									// We don't need to process it anymore.
+									rpcConn.mu.Unlock()
+									break
+								}
+
+								if err := rpcConn.maybeConnectLocked(ctx, s.stopper); err != nil {
+									if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && rpcConn.mu.everyN.ShouldLog() {
+										log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", nodeID, err)
+									}
+
+									rpcConn.mu.Unlock()
+
+									s.connsMu.Lock()
+									s.connsMu.quarantine[nodeID] = s.clock.Now().AddDuration(errSleepTime)
+									s.connsMu.Unlock()
+									break
+								}
+
+								msg, ok, future := rpcConn.producer.buf.MaybeGetBySeq(ctx, rpcConn.mu.lastSent+1)
+								// log.Dev.Infof(ctx, "side-transport sender worker %d got message %+v from n%d", workerID, msg, rpcConn.nodeID)
+								// We can be signaled to stop in two ways: the buffer can be closed (in
+								// which case all connections must exit), or this connection was closed
+								// via close(). In either case, we quit.
+								if !ok {
+									rpcConn.mu.Unlock()
+									break
+								}
+
+								if future {
+									// No new messages to send.
+									rpcConn.mu.Unlock()
+									break
+								}
+
+								if msg == nil {
+									// The sequence number we've requested is no longer in the buffer. We
+									// need to generate a snapshot in order to re-initialize the stream.
+									// The snapshot will give us the sequence number to use for future
+									// incrementals.
+									rpcConn.mu.Unlock()
+									msg = rpcConn.producer.GetSnapshot()
+									rpcConn.mu.Lock()
+								}
+
+								rpcConn.mu.lastSent = msg.SeqNum
+
+								if fn := rpcConn.mu.testingKnobs.beforeSend; fn != nil {
+									fn(rpcConn.mu.nodeID, msg)
+								}
+								if err := rpcConn.mu.stream.Send(msg); err != nil {
+									// log.Dev.Infof(ctx, "side-transport failed to send message %+v to n%d: %s", msg, rpcConn.nodeID, err)
+									if err != io.EOF && rpcConn.mu.everyN.ShouldLog() {
+										log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+											rpcConn.mu.lastSent, rpcConn.mu.nodeID, err)
+									}
+									// Keep track of the fact that we need a new connection.
+									//
+									// TODO(andrei): Instead of simply trying to establish a connection
+									// again when the next message needs to be sent and get rejected by
+									// the circuit breaker if the remote node is still unreachable, we
+									// should have a blocking version of Dial() that we just leave hanging
+									// and get a notification when it succeeds.
+									rpcConn.cleanupStreamLocked(err)
+									rpcConn.mu.Unlock()
+									s.connsMu.Lock()
+									s.connsMu.quarantine[rpcConn.mu.nodeID] = s.clock.Now().AddDuration(errSleepTime)
+									s.connsMu.Unlock()
+									break
+								} else {
+									rpcConn.mu.Unlock()
+								}
+							}
+						}
+
+					case <-s.stopper.ShouldQuiesce():
+						return
+					}
+				}
+			})
+	}
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
@@ -261,6 +411,17 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 					// Loop around to use the updated timer.
 					continue
 				case <-s.stopper.ShouldQuiesce():
+					// First wait for all workers to finish
+					workerWg.Wait()
+
+					// Then iterate over all the connections and close them.
+					s.connsMu.Lock()
+					for _, c := range s.connsMu.conns {
+						if rpcConn, ok := c.(*rpcConn); ok {
+							rpcConn.cleanupStream(nil /* err */)
+						}
+					}
+					s.connsMu.Unlock()
 					return
 				}
 			}
@@ -457,6 +618,9 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			if !nodesWithFollowers.Contains(int(nodeID)) {
 				delete(s.connsMu.conns, nodeID)
 				c.close()
+				if rpcConn, ok := c.(*rpcConn); ok {
+					rpcConn.cleanupStream(nil /* err */)
+				}
 			}
 		}
 
@@ -471,7 +635,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			// connection to ourselves if we find such replicas.
 			if _, ok := s.connsMu.conns[nodeID]; !ok {
 				c := s.connFactory.new(s, nodeID)
-				c.run(ctx, s.stopper)
+				// c.run(ctx, s.stopper)
 				s.connsMu.conns[nodeID] = c
 			}
 		})
@@ -552,6 +716,8 @@ type updatesBuf struct {
 		head, tail int
 		// closed is set by the producer to signal the consumers to exit.
 		closed bool
+
+		bcastCh chan struct{}
 	}
 }
 
@@ -563,6 +729,7 @@ func newUpdatesBuf() *updatesBuf {
 	buf := &updatesBuf{}
 	buf.mu.updated.L = &buf.mu
 	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
+	buf.mu.bcastCh = make(chan struct{})
 	return buf
 }
 
@@ -590,6 +757,9 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
 	b.mu.updated.Broadcast()
+
+	close(b.mu.bcastCh)
+	b.mu.bcastCh = make(chan struct{})
 }
 
 func (b *updatesBuf) lastIdxLocked() int {
@@ -641,6 +811,38 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 	}
 }
 
+func (b *updatesBuf) MaybeGetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Update, bool, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	// Loop until the requested seqNum is added to the buffer.
+	for {
+		if b.mu.closed {
+			return nil, false, false
+		}
+
+		var firstSeq, lastSeq ctpb.SeqNum
+		if b.sizeLocked() == 0 {
+			firstSeq, lastSeq = 0, 0
+		} else {
+			firstSeq, lastSeq = b.mu.data[b.mu.head].SeqNum, b.mu.data[b.lastIdxLocked()].SeqNum
+		}
+		if seqNum < firstSeq {
+			// Requesting a message that's not in the buffer any more.
+			return nil, true, false
+		}
+		// If the requested msg has not been produced yet, block.
+		if seqNum == lastSeq+1 {
+			return nil, true, true
+		}
+		if seqNum > lastSeq+1 {
+			log.Dev.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
+		}
+		idx := (b.mu.head + (int)(seqNum-firstSeq)) % len(b.mu.data)
+		return b.mu.data[idx], true, false
+	}
+}
+
 func (b *updatesBuf) sizeLocked() int {
 	if b.mu.head < b.mu.tail {
 		return b.mu.tail - b.mu.head
@@ -677,7 +879,7 @@ type connFactory interface {
 // conn is a side-transport connection to a node. A conn watches an updatesBuf
 // and streams all the messages to the respective node.
 type conn interface {
-	run(context.Context, *stop.Stopper)
+	// run(context.Context, *stop.Stopper)
 	close()
 	getState() connState
 }
@@ -711,20 +913,23 @@ const sleepOnErr = time.Second
 // (because this stream is disconnected for long enough), we'll have to send a
 // snapshot before we can resume sending regular messages.
 type rpcConn struct {
-	log.AmbientContext
-	dialer       rpcbase.NodeDialer
-	producer     *Sender
-	nodeID       roachpb.NodeID
-	testingKnobs connTestingKnobs
-
-	stream   ctpb.RPCSideTransport_PushUpdatesClient
-	lastSent ctpb.SeqNum
-	// cancelStreamCtx cleans up the resources (goroutine) associated with stream.
-	// It needs to be called whenever stream is discarded.
-	cancelStreamCtx context.CancelFunc
-	closed          int32 // atomic
+	producer *Sender
 
 	mu struct {
+		log.AmbientContext
+		dialer       rpcbase.NodeDialer
+		nodeID       roachpb.NodeID
+		testingKnobs connTestingKnobs
+
+		stream   ctpb.RPCSideTransport_PushUpdatesClient
+		lastSent ctpb.SeqNum
+		// cancelStreamCtx cleans up the resources (goroutine) associated with stream.
+		// It needs to be called whenever stream is discarded.
+		cancelStreamCtx context.CancelFunc
+		closed          int32 // atomic
+
+		everyN log.EveryN
+
 		syncutil.Mutex
 		state connState
 	}
@@ -734,13 +939,14 @@ func newRPCConn(
 	dialer rpcbase.NodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
 ) conn {
 	r := &rpcConn{
-		dialer:       dialer,
-		producer:     producer,
-		nodeID:       nodeID,
-		testingKnobs: testingKnobs,
+		producer: producer,
 	}
+	r.mu.dialer = dialer
+	r.mu.nodeID = nodeID
+	r.mu.testingKnobs = testingKnobs
+	r.mu.everyN = log.Every(10 * time.Second)
 	r.mu.state.connected = false
-	r.AddLogTag("ctstream", nodeID)
+	r.mu.AddLogTag("ctstream", nodeID)
 	return r
 }
 
@@ -750,40 +956,52 @@ func newRPCConn(
 // err is the communication error that led to the stream being closed. Can be
 // nil if the stream was closed because we're shutting down.
 func (r *rpcConn) cleanupStream(err error) {
-	if r.stream == nil {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanupStreamLocked(err)
+}
+
+func (r *rpcConn) cleanupStreamLocked(err error) {
+	if r.mu.stream == nil {
 		return
 	}
-	_ /* err */ = r.stream.CloseSend()
-	r.stream = nil
-	r.cancelStreamCtx()
-	r.cancelStreamCtx = nil
+	_ /* err */ = r.mu.stream.CloseSend()
+	r.mu.stream = nil
+	r.mu.cancelStreamCtx()
+	r.mu.cancelStreamCtx = nil
 	// If we've been disconnected, reset the message sequence. If we ever
 	// reconnect, we'll ask the buffer for message 1, which was a snapshot.
 	// Generally, the buffer is not going to have that message any more and so
 	// we'll generate a new snapshot.
-	r.lastSent = 0
+	r.mu.lastSent = 0
 
-	r.mu.Lock()
 	r.mu.state.connected = false
 	r.mu.state.lastDisconnect = err
 	r.mu.state.lastDisconnectTime = timeutil.Now()
-	r.mu.Unlock()
 }
 
 // close makes the connection stop sending messages. The run() goroutine will
 // exit asynchronously. The parent Sender is expected to remove this connection
 // from its list.
 func (r *rpcConn) close() {
-	atomic.StoreInt32(&r.closed, 1)
+	atomic.StoreInt32(&r.mu.closed, 1)
 }
 
-func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
-	if r.stream != nil {
+func (r *rpcConn) maybeConnect(ctx context.Context, s *stop.Stopper) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maybeConnectLocked(ctx, s)
+}
+
+func (r *rpcConn) maybeConnectLocked(ctx context.Context, _ *stop.Stopper) error {
+	if r.mu.stream != nil {
 		// Already connected.
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
+	log.Dev.Infof(ctx, "side-transport connecting to n%d", r.mu.nodeID)
+
+	client, err := ctpb.DialSideTransportClient(r.mu.dialer, ctx, r.mu.nodeID, rpcbase.SystemClass, r.producer.st)
 	if err != nil {
 		return err
 	}
@@ -793,85 +1011,85 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		cancel()
 		return err
 	}
-	r.recordConnect()
-	r.stream = stream
+	r.recordConnectLocked()
+	r.mu.stream = stream
 	// This will need to be called when we're done with the stream.
-	r.cancelStreamCtx = cancel
+	r.mu.cancelStreamCtx = cancel
 	return nil
 }
 
 // run implements the conn interface.
-func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
-	_ /* err */ = stopper.RunAsyncTask(ctx, fmt.Sprintf("closedts publisher for n%d", r.nodeID),
-		func(ctx context.Context) {
-			// This WithCancelOnQuiesce serves to interrupt r.stream.Send() calls. The
-			// cancelation will be inherited by all the gRPC streams.
-			ctx, cancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(ctx))
-			defer cancel()
+// func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
+// 	_ /* err */ = stopper.RunAsyncTask(ctx, fmt.Sprintf("closedts publisher for n%d", r.nodeID),
+// 		func(ctx context.Context) {
+// 			// This WithCancelOnQuiesce serves to interrupt r.stream.Send() calls. The
+// 			// cancelation will be inherited by all the gRPC streams.
+// 			ctx, cancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(ctx))
+// 			defer cancel()
 
-			defer r.cleanupStream(nil /* err */)
-			everyN := log.Every(10 * time.Second)
+// 			defer r.cleanupStream(nil /* err */)
+// 			everyN := log.Every(10 * time.Second)
 
-			errSleepTime := sleepOnErr
-			if r.testingKnobs.sleepOnErrOverride > 0 {
-				errSleepTime = r.testingKnobs.sleepOnErrOverride
-			}
+// 			errSleepTime := sleepOnErr
+// 			if r.testingKnobs.sleepOnErrOverride > 0 {
+// 				errSleepTime = r.testingKnobs.sleepOnErrOverride
+// 			}
 
-			for {
-				if ctx.Err() != nil {
-					return
-				}
-				if atomic.LoadInt32(&r.closed) > 0 {
-					return
-				}
-				if err := r.maybeConnect(ctx, stopper); err != nil {
-					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
-						log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
-					}
-					time.Sleep(errSleepTime)
-					continue
-				}
+// 			for {
+// 				if ctx.Err() != nil {
+// 					return
+// 				}
+// 				if atomic.LoadInt32(&r.closed) > 0 {
+// 					return
+// 				}
+// 				if err := r.maybeConnect(ctx, stopper); err != nil {
+// 					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
+// 						log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
+// 					}
+// 					time.Sleep(errSleepTime)
+// 					continue
+// 				}
 
-				var msg *ctpb.Update
-				var ok bool
-				msg, ok = r.producer.buf.GetBySeq(ctx, r.lastSent+1)
-				// We can be signaled to stop in two ways: the buffer can be closed (in
-				// which case all connections must exit), or this connection was closed
-				// via close(). In either case, we quit.
-				if !ok {
-					return
-				}
+// 				var msg *ctpb.Update
+// 				var ok bool
+// 				msg, ok = r.producer.buf.GetBySeq(ctx, r.lastSent+1)
+// 				// We can be signaled to stop in two ways: the buffer can be closed (in
+// 				// which case all connections must exit), or this connection was closed
+// 				// via close(). In either case, we quit.
+// 				if !ok {
+// 					return
+// 				}
 
-				if msg == nil {
-					// The sequence number we've requested is no longer in the buffer. We
-					// need to generate a snapshot in order to re-initialize the stream.
-					// The snapshot will give us the sequence number to use for future
-					// incrementals.
-					msg = r.producer.GetSnapshot()
-				}
-				r.lastSent = msg.SeqNum
+// 				if msg == nil {
+// 					// The sequence number we've requested is no longer in the buffer. We
+// 					// need to generate a snapshot in order to re-initialize the stream.
+// 					// The snapshot will give us the sequence number to use for future
+// 					// incrementals.
+// 					msg = r.producer.GetSnapshot()
+// 				}
+// 				r.lastSent = msg.SeqNum
 
-				if fn := r.testingKnobs.beforeSend; fn != nil {
-					fn(r.nodeID, msg)
-				}
-				if err := r.stream.Send(msg); err != nil {
-					if err != io.EOF && everyN.ShouldLog() {
-						log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
-							r.lastSent, r.nodeID, err)
-					}
-					// Keep track of the fact that we need a new connection.
-					//
-					// TODO(andrei): Instead of simply trying to establish a connection
-					// again when the next message needs to be sent and get rejected by
-					// the circuit breaker if the remote node is still unreachable, we
-					// should have a blocking version of Dial() that we just leave hanging
-					// and get a notification when it succeeds.
-					r.cleanupStream(err)
-					time.Sleep(errSleepTime)
-				}
-			}
-		})
-}
+// 				if fn := r.testingKnobs.beforeSend; fn != nil {
+// 					fn(r.nodeID, msg)
+// 				}
+// 				if err := r.stream.Send(msg); err != nil {
+// 					if err != io.EOF && everyN.ShouldLog() {
+// 						log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+// 							r.lastSent, r.nodeID, err)
+// 					}
+// 					// Keep track of the fact that we need a new connection.
+// 					//
+// 					// TODO(andrei): Instead of simply trying to establish a connection
+// 					// again when the next message needs to be sent and get rejected by
+// 					// the circuit breaker if the remote node is still unreachable, we
+// 					// should have a blocking version of Dial() that we just leave hanging
+// 					// and get a notification when it succeeds.
+// 					r.cleanupStream(err)
+// 					time.Sleep(errSleepTime)
+// 				}
+// 			}
+// 		})
+// }
 
 type connState struct {
 	connected          bool
@@ -883,14 +1101,22 @@ type connState struct {
 func (r *rpcConn) getState() connState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.getStateLocked()
+}
+
+func (r *rpcConn) getStateLocked() connState {
 	return r.mu.state
 }
 
 func (r *rpcConn) recordConnect() {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recordConnectLocked()
+}
+
+func (r *rpcConn) recordConnectLocked() {
 	r.mu.state.connected = true
 	r.mu.state.connectedTime = timeutil.Now()
-	r.mu.Unlock()
 }
 
 func (s streamState) String() string {
