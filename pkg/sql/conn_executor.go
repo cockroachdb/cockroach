@@ -4450,6 +4450,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		sql := truncateSQL(query.stmt.SQL)
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
 		elapsedTime := crtime.MonoFromTime(timeNow).Sub(query.start)
+		var isolationLevel string
+		if activeTxnInfo != nil && query.txnID == activeTxnInfo.ID {
+			isolationLevel = activeTxnInfo.IsolationLevel
+		} else {
+			isolationLevel = tree.IsolationLevel(ex.sessionData().DefaultTxnIsolationLevel).String()
+		}
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			TxnID:          query.txnID,
 			ID:             id.String(),
@@ -4465,7 +4471,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			IsFullScan:     query.isFullScan,
 			PlanGist:       query.planGist,
 			Database:       query.database,
-			IsolationLevel: activeTxnInfo.IsolationLevel,
+			IsolationLevel: isolationLevel,
 		})
 	}
 	lastActiveQuery := ""
