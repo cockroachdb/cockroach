@@ -23,10 +23,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc/drpcmetadata"
+	"storj.io/drpc/drpcmux"
 )
 
 // gwRequestKey is a field set on the context to indicate a request
-// is coming from gRPC gateway.
+// is coming from RPC gateway.
 const gwRequestKey = "gw-request"
 
 var (
@@ -508,6 +510,30 @@ func gatewayRequestRecoveryInterceptor(
 				}
 			}()
 		}
+	}
+	resp, err = handler(ctx, req)
+	return resp, err
+}
+
+// MarkDRPCGatewayRequest annotates ctx so that downstream DRPC calls can
+// be recognized as originating from the DB Console HTTP gateway.
+func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
+	return drpcmetadata.Add(ctx, gwRequestKey, "true")
+}
+
+// DRPCGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
+// that are invoked due to DB console requests. For these requests, we do not
+// want an uncaught panic to crash the node.
+func DRPCGatewayRequestRecoveryInterceptor(
+	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
+) (resp interface{}, err error) {
+	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
+		defer func() {
+			if p := recover(); p != nil {
+				logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
+				err = errors.New("an unexpected error occurred")
+			}
+		}()
 	}
 	resp, err = handler(ctx, req)
 	return resp, err
