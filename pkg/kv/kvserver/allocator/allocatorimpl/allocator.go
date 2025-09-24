@@ -2756,6 +2756,14 @@ func (a *Allocator) CountBasedRebalancingDisabled() bool {
 	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
+// CountBasedRebalancingOnlyEnabledByMMA returns true if count-based rebalancing
+// should be enabled only when mma (multi-metric store rebalancer) allows the
+// change. This is used to prevent thrashing when both multi-metric and
+// count-based rebalancing are enabled and have conflicting goals.
+func (a *Allocator) CountBasedRebalancingOnlyEnabledByMMA() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricAndCount
+}
+
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
