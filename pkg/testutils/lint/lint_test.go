@@ -1674,7 +1674,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`nolint:yaml`),
 		), func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'yaml.UnmarshalStrict' instead", s)
+			t.Errorf("\n%s <- forbidden; use 'yamlutil.UnmarshalStrict' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
