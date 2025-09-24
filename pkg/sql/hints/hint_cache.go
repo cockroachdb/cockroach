@@ -61,10 +61,11 @@ type StatementHintsCache struct {
 	}
 
 	// Used to start/coordinate the rangefeed.
-	clock   *hlc.Clock
-	f       *rangefeed.Factory
-	stopper *stop.Stopper
-	codec   keys.SQLCodec
+	clock           *hlc.Clock
+	f               *rangefeed.Factory
+	stopper         *stop.Stopper
+	codec           keys.SQLCodec
+	initialScanChan chan error
 
 	// Used when decoding KVs from the range feed.
 	datumAlloc tree.DatumAlloc
@@ -112,17 +113,37 @@ func NewStatementHintsCache(
 func (c *StatementHintsCache) Start(
 	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
 ) error {
-	// TODO(drewk): in a follow-up commit, block until the initial scan is done
-	// so that statements without hints don't have to check the LRU cache.
-	return c.startRangefeedInternal(ctx, sysTableResolver)
+	initialScanChan := make(chan error, 1)
+	if err := c.startRangefeedInternal(ctx, sysTableResolver, initialScanChan); err != nil {
+		return err
+	}
+	// Wait for the initial scan before returning.
+	select {
+	case err := <-initialScanChan:
+		// We made a best-effort attempt to populate hintedHashes before server
+		// startup finished. Log the error and allow the server to start anyway.
+		// The initial scan will be retried, and in the meantime, all statements
+		// will skip hintedHashes and check hintCache.
+		log.Dev.Warningf(ctx, "failed to perform initial scan on system.statement_hints table: %v", err)
+		return nil
+
+	case <-c.stopper.ShouldQuiesce():
+		return errors.Wrap(stop.ErrUnavailable, "failed to retrieve initial statement hints")
+
+	case <-ctx.Done():
+		return errors.Wrap(ctx.Err(), "failed to retrieve initial statement hints")
+	}
 }
 
 // startRangefeedInternal starts a rangefeed on the statement_hints table to
 // keep the hintedHashes map up to date and invalidate entries in the hintCache.
-// The initial scan of the table is asynchronous.
+// The initial scan of the table is asynchronous, but the caller can use
+// initialScanChan to wait for it to complete.
 func (c *StatementHintsCache) startRangefeedInternal(
-	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
+	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver, initialScanChan chan error,
 ) error {
+	c.initialScanChan = initialScanChan
+
 	// We need to retry unavailable replicas here. This is only meant to be called
 	// at server startup.
 	tableID, err := startup.RunIdempotentWithRetryEx(ctx,
@@ -156,7 +177,7 @@ func (c *StatementHintsCache) startRangefeedInternal(
 
 	// Kick off the rangefeedcache which will retry until the stopper stops. This
 	// function only returns an error if we're shutting down.
-	return rangefeedcache.Start(ctx, c.stopper, watcher, nil /* onError */)
+	return rangefeedcache.Start(ctx, c.stopper, watcher, c.onError)
 }
 
 func (c *StatementHintsCache) translateEvent(
@@ -179,12 +200,22 @@ func (c *StatementHintsCache) onUpdate(
 		log.Dev.Info(ctx, "statement_hints rangefeed completed initial scan")
 		hintedHashes := make(map[int64]int)
 		applyUpdate(hintedHashes, update.Events)
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.mu.hintedHashes = hintedHashes
+		func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			c.mu.hintedHashes = hintedHashes
 
-		// Invalidate all cache entries.
-		c.mu.hintCache.Clear()
+			// Invalidate all cache entries. In most cases the cache will already be
+			// empty, but if the first attempted initial scan failed, server startup
+			// will have proceeded and some statements may have populated the cache.
+			c.mu.hintCache.Clear()
+		}()
+		if c.initialScanChan != nil {
+			// Notify the caller that the initial scan is complete.
+			c.initialScanChan <- nil
+			close(c.initialScanChan)
+			c.initialScanChan = nil
+		}
 	} else {
 		log.Dev.Info(ctx, "statement_hints rangefeed applying incremental update")
 		c.mu.Lock()
@@ -195,6 +226,15 @@ func (c *StatementHintsCache) onUpdate(
 		for _, ev := range update.Events {
 			c.mu.hintCache.Del(ev.hash)
 		}
+	}
+}
+
+func (c *StatementHintsCache) onError(err error) {
+	if c.initialScanChan != nil {
+		// Notify the caller that the initial scan failed.
+		c.initialScanChan <- err
+		close(c.initialScanChan)
+		c.initialScanChan = nil
 	}
 }
 
