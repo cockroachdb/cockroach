@@ -497,27 +497,29 @@ func TriggerInspectJob(
 	// Consistency check is done async via a job.
 	jobID := execCfg.JobRegistry.MakeJobID()
 
-	// TODO(148300): just grab the first secondary index and use that for the
-	// consistency check.
-	// TODO(148365): When INSPECT is added, we want to skip unsupported indexes
-	// and return a NOTICE.
 	secIndexes := tableDesc.PublicNonPrimaryIndexes()
 	if len(secIndexes) == 0 {
 		return jobID, errors.AssertionFailedf("must have at least one secondary index")
+	}
+
+	// Create checks for all secondary indexes
+	// TODO(148365): When INSPECT is added, we want to skip unsupported indexes
+	// and return a NOTICE.
+	checks := make([]*jobspb.InspectDetails_Check, 0, len(secIndexes))
+	for _, index := range secIndexes {
+		checks = append(checks, &jobspb.InspectDetails_Check{
+			Type:    jobspb.InspectCheckIndexConsistency,
+			TableID: tableDesc.GetID(),
+			IndexID: index.GetID(),
+		})
 	}
 
 	// TODO(sql-queries): add row count check when that is implemented.
 	jr := jobs.Record{
 		Description: jobRecordDescription,
 		Details: jobspb.InspectDetails{
-			Checks: []*jobspb.InspectDetails_Check{
-				{
-					Type:    jobspb.InspectCheckIndexConsistency,
-					TableID: tableDesc.GetID(),
-					IndexID: secIndexes[0].GetID(),
-				},
-			},
-			AsOf: asOf,
+			Checks: checks,
+			AsOf:   asOf,
 		},
 		Progress:      jobspb.InspectProgress{},
 		CreatedBy:     nil,
