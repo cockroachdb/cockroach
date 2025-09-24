@@ -257,3 +257,13 @@ SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
 ----
 t_pkey  NULL
 i       hello2
+
+subtest truncate_with_schema_locked
+
+statement ok
+CREATE TABLE t_schema_locked(x int) WITH (schema_locked=true)
+
+statement error pgcode 57000  schema changes are disallowed on table \"t_schema_locked\" because it is locked
+TRUNCATE TABLE t_schema_locked
+
+subtest end
