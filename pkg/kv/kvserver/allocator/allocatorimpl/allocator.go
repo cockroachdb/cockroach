@@ -2484,8 +2484,16 @@ func (a *Allocator) TransferLeaseTarget(
 		var bestOption roachpb.ReplicaDescriptor
 		candidates := make([]roachpb.ReplicaDescriptor, 0, len(validTargets))
 		bestOptionLeaseCount := int32(math.MaxInt32)
+		validTargetsStoreIDs := make([]roachpb.StoreID, 0, len(validTargets))
+		for _, repl := range validTargets {
+			validTargetsStoreIDs = append(validTargetsStoreIDs, repl.StoreID)
+		}
 		for _, repl := range validTargets {
 			if leaseRepl.StoreID() == repl.StoreID {
+				continue
+			}
+			if a.CountBasedRebalancingOnlyEnabledByMMA() &&
+				a.as.IsInConflictWithMMA(source.StoreID, repl.StoreID, validTargetsStoreIDs, true /* cpuOnly */) {
 				continue
 			}
 			storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
@@ -3066,6 +3074,26 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	// Return false early if count based rebalancing is disabled.
 	if a.CountBasedRebalancingDisabled() {
 		return false
+	}
+
+	// If count based rebalancing is only enabled by MMA, return true only if
+	// there is at least one good candidate that is not in conflict with MMA's
+	// goal.
+	if a.CountBasedRebalancingOnlyEnabledByMMA() {
+		atLeastOneGoodCandidate := false
+		targetsStoreIDs := make([]roachpb.StoreID, 0, len(existing))
+		for _, repl := range existing {
+			targetsStoreIDs = append(targetsStoreIDs, repl.StoreID)
+		}
+		for _, replDesc := range existing {
+			if !a.as.IsInConflictWithMMA(source.StoreID, replDesc.StoreID, targetsStoreIDs, true /*cpuOnly*/) {
+				atLeastOneGoodCandidate = true
+				break
+			}
+		}
+		if !atLeastOneGoodCandidate {
+			return false
+		}
 	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease
 	// rebalancing is enabled? In happy cases it's nice to keep this working
