@@ -461,7 +461,7 @@ CREATE TABLE crdb_internal.super_regions (
 				if err != nil {
 					return err
 				}
-				typeDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Type(ctx, typeID)
+				typeDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Type(ctx, typeID)
 				if err != nil {
 					return err
 				}
@@ -588,7 +588,7 @@ CREATE TABLE crdb_internal.tables (
 		},
 	},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 		if err != nil {
 			return err
 		}
@@ -652,12 +652,12 @@ CREATE TABLE crdb_internal.tables (
 func crdbInternalTablesDatabaseLookupFunc(
 	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 ) (bool, error) {
-	var descs nstree.Catalog
+	var descriptors nstree.Catalog
 	var err error
 	if useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		descs, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.Txn(), db)
+		descriptors, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.Txn(), db, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	} else {
-		descs, err = p.Descriptors().GetAllDescriptors(ctx, p.Txn())
+		descriptors, err = p.Descriptors().GetAllDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	}
 	if err != nil {
 		return false, err
@@ -668,7 +668,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 	scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
 	// Record database descriptors for name lookups.
 	dbID := db.GetID()
-	_ = descs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+	_ = descriptors.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.GetParentID() != dbID {
 			return nil
 		}
@@ -679,7 +679,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 	})
 	rf := makeCrdbInternalTablesAddRowFn(p, addRow)
 	var seenAny bool
-	if err := descs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+	if err := descriptors.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.GetParentID() != dbID {
 			return nil
 		}
@@ -830,7 +830,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 		if err != nil {
 			return err
 		}
@@ -1219,7 +1219,7 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 				case *ptpb.Target_SchemaObjects:
 					// Looking up leased descriptors can be faster mean they are one version off, which is acceptable for computing
 					// the number of ranges.
-					descs, err := p.Descriptors().ByIDWithLeased(p.InternalSQLTxn().KV()).Get().Descs(ctx, t.SchemaObjects.IDs)
+					descs, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.InternalSQLTxn().KV(), &p.EvalContext().Settings.SV).Get().Descs(ctx, t.SchemaObjects.IDs)
 					if err != nil {
 						return err
 					}
@@ -3269,7 +3269,7 @@ CREATE TABLE crdb_internal.create_schema_statements (
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
-			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 			if err != nil {
 				return err
 			}
@@ -3319,7 +3319,7 @@ func createRoutinePopulate(
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
-			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 			if err != nil {
 				return err
 			}
@@ -3347,7 +3347,7 @@ func createRoutinePopulate(
 			}
 		}
 
-		fnDescs, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
+		fnDescs, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
@@ -3425,7 +3425,7 @@ func createRoutinePopulateByFnIndex(
 	// `crdb_internal.create_function_statements` and `crdb_internal.create_procedure_statements`, helping
 	// optimize the queries for the create statements output in `SHOW CREATE ALL ROUTINES`.
 	fnID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-	fnDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	fnDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Function(ctx, fnID)
 	if err != nil || fnDesc == nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || fnDesc == nil {
 			return false, nil
@@ -3433,7 +3433,7 @@ func createRoutinePopulateByFnIndex(
 		return false, err
 	}
 	scID := fnDesc.GetParentSchemaID()
-	sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, scID)
+	sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, scID)
 	if err != nil || sc == nil {
 		return false, err
 	}
@@ -4498,19 +4498,19 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err != nil {
 			return nil, nil, err
 		}
-		var descs catalog.Descriptors
+		var descriptors catalog.Descriptors
 		// Admin or viewActivity roles have access to all information, so
 		// don't bother fetching all the descriptors unecessarily.
 		if !hasAdmin && !viewActOrViewActRedact {
-			all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+			all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 			if err != nil {
 				return nil, nil, err
 			}
-			descs = all.OrderedDescriptors()
+			descriptors = all.OrderedDescriptors()
 		}
 
 		hasPermission := hasAdmin || viewActOrViewActRedact
-		for _, desc := range descs {
+		for _, desc := range descriptors {
 			if ok, err := p.HasPrivilege(ctx, desc, privilege.ZONECONFIG, p.User()); err != nil {
 				return nil, nil, err
 			} else if ok {
@@ -5886,7 +5886,7 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 				// We can use a leased descriptor here because we're only looking up
 				// the constraint by ID, and that won't change during the lifetime of
 				// the table.
-				tableDesc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Table(ctx, descpb.ID(key.ObjectID))
+				tableDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Table(ctx, descpb.ID(key.ObjectID))
 				if err != nil {
 					return err
 				}
@@ -7984,7 +7984,7 @@ func genClusterLocksGenerator(
 			return nil, nil, noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
-		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -8683,7 +8683,7 @@ func getContentionEventInfo(
 
 	desc := p.Descriptors()
 	var tableDesc catalog.TableDescriptor
-	tableDesc, err = desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+	tableDesc, err = descs.GetCatalogDescriptorGetter(desc, p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 	if err != nil {
 		return "", "", fmt.Sprintf("[dropped table id: %d]", tableID), "[dropped index]" //nolint:returnerrcheck
 	}
@@ -8695,14 +8695,14 @@ func getContentionEventInfo(
 		indexName = idxDesc.GetName()
 	}
 
-	dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+	dbDesc, err := descs.GetCatalogDescriptorGetter(desc, p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		dbName = "[dropped database]"
 	} else if dbDesc != nil {
 		dbName = dbDesc.GetName()
 	}
 
-	schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+	schemaDesc, err := descs.GetCatalogDescriptorGetter(desc, p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
 	if err != nil {
 		schemaName = "[dropped schema]"
 	} else if schemaDesc != nil {
