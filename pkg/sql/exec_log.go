@@ -347,23 +347,7 @@ func (p *planner) maybeLogStatementInternal(
 		// overhead latency: txn/retry management, error checking, etc
 		execOverheadNanos := svcLatNanos - processingLatNanos
 
-		// If the statement was recorded by the stats collector, we can extract
-		// the statement fingerprint ID. Otherwise, we'll need to compute it from the AST.
-		stmtFingerprintID := statsCollector.StatementFingerprintID()
-		if stmtFingerprintID == 0 {
-			repQuery := p.stmt.StmtNoConstants
-			if repQuery == "" {
-				flags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV))
-				f := tree.NewFmtCtx(flags)
-				f.FormatNode(p.stmt.AST)
-				repQuery = f.CloseAndGetString()
-			}
-			stmtFingerprintID = appstatspb.ConstructStatementFingerprintID(
-				repQuery,
-				implicitTxn,
-				p.CurrentDatabase(),
-			)
-		}
+		stmtFingerprintID := p.instrumentation.fingerprintId
 
 		sampledQuery := getSampledQuery()
 		defer releaseSampledQuery(sampledQuery)

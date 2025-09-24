@@ -8,11 +8,9 @@ package logical
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -1092,21 +1090,17 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 func resolveDest(
 	ctx context.Context, execCfg *sql.ExecutorConfig, sourceURI string,
 ) (string, error) {
-	u, err := url.Parse(sourceURI)
+	configUri, err := streamclient.ParseConfigUri(sourceURI)
 	if err != nil {
 		return "", err
 	}
 
-	resolved := ""
-	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		conn, err := externalconn.LoadExternalConnection(ctx, u.Host, txn)
-		if err != nil {
-			return err
-		}
-		resolved = conn.UnredactedConnectionStatement()
-		return nil
-	})
-	return resolved, err
+	clusterUri, err := configUri.AsClusterUri(ctx, execCfg.InternalDB)
+	if err != nil {
+		return "", err
+	}
+
+	return clusterUri.Serialize(), nil
 }
 
 func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig) (string, error) {

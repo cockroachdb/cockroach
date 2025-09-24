@@ -833,7 +833,7 @@ func updateFinalizedTxn(
 	opts := storage.MVCCWriteOptions{Stats: ms, Category: fs.BatchEvalReadCategory}
 	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
-			log.Dev.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
+			log.KvExec.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
 		if !recordAlreadyExisted {
 			// Nothing to delete, so there's no use writing a deletion tombstone. This
@@ -956,7 +956,7 @@ func RunCommitTrigger(
 		return res, nil
 	}
 
-	log.Dev.Fatalf(ctx, "unknown commit trigger: %+v", ct)
+	log.KvExec.Fatalf(ctx, "unknown commit trigger: %+v", ct)
 	return result.Result{}, nil
 }
 
@@ -1400,7 +1400,7 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
 		if leftLease.Empty() {
-			log.Dev.Fatalf(ctx, "LHS of split has no lease")
+			log.KvExec.Fatalf(ctx, "LHS of split has no lease")
 		}
 
 		// Copy the lease from the left-hand side of the split over to the

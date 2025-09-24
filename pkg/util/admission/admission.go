@@ -167,7 +167,6 @@ type requester interface {
 // WorkKind will interact with a granter. See admission.go for an overview of
 // how this fits into the overall structure.
 type granter interface {
-	grantKind() grantKind
 	// tryGet is used by a requester to get slots/tokens for a piece of work
 	// that has encountered no waiting/queued work. This is the fast path that
 	// avoids queueing in the requester. The optional parameter
@@ -379,8 +378,9 @@ type elasticCPULimiter interface {
 // expect this to be called every scheduler_latency.sample_period.
 type SchedulerLatencyListener = schedulerlatency.LatencyObserver
 
-// grantKind represents the two kind of ways we grant admission: using a slot
-// or a token. The slot terminology is akin to a scheduler, where a scheduling
+// There are two ways we grant admission: using a slot or a token.
+//
+// The slot terminology is akin to a scheduler, where a scheduling
 // slot must be free for a thread to run. But unlike a scheduler, we don't
 // have visibility into the fact that work execution may be blocked on IO. So
 // a slot can also be viewed as a limit on concurrency of ongoing work. The
@@ -402,12 +402,6 @@ type SchedulerLatencyListener = schedulerlatency.LatencyObserver
 // completion information such as how many tokens were actually used, which
 // can differ from the up front information, and is utilized to adjust the
 // available tokens.
-type grantKind int8
-
-const (
-	slot grantKind = iota
-	token
-)
 
 type grantResult int8
 

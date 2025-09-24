@@ -1475,7 +1475,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 		// If not a benign or purgatory error, log.
 		if !benign {
-			log.Dev.Errorf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "queue processing resulted in non-benign error: %v", err)
 		}
 	}
 

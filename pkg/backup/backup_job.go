@@ -428,7 +428,10 @@ func backup(
 	}
 
 	// TODO(msbutler): version gate writing the old manifest once we can guarantee
-	// a cluster version that will not read the old manifest.
+	// a cluster version that will not read the old manifest. This will occur when we delete
+	// LegacyFindPriorBackups and the fallback path in
+	// ListFullBackupsInCollection, which can occur when we completely rely on the
+	// backup index.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.DeprecatedBackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, 0, err
@@ -1809,33 +1812,9 @@ func (b *backupResumer) readManifestOnResume(
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
-		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions, kmsEnv)
-	if err != nil {
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
-		}
-		// Try reading temp checkpoint.
-		tmpCheckpoint := backupinfo.TempCheckpointFileNameForJob(b.job.ID())
-		desc, memSize, err = backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
-			tmpCheckpoint, details.EncryptionOptions, kmsEnv)
-		if err != nil {
-			return nil, 0, err
-		}
-		// "Rename" temp checkpoint.
-		if err := backupinfo.WriteBackupManifestCheckpoint(
-			ctx, details.URI, details.EncryptionOptions, kmsEnv, &desc, cfg, user,
-		); err != nil {
-			mem.Shrink(ctx, memSize)
-			return nil, 0, errors.Wrapf(err, "renaming temp checkpoint file")
-		}
-		// Best effort remove temp checkpoint.
-		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
-			log.Dev.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
-		}
-		if err := defaultStore.Delete(ctx, backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint); err != nil {
-			log.Dev.Errorf(ctx, "error removing temporary checkpoint %s", backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint)
-		}
+	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore, details.EncryptionOptions, kmsEnv)
+	if err != nil && !errors.Is(err, cloud.ErrFileDoesNotExist) {
+		return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 	}
 
 	if !desc.ClusterID.Equal(cfg.NodeInfo.LogicalClusterID()) {
@@ -1973,16 +1952,6 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		// We first attempt to delete from base directory to account for older
-		// backups, and then from the progress directory.
-		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName)
-		if err != nil {
-			log.Dev.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
-		}
-		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName+backupinfo.BackupManifestChecksumSuffix)
-		if err != nil {
-			log.Dev.Warningf(ctx, "unable to delete checkpoint checksum file in base directory: %+v", err)
-		}
 		// Delete will not delete a nonempty directory, so we have to go through
 		// all files and delete each file one by one.
 		return exportStore.List(ctx, backupinfo.BackupProgressDirectory, "", func(p string) error {

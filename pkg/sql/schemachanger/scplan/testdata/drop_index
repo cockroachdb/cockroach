@@ -249,7 +249,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 105, ColumnID: 4}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 105, ColumnID: 4, Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 105, ColumnID: 4, ReferencedColumnIDs: [2], Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4, TypeName: STRING}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 105, IndexID: 4, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 105, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
@@ -296,7 +296,7 @@ DROP INDEX idx2 CASCADE
   kind: PreviousTransactionPrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 105, ColumnID: 4}, WRITE_ONLY]
-  to:   [ColumnComputeExpression:{DescID: 105, ColumnID: 4, Usage: REGULAR}, ABSENT]
+  to:   [ColumnComputeExpression:{DescID: 105, ColumnID: 4, ReferencedColumnIDs: [2], Usage: REGULAR}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 105, ColumnID: 4}, WRITE_ONLY]
@@ -311,11 +311,11 @@ DROP INDEX idx2 CASCADE
   to:   [IndexColumn:{DescID: 105, ColumnID: 4, IndexID: 4}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 4, Usage: REGULAR}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 4, ReferencedColumnIDs: [2], Usage: REGULAR}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 4}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 4, Usage: REGULAR}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 4, ReferencedColumnIDs: [2], Usage: REGULAR}, ABSENT]
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4, TypeName: STRING}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type, except if part of a column type alteration 
@@ -528,7 +528,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 105, ColumnID: 5}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 105, ColumnID: 5, Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 105, ColumnID: 5, ReferencedColumnIDs: [1], Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 5, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveColumnComputeExpression
@@ -578,7 +578,7 @@ DROP INDEX idx3 CASCADE
   kind: PreviousTransactionPrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 105, ColumnID: 5}, WRITE_ONLY]
-  to:   [ColumnComputeExpression:{DescID: 105, ColumnID: 5, Usage: REGULAR}, ABSENT]
+  to:   [ColumnComputeExpression:{DescID: 105, ColumnID: 5, ReferencedColumnIDs: [1], Usage: REGULAR}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 105, ColumnID: 5}, WRITE_ONLY]
@@ -593,11 +593,11 @@ DROP INDEX idx3 CASCADE
   to:   [IndexColumn:{DescID: 105, ColumnID: 5, IndexID: 6}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 5, Usage: REGULAR}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 5, ReferencedColumnIDs: [1], Usage: REGULAR}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 5, Usage: REGULAR}, ABSENT]
+- from: [ColumnComputeExpression:{DescID: 105, ColumnID: 5, ReferencedColumnIDs: [1], Usage: REGULAR}, ABSENT]
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 5, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type, except if part of a column type alteration 
@@ -1908,7 +1908,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 105, ColumnID: 6}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 105, ColumnID: 6, ReferencedFunctionIDs: [104], Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 105, ColumnID: 6, ReferencedColumnIDs: [1], ReferencedFunctionIDs: [104], Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 6, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 105, IndexID: 10, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 105, IndexID: 10}, ABSENT], PUBLIC] -> ABSENT

@@ -47,11 +47,6 @@ type slotGranter struct {
 var _ granterWithLockedCalls = &slotGranter{}
 var _ granter = &slotGranter{}
 
-// grantKind implements granter.
-func (sg *slotGranter) grantKind() grantKind {
-	return slot
-}
-
 // tryGet implements granter.
 func (sg *slotGranter) tryGet(_ burstQualification, count int64) bool {
 	return sg.coord.tryGet(sg.workKind, count, 0 /*arbitrary*/)
@@ -186,11 +181,6 @@ var _ granter = &tokenGranter{}
 func (tg *tokenGranter) refillBurstTokens(skipTokenEnforcement bool) {
 	tg.availableBurstTokens = tg.maxBurstTokens
 	tg.skipTokenEnforcement = skipTokenEnforcement
-}
-
-// grantKind implements granter.
-func (tg *tokenGranter) grantKind() grantKind {
-	return token
 }
 
 // tryGet implements granter.
@@ -335,11 +325,6 @@ type kvStoreTokenChildGranter struct {
 
 var _ granterWithStoreReplicatedWorkAdmitted = &kvStoreTokenChildGranter{}
 var _ granter = &kvStoreTokenChildGranter{}
-
-// grantKind implements granter.
-func (cg *kvStoreTokenChildGranter) grantKind() grantKind {
-	return token
-}
 
 // tryGet implements granter.
 func (cg *kvStoreTokenChildGranter) tryGet(_ burstQualification, count int64) bool {

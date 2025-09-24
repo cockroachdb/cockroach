@@ -1837,7 +1837,7 @@ func runCDCMultiTablePTSBenchmark(
 		numRanges = params.numRanges
 	}
 
-	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protected_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
 		t.Fatalf("failed to set per-table protected timestamps: %v", err)
 	}
 
@@ -2924,7 +2924,7 @@ func registerCDC(r registry.Registry) {
 				logSearchStr := `(client/metadata fetching metadata for|updating kafka metadata for topics|fetching metadata to learn its partitions|waiting for metadata for new topic)`
 				results, checkLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
 					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
-					fmt.Sprintf(`grep -E "%s" logs/cockroach.log`, logSearchStr))
+					fmt.Sprintf(`grep -E "%s" logs/cockroach-changefeed.log`, logSearchStr))
 				if checkLogsErr != nil {
 					t.Fatal(checkLogsErr)
 				}
@@ -3180,7 +3180,7 @@ func registerCDC(r registry.Registry) {
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
 						// Disable per-table PTS to avoid impact on results.
-						"changefeed.protected_timestamp.per_table.enabled": "false",
+						"changefeed.protect_timestamp.per_table.enabled": "false",
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {

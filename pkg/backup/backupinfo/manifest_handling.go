@@ -168,6 +168,25 @@ func ReadBackupManifestFromStore(
 	return manifest, memSize, nil
 }
 
+func ContainsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
+	containsManifestWithFilename := func(filename string) (bool, error) {
+		r, _, err := exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
+		if err != nil {
+			if errors.Is(err, cloud.ErrFileDoesNotExist) {
+				return false, nil
+			}
+			return false, err
+		}
+		r.Close(ctx)
+		return true, nil
+	}
+	exists, err := containsManifestWithFilename(backupbase.BackupMetadataName)
+	if exists || err != nil {
+		return exists, err
+	}
+	return containsManifestWithFilename(backupbase.DeprecatedBackupManifestName)
+}
+
 // compressData compresses data buffer and returns compressed
 // bytes (i.e. gzip format).
 func compressData(descBuf []byte) ([]byte, error) {
@@ -197,18 +216,19 @@ func DecompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte
 
 // ReadBackupCheckpointManifest reads and unmarshals a BACKUP-CHECKPOINT
 // manifest from filename in the provided export store.
+//
+// NB: a checkpoint file should always get written before this is called.
 func ReadBackupCheckpointManifest(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
-	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupCheckpointManifest")
 	defer sp.Finish()
 
-	checkpointFile, err := readLatestCheckpointFile(ctx, exportStore, filename)
+	checkpointFile, err := readLatestCheckpointFile(ctx, exportStore, BackupManifestCheckpointName)
 	if err != nil {
 		return backuppb.BackupManifest{}, 0, err
 	}
@@ -216,7 +236,7 @@ func ReadBackupCheckpointManifest(
 
 	// Look for a checksum, if one is not found it could be an older backup,
 	// but we want to continue anyway.
-	checksumFile, err := readLatestCheckpointFile(ctx, exportStore, filename+BackupManifestChecksumSuffix)
+	checksumFile, err := readLatestCheckpointFile(ctx, exportStore, BackupManifestCheckpointName+BackupManifestChecksumSuffix)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return backuppb.BackupManifest{}, 0, err
@@ -1278,17 +1298,6 @@ func CheckForBackupLock(
 // 2) BACKUP-LOCK: Written by the coordinator node to lay claim on a backup
 // location. This file is suffixed with the ID of the backup job to prevent a
 // node from reading its own lock file on job resumption.
-//
-// 3) BACKUP-CHECKPOINT: Prior to 22.1.1, nodes would use the BACKUP-CHECKPOINT
-// to lay claim on a backup location. To account for a mixed-version cluster
-// where an older coordinator node may be running a concurrent backup to the
-// same location, we must continue to check for a BACKUP-CHECKPOINT file.
-//
-// NB: The node will continue to write a BACKUP-CHECKPOINT file later in its
-// execution, but we do not have to worry about reading our own
-// BACKUP-CHECKPOINT file (and locking ourselves out) since
-// `checkForPreviousBackup` is invoked as the first step on job resumption, and
-// is not called again.
 func CheckForPreviousBackup(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -1305,18 +1314,16 @@ func CheckForPreviousBackup(
 	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, _, err := defaultStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
-	if err == nil {
-		r.Close(ctx)
-		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file",
-			redactedURI, backupbase.DeprecatedBackupManifestName)
-	}
-
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+	exists, err := ContainsManifest(ctx, defaultStore)
+	if err != nil {
 		return errors.Wrapf(err,
-			"%s returned an unexpected error when checking for the existence of %s file",
-			redactedURI, backupbase.DeprecatedBackupManifestName)
+			"%s returned an unexpected error when checking for the existence of manifest",
+			redactedURI)
+	}
+	if exists {
+		return pgerror.Newf(pgcode.FileAlreadyExists,
+			"%s already contains a manifest",
+			redactedURI)
 	}
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
@@ -1343,33 +1350,7 @@ func CheckForPreviousBackup(
 		}
 		log.Dev.Warningf(ctx, "external storage %s does not support listing: skip checking for BACKUP_LOCK", redactedURI)
 	}
-
-	// Check for a BACKUP-CHECKPOINT that might have been written by a node
-	// running a pre-22.1.1 binary.
-	//
-	// TODO(adityamaru): Delete in 23.1 since we will no longer need to check for
-	// BACKUP-CHECKPOINT files as all backups will rely on BACKUP-LOCK to lock a
-	// location.
-	r, err = readLatestCheckpointFile(ctx, defaultStore, BackupManifestCheckpointName)
-	if err == nil {
-		r.Close(ctx)
-		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file (is another operation already in progress?)",
-			redactedURI, BackupManifestCheckpointName)
-	}
-
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-		return errors.Wrapf(err,
-			"%s returned an unexpected error when checking for the existence of %s file",
-			redactedURI, BackupManifestCheckpointName)
-	}
-
 	return nil
-}
-
-// TempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
-func TempCheckpointFileNameForJob(jobID jobspb.JobID) string {
-	return fmt.Sprintf("%s-%d", BackupManifestCheckpointName, jobID)
 }
 
 // BackupManifestDescriptors returns the descriptors encoded in the manifest as
@@ -1440,11 +1421,8 @@ func newDescriptorBuilder(
 	return nil
 }
 
-// WriteBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST and
-// CHECKSUM file. If it is a pure v22.1 cluster or later, it will write a
-// timestamped BACKUP-CHECKPOINT to the /progress directory. If it is a mixed
-// cluster version, it will write a non timestamped BACKUP-CHECKPOINT to the
-// base directory in order to not break backup jobs that resume on a v21.2 node.
+// WriteBackupManifestCheckpoint writes a BACKUP-CHECKPOINT file and CHECKSUM
+// file.
 func WriteBackupManifestCheckpoint(
 	ctx context.Context,
 	storageURI string,
@@ -1545,12 +1523,9 @@ func readLatestCheckpointFile(
 	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
 ) (ioctx.ReadCloserCtx, error) {
 	filename = strings.TrimPrefix(filename, "/")
-	// First try reading from the progress directory. If the backup is from
-	// an older version, it may not exist there yet so try reading
-	// in the base directory if the first attempt fails.
+
 	var checkpoint string
 	var checkpointFound bool
-	var r ioctx.ReadCloserCtx
 	var err error
 
 	// We name files such that the most recent checkpoint will always
@@ -1571,7 +1546,7 @@ func readLatestCheckpointFile(
 	// directly. This can still fail if it is a mixed cluster and the
 	// checkpoint was written in the base directory.
 	if errors.Is(err, cloud.ErrListingUnsupported) {
-		r, _, err = exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+filename, cloud.ReadOptions{NoFileSize: true})
+		r, _, err := exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+filename, cloud.ReadOptions{NoFileSize: true})
 		// If we found the checkpoint in progress, then don't bother reading
 		// from base, just return the reader.
 		if err == nil {
@@ -1581,26 +1556,18 @@ func readLatestCheckpointFile(
 		return nil, err
 	}
 
-	if checkpointFound {
-		var name string
-		if strings.HasSuffix(filename, BackupManifestChecksumSuffix) {
-			name = BackupProgressDirectory + "/" + checkpoint + BackupManifestChecksumSuffix
-		} else {
-			name = BackupProgressDirectory + "/" + checkpoint
-		}
-		r, _, err = exportStore.ReadFile(ctx, name, cloud.ReadOptions{NoFileSize: true})
-		return r, err
+	if !checkpointFound {
+		return nil, errors.Newf("latest file %s not found", filename)
 	}
 
-	// If the checkpoint wasn't found in the progress directory, then try
-	// reading from the base directory instead.
-	r, _, err = exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
-
-	if err != nil {
-		return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
+	var name string
+	if strings.HasSuffix(filename, BackupManifestChecksumSuffix) {
+		name = BackupProgressDirectory + "/" + checkpoint + BackupManifestChecksumSuffix
+	} else {
+		name = BackupProgressDirectory + "/" + checkpoint
 	}
-	return r, nil
-
+	r, _, err := exportStore.ReadFile(ctx, name, cloud.ReadOptions{NoFileSize: true})
+	return r, err
 }
 
 // NewTimestampedCheckpointFileName returns a string of a new checkpoint filename

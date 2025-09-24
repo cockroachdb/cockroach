@@ -3019,12 +3019,11 @@ func indexTruncateInTxn(
 // the next resume, a mergeTimestamp newer than the GC time will be picked and
 // the job can continue.
 func getMergeTimestamp(ctx context.Context, clock *hlc.Clock) hlc.Timestamp {
-	// Use the current timestamp plus the maximum allowed offset to account for
-	// potential clock skew across nodes. The chosen timestamp must be greater
-	// than all commit timestamps used so far. This may result in seeing rows
-	// that are already present in the index being merged, but that’s fine as
-	// they will be treated as no-ops.
-	ts := clock.Now().AddDuration(clock.MaxOffset())
+	// Use the current timestamp since by this point we only have one descriptor
+	// version and no one can commit with the old version due to transaction
+	// deadlines from the lease manager. Anything after that version will write to
+	// both the backfilled and temporary index.
+	ts := clock.Now()
 	log.Dev.Infof(ctx, "merging all keys in temporary index before time %v", ts)
 	return ts
 }

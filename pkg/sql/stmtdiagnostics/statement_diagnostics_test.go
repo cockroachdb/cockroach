@@ -8,7 +8,9 @@ package stmtdiagnostics_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,16 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -767,6 +773,514 @@ func TestTxnRegistry_InsertTxnRequest_Polling(t *testing.T) {
 		}
 		if _, ok = registry3.GetRequest(id); ok {
 			return errors.New("request still found on server 3")
+		}
+		return nil
+	})
+}
+
+func TestTxnBundleCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+
+	txnStatements := []string{"SELECT 'aaaaaa', 'bbbbbb'",
+		"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'"}
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	// Set to 1s so that we can quickly pick up the request.
+	stmtdiagnostics.PollingInterval.Override(ctx, &settings.SV, time.Second)
+
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.SynchronousSQLStats = true
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: knobs,
+			},
+		},
+	})
+
+	defer tc.Stopper().Stop(ctx)
+
+	// SETUP
+	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Execute to transaction so that it is in transaction_statistics
+	executeTransactions(t, sqlConn, txnStatements)
+
+	// Get the fingerprint id and statement fingerprint ids for the transaction
+	// to make the txn diagnostics request
+	row := sqlConn.QueryRow(t,
+		`
+SELECT
+  ts.fingerprint_id AS fingerprint_id,
+  ts.metadata->'stmtFingerprintIDs' as fingerprint_ids
+FROM crdb_internal.transaction_statistics ts
+JOIN crdb_internal.statement_statistics ss on ss.transaction_fingerprint_id = ts.fingerprint_id
+WHERE ss.metadata->>'query' LIKE 'SELECT _, _'
+LIMIT 1`)
+	var fingerprintId []byte
+	var fingerprintIdsBytes []byte
+
+	row.Scan(&fingerprintId, &fingerprintIdsBytes)
+	_, txnFingerprintId, err := encoding.DecodeUint64Ascending(fingerprintId)
+	require.NoError(t, err)
+
+	var statementFingerprintStrs []string
+
+	err = json.Unmarshal(fingerprintIdsBytes, &statementFingerprintStrs)
+	require.NoError(t, err)
+
+	var statementFingerprintIds []uint64
+	for _, s := range statementFingerprintStrs {
+		value, err := strconv.ParseUint(s, 16, 64)
+		require.NoError(t, err)
+		statementFingerprintIds = append(statementFingerprintIds, value)
+	}
+
+	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+
+	t.Run("txn diagnostic request", func(t *testing.T) {
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			0,
+			0,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		var count int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+
+		// Execute the transaction until the request is marked as complete.
+		// We use a connection to a different server than the diagnostics request
+		// was made on to ensure that the request is properly gossiped.
+		runTxnUntilDiagnosticsCollected(t, tc, sqlutils.MakeSQLRunner(tc.ServerConn(1)), txnStatements, reqId)
+
+	})
+
+	t.Run("txn diagnostic with statement diagnostic request", func(t *testing.T) {
+
+		stmtReqId, err := registry.StmtRegistry.InsertRequestInternal(
+			ctx,
+			"SELECT _, _",
+			"", false, 0, 0, 0,
+		)
+		require.NoError(t, err)
+		var stmtcount int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		// execute the statement to ensure that the correct statement diagnostics
+		// request is actually being created.
+		sqlConn.Exec(t, txnStatements[0])
+		// should be complete now
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=true and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+		testutils.SucceedsSoon(t, func() error {
+			// wait for the statement diagnostics request to be removed from all
+			// server registries
+			for i := range tc.NumServers() {
+				stmtReg := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+				if found := stmtReg.TestingFindRequest(stmtReqId); found {
+					return errors.Newf("stmt request %d still in registry", stmtReqId)
+				}
+			}
+			return nil
+		})
+		// Make a new request for the same statement
+		stmtReqId, err = registry.StmtRegistry.InsertRequestInternal(
+			ctx,
+			"SELECT _, _",
+			"", false, 0, 0, 0,
+		)
+		require.NoError(t, err)
+		// make sure the statement diagnostics request is also marked as
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			0,
+			0,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		var count int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+		runTxnUntilDiagnosticsCollected(t, tc, sqlConn, txnStatements, reqId)
+		// Ensure there are no more active transaction diagnostics requests
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 0, count)
+		// make sure the statement diagnostics request is still incomplete
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+
+		executeTransactions(t, sqlConn, txnStatements)
+		// should be complete now that there is no transaction diagnostics request
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=true and id=$1", stmtReqId).Scan(&stmtcount)
+		require.Equal(t, 1, stmtcount)
+	})
+
+	t.Run("multiple txn executions", func(t *testing.T) {
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			1,
+			1,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		var count int
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+
+		conn2 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
+		conn3 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
+
+		// Wait for the request to be in all node registries
+		testutils.SucceedsSoon(t, func() error {
+			for i := range tc.NumServers() {
+				innerRegistry := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+				_, ok := innerRegistry.GetRequest(reqId)
+				if !ok {
+					return errors.New("expected request to be in registry")
+				}
+			}
+			return nil
+		})
+
+		conn2.Exec(t, "BEGIN")
+		conn3.Exec(t, "BEGIN")
+
+		conn2.Exec(t, txnStatements[0])
+		conn2.Exec(t, txnStatements[1])
+
+		conn3.Exec(t, txnStatements[0])
+		conn3.Exec(t, txnStatements[1])
+		conn3.Exec(t, "COMMIT")
+		conn2.Exec(t, "COMMIT")
+
+		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true and id=$1", reqId).Scan(&count)
+		require.Equal(t, 1, count)
+
+		sqlConn.QueryRow(t, ""+
+			"SELECT count(*) FROM system.statement_diagnostics sd "+
+			"JOIN system.transaction_diagnostics_requests tdr on tdr.transaction_diagnostics_id = sd.transaction_diagnostics_id "+
+			"WHERE tdr.id=$1", reqId).Scan(&count)
+
+		require.Equal(t, 3, count)
+	})
+}
+
+func TestRequestTxnBundleBuiltin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	knobs := sqlstats.CreateTestingKnobs()
+	knobs.SynchronousSQLStats = true
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{Knobs: base.TestingKnobs{
+		SQLStatsKnobs: knobs,
+	}})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(srv.SQLConn(t))
+
+	txnStatements := []string{"SELECT 'aaaaaa', 'bbbbbb'",
+		"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'"}
+
+	// The built-in requires that the transaction fingerprint exists in
+	// the system.transaction_statistics table, so we execute the transaction
+	// once.
+	executeTransactions(t, runner, txnStatements)
+
+	// Get the fingerprint id and statement fingerprint ids for the transaction
+	// to make the txn diagnostics request
+	row := runner.QueryRow(t,
+		`
+SELECT
+  encode(ts.fingerprint_id, 'hex') AS fingerprint_id,
+  ts.metadata->'stmtFingerprintIDs' as fingerprint_ids
+FROM crdb_internal.transaction_statistics ts
+JOIN crdb_internal.statement_statistics ss on ss.transaction_fingerprint_id = ts.fingerprint_id
+WHERE ss.metadata->>'query' LIKE 'SELECT _, _'
+LIMIT 1`)
+	var expectedTxnFpId string
+	var fingerprintIdsBytes []byte
+
+	row.Scan(&expectedTxnFpId, &fingerprintIdsBytes)
+	var statementFingerprintIds []uint64
+	var statementFingerprintStrs []string
+	err := json.Unmarshal(fingerprintIdsBytes, &statementFingerprintStrs)
+	require.NoError(t, err)
+
+	for _, s := range statementFingerprintStrs {
+		value, err := strconv.ParseUint(s, 16, 64)
+		require.NoError(t, err)
+		statementFingerprintIds = append(statementFingerprintIds, value)
+	}
+
+	runner.Exec(t, "CREATE USER alloweduser")
+	runner.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO alloweduser")
+
+	runner.Exec(t, "CREATE USER alloweduserredacted")
+	runner.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO alloweduserredacted")
+
+	runner.Exec(t, "CREATE USER notalloweduser")
+
+	for _, tc := range []struct {
+		name                        string
+		expectedMinExecutionLatency string
+		expectedExpiresAt           string
+		expectedSampleProbability   float64
+		expectedRedacted            bool
+		expectedError               string
+		expectedUser                string
+	}{
+		{
+			name:                        "conditional",
+			expectedMinExecutionLatency: "00:00:00.1",
+			expectedSampleProbability:   0.5,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+		},
+		{
+			name:                        "conditional_no_min_latency",
+			expectedSampleProbability:   0.5,
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "got non-zero sampling probability",
+		},
+		{
+			name:                        "conditional_probability_out_of_bounds",
+			expectedSampleProbability:   1.5,
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "expected sampling probability in range",
+		},
+		{
+			name:                        "not_conditional",
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedSampleProbability:   0,
+			expectedRedacted:            false,
+		},
+		{
+			name:                        "with_expiration",
+			expectedExpiresAt:           "1h",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedRedacted:            false,
+		},
+		{
+			name:                        "redacted",
+			expectedMinExecutionLatency: "0",
+			expectedExpiresAt:           "0",
+			expectedSampleProbability:   0,
+			expectedRedacted:            true,
+		},
+		{
+			name:                        "alloweduser",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedUser:                "alloweduser",
+		},
+		{
+			name:                        "alloweduserredacted",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            true,
+			expectedUser:                "alloweduserredacted",
+		},
+		{
+			name:                        "alloweduserredacted must be redacted",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "users with VIEWACTIVITYREDACTED privilege can only request redacted statement bundles",
+			expectedUser:                "alloweduserredacted",
+		},
+		{
+			name:                        "notalloweduser",
+			expectedMinExecutionLatency: "0",
+			expectedSampleProbability:   0,
+			expectedExpiresAt:           "0",
+			expectedRedacted:            false,
+			expectedError:               "requesting statement bundle requires VIEWACTIVITY privilege",
+			expectedUser:                "notalloweduser",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				runner.Exec(t, "RESET ROLE")
+				runner.Exec(t, "DELETE FROM system.transaction_diagnostics_requests")
+			}()
+
+			if tc.expectedUser != "" {
+				runner.Exec(t, "SET ROLE "+tc.expectedUser)
+			} else {
+				tc.expectedUser = "root"
+			}
+			var requestId int
+			var created bool
+			if tc.expectedError != "" {
+				runner.ExpectErr(t, tc.expectedError, "SELECT crdb_internal.request_transaction_bundle($1, $2, $3, $4, $5)",
+					expectedTxnFpId,
+					tc.expectedSampleProbability,
+					tc.expectedMinExecutionLatency,
+					tc.expectedExpiresAt,
+					tc.expectedRedacted)
+			} else {
+				requestTime := timeutil.Now()
+				runner.QueryRow(t, "SELECT request_id, created FROM crdb_internal.request_transaction_bundle($1, $2, $3::INTERVAL, $4, $5)",
+					expectedTxnFpId,
+					tc.expectedSampleProbability,
+					tc.expectedMinExecutionLatency,
+					tc.expectedExpiresAt,
+					tc.expectedRedacted,
+				).Scan(&requestId, &created)
+				require.True(t, created)
+
+				var (
+					txnFpId             string
+					stmtFingerprintIds  [][]byte
+					minExecutionLatency gosql.NullString
+					expiresAt           gosql.NullTime
+					sampleProbability   *float64
+					redacted            bool
+					username            string
+				)
+
+				runner.Exec(t, "RESET ROLE")
+				runner.QueryRow(t, "SELECT "+
+					"encode(transaction_fingerprint_id, 'hex') as txn_fingerprint_id, "+
+					"statement_fingerprint_ids, "+
+					"min_execution_latency, "+
+					"expires_at, "+
+					"sampling_probability, "+
+					"redacted, "+
+					"username "+
+					"FROM system.transaction_diagnostics_requests "+
+					"WHERE id = $1", requestId).Scan(&txnFpId, pq.Array(&stmtFingerprintIds), &minExecutionLatency, &expiresAt, &sampleProbability, &redacted, &username)
+				var expectedSampleProbability *float64
+				if tc.expectedSampleProbability != 0 {
+					expectedSampleProbability = &tc.expectedSampleProbability
+				}
+
+				if tc.expectedMinExecutionLatency != "0" {
+					require.True(t, minExecutionLatency.Valid)
+					require.Equal(t, tc.expectedMinExecutionLatency, minExecutionLatency.String)
+				}
+
+				if tc.expectedExpiresAt != "0" {
+					require.True(t, expiresAt.Valid, "expiresAt should not be NULL when expectedExpiresAt is set")
+					expectedExpiresAt, err := time.ParseDuration(tc.expectedExpiresAt)
+					require.NoError(t, err)
+					require.WithinDuration(t, requestTime.Add(expectedExpiresAt), expiresAt.Time, time.Minute)
+				}
+
+				require.Equal(t, expectedTxnFpId, txnFpId)
+				require.Equal(t, statementFingerprintIds, stmtdiagnostics.ToUint64Slice(t, stmtFingerprintIds))
+				require.Equal(t, expectedSampleProbability, sampleProbability)
+				require.Equal(t, tc.expectedRedacted, redacted)
+				require.Equal(t, tc.expectedUser, username)
+			}
+		})
+	}
+
+	t.Run("non-existent transaction fingerprint id", func(t *testing.T) {
+		var found bool
+		runner.QueryRow(t, "SELECT created FROM crdb_internal.request_transaction_bundle($1, $2, $3, $4, $5)",
+			"ffffffffffffffff",
+			0,
+			"0",
+			0,
+			false).Scan(&found)
+		require.False(t, found)
+	})
+
+	t.Run("non-hex encoded transaction fingerprint id", func(t *testing.T) {
+		runner.ExpectErr(t, "invalid transaction fingerprint id", "SELECT crdb_internal.request_transaction_bundle($1, $2, $3, $4, $5)",
+			"zzzz",
+			0,
+			"0",
+			0,
+			false)
+	})
+}
+
+func executeTransactions(t *testing.T, runner *sqlutils.SQLRunner, statements []string) {
+	t.Helper()
+	runner.Exec(t, "BEGIN")
+	for _, stmt := range statements {
+		runner.Exec(t, stmt)
+	}
+	runner.Exec(t, "COMMIT")
+}
+
+func runTxnUntilDiagnosticsCollected(
+	t *testing.T,
+	tc serverutils.TestClusterInterface,
+	sqlConn *sqlutils.SQLRunner,
+	statements []string,
+	reqId stmtdiagnostics.RequestID,
+) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		executeTransactions(t, sqlConn, statements)
+		r := tc.ServerConn(0).QueryRow("SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true and id=$1", reqId)
+		if r.Err() != nil {
+			return r.Err()
+		}
+		var count int
+		err := r.Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return errors.Newf("expected 1 completed bundle, got %d", count)
+		}
+		return nil
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		for i := range tc.NumServers() {
+			registry := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+			_, ok := registry.GetRequest(reqId)
+			if ok {
+				return errors.Newf("expected request to be removed from registry. Still exits in registry %d", i)
+			}
 		}
 		return nil
 	})

@@ -112,7 +112,7 @@ func Get(
 			case 1:
 				reply.IntentValue = &intentVals[0].Value
 			default:
-				log.Dev.Fatalf(ctx, "more than 1 intent on single key: %v", intentVals)
+				log.KvExec.Fatalf(ctx, "more than 1 intent on single key: %v", intentVals)
 			}
 		}
 	}

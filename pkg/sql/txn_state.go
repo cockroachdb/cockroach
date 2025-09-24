@@ -145,6 +145,10 @@ type txnState struct {
 
 	// execType records the executor type for the transaction.
 	execType executorType
+
+	// txnInstrumentationHelper contains state used to manage transaction
+	// bundle collection.
+	txnInstrumentationHelper txnInstrumentationHelper
 }
 
 // txnType represents the type of a SQL transaction.
@@ -296,6 +300,22 @@ func (ts *txnState) resetForNewSQLTxn(
 	return txnID
 }
 
+func (ts *txnState) shouldCollectTxnDiagnostics(
+	ctx context.Context, stmtFingerprintId uint64, stmt *Statement, tracer *tracing.Tracer,
+) (newCtx context.Context, collectingDiagnostics bool) {
+	// As per the documentation of txnState.mu, a lock isn't required here since
+	// we are just reading the value from the session's main go routine.
+	if ts.mu.stmtCount == 1 {
+		// If this is the first statement being executed in the transaction,
+		// check if we need to start collecting transaction-level diagnostics.
+		//var started bool
+		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeStartDiagnostics(ctx, stmtFingerprintId, tracer)
+	} else {
+		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.ShouldContinueDiagnostics(ctx, stmt.AST, stmtFingerprintId)
+	}
+	return
+}
+
 // finishSQLTxn finalizes a transaction's results and closes the root span for
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
 // called for starting another SQL txn. The ID of the finalized transaction is
@@ -304,8 +324,9 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 	ts.mon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
 
+	elapsed := timeutil.Since(ts.recordingStart)
 	if ts.shouldRecord {
-		if elapsed := timeutil.Since(ts.recordingStart); elapsed >= ts.recordingThreshold {
+		if elapsed >= ts.recordingThreshold {
 			logTraceAboveThreshold(ts.Ctx,
 				sp.GetRecording(sp.RecordingType()), /* recording */
 				"SQL txn",                           /* opName */
@@ -317,6 +338,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 		}
 	}
 
+	ts.txnInstrumentationHelper.Finalize(ts.Ctx, elapsed)
 	sp.Finish()
 	if ts.txnCancelFn != nil {
 		ts.txnCancelFn()

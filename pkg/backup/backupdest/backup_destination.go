@@ -52,20 +52,7 @@ const (
 // On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
 // omit a leading slash. However, backups in a subdirectory of a base bucket
 // will contain one.
-var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
-
-// TODO(adityamaru): Move this to the soon to be `backupinfo` package.
-func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, _, err := exportStore.ReadFile(ctx, backupbase.DeprecatedBackupManifestName, cloud.ReadOptions{NoFileSize: true})
-	if err != nil {
-		if errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	r.Close(ctx)
-	return true, nil
-}
+var deprecatedBackupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.DeprecatedBackupManifestName + "$")
 
 // ResolvedDestination encapsulates information that is populated while
 // resolving the destination of a backup.
@@ -148,7 +135,7 @@ func ResolveDest(
 		return ResolvedDestination{}, err
 	}
 	defer defaultStore.Close()
-	exists, err := containsManifest(ctx, defaultStore)
+	exists, err := backupinfo.ContainsManifest(ctx, defaultStore)
 	if err != nil {
 		return ResolvedDestination{}, err
 	}
@@ -496,7 +483,7 @@ func ListFullBackupsInCollection(
 
 	var backupPaths []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
-		if backupPathRE.MatchString(f) {
+		if deprecatedBackupPathRE.MatchString(f) {
 			backupPaths = append(backupPaths, f)
 		}
 		return nil

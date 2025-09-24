@@ -24,7 +24,7 @@ import (
 func tsFromFunc(ticks int, f func(tick int) float64) []float64 {
 	vs := make([]float64, ticks)
 	for i := 0; i < ticks; i++ {
-		vs[i] = f(i)
+		vs[i] = math.Round(f(i)*1e6) / 1e6
 	}
 	return vs
 }

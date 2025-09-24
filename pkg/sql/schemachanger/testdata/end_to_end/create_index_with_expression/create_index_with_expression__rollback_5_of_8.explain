@@ -36,7 +36,7 @@ Schema change plan for rolling back CREATE INDEX idx1 ON defaultdb.public.t (low
       │    ├── 6 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-)}
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_idx_expr-), TypeName: "STRING"}
-      │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-), Usage: REGULAR}
+      │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (crdb_internal_idx_expr-), ReferencedColumnIDs: [2], Usage: REGULAR}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx1-)}
       │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3}

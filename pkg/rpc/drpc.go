@@ -219,6 +219,9 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	unaryInterceptors = append(unaryInterceptors, stopUnary)
 	streamInterceptors = append(streamInterceptors, stopStream)
 
+	// Recover from any uncaught panics caused by DB Console requests.
+	unaryInterceptors = append(unaryInterceptors, DRPCGatewayRequestRecoveryInterceptor)
+
 	if !rpcCtx.ContextOptions.Insecure {
 		a := kvAuth{
 			sv: &rpcCtx.Settings.SV,

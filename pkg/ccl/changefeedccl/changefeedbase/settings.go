@@ -213,7 +213,7 @@ var ProtectTimestampBucketingInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.protect_timestamp_bucketing_interval",
 	"controls the amount a table is allowed to lag behind the most advanced table before a per-table protected timestamp record is created; "+
-		"only used when changefeed.protected_timestamp.per_table.enabled is true",
+		"only used when changefeed.protect_timestamp.per_table.enabled is true",
 	2*time.Minute,
 	settings.PositiveDuration)
 
@@ -229,10 +229,10 @@ var ProtectTimestampLag = settings.RegisterDurationSetting(
 // instead of a single record for all tables in a changefeed.
 var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"changefeed.protected_timestamp.per_table.enabled",
+	"changefeed.protect_timestamp.per_table.enabled",
 	"if true, creates separate protected timestamp records for each table in a changefeed; "+
 		"if false, uses a single protected timestamp record for all tables",
-	metamorphic.ConstantWithTestBool("changefeed.protected_timestamp.per_table.enabled", true))
+	metamorphic.ConstantWithTestBool("changefeed.protect_timestamp.per_table.enabled", false))
 
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
