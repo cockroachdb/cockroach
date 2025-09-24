@@ -48,6 +48,7 @@ type SQLProvider struct {
 	options     cspann.IndexOptions
 	pool        *pgxpool.Pool
 	tableName   string
+	indexName   string
 	retryCount  atomic.Uint64
 }
 
@@ -85,6 +86,7 @@ func NewSQLProvider(
 
 	// Create sanitized table and index names.
 	tableName := fmt.Sprintf("vecbench_%s", sanitizeIdentifier(datasetName))
+	indexName := fmt.Sprintf("vecbench_%s_embedding_idx", sanitizeIdentifier(datasetName))
 
 	return &SQLProvider{
 		datasetName: datasetName,
@@ -93,6 +95,7 @@ func NewSQLProvider(
 		options:     options,
 		pool:        pool,
 		tableName:   tableName,
+		indexName:   indexName,
 	}, nil
 }
 
@@ -136,6 +139,20 @@ func (s *SQLProvider) New(ctx context.Context) error {
 		return errors.Wrap(err, "dropping table")
 	}
 
+	// Enable vector indexes if not already enabled.
+	_, err = s.pool.Exec(ctx, "SET CLUSTER SETTING feature.vector_index.enabled = true")
+	if err != nil {
+		return errors.Wrap(err, "enabling vector indexes")
+	}
+
+	// Create table without vector index. Index creation is handled separately.
+	_, err = s.pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %s (
+		id BYTES PRIMARY KEY,
+		embedding VECTOR(%d))`, s.tableName, s.dims))
+	return errors.Wrap(err, "creating table")
+}
+
+func (s *SQLProvider) CreateIndex(ctx context.Context) error {
 	var opClass string
 	switch s.distMetric {
 	case vecpb.CosineDistance:
@@ -144,13 +161,52 @@ func (s *SQLProvider) New(ctx context.Context) error {
 		opClass = " vector_ip_ops"
 	}
 
-	_, err = s.pool.Exec(ctx, fmt.Sprintf(`
-		CREATE TABLE %s (
-			id BYTES PRIMARY KEY,
-			embedding VECTOR(%d),
-			VECTOR INDEX (embedding%s)
-		)`, s.tableName, s.dims, opClass))
-	return errors.Wrap(err, "creating table")
+	_, err := s.pool.Exec(ctx, fmt.Sprintf(
+		"CREATE VECTOR INDEX %s ON %s (embedding%s)",
+		s.indexName,
+		s.tableName,
+		opClass,
+	))
+	return errors.Wrap(err, "creating index")
+}
+
+// CheckIndexCreationStatus implements the VectorProvider interface.
+func (s *SQLProvider) CheckIndexCreationStatus(ctx context.Context) (float64, error) {
+	var status string
+	var fractionCompleted float64
+
+	// Query for jobs related to our index creation.
+	rows, err := s.pool.Query(ctx, `
+		SELECT status, fraction_completed
+		FROM [SHOW JOBS]
+		WHERE description LIKE '%%vecbench%%'
+		AND job_type = 'NEW SCHEMA CHANGE'
+		ORDER BY created DESC
+		LIMIT 1`)
+	if err != nil {
+		return 0, errors.Wrap(err, "querying job progress")
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, errors.Wrap(err, "querying job progress")
+		}
+		return 0.0, nil
+	}
+
+	if err := rows.Scan(&status, &fractionCompleted); err != nil {
+		return 0, errors.Wrap(err, "scanning job progress")
+	}
+
+	if status == "succeeded" {
+		return 1.0, nil
+	} else if status == "failed" || status == "canceled" {
+		return fractionCompleted, errors.Newf("index creation job failed with status: %s", status)
+	}
+
+	// Job is still running.
+	return fractionCompleted, nil
 }
 
 // InsertVectors implements the VectorProvider interface.
@@ -296,7 +352,7 @@ func (s *SQLProvider) FormatStats() string {
 	return ""
 }
 
-// sanitizeIdentifier makes a string safe to use as a SQL identifier
+// sanitizeIdentifier makes a string safe to use as a SQL identifier.
 func sanitizeIdentifier(s string) string {
 	// Replace non-alphanumeric characters with underscores.
 	return strings.Map(func(r rune) rune {
