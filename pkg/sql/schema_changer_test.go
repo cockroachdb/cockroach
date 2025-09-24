@@ -8033,11 +8033,15 @@ func TestCreateTableAsValidationFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var hookEnabled atomic.Bool
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunDuringQueryBackfillValidation: func(expectedCount int64, currentCount int64) (newCurrentCount int64, err error) {
-					return 0, nil
+					if hookEnabled.Load() {
+						return 0, nil
+					}
+					return currentCount, nil
 				},
 			},
 		},
@@ -8050,7 +8054,13 @@ func TestCreateTableAsValidationFailure(t *testing.T) {
 	runner.Exec(t, "INSERT INTO t1 VALUES (1)")
 	runner.Exec(t, "INSERT INTO t1 VALUES (2)")
 	runner.Exec(t, "INSERT INTO t1 VALUES (3)")
+	// Validate cases that should work
+	runner.Exec(t, "CREATE TABLE simple_copy AS (SELECT * FROM t1)")
+	// Row count is can change.
+	runner.Exec(t, "CREATE TABLE t_random AS (SELECT * FROM t1 WHERE random() > 0.5)")
+	runner.Exec(t, " CREATE TABLE t_random2 AS (SELECT * FROM generate_series(0, CAST((100 * random()) AS INT)));")
 	// Execute a CTAS and CREATE MATERIALIZED VIEW statements that should fail.
+	hookEnabled.Store(true)
 	runner.ExpectErr(t, "backfill query did not populate index \"t2_pkey\" with expected number of rows", "CREATE TABLE t2 AS (SELECT * FROM t1)")
 	runner.ExpectErr(t, "backfill query did not populate index \"t2_pkey\" with expected number of rows", "CREATE MATERIALIZED VIEW t2 AS (SELECT n FROM t1)")
 }
