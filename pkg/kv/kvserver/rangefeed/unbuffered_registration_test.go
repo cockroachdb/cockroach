@@ -65,13 +65,14 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 		})
 	})
 	testServerStream.reset()
-	t.Run("publish 20 logical ops to 50 registrations", func(t *testing.T) {
-		for i := 0; i < 20; i++ {
+	eventCount := testProcessorEventCCap - 1
+	t.Run(fmt.Sprintf("publish %d logical ops to 50 registrations", eventCount), func(t *testing.T) {
+		for range eventCount {
 			p.ConsumeLogicalOps(ctx, writeValueOp(hlc.Timestamp{WallTime: 1}))
 		}
-		testServerStream.waitForEventCount(t, 20*50)
+		testServerStream.waitForEventCount(t, eventCount*50)
 		testServerStream.iterateEventsByStreamID(func(_ int64, events []*kvpb.MuxRangeFeedEvent) {
-			require.Equal(t, 20, len(events))
+			require.Equal(t, eventCount, len(events))
 			require.NotNil(t, events[0].RangeFeedEvent.Val)
 		})
 	})
