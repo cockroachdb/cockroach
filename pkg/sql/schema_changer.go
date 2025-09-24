@@ -312,58 +312,11 @@ const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
 // validateBackfillQueryIntoTable validates that source query matches the contents of
 // a backfilled table, when executing the query at queryTS.
 func (sc *SchemaChanger) validateBackfillQueryIntoTable(
-	ctx context.Context,
-	table catalog.TableDescriptor,
-	entryCountWrittenToPrimaryIdx int64,
-	queryTS hlc.Timestamp,
-	query string,
-	skipAOSTValidation bool,
+	ctx context.Context, table catalog.TableDescriptor, entryCountWrittenToPrimaryIdx int64,
 ) error {
-	var aostEntryCount int64
 	sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "validateBackfillQueryIntoTable")
 	sd.SessionData = *sc.sessionData
-	// First get the expected row count for the source query at the target timestamp.
-	if err := sc.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		if skipAOSTValidation {
-			return nil
-		}
-		parsedQuery, err := parser.ParseOne(query)
-		if err != nil {
-			return err
-		}
-		// If the query has an AOST clause, then we will remove it here.
-		selectTop, ok := parsedQuery.AST.(*tree.Select)
-		if ok {
-			selectStmt := selectTop.Select
-			var parenSel *tree.ParenSelect
-			var ok bool
-			for parenSel, ok = selectStmt.(*tree.ParenSelect); ok; parenSel, ok = selectStmt.(*tree.ParenSelect) {
-				selectStmt = parenSel.Select.Select
-			}
-			sc, ok := selectStmt.(*tree.SelectClause)
-			if ok && sc.From.AsOf.Expr != nil {
-				sc.From.AsOf.Expr = nil
-				query = parsedQuery.AST.String()
-			}
-		}
-		// Inject the query and the time we should scan at.
-		err = txn.KV().SetFixedTimestamp(ctx, queryTS)
-		if err != nil {
-			return err
-		}
-		countQuery := fmt.Sprintf("SELECT count(*) FROM (%s)", query)
-		row, err := txn.QueryRow(ctx, "backfill-query-src-count", txn.KV(), countQuery)
-		if err != nil {
-			return err
-		}
-		aostEntryCount = int64(tree.MustBeDInt(row[0]))
-		return nil
-	}, isql.WithSessionData(sd),
-		isql.WithPriority(admissionpb.BulkNormalPri),
-	); err != nil {
-		return err
-	}
-	// Next run validation on table that was populated using count queries.
+	// Run validation on table that was populated using count queries.
 	// Get rid of the table ID prefix.
 	index := table.GetPrimaryIndex()
 	now := sc.db.KV().Clock().Now()
@@ -390,7 +343,7 @@ func (sc *SchemaChanger) validateBackfillQueryIntoTable(
 	// Testing knob that allows us to manipulate counts to fail
 	// the validation.
 	if sc.testingKnobs.RunDuringQueryBackfillValidation != nil {
-		newTblEntryCount, err = sc.testingKnobs.RunDuringQueryBackfillValidation(aostEntryCount, newTblEntryCount)
+		newTblEntryCount, err = sc.testingKnobs.RunDuringQueryBackfillValidation(entryCountWrittenToPrimaryIdx, newTblEntryCount)
 		if err != nil {
 			return err
 		}
@@ -402,9 +355,6 @@ func (sc *SchemaChanger) validateBackfillQueryIntoTable(
 				index.GetName(), entryCountWrittenToPrimaryIdx, newTblEntryCount,
 			)
 		}
-	}
-	if !skipAOSTValidation && newTblEntryCount != aostEntryCount {
-		return errors.AssertionFailedf("backfill query did not populate index %q with expected number of rows (expected: %d, got: %d)", index.GetName(), aostEntryCount, newTblEntryCount)
 	}
 	return nil
 }
@@ -435,8 +385,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		}
 	}()
-	validationTime := ts
-	var skipAOSTValidation bool
 	bulkSummary := kvpb.BulkOpSummary{}
 
 	err = sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -596,23 +544,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				return
 			}
 		})
-
-		if planAndRunErr != nil {
-			return planAndRunErr
-		}
-		// Otherwise, the select statement had no fixed timestamp. For
-		// validating counts we will start with the read timestamp.
-		if ts.IsEmpty() {
-			validationTime = txn.KV().ReadTimestamp()
-		}
-		// If a virtual table was used then we can't conduct any kind of validation,
-		// since our AOST query might be reading data not in KV.
-		for _, tbl := range localPlanner.curPlan.mem.Metadata().AllTables() {
-			if tbl.Table.IsVirtualTable() {
-				skipAOSTValidation = true
-			}
-		}
-		return nil
+		return planAndRunErr
 	})
 
 	// BatchTimestampBeforeGCError is retryable for the schema changer, but we
@@ -638,7 +570,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 	// Validation will be skipped if the query is not AOST safe.
 	// (i.e. reading non-KV data via CRDB internal)
-	if err := sc.validateBackfillQueryIntoTable(ctx, table, entriesWrittenToPrimaryIdx, validationTime, query, skipAOSTValidation); err != nil {
+	if err := sc.validateBackfillQueryIntoTable(ctx, table, entriesWrittenToPrimaryIdx); err != nil {
 		return err
 	}
 	return nil
@@ -646,7 +578,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 // maybe backfill a created table by executing the AS query. Return nil if
 // successfully backfilled.
-//
 // Note that this does not connect to the tracing settings of the
 // surrounding SQL transaction. This should be OK as (at the time of
 // this writing) this code path is only used for standalone CREATE
