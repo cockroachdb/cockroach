@@ -121,7 +121,7 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 	mvt.InMixedVersion(
 		"test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand,
 			h *mixedversion.Helper) error {
-			if err := initializeSchemaAndIDsMixedVersion(ctx, c, t.L(), h, t); err != nil {
+			if err := initializeSchemaAndIDs(ctx, c, l, h.CockroachBinaryForWorkload(t)); err != nil {
 				t.Fatal(err)
 			}
 			return testEndpoints(ctx, c, l, getEndpoints(t), true)
@@ -269,14 +269,6 @@ func withRetries(ctx context.Context, opts retry.Options, f func() error) error 
 		return nil
 	}
 	return lastErr
-}
-
-// initializeSchemaAndIDsMixedVersion wraps initializeSchemaAndIDs to take
-// advantage of mixedversion Helper
-func initializeSchemaAndIDsMixedVersion(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, h *mixedversion.Helper, t test.Test,
-) error {
-	return initializeSchemaAndIDs(ctx, c, l, h.CockroachBinaryForWorkload(t))
 }
 
 // initializeSchemaAndIDs ensures schema objects are created in the cluster, and determines
