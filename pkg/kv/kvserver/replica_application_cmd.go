@@ -158,7 +158,7 @@ func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 // command's proposal if it is local, it asserts that the proposal is not local.
 func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
 	if c.IsLocal() {
-		log.Dev.Fatalf(ctx, "proposal unexpectedly local: %v", c.ReplicatedResult())
+		log.KvExec.Fatalf(ctx, "proposal unexpectedly local: %v", c.ReplicatedResult())
 	}
 	c.finishTracingSpan()
 }

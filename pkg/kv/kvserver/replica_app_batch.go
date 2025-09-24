@@ -474,7 +474,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	} else if ops != nil {
-		log.Dev.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
+		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
 
 	return nil
@@ -598,7 +598,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 // application.
 func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
-		log.Dev.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.numEntriesProcessed)
+		log.KvExec.Infof(ctx, "flushing batch %v of %d entries", b.state, b.ab.numEntriesProcessed)
 	}
 
 	// Add the replica applied state key to the write batch if this change

@@ -136,7 +136,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
-		log.Dev.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
+		log.KvDistribution.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
 	}
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
@@ -602,7 +602,7 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 		// disk space (which is reclaimed on node restart). It is unexpected
 		// though, so log a warning.
 		if err := kvSS.scratch.Close(); err != nil {
-			log.Dev.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
+			log.KvDistribution.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
 	}
 }

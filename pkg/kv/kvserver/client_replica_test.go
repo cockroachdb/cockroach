@@ -328,7 +328,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			updatedVal := []byte("updatedVal")
 			if err := txn.CPut(ctx, key, updatedVal, kvclientutils.StrToCPutExistingValue("initVal")); err != nil {
-				log.Dev.Errorf(context.Background(), "failed put value: %+v", err)
+				log.KvExec.Errorf(context.Background(), "failed put value: %+v", err)
 				return err
 			}
 
@@ -1595,7 +1595,7 @@ func (l *leaseTransferTest) sendRead(t *testing.T, storeIdx int) *kvpb.Error {
 		getArgs(l.leftKey),
 	)
 	if pErr != nil {
-		log.Dev.Warningf(context.Background(), "%v", pErr)
+		log.KvExec.Warningf(context.Background(), "%v", pErr)
 	}
 	return pErr
 }
@@ -1637,9 +1637,9 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 			l.evalFilter = nil
 			l.filterMu.Unlock()
 			extensionSem <- struct{}{}
-			log.Dev.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
+			log.KvExec.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
 			<-extensionSem
-			log.Dev.Infof(filterArgs.Ctx, "filter unblocking lease request")
+			log.KvExec.Infof(filterArgs.Ctx, "filter unblocking lease request")
 		}
 		return nil
 	}
@@ -2344,7 +2344,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 		})
 	})
 
-	log.Dev.Info(ctx, "restarting")
+	log.KvExec.Info(ctx, "restarting")
 	require.NoError(t, tc.Restart())
 
 	// Send another read and check that the pre-existing lease has not been used.
@@ -2461,13 +2461,13 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 
 			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); ok {
-				log.Dev.Infof(ctx, "retrying lease after %s", pErr)
+				log.KvExec.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if _, ok := pErr.GetDetail().(*kvpb.LeaseRejectedError); ok {
 				// Lease rejected? Try again. The extension should work because
 				// extending is idempotent (assuming the PrevLease matches).
-				log.Dev.Infof(ctx, "retrying lease after %s", pErr)
+				log.KvExec.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if pErr != nil {
@@ -3021,7 +3021,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
 	aliveNodeIdx := 1 - stoppedNodeInx
-	log.Dev.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
+	log.KvExec.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
 	tc.StopServer(stoppedNodeInx)
 	repl := tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 

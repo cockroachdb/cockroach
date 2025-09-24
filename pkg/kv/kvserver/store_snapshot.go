@@ -296,7 +296,7 @@ func (s *Store) throttleSnapshot(
 	// NB: this log message is skipped in test builds as many tests do not mock
 	// all of the objects being logged.
 	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
-		log.Dev.Infof(
+		log.KvDistribution.Infof(
 			ctx,
 			"waited for %.1fs to acquire snapshot reservation to r%d",
 			elapsed.Seconds(),
@@ -410,7 +410,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 		exReplica, err := s.GetReplica(it.Desc().RangeID)
 		msg := IntersectingSnapshotMsg
 		if err != nil {
-			log.Dev.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
+			log.KvDistribution.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
 		} else {
 			inactive := func(r *Replica) bool {
 				if r.RaftStatus() == nil {
@@ -531,7 +531,7 @@ func (s *Store) receiveSnapshot(
 			}
 			return nil
 		}); pErr != nil {
-		log.Dev.Infof(ctx, "cannot accept snapshot: %s", pErr)
+		log.KvDistribution.Infof(ctx, "cannot accept snapshot: %s", pErr)
 		return sendSnapshotError(ctx, s, stream, pErr.GoError())
 	}
 
@@ -540,7 +540,7 @@ func (s *Store) receiveSnapshot(
 			// Remove the placeholder, if it's still there. Most of the time it will
 			// have been filled and this is a no-op.
 			if _, err := s.removePlaceholder(ctx, placeholder, removePlaceholderFailed); err != nil {
-				log.Dev.Fatalf(ctx, "unable to remove placeholder: %s", err)
+				log.KvDistribution.Fatalf(ctx, "unable to remove placeholder: %s", err)
 			}
 		}
 	}()
@@ -563,7 +563,7 @@ func (s *Store) receiveSnapshot(
 		return err
 	}
 	if log.V(2) {
-		log.Dev.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
+		log.KvDistribution.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
 	comparisonResult := s.getLocalityComparison(header.RaftMessageRequest.FromReplica.NodeID,
@@ -775,7 +775,7 @@ func SendEmptySnapshot(
 
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+			log.KvDistribution.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
 
