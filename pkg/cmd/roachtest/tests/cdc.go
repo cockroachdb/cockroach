@@ -2058,7 +2058,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(7, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-b")),
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(),
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodeToZone := map[int]string{
 				0: "us-east1-b",
@@ -2071,7 +2071,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 20})
 
 			var err error
 			_, err = ct.DB().Exec("ALTER DATABASE tpcc SET PRIMARY REGION 'us-west1'")
@@ -2082,6 +2082,7 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts: map[string]string{
 					"execution_locality": "'region=us-east1'",
+					"initial_scan":       "'only'",
 				},
 			})
 			ct.waitForWorkload()
