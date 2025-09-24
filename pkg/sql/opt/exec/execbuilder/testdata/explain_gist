@@ -262,13 +262,13 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
 └── • render
     │
     └── • group (hash)
-        │ group by: engine_attribute, engine_attribute, engine_attribute, engine_attribute, engine_attribute, engine_attribute, engine_attribute
+        │ group by: udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog
         │
         └── • sort
             │ order
             │
             └── • hash join (left outer)
-                │ equality: (engine_attribute) = (conversion_factor)
+                │ equality: (udt_catalog) = (srs_id)
                 │
                 ├── • filter
                 │   │
