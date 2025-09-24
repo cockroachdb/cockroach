@@ -46,7 +46,7 @@ done
 test_filter="${test_filter})\$"
 
 export RUNS_PER_TEST=1000
-export TEST_ARGS="--test_timeout=25200 --runs_per_test $RUNS_PER_TEST"
+export TEST_ARGS="--test_timeout=300 --runs_per_test $RUNS_PER_TEST"
 
 mkdir -p $ARTIFACTS_DIR
 
@@ -62,7 +62,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test //pkg/kv/kvserver/asim/tests:tests
                                       --test_env TC_SERVER_URL \
                                       --test_env COCKROACH_RUN_ASIM_TESTS=true \
                                       --test_filter="^TestDataDriven$" \
-                                      --test_timeout=3600 \
+                                      --test_timeout=600 \
     || exit_status=$?
 
 # Run the rest of the tests under stress.
