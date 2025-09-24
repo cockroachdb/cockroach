@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -619,6 +620,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
+	as            *mmaintegration.AllocatorSync
 	deterministic bool
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -658,6 +660,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 // close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
+	as *mmaintegration.AllocatorSync,
 	deterministic bool,
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -670,6 +673,7 @@ func MakeAllocator(
 	}
 	allocator := Allocator{
 		st:            st,
+		as:            as,
 		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
