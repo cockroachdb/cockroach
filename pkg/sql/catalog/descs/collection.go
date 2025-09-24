@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -367,6 +368,63 @@ func (c onlyVersionBumpOption) apply(opts *writeDescOptions) {
 // convergence to a single version.
 func WithOnlyVersionBump() WriteDescOption {
 	return onlyVersionBumpOption(true)
+}
+
+type getAllOptions struct {
+	allowLeased bool
+}
+
+// GetAllOption defines functional options for GetAll* methods.
+type GetAllOption interface {
+	apply(*getAllOptions)
+}
+
+type allowLeasedOption bool
+
+func (c allowLeasedOption) apply(opts *getAllOptions) {
+	opts.allowLeased = bool(c)
+}
+
+// WithAllowLeased configures GetAll* methods to allow leased descriptors.
+func WithAllowLeased() GetAllOption {
+	return allowLeasedOption(true)
+}
+
+// applyGetAllOptions applies the provided functional options to a getAllOptions struct.
+func applyGetAllOptions(opts []GetAllOption) getAllOptions {
+	options := getAllOptions{}
+	for _, opt := range opts {
+		opt.apply(&options)
+	}
+	return options
+}
+
+var allowLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.allow_leased_descriptors.enabled",
+	"if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance",
+	false,
+	settings.WithPublic,
+)
+
+// GetCatalogGetAllOptions returns the functional options for GetAll* methods
+// based on the cluster setting for allowing leased descriptors in catalog views.
+func GetCatalogGetAllOptions(sv *settings.Values) []GetAllOption {
+	if allowLeasedDescriptorsInCatalogViews.Get(sv) {
+		return []GetAllOption{WithAllowLeased()}
+	}
+	return nil
+}
+
+// GetCatalogDescriptorGetter returns the appropriate descriptor getter for
+// catalog views based on the cluster setting.
+func GetCatalogDescriptorGetter(
+	descriptors *Collection, txn *kv.Txn, sv *settings.Values,
+) ByIDGetterBuilder {
+	if allowLeasedDescriptorsInCatalogViews.Get(sv) {
+		return descriptors.ByIDWithLeased(txn)
+	}
+	return descriptors.ByIDWithoutLeased(txn)
 }
 
 // maybeMarkVersionBumpOnly updates the version bump only flag for the
@@ -830,12 +888,15 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 
 // GetAll returns all descriptors, namespace entries, comments and
 // zone configs visible by the transaction.
-func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+func (tc *Collection) GetAll(
+	ctx context.Context, txn *kv.Txn, opts ...GetAllOption,
+) (nstree.Catalog, error) {
+	options := applyGetAllOptions(opts)
 	stored, err := tc.cr.ScanAll(ctx, txn)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	ret, err := tc.aggregateAllLayers(ctx, txn, stored)
+	ret, err := tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -860,7 +921,8 @@ func (tc *Collection) GetAllComments(
 	if err != nil {
 		return nil, err
 	}
-	comments, err := tc.aggregateAllLayers(ctx, txn, kvComments)
+	const allowLeased = false
+	comments, err := tc.aggregateAllLayers(ctx, txn, allowLeased, kvComments)
 	if err != nil {
 		return nil, err
 	}
@@ -878,12 +940,15 @@ func (tc *Collection) GetAllFromStorageUnvalidated(
 }
 
 // GetAllDatabases is like GetAll but filtered to non-dropped databases.
-func (tc *Collection) GetAllDatabases(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+func (tc *Collection) GetAllDatabases(
+	ctx context.Context, txn *kv.Txn, opts ...GetAllOption,
+) (nstree.Catalog, error) {
+	options := applyGetAllOptions(opts)
 	stored, err := tc.cr.ScanNamespaceForDatabases(ctx, txn)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	ret, err := tc.aggregateAllLayers(ctx, txn, stored)
+	ret, err := tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -901,17 +966,18 @@ func (tc *Collection) GetAllDatabases(ctx context.Context, txn *kv.Txn) (nstree.
 // GetAllSchemasInDatabase is like GetAll but filtered to the schemas with
 // the specified parent database. Includes virtual schemas.
 func (tc *Collection) GetAllSchemasInDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, opts ...GetAllOption,
 ) (nstree.Catalog, error) {
+	options := applyGetAllOptions(opts)
 	stored, err := tc.cr.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
 	var ret nstree.MutableCatalog
 	if db.HasPublicSchemaWithDescriptor() {
-		ret, err = tc.aggregateAllLayers(ctx, txn, stored)
+		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
 	} else {
-		ret, err = tc.aggregateAllLayers(ctx, txn, stored, schemadesc.GetPublicSchema())
+		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, schemadesc.GetPublicSchema())
 	}
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -938,8 +1004,13 @@ func (tc *Collection) GetAllSchemasInDatabase(
 // the specified parent schema. Includes virtual objects. Does not include
 // dropped objects.
 func (tc *Collection) GetAllObjectsInSchema(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	opts ...GetAllOption,
 ) (nstree.Catalog, error) {
+	options := applyGetAllOptions(opts)
 	var ret nstree.MutableCatalog
 	if sc.SchemaKind() == catalog.SchemaVirtual {
 		tc.virtual.addAllToCatalog(ret)
@@ -948,7 +1019,7 @@ func (tc *Collection) GetAllObjectsInSchema(
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
-		ret, err = tc.aggregateAllLayers(ctx, txn, stored, sc)
+		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, sc)
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
@@ -967,13 +1038,14 @@ func (tc *Collection) GetAllObjectsInSchema(
 // GetAllObjectsInSchema applied to each of those schemas.
 // Includes virtual objects. Does not include dropped objects.
 func (tc *Collection) GetAllInDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, opts ...GetAllOption,
 ) (nstree.Catalog, error) {
+	options := applyGetAllOptions(opts)
 	stored, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	schemas, err := tc.GetAllSchemasInDatabase(ctx, txn, db)
+	schemas, err := tc.GetAllSchemasInDatabase(ctx, txn, db, opts...)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -985,7 +1057,7 @@ func (tc *Collection) GetAllInDatabase(
 	}); err != nil {
 		return nstree.Catalog{}, err
 	}
-	ret, err := tc.aggregateAllLayers(ctx, txn, stored, schemasSlice...)
+	ret, err := tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, schemasSlice...)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -1013,17 +1085,18 @@ func (tc *Collection) GetAllInDatabase(
 // GetAllTablesInDatabase is like GetAllInDatabase but filtered to tables.
 // Includes virtual objects. Does not include dropped objects.
 func (tc *Collection) GetAllTablesInDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, opts ...GetAllOption,
 ) (nstree.Catalog, error) {
+	options := applyGetAllOptions(opts)
 	stored, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
 	var ret nstree.MutableCatalog
 	if db.HasPublicSchemaWithDescriptor() {
-		ret, err = tc.aggregateAllLayers(ctx, txn, stored)
+		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
 	} else {
-		ret, err = tc.aggregateAllLayers(ctx, txn, stored, schemadesc.GetPublicSchema())
+		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, schemadesc.GetPublicSchema())
 	}
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -1046,7 +1119,11 @@ func (tc *Collection) GetAllTablesInDatabase(
 // takes care to stack all of the Collection's layer appropriately and ensures
 // that the returned descriptors are properly hydrated and validated.
 func (tc *Collection) aggregateAllLayers(
-	ctx context.Context, txn *kv.Txn, stored nstree.Catalog, schemas ...catalog.SchemaDescriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	allowLeased bool,
+	stored nstree.Catalog,
+	schemas ...catalog.SchemaDescriptor,
 ) (ret nstree.MutableCatalog, _ error) {
 	// Descriptors need to be re-read to ensure proper validation hydration etc.
 	// We collect their IDs for this purpose and we'll re-add them later.
@@ -1142,8 +1219,12 @@ func (tc *Collection) aggregateAllLayers(
 	// Remove deleted descriptors from consideration, re-read and add the rest.
 	tc.deletedDescs.ForEach(descIDs.Remove)
 	allDescs := make([]catalog.Descriptor, descIDs.Len())
+	flags := defaultUnleasedFlags()
+	if allowLeased {
+		flags.layerFilters.withoutLeased = false
+	}
 	if err := getDescriptorsByID(
-		ctx, tc, txn, defaultUnleasedFlags(), allDescs, descIDs.Ordered()...,
+		ctx, tc, txn, flags, allDescs, descIDs.Ordered()...,
 	); err != nil {
 		return nstree.MutableCatalog{}, err
 	}
@@ -1159,7 +1240,7 @@ func (tc *Collection) aggregateAllLayers(
 // in the requested database.
 // Deprecated: prefer GetAllInDatabase.
 func (tc *Collection) GetAllDescriptorsForDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, opts ...GetAllOption,
 ) (nstree.Catalog, error) {
 	// Re-read database descriptor to have the freshest version.
 	{
@@ -1169,7 +1250,7 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 			return nstree.Catalog{}, err
 		}
 	}
-	c, err := tc.GetAllInDatabase(ctx, txn, db)
+	c, err := tc.GetAllInDatabase(ctx, txn, db, opts...)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -1185,8 +1266,10 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 // GetAllDescriptors returns all physical descriptors visible by the
 // transaction.
 // Deprecated: prefer GetAll.
-func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	all, err := tc.GetAll(ctx, txn)
+func (tc *Collection) GetAllDescriptors(
+	ctx context.Context, txn *kv.Txn, opts ...GetAllOption,
+) (nstree.Catalog, error) {
+	all, err := tc.GetAll(ctx, txn, opts...)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -1213,9 +1296,9 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 // transaction, ordered by name.
 // Deprecated: prefer GetAllDatabases.
 func (tc *Collection) GetAllDatabaseDescriptors(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, opts ...GetAllOption,
 ) (ret []catalog.DatabaseDescriptor, _ error) {
-	c, err := tc.GetAllDatabases(ctx, txn)
+	c, err := tc.GetAllDatabases(ctx, txn, opts...)
 	if err != nil {
 		return nil, err
 	}

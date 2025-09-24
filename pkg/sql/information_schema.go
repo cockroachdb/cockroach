@@ -997,11 +997,11 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				}
 				// Note: Cross DB references are deprecated, but this should be
 				// a cached look up when they don't exist.
-				refDB, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Database(ctx, refTable.GetParentID())
+				refDB, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Database(ctx, refTable.GetParentID())
 				if err != nil {
 					return err
 				}
-				refSchema, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Schema(ctx, refTable.GetParentSchemaID())
+				refSchema, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Schema(ctx, refTable.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -1832,7 +1832,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
-			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 			if err != nil {
 				return err
 			}
@@ -1890,7 +1890,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, id)
+				sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -2450,7 +2450,7 @@ https://www.postgresql.org/docs/current/infoschema-triggers.html`,
 						}
 
 						// Build the action statement.
-						funcDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Function(ctx, trigger.FuncID)
+						funcDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Function(ctx, trigger.FuncID)
 						if err != nil {
 							return err
 						}
@@ -2550,7 +2550,7 @@ func forEachSchema(
 	fn func(ctx context.Context, sc catalog.SchemaDescriptor) error,
 ) error {
 	forEachDatabase := func(db catalog.DatabaseDescriptor) error {
-		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db)
+		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 		if err != nil {
 			return err
 		}
@@ -2586,7 +2586,7 @@ func forEachSchema(
 	if dbContext != nil {
 		return iterutil.Map(forEachDatabase(dbContext))
 	}
-	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
+	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	if err != nil {
 		return err
 	}
@@ -2612,7 +2612,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []catalog.DatabaseDescriptor
 	if dbContext == nil {
-		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 		if err != nil {
 			return err
 		}
@@ -2658,9 +2658,9 @@ func forEachTypeDesc(
 	var all nstree.Catalog
 	if dbContext != nil &&
 		useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	}
 	if err != nil {
 		return err
@@ -2740,9 +2740,9 @@ func forEachTableDesc(
 ) (err error) {
 	var all nstree.Catalog
 	if dbContext != nil && useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	}
 	if err != nil {
 		return err
