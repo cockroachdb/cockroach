@@ -6313,8 +6313,7 @@ func TestRaftPreVote(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
-					Settings:          st,
+					Settings: st,
 					RaftConfig: base.RaftConfig{
 						RaftEnableCheckQuorum: true,
 						RaftTickInterval:      200 * time.Millisecond, // speed up test
