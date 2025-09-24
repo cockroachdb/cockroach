@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -865,6 +866,39 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 		} else {
 			a.cs.undoPendingChange(changeID, false)
 		}
+	}
+}
+
+func (a *allocatorState) IsInConflictWithMMA(
+	rangeUsageInfo allocator.RangeUsageInfo,
+	existing roachpb.StoreID,
+	cand roachpb.StoreID,
+	cands []roachpb.StoreID,
+	cpuOnly bool,
+) bool {
+	srcSS := a.cs.stores[existing]
+	targetSS := a.cs.stores[cand]
+	var means meansForStoreSet
+	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
+	storeIDs := makeStoreIDPostingList(cands)
+	storeIDs.insert(existing)
+	means.stores = storeIDs
+	computeMeansForStoreSet(a.cs, &means, scratchNodes)
+	var addedLoad LoadVector
+	if cpuOnly {
+		if diff := LoadValue(int64(rangeUsageInfo.RequestCPUNanosPerSecond - rangeUsageInfo.RaftCPUNanosPerSecond)); diff > 0 {
+			addedLoad[CPURate] = diff
+		}
+		return !a.cs.canShedAndAddLoad(context.Background(), srcSS, targetSS, addedLoad, &means, true, CPURate)
+	} else {
+		// we are excluding impact of raft cpu only here but whatever
+		addedLoad = LoadVector{
+			CPURate:        LoadValue(int64(rangeUsageInfo.RequestCPUNanosPerSecond + rangeUsageInfo.RaftCPUNanosPerSecond)),
+			WriteBandwidth: LoadValue(rangeUsageInfo.WriteBytesPerSecond),
+			ByteSize:       LoadValue(rangeUsageInfo.LogicalBytes),
+		}
+		existingSLS := a.cs.computeLoadSummary(context.Background(), existing, &means.storeLoad, &means.nodeLoad)
+		return !a.cs.canShedAndAddLoad(context.Background(), srcSS, targetSS, addedLoad, &means, false, existingSLS.worstDim)
 	}
 }
 

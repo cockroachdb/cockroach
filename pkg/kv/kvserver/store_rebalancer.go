@@ -1020,6 +1020,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// misconfiguration.
 		validTargets := sr.allocator.ValidLeaseTargets(
 			ctx,
+			candidateReplica.RangeUsageInfo(),
 			sr.storePool,
 			rebalanceCtx.rangeDesc,
 			rebalanceCtx.conf,

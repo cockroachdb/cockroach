@@ -13,9 +13,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -327,6 +329,7 @@ type ScorerOptions interface {
 	getIOOverloadOptions() IOOverloadOptions
 	// getDiskOptions returns the scorer options for disk fullness.
 	getDiskOptions() DiskCapacityOptions
+	isInConflictWithMMA(rangeInfo allocator.RangeUsageInfo, existing roachpb.StoreID, candidate roachpb.StoreID, candidateSL storepool.StoreList) bool
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -383,6 +386,12 @@ func (bo BaseScorerOptions) getDiskOptions() DiskCapacityOptions {
 
 func (bo BaseScorerOptions) deterministicForTesting() bool {
 	return bo.Deterministic
+}
+
+func (bo BaseScorerOptions) isInConflictWithMMA(
+	_ allocator.RangeUsageInfo, _ roachpb.StoreID, _ roachpb.StoreID, _ storepool.StoreList,
+) bool {
+	return false
 }
 
 // maybeJitterStoreStats returns the provided store list since that is the
@@ -568,6 +577,29 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 		return 1
 	}
 	return 0
+}
+
+type LoadAwareRangeCountScorerOptions struct {
+	*RangeCountScorerOptions
+	*mmaintegration.AllocatorSync
+}
+
+func (a *Allocator) LoadAwareRangeCountScorerOptions() LoadAwareRangeCountScorerOptions {
+	return LoadAwareRangeCountScorerOptions{
+		a.ScorerOptions(context.Background()),
+		a.as,
+	}
+}
+
+var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
+
+func (lr LoadAwareRangeCountScorerOptions) isInConflictWithMMA(
+	rangeUsageInfo allocator.RangeUsageInfo,
+	existing roachpb.StoreID,
+	cand roachpb.StoreID,
+	candidateSL storepool.StoreList,
+) bool {
+	return lr.IsInConflictWithMMA(rangeUsageInfo, existing, cand, candidateSL, false)
 }
 
 // LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
@@ -1566,6 +1598,7 @@ func (o *LoadScorerOptions) getRebalanceTargetToMinimizeDelta(
 // details.
 func rankedCandidateListForRebalancing(
 	ctx context.Context,
+	rangeInfo allocator.RangeUsageInfo,
 	allStores storepool.StoreList,
 	removalConstraintsChecker constraintsCheckFn,
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,
@@ -1823,6 +1856,9 @@ func rankedCandidateListForRebalancing(
 			// We handled the possible candidates for removal above. Don't process
 			// anymore here.
 			if _, ok := existingStores[cand.store.StoreID]; ok {
+				continue
+			}
+			if options.isInConflictWithMMA(rangeInfo, existing.store.StoreID, cand.store.StoreID, comparable.candidateSL) {
 				continue
 			}
 			// We already computed valid, necessary, fullDisk, and diversityScore

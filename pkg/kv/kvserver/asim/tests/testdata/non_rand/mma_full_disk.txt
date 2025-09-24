@@ -7,7 +7,7 @@ gen_cluster nodes=5 store_byte_capacity=10737418240
 gen_ranges ranges=15 bytes=524288000 repl_factor=3 placement_type=skewed
 ----
 
-eval duration=20m seed=42 cfgs=(mma-only) metrics=(disk_fraction_used,replicas,leases,cpu,cpu_util)
+eval duration=20m seed=42 cfgs=(mma-only) metrics=(disk_fraction_used,replicas,leases,cpu,cpu_util,mma-count)
 ----
 disk_fraction_used#1: first: [s1=0.92, s2=0.85, s3=0.49, s4=0.24, s5=0.24] (stddev=0.29, mean=0.55, sum=3)
 disk_fraction_used#1: last:  [s1=0.55, s2=0.55, s3=0.55, s4=0.55, s5=0.55] (stddev=0.00, mean=0.55, sum=3)

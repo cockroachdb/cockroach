@@ -18,36 +18,48 @@ gen_ranges ranges=100 repl_factor=5 placement_type=replica_placement
 ----
 {s1:*,s2,s4,s5,s6}:1
 
-gen_load rate=1000 rw_ratio=0.95 min_block=1000 max_block=1000 request_cpu_per_access=100000 raft_cpu_per_write=10000
+gen_load rate=2000 rw_ratio=0.95 min_block=1000 max_block=1000 request_cpu_per_access=1000000 raft_cpu_per_write=10000
 ----
 
 set_span_config
 [0,9999999999): num_replicas=5 num_voters=5 constraints={'+region=a':2,'+region=b':2,'+region=c':1} lease_preferences=[['+region=a']]
 ----
 
-eval duration=60m samples=1 seed=42 metrics=(cpu,cpu_util,leases,replicas) cfgs=(sma-count,mma-only)
+eval duration=60m samples=1 seed=42 metrics=(cpu,cpu_util,leases,replicas) cfgs=(sma-count,mma-only,mma-count)
 ----
-cpu#1: last:  [s1=41374276, s2=27297814, s3=32347286, s4=499562, s5=499562, s6=499562, s7=0, s8=0, s9=0] (stddev=16111846.58, mean=11390895.78, sum=102518062)
-cpu#1: thrash_pct: [s1=14%, s2=14%, s3=29%, s4=1%, s5=1%, s6=1%, s7=0%, s8=0%, s9=0%]  (sum=59%)
-cpu_util#1: last:  [s1=0.01, s2=0.01, s3=0.01, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.00, mean=0.00, sum=0)
-cpu_util#1: thrash_pct: [s1=14%, s2=14%, s3=29%, s4=1%, s5=1%, s6=1%, s7=0%, s8=0%, s9=0%]  (sum=59%)
+cpu#1: last:  [s1=720317962, s2=660763359, s3=621361879, s4=999944, s5=999944, s6=999944, s7=0, s8=0, s9=0] (stddev=315294026.04, mean=222827003.56, sum=2005443032)
+cpu#1: thrash_pct: [s1=10%, s2=11%, s3=33%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=55%)
+cpu_util#1: last:  [s1=0.14, s2=0.13, s3=0.12, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.06, mean=0.04, sum=0)
+cpu_util#1: thrash_pct: [s1=10%, s2=11%, s3=33%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=55%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
-leases#1: last:  [s1=41, s2=27, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=16.07, mean=11.11, sum=100)
-leases#1: thrash_pct: [s1=0%, s2=0%, s3=8%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=8%)
+leases#1: last:  [s1=36, s2=33, s3=31, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.76, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=3%, s3=19%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=22%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
-replicas#1: last:  [s1=69, s2=67, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
-replicas#1: thrash_pct: [s1=8%, s2=6%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=14%)
-artifacts[sma-count]: cb26954cf324c27d
+replicas#1: last:  [s1=69, s2=66, s3=65, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=10%, s2=8%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=18%)
+artifacts[sma-count]: 5a2ae3dcaecef53f
 ==========================
-cpu#1: last:  [s1=100533500, s2=500166, s3=0, s4=500166, s5=500166, s6=500166, s7=0, s8=0, s9=0] (stddev=31516919.38, mean=11392684.89, sum=102534164)
-cpu#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
-cpu_util#1: last:  [s1=0.02, s2=0.00, s3=0.00, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.01, mean=0.00, sum=0)
-cpu_util#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
+cpu#1: last:  [s1=719651325, s2=641735273, s3=641140178, s4=1000177, s5=1000177, s6=1000177, s7=0, s8=0, s9=0] (stddev=315151021.86, mean=222836367.44, sum=2005527307)
+cpu#1: thrash_pct: [s1=7%, s2=23%, s3=22%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=53%)
+cpu_util#1: last:  [s1=0.14, s2=0.13, s3=0.13, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.06, mean=0.04, sum=0)
+cpu_util#1: thrash_pct: [s1=7%, s2=23%, s3=22%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=53%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
-leases#1: last:  [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
+leases#1: last:  [s1=36, s2=32, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.75, mean=11.11, sum=100)
 leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
-replicas#1: last:  [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
+replicas#1: last:  [s1=68, s2=100, s3=32, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=44.56, mean=55.56, sum=500)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
-artifacts[mma-only]: 64926c4817b68708
+artifacts[mma-only]: a6c9461b2f3a0720
+==========================
+cpu#1: last:  [s1=720347714, s2=640742101, s3=641459381, s4=999587, s5=999587, s6=999587, s7=0, s8=0, s9=0] (stddev=315173811.12, mean=222838661.89, sum=2005547957)
+cpu#1: thrash_pct: [s1=11%, s2=17%, s3=31%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=59%)
+cpu_util#1: last:  [s1=0.14, s2=0.13, s3=0.13, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.06, mean=0.04, sum=0)
+cpu_util#1: thrash_pct: [s1=11%, s2=17%, s3=31%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=59%)
+leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
+leases#1: last:  [s1=36, s2=32, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.75, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=17%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=17%)
+replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
+replicas#1: last:  [s1=67, s2=69, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=0%, s2=3%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=3%)
+artifacts[mma-count]: 1baf367e0e1a6c24
 ==========================

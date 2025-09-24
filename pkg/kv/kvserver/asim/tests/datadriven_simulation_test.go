@@ -170,9 +170,8 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 // To run all tests and rewrite the testdata files as well as generate the
 // artifacts in `testdata/generated`, you can use:
-/*
-./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env COCKROACH_ALWAYS_KEEP_TEST_LOGS=true
-*/
+// ./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env
+// COCKROACH_ALWAYS_KEEP_TEST_LOGS=true */
 func TestDataDriven(t *testing.T) {
 	skip.UnderDuressWithIssue(t, 149875)
 	leakTestAfter := leaktest.AfterTest(t)
@@ -517,7 +516,7 @@ func TestDataDriven(t *testing.T) {
 							})
 					},
 					// Both the replicate/lease queues and the MMA are enabled.
-					"mma-and-count": func(eg *gen.StaticEvents) {
+					"mma-count": func(eg *gen.StaticEvents) {
 						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,

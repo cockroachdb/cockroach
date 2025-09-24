@@ -18,7 +18,7 @@ gen_ranges ranges=100 repl_factor=5 placement_type=replica_placement
 ----
 {s1:*,s2,s4,s5,s6}:1
 
-gen_load rate=1000 rw_ratio=0.95 min_block=1000 max_block=1000 request_cpu_per_access=100000 raft_cpu_per_write=10000
+gen_load rate=1000 rw_ratio=0.95 min_block=1000 max_block=1000 request_cpu_per_access=5000000 raft_cpu_per_write=10000
 ----
 
 set_span_config
@@ -28,17 +28,29 @@ set_span_config
 setting split_queue_enabled=false
 ----
 
-eval duration=40m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,cpu_util,leases,replicas)
+eval duration=40m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,leases,replicas)
 ----
-cpu#1: last:  [s1=100533499, s2=500166, s3=0, s4=500166, s5=500166, s6=500166, s7=0, s8=0, s9=0] (stddev=31516919.07, mean=11392684.78, sum=102534163)
-cpu#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
-cpu_util#1: last:  [s1=0.02, s2=0.00, s3=0.00, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.01, mean=0.00, sum=0)
-cpu_util#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
+cpu#1: last:  [s1=1796346149, s2=1601160605, s3=1602033353, s4=499258, s5=499258, s6=499258, s7=0, s8=0, s9=0] (stddev=787270621.50, mean=555670875.67, sum=5001037881)
+cpu#1: thrash_pct: [s1=8%, s2=31%, s3=31%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=70%)
+cpu_util#1: last:  [s1=0.36, s2=0.32, s3=0.32, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.16, mean=0.11, sum=1)
+cpu_util#1: thrash_pct: [s1=8%, s2=31%, s3=31%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=70%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
-leases#1: last:  [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
+leases#1: last:  [s1=36, s2=32, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.75, mean=11.11, sum=100)
 leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
-replicas#1: last:  [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
+replicas#1: last:  [s1=68, s2=100, s3=32, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=44.56, mean=55.56, sum=500)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
-artifacts[mma-only]: 621f3d4f69649ede
+artifacts[mma-only]: 29c929f977fd070d
+==========================
+cpu#1: last:  [s1=1801801994, s2=1549819906, s3=1650809348, s4=499808, s5=499808, s6=499808, s7=0, s8=0, s9=0] (stddev=788208764.77, mean=555992296.89, sum=5003930672)
+cpu#1: thrash_pct: [s1=13%, s2=23%, s3=35%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=71%)
+cpu_util#1: last:  [s1=0.36, s2=0.31, s3=0.33, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.16, mean=0.11, sum=1)
+cpu_util#1: thrash_pct: [s1=13%, s2=23%, s3=35%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=71%)
+leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
+leases#1: last:  [s1=36, s2=31, s3=33, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.76, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=3%, s3=15%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=18%)
+replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
+replicas#1: last:  [s1=67, s2=69, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=0%, s2=3%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=3%)
+artifacts[mma-count]: f005c9f19239732e
 ==========================

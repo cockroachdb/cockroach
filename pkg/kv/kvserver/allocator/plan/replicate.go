@@ -171,6 +171,9 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 		if rp.allocator.CountBasedRebalancingDisabled() {
 			scorerOptions = rp.allocator.BaseScorerOptionsWithNoConvergence()
 		}
+		if rp.allocator.LoadAware() {
+			scorerOptions = rp.allocator.LoadAwareRangeCountScorerOptions()
+		}
 		rangeUsageInfo := repl.RangeUsageInfo()
 		_, _, _, ok := rp.allocator.RebalanceVoter(
 			ctx,

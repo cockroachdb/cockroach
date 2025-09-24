@@ -568,6 +568,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	// Old allocator is still needed for other queues.
 	allocator := allocatorimpl.MakeAllocator(
 		s.settings.ST,
+		node.as,
 		sp.IsDeterministic(),
 		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
 		&allocator.TestingKnobs{
