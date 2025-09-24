@@ -44,8 +44,15 @@ func DialStatusClientNoBreaker(
 func DialStatusClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
 ) (RPCStatusClient, error) {
-	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
-		NewGRPCStatusClientAdapter, NewDRPCStatusClientAdapter, cs)
+	if rpcbase.TODODRPC {
+		return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+			NewGRPCStatusClientAdapter, NewDRPCStatusClientAdapter, cs)
+	}
+	conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+	return NewGRPCStatusClientAdapter(conn), nil
 }
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
@@ -54,8 +61,15 @@ func DialStatusClient(
 func DialAdminClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
 ) (RPCAdminClient, error) {
-	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
-		NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter, cs)
+	if rpcbase.TODODRPC {
+		return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+			NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter, cs)
+	}
+	conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
+	if err != nil {
+		return nil, err
+	}
+	return NewGRPCAdminClientAdapter(conn), nil
 }
 
 // DialAdminClientNoBreaker establishes a DRPC connection if enabled;
