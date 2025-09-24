@@ -232,8 +232,15 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 	}
 }
 
+// IsInConflictWithMMA is called by the allocator to check if a change is in
+// conflict with MMA's goal.
 func (as *AllocatorSync) IsInConflictWithMMA(
 	existing roachpb.StoreID, cand roachpb.StoreID, cands []roachpb.StoreID, cpuOnly bool,
 ) bool {
+	// Check if LBRebalancingMultiMetricAndCount just in case. Caller should only
+	// call this function when LBRebalancingMultiMetricAndCount is enabled.
+	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) != kvserverbase.LBRebalancingMultiMetricAndCount {
+		return false
+	}
 	return as.mmaAllocator.IsInConflictWithMMA(existing, cand, cands, cpuOnly)
 }
