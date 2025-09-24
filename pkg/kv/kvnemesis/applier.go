@@ -349,11 +349,14 @@ func applyClientOp(
 		o.Result.OptionalTimestamp = ts
 	case *CPutOperation:
 		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			expVal := roachpb.MakeValueFromBytes(o.ExpVal)
+			var expBytes []byte
+			if o.ExpVal != nil {
+				expBytes = roachpb.MakeValueFromBytes(o.ExpVal).TagAndDataBytes()
+			}
 			if o.AllowIfDoesNotExist {
-				b.CPutAllowingIfNotExists(o.Key, o.Value(), expVal.TagAndDataBytes())
+				b.CPutAllowingIfNotExists(o.Key, o.Value(), expBytes)
 			} else {
-				b.CPut(o.Key, o.Value(), expVal.TagAndDataBytes())
+				b.CPut(o.Key, o.Value(), expBytes)
 			}
 			setLastReqSeq(b, o.Seq)
 		})
