@@ -380,7 +380,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return errors.Wrap(err, "failed to check cluster version against storage")
 		}
 
-		log.Dev.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
+		log.KvExec.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {
 			ident, err := kvstorage.ReadStoreIdent(ctx, e)
@@ -396,7 +396,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return err
 		}
 		if len(prepRep.MissingStores) > 0 {
-			log.Dev.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
+			log.KvExec.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
 				strutil.JoinIDs("s", prepRep.MissingStores))
 		}
 		_, err = CommitReplicaChanges(batches)
@@ -426,14 +426,14 @@ func MaybeApplyPendingRecoveryPlan(
 			// This is wrong, we must not have staged plans in a non-bootstrapped
 			// node. But we can't write an error here as store init might refuse to
 			// work if there are already some keys in store.
-			log.Dev.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
+			log.KvExec.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
 			return nil
 		}
 		return err
 	}
 
 	if err := planStore.RemovePlan(); err != nil {
-		log.Dev.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
+		log.KvExec.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
 	}
 
 	err = applyPlan(storeIdent.NodeID, plan)
@@ -443,11 +443,11 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 	if err != nil {
 		r.Error = err.Error()
-		log.Dev.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
+		log.KvExec.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
 	}
 	if err = writeNodeRecoveryResults(ctx, engines[0], r,
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
-		log.Dev.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
+		log.KvExec.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
 	return nil
 }

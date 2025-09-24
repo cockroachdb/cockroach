@@ -986,9 +986,9 @@ func (a *Allocator) ComputeAction(
 	// to be processed with the correct priority.
 	if priority == -1 {
 		if buildutil.CrdbTestBuild {
-			log.Dev.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+			log.KvDistribution.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
 		} else {
-			log.Dev.Warningf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+			log.KvDistribution.Warningf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
 		}
 	}
 	return action, priority

@@ -147,7 +147,7 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 	defer s.mu.Unlock()
 
 	if err != io.EOF {
-		log.Dev.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
+		log.KvDistribution.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	} else {
 		log.VEventf(ctx, 2, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	}
@@ -236,11 +236,11 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 	log.VEventf(ctx, 4, "received side-transport update: %v", msg)
 
 	if msg.NodeID == 0 {
-		log.Dev.Fatalf(ctx, "missing NodeID in message: %s", msg)
+		log.KvDistribution.Fatalf(ctx, "missing NodeID in message: %s", msg)
 	}
 
 	if msg.NodeID != r.nodeID {
-		log.Dev.Fatalf(ctx, "wrong NodeID; expected %d, got %d", r.nodeID, msg.NodeID)
+		log.KvDistribution.Fatalf(ctx, "wrong NodeID; expected %d, got %d", r.nodeID, msg.NodeID)
 	}
 
 	// Handle the removed ranges. In order to not lose closed ts info, before we
@@ -259,11 +259,11 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		for _, rangeID := range msg.Removed {
 			info, ok := r.mu.tracked[rangeID]
 			if !ok {
-				log.Dev.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
+				log.KvDistribution.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
 			ts, ok := r.mu.lastClosed[info.policy]
 			if !ok {
-				log.Dev.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
+				log.KvDistribution.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
 			}
 			r.stores.ForwardSideTransportClosedTimestampForRange(ctx, rangeID, ts, info.lai)
 		}
@@ -279,7 +279,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		r.mu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, len(r.mu.lastClosed))
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
-		log.Dev.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
+		log.KvDistribution.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
 			"%d, got %d", r.mu.lastSeqNum+1, msg.SeqNum)
 	}
 	r.mu.lastSeqNum = msg.SeqNum
@@ -328,13 +328,13 @@ func (r *incomingStream) Run(
 				r.nodeID = msg.NodeID
 
 				if err := r.server.onFirstMsg(ctx, r, r.nodeID); err != nil {
-					log.Dev.Warningf(ctx, "%s", err.Error())
+					log.KvDistribution.Warningf(ctx, "%s", err.Error())
 					return
 				} else if ch := r.testingKnobs.onFirstMsg; ch != nil {
 					ch <- struct{}{}
 				}
 				if !msg.Snapshot {
-					log.Dev.Fatal(ctx, "expected the first message to be a snapshot")
+					log.KvDistribution.Fatal(ctx, "expected the first message to be a snapshot")
 				}
 				r.AddLogTag("remote", r.nodeID)
 				ctx = r.AnnotateCtx(ctx)

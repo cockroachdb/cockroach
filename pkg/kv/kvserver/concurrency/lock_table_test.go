@@ -2036,7 +2036,7 @@ func BenchmarkLockTable(b *testing.B) {
 							runRequests(b, iters, requestsPerGroup[0], env)
 						}
 						if log.V(1) {
-							log.Dev.Infof(context.Background(), "num requests that waited: %d, num scan calls: %d\n",
+							log.KvExec.Infof(context.Background(), "num requests that waited: %d, num scan calls: %d\n",
 								atomic.LoadUint64(&numRequestsWaited), atomic.LoadUint64(&numScanCalls))
 						}
 					})

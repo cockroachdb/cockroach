@@ -211,7 +211,7 @@ func (ss *DiskSideloadStorage) TruncateTo(ctx context.Context, lastIndex kvpb.Ra
 		if err != nil && !oserror.IsNotExist(err) {
 			// TODO(pavelkalinnikov): this is possible because deletedAll can be left
 			// true despite existence of files with index < from which are skipped.
-			log.Dev.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
+			log.KvExec.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
 			err = nil // handled
 		}
 	}
@@ -266,7 +266,7 @@ func (ss *DiskSideloadStorage) forEach(
 		upToDot := strings.SplitN(base, ".", 2)
 		logIdx, err := strconv.ParseUint(upToDot[0], 10, 64)
 		if err != nil {
-			log.Dev.Infof(ctx, "unexpected file %s in sideloaded directory %s", match, ss.dir)
+			log.KvExec.Infof(ctx, "unexpected file %s in sideloaded directory %s", match, ss.dir)
 			continue
 		}
 		if keepGoing, err := visit(kvpb.RaftIndex(logIdx), match); err != nil {

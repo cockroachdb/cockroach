@@ -76,21 +76,21 @@ func (sl StateLoader) LoadLastEntryID(
 	if ok, _ := iter.Valid(); ok {
 		key := iter.UnsafeKey().Key
 		if len(key) < len(prefix) {
-			log.Dev.Fatalf(ctx, "unable to decode Raft log index key: len(%s) < len(%s)", key.String(), prefix.String())
+			log.KvExec.Fatalf(ctx, "unable to decode Raft log index key: len(%s) < len(%s)", key.String(), prefix.String())
 		}
 		suffix := key[len(prefix):]
 		var err error
 		last.Index, err = keys.DecodeRaftLogKeyFromSuffix(suffix)
 		if err != nil {
-			log.Dev.Fatalf(ctx, "unable to decode Raft log index key: %s; %v", key.String(), err)
+			log.KvExec.Fatalf(ctx, "unable to decode Raft log index key: %s; %v", key.String(), err)
 		}
 		v, err := iter.UnsafeValue()
 		if err != nil {
-			log.Dev.Fatalf(ctx, "unable to read Raft log entry %d (%s): %v", last.Index, key.String(), err)
+			log.KvExec.Fatalf(ctx, "unable to read Raft log entry %d (%s): %v", last.Index, key.String(), err)
 		}
 		entry, err := raftlog.RaftEntryFromRawValue(v)
 		if err != nil {
-			log.Dev.Fatalf(ctx, "unable to decode Raft log entry %d (%s): %v", last.Index, key.String(), err)
+			log.KvExec.Fatalf(ctx, "unable to decode Raft log entry %d (%s): %v", last.Index, key.String(), err)
 		}
 		last.Term = kvpb.RaftTerm(entry.Term)
 	}
