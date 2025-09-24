@@ -228,6 +228,7 @@ const (
 	CrdbInternalFullyQualifiedNamesViewID
 	CrdbInternalStoreLivenessSupportFrom
 	CrdbInternalStoreLivenessSupportFor
+	CrdbInternalClusterInspectErrorsViewID
 	// CrdbInternalTestID is reserved for tests that need to inject virtual tables
 	// into crdb_internal.
 	CrdbInternalTestID
