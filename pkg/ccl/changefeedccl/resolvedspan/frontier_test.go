@@ -6,20 +6,28 @@
 package resolvedspan_test
 
 import (
+	"context"
+	"fmt"
 	"iter"
+	"math/rand/v2"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -172,6 +180,7 @@ func TestCoordinatorFrontier(t *testing.T) {
 }
 
 type frontier interface {
+	AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error
 	Frontier() hlc.Timestamp
 	ForwardResolvedSpan(jobspb.ResolvedSpan) (bool, error)
 	InBackfill(jobspb.ResolvedSpan) bool
@@ -529,4 +538,113 @@ func TestFrontierForwardFullTableSpan(t *testing.T) {
 			}
 			require.Equal(t, targetTimestamp, f.Frontier())
 		})
+}
+
+func BenchmarkFrontierPerTableTracking(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+
+	for _, tenantType := range []string{"system", "tenant"} {
+		for _, frontierType := range []string{"aggregator", "coordinator"} {
+			for _, perTableTracking := range []bool{false, true} {
+				b.Run(
+					fmt.Sprintf("%s/%s/per-table-tracking=%t", tenantType, frontierType, perTableTracking),
+					func(b *testing.B) {
+						// Start the server.
+						srv, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+							DefaultTestTenant: base.TestControlsTenantsExplicitly,
+						})
+						defer srv.Stopper().Stop(ctx)
+
+						// Get a SQL connection/codec for the tenant type.
+						sqlDB, codec := func() (*sqlutils.SQLRunner, keys.SQLCodec) {
+							switch tenantType {
+							case "system":
+								return sqlutils.MakeSQLRunner(db), keys.SystemSQLCodec
+							case "tenant":
+								tenantID := roachpb.MinTenantID
+								_, tenantDB := serverutils.StartTenant(b, srv, base.TestTenantArgs{
+									TenantID: tenantID,
+								})
+								return sqlutils.MakeSQLRunner(tenantDB), keys.MakeSQLCodec(tenantID)
+							default:
+								panic("unreachable")
+							}
+						}()
+
+						// Create a table and split it into 100 spans.
+						const numSpans = 100
+						sqlDB.Exec(b, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+						sqlDB.Exec(b, fmt.Sprintf(
+							`ALTER TABLE foo SPLIT AT SELECT generate_series(10, %d, 10)`, (numSpans-1)*10))
+
+						var fooTableID uint32
+						sqlDB.QueryRow(b, `SELECT 'foo'::regclass::oid::int`).Scan(&fooTableID)
+						fooSpan := codec.TableSpan(fooTableID)
+
+						// Collect all the spans and randomly shuffle the order.
+						var spans roachpb.Spans
+						rows := sqlDB.Query(b, `SELECT raw_start_key, raw_end_key
+FROM [SHOW RANGES FROM TABLE foo WITH KEYS]`)
+						for rows.Next() {
+							var startKey, endKey roachpb.Key
+							err := rows.Scan(&startKey, &endKey)
+							require.NoError(b, err)
+							sp := roachpb.Span{Key: startKey, EndKey: endKey}
+							spans = append(spans, fooSpan.Intersect(sp))
+						}
+						require.Len(b, spans, numSpans)
+						rand.Shuffle(len(spans), func(i, j int) {
+							spans[i], spans[j] = spans[j], spans[i]
+						})
+
+						now := makeTS(timeutil.Now().Unix())
+
+						// Create the frontier and add all the spans.
+						f, err := func() (frontier, error) {
+							switch frontierType {
+							case "aggregator":
+								return resolvedspan.NewAggregatorFrontier(
+									now,
+									now,
+									codec,
+									perTableTracking,
+								)
+							case "coordinator":
+								return resolvedspan.NewCoordinatorFrontier(
+									now,
+									now,
+									codec,
+									perTableTracking,
+								)
+							default:
+								panic("unreachable")
+							}
+						}()
+						require.NoError(b, err)
+						require.NoError(b, f.AddSpansAt(now, spans...))
+
+						// Main benchmark loop: forward (shuffled) spans in a loop.
+						b.ResetTimer()
+						for n := range b.N {
+							ts := now.AddDuration(time.Second)
+							i := n % len(spans)
+							_, err := f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+								Span:      spans[i],
+								Timestamp: ts,
+							})
+							if err != nil {
+								b.Fatalf("error forwarding: %v", err)
+							}
+						}
+						b.StopTimer()
+
+						// Make sure the compiler doesn't optimize away the forwards.
+						require.True(b, now.LessEq(f.Frontier()))
+					})
+			}
+		}
+	}
 }
