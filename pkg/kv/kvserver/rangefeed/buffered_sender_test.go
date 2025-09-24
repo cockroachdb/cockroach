@@ -237,41 +237,56 @@ func TestBufferedSenderOnStreamShutdown(t *testing.T) {
 	p, h, pStopper := newTestProcessor(t, withRangefeedTestType(scheduledProcessorWithBufferedSender))
 	defer pStopper.Stop(ctx)
 
+	streamID := int64(42)
+
 	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1 := new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
-	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
+	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: streamID}
+
+	// Block the stream so that we can overflow later.
+	unblock := testServerStream.BlockSend()
+	defer unblock()
+
+	waitForQueueLen := func(len int) {
+		testutils.SucceedsSoon(t, func() error {
+			if bs.len() == len {
+				return nil
+			}
+			return errors.Newf("expected %d events, found %d", len, bs.len())
+		})
+	}
 
 	// Add our stream to the stream manager.
-	id := int64(42)
 	registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-		sm.NewStream(id, 1 /*rangeID*/))
+		sm.NewStream(streamID, 1 /*rangeID*/))
 	require.True(t, registered)
-	sm.AddStream(id, d)
+	sm.AddStream(streamID, d)
 
-	// Block the stream to help the queue to overflow.
-	unblock := testServerStream.BlockSend()
-	for int64(bs.len()) != queueCap {
+	require.NoError(t, sm.sender.sendBuffered(muxEv, nil))
+	// At this point we actually have sent 2 events. 1 checkpoint event sent by
+	// register and 1 event sent on the line above. We wait for 1 of these events
+	// to be pulled off the queue and block in the sender, leaving 1 in the queue.
+	waitForQueueLen(1)
+	// Now fill the rest of the queue.
+	for range queueCap - 1 {
 		require.NoError(t, sm.sender.sendBuffered(muxEv, nil))
 	}
-	require.Equal(t, queueCap, int64(bs.len()))
-	require.Equal(t, bs.sendBuffered(muxEv, nil).Error(),
-		newRetryErrBufferCapacityExceeded().Error())
-	require.True(t, bs.queueMu.overflowed)
-	unblock()
 
-	// All events buffered should still be sent to the stream.
-	testutils.SucceedsSoon(t, func() error {
-		if bs.len() == 0 {
-			return nil
-		}
-		return errors.Newf("expected 0 registrations, found %d", bs.len())
-	})
+	// The next write should overflow.
+	capExceededErrStr := newRetryErrBufferCapacityExceeded().Error()
+	err := sm.sender.sendBuffered(muxEv, nil)
+	require.EqualError(t, err, capExceededErrStr)
+	require.True(t, bs.overflowed())
+
+	unblock()
+	waitForQueueLen(0)
 	// Overflow cleanup.
-	err := <-sm.Error()
-	require.Equal(t, newRetryErrBufferCapacityExceeded().Error(), err.Error())
+	err = <-sm.Error()
+	require.EqualError(t, err, capExceededErrStr)
 	// Note that we expect the stream manager to shut down here, but no actual
 	// error events would be sent during the shutdown.
-	require.Equal(t, bs.sendBuffered(muxEv, nil).Error(), newRetryErrBufferCapacityExceeded().Error())
+	err = sm.sender.sendBuffered(muxEv, nil)
+	require.EqualError(t, err, capExceededErrStr)
 }

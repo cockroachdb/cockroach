@@ -229,6 +229,12 @@ func (bs *BufferedSender) len() int {
 	return int(bs.queueMu.buffer.len())
 }
 
+func (bs *BufferedSender) overflowed() bool {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	return bs.queueMu.overflowed
+}
+
 // Used for testing only.
 func (bs *BufferedSender) waitForEmptyBuffer(ctx context.Context) error {
 	opts := retry.Options{
