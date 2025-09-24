@@ -1,0 +1,1043 @@
+import file=tpce_schema
+----
+
+exec-ddl
+CREATE TABLE foo (a INT PRIMARY KEY, b INT[], c STRING, INVERTED INDEX b_inverted_index(b), UNIQUE INDEX c_idx(c))
+----
+
+exec-ddl
+CREATE TABLE bar (ba INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), INDEX(c))
+----
+
+exec-ddl
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
+----
+
+# ConstructScan/ConstructSerializingProject
+decompile
+SELECT * from foo LIMIT 10
+----
+explain(shape):
+• scan
+  table: foo@foo_pkey
+  spans: LIMITED SCAN
+  limit: 10
+pheromone:
+* (project)
+ └── scan | placeholder-scan
+      table: foo
+      index: foo_pkey
+
+# ConstructFilter
+decompile
+SELECT * from foo WHERE a = 1
+----
+explain(shape):
+• scan
+  table: foo@foo_pkey
+  spans: 1+ spans
+pheromone:
+* (project)
+ └── scan | placeholder-scan
+      table: foo
+      index: foo_pkey
+
+decompile
+SELECT * from foo WHERE a IN (1, 3, 5)
+----
+explain(shape):
+• scan
+  table: foo@foo_pkey
+  spans: 1+ spans
+pheromone:
+* (project)
+ └── scan | placeholder-scan
+      table: foo
+      index: foo_pkey
+
+# ConstructInvertedFilter/ConstructIndexJoin
+decompile
+SELECT * from foo WHERE b @> ARRAY[1]
+----
+explain(shape):
+• index join
+│ table: foo@foo_pkey
+│
+└── • scan
+      table: foo@b_inverted_index
+      spans: 1+ spans
+pheromone:
+* (project)
+ └── index-join
+      table: foo
+      └── scan | placeholder-scan
+           table: foo
+           index: b_inverted_index
+
+# ConstructSimpleProjectOp
+decompile
+select a,b from foo@c_idx where c = 'bar'
+----
+explain(shape):
+• index join
+│ table: foo@foo_pkey
+│
+└── • scan
+      table: foo@c_idx
+      spans: 1+ spans
+pheromone:
+* (project)
+ └── * (project)
+      └── index-join
+           table: foo
+           └── scan | placeholder-scan
+                table: foo
+                index: c_idx
+
+# ConstructRender
+decompile
+select a + 1 from foo
+----
+explain(shape):
+• render
+│
+└── • scan
+      table: foo@c_idx
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (render)
+      └── scan | placeholder-scan
+           table: foo
+           index: c_idx
+
+# ConstructApplyJoin
+decompile
+SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+----
+explain(shape):
+• apply join (semi)
+│ pred: column1 = a
+│
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (apply)
+      └── scan | placeholder-scan
+           table: abc
+           index: abc_pkey
+
+# ConstructHashJoin
+decompile
+SELECT * FROM foo INNER HASH JOIN bar ON a = ba
+----
+explain(shape):
+• hash join
+│ equality: (a) = (ba)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     table: foo@foo_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      table: bar@bar_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── inner-join
+      ├── scan | placeholder-scan
+      │    table: foo
+      │    index: foo_pkey
+      └── scan | placeholder-scan
+           table: bar
+           index: bar_pkey
+
+# ConstructMergeJoin
+decompile
+SELECT * FROM foo JOIN bar ON a = ba
+----
+explain(shape):
+• merge join
+│ equality: (a) = (ba)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     table: foo@foo_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      table: bar@bar_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── merge-join
+      ├── scan | placeholder-scan
+      │    table: foo
+      │    index: foo_pkey
+      └── scan | placeholder-scan
+           table: bar
+           index: bar_pkey
+
+# ConstructGroupBy
+decompile
+SELECT c, count(*) FROM foo, bar WHERE a = 1 GROUP BY c
+----
+explain(shape):
+• group (streaming)
+│
+└── • cross join
+    │
+    ├── • scan
+    │     table: bar@bar_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          table: foo@foo_pkey
+          spans: 1+ spans
+pheromone:
+* (project)
+ └── * (group by)
+      └── * (project)
+           └── inner-join
+                ├── scan | placeholder-scan
+                │    table: bar
+                │    index: bar_pkey
+                └── scan | placeholder-scan
+                     table: foo
+                     index: foo_pkey
+
+# ConstructScalarGroupBy
+decompile
+SELECT sum(a),max(c) FROM foo
+----
+explain(shape):
+• group (scalar)
+│
+└── • scan
+      table: foo@c_idx
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (group (scalar))
+      └── scan | placeholder-scan
+           table: foo
+           index: c_idx
+
+# ConstructInsert
+decompile
+INSERT INTO foo VALUES (1,ARRAY[1,2],'str')
+----
+explain(shape):
+• insert fast path
+  into: foo(a, b, c)
+  auto commit
+  size: 3 columns, 1 row
+pheromone:
+* (insert fast path)
+
+# ConstructDistinct
+decompile
+SELECT DISTINCT ON (b,c) b,c from abc
+----
+explain(shape):
+• distinct
+│ distinct on: b, c
+│
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (distinct)
+      └── scan | placeholder-scan
+           table: abc
+           index: abc_pkey
+
+# ConstructHashSetOpOp
+decompile
+SELECT * FROM abc INTERSECT ALL SELECT * FROM abc
+----
+explain(shape):
+• intersect all
+│
+├── • scan
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (streaming set op)
+      ├── scan | placeholder-scan
+      │    table: abc
+      │    index: abc_pkey
+      └── scan | placeholder-scan
+           table: abc
+           index: abc_pkey
+
+# ConstructStreamingSetOpOp
+decompile
+SELECT * FROM abc UNION SELECT * FROM abc ORDER BY b,a
+----
+explain(shape):
+• distinct
+│ distinct on: a
+│
+└── • union all
+    │
+    ├── • sort
+    │   │ order: +b,+a
+    │   │
+    │   └── • scan
+    │         table: abc@abc_pkey
+    │         spans: FULL SCAN
+    │
+    └── • sort
+        │ order: +b,+a
+        │
+        └── • scan
+              table: abc@abc_pkey
+              spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (distinct)
+      └── * (union all)
+           ├── sort
+           │    └── scan | placeholder-scan
+           │         table: abc
+           │         index: abc_pkey
+           └── sort
+                └── scan | placeholder-scan
+                     table: abc
+                     index: abc_pkey
+
+# ConstructUnionAllOp
+decompile
+SELECT * FROM abc UNION ALL SELECT * FROM abc
+----
+explain(shape):
+• union all
+│
+├── • scan
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (union all)
+      ├── scan | placeholder-scan
+      │    table: abc
+      │    index: abc_pkey
+      └── scan | placeholder-scan
+           table: abc
+           index: abc_pkey
+
+# ConstructOrdinality
+decompile
+SELECT * FROM abc WITH ORDINALITY
+----
+explain(shape):
+• ordinality
+│
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (ordinality)
+      └── scan | placeholder-scan
+           table: abc
+           index: abc_pkey
+
+# ConstructLookupJoin
+decompile
+SELECT * FROM foo INNER LOOKUP JOIN bar ON a = ba
+----
+explain(shape):
+• lookup join
+│ table: bar@bar_pkey
+│ equality: (a) = (ba)
+│ equality cols are key
+│
+└── • scan
+      table: foo@foo_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── lookup-join | lock
+      table: bar
+      index: bar_pkey
+      └── scan | placeholder-scan
+           table: foo
+           index: foo_pkey
+
+# ConstructInvertedJoin
+decompile
+SELECT * FROM foo JOIN bar ON b @> ARRAY[1,2]
+----
+explain(shape):
+• cross join
+│
+├── • scan
+│     table: bar@bar_pkey
+│     spans: FULL SCAN
+│
+└── • lookup join
+    │ table: foo@foo_pkey
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │
+    └── • zigzag join
+          left table: foo@b_inverted_index
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: foo@b_inverted_index
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
+pheromone:
+* (project)
+ └── inner-join
+      ├── scan | placeholder-scan
+      │    table: bar
+      │    index: bar_pkey
+      └── lookup-join | lock
+           table: foo
+           index: foo_pkey
+           └── * (project)
+                └── * (zigzag join)
+
+# ConstructZigzagJoin
+decompile
+SELECT * FROM abc WHERE b = 2 AND c = 3
+----
+explain(shape):
+• zigzag join
+  pred: (b = _) AND (c = _)
+  left table: abc@abc_b_idx
+  left columns: (a, b)
+  left fixed values: 1 column
+  right table: abc@abc_c_idx
+  right columns: (a, c)
+  right fixed values: 1 column
+pheromone:
+* (project)
+ └── * (project)
+      └── * (zigzag join)
+
+# ConstructMax1Row
+decompile
+SELECT (SELECT a FROM abc FOR UPDATE)
+----
+explain(shape):
+• root
+│
+├── • values
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT a FROM abc FOR UPDATE)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │
+        └── • scan
+              table: abc@abc_b_idx
+              spans: FULL SCAN
+              locking strength: for update
+pheromone:
+* (project)
+ └── * (values)
+
+# ConstructProjectSet
+decompile
+SELECT * FROM generate_series(1, 3)
+----
+explain(shape):
+• project set
+│
+└── • emptyrow
+pheromone:
+* (project)
+ └── * (project set)
+      └── * (values)
+
+# ConstructWindow
+decompile
+SELECT * FROM (SELECT avg(a) OVER () FROM abc)
+----
+explain(shape):
+• window
+│
+└── • scan
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (project)
+      └── * (window)
+           └── scan | placeholder-scan
+                table: abc
+                index: abc_b_idx
+
+# ConstructExplainOpt
+decompile
+EXPLAIN (OPT) SELECT 1
+----
+explain(shape):
+• explain
+pheromone:
+* (project)
+ └── * (explain)
+
+# ConstructExplain
+decompile
+EXPLAIN SELECT 1
+----
+explain(shape):
+• explain
+pheromone:
+* (project)
+ └── * (explain)
+
+# ConstructShowTrace
+decompile
+SHOW TRACE FOR SESSION
+----
+explain(shape):
+• show trace
+pheromone:
+* (project)
+ └── * (show trace)
+
+# ConstructInsert
+decompile
+INSERT INTO abc SELECT * from abc
+----
+explain(shape):
+• insert
+│ into: abc(a, b, c)
+│ auto commit
+│
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
+pheromone:
+* (insert)
+ └── scan | placeholder-scan
+      table: abc
+      index: abc_pkey
+
+# ConstructUpdate
+decompile
+UPDATE abc SET b = 2 WHERE a = 1
+----
+explain(shape):
+• update
+│ table: abc
+│ set: b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          table: abc@abc_pkey
+          spans: 1+ spans
+          locking strength: for update
+pheromone:
+* (update)
+ └── * (project)
+      └── * (render)
+           └── scan | placeholder-scan
+                table: abc
+                index: abc_pkey
+
+# ConstructUpsert
+decompile
+UPSERT INTO abc (a,b,c) VALUES (1,2,3)
+----
+explain(shape):
+• upsert
+│ into: abc(a, b, c)
+│ auto commit
+│ arbiter indexes: abc_pkey
+│
+└── • cross join (left outer)
+    │
+    ├── • values
+    │     size: 3 columns, 1 row
+    │
+    └── • scan
+          table: abc@abc_pkey
+          spans: 1+ spans
+          locking strength: for update
+pheromone:
+* (upsert)
+ └── * (project)
+      └── left-join
+           ├── * (values)
+           └── scan | placeholder-scan
+                table: abc
+                index: abc_pkey
+
+# ConstructDeleteRange
+decompile
+DELETE FROM foo
+----
+explain(shape):
+• delete
+│ from: foo
+│ auto commit
+│
+└── • scan
+      table: foo@foo_pkey
+      spans: FULL SCAN
+      locking strength: for update
+pheromone:
+* (delete)
+ └── scan | placeholder-scan
+      table: foo
+      index: foo_pkey
+
+# ConstructDelete
+decompile
+DELETE FROM foo WHERE a = 1
+----
+explain(shape):
+• delete
+│ from: foo
+│ auto commit
+│
+└── • scan
+      table: foo@foo_pkey
+      spans: 1+ spans
+      locking strength: for update
+pheromone:
+* (delete)
+ └── scan | placeholder-scan
+      table: foo
+      index: foo_pkey
+
+# createTableOp
+decompile
+CREATE TABLE t1 (x int)
+----
+explain(shape):
+• create table
+pheromone:
+* (create table)
+
+# createTableAsOp
+decompile
+CREATE TABLE t2 AS SELECT * FROM abc
+----
+explain(shape):
+• create table as
+│
+└── • render
+    │
+    └── • scan
+          table: abc@abc_pkey
+          spans: FULL SCAN
+pheromone:
+* (create table as)
+ └── * (project)
+      └── * (render)
+           └── scan | placeholder-scan
+                table: abc
+                index: abc_pkey
+
+#	createViewOp
+decompile
+CREATE VIEW v AS SELECT 1
+----
+explain(shape):
+• create view
+pheromone:
+* (create view)
+
+exec-ddl
+CREATE SEQUENCE select_test
+----
+
+# ConstructTopK
+decompile
+SELECT * FROM xyz ORDER BY y LIMIT 10
+----
+explain(shape):
+• top-k
+│ order: +y
+│ k: 10
+│
+└── • scan
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── top-k
+      └── scan | placeholder-scan
+           table: xyz
+           index: xyz_pkey
+
+
+# ConstructSequenceSelect
+decompile
+SELECT * FROM select_test
+----
+explain(shape):
+• sequence select
+pheromone:
+* (project)
+ └── * (sequence select)
+
+
+# alterTableSplitOp
+decompile
+ALTER TABLE foo SPLIT AT VALUES(1)
+----
+explain(shape):
+• split
+│ index: foo@foo_pkey
+│ expiry: CAST(_ AS STRING)
+│
+└── • values
+      size: 1 column, 1 row
+pheromone:
+* (project)
+ └── * (split)
+      └── * (project)
+           └── * (values)
+
+# alterTableUnsplitOp
+decompile
+ALTER TABLE foo UNSPLIT AT VALUES(1)
+----
+explain(shape):
+• unsplit
+│ index: foo@foo_pkey
+│
+└── • values
+      size: 1 column, 1 row
+pheromone:
+* (project)
+ └── * (unsplit)
+      └── * (project)
+           └── * (values)
+
+
+# alterTableUnsplitAllOp
+decompile
+ALTER TABLE foo UNSPLIT ALL
+----
+explain(shape):
+• unsplit all
+  index: foo@foo_pkey
+pheromone:
+* (project)
+ └── * (unsplit all)
+
+# alterTableRelocateOp
+decompile
+ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1],1)
+----
+explain(shape):
+• relocate table
+│ index: abc@abc_pkey
+│
+└── • values
+      size: 2 columns, 1 row
+pheromone:
+* (project)
+ └── * (relocate table)
+      └── * (project)
+           └── * (values)
+
+# ConstructBuffer/ConstructScanBuffer
+decompile
+SELECT * FROM [INSERT INTO abc SELECT a, b, c FROM abc RETURNING a] ORDER BY a
+----
+explain(shape):
+• root
+│
+├── • sort
+│   │ order: +a
+│   │
+│   └── • scan buffer
+│         label: buffer 1
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: INSERT INTO abc SELECT a, b, c FROM abc RETURNING a
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ label: buffer 1
+        │
+        └── • insert
+            │ into: abc(a, b, c)
+            │
+            └── • scan
+                  table: abc@abc_pkey
+                  spans: FULL SCAN
+pheromone:
+* (project)
+ └── sort
+      └── * (scan buffer)
+
+# ConstructRecursiveCTE/recursiveCTEOp
+decompile
+WITH RECURSIVE cte(x) AS (VALUES (1) UNION ALL SELECT x+1 FROM cte WHERE x < 10) SELECT * FROM cte
+----
+explain(shape):
+• render
+│
+└── • recursive cte
+    │
+    └── • values
+          size: 1 column, 1 row
+pheromone:
+* (project)
+ └── * (render)
+      └── * (recursive cte)
+           └── * (values)
+
+# controlSchedulesOp
+decompile
+PAUSE SCHEDULE 123
+----
+explain(shape):
+• control schedules
+│
+└── • values
+      size: 1 column, 1 row
+pheromone:
+* (control schedules)
+ └── * (values)
+
+# controlJobsOp
+decompile
+CANCEL JOBS SELECT 1
+----
+explain(shape):
+• control jobs
+│
+└── • values
+      size: 1 column, 1 row
+pheromone:
+* (control jobs)
+ └── * (project)
+      └── * (values)
+
+# cancelQueriesOp
+decompile
+CANCEL QUERIES SELECT '1'
+----
+explain(shape):
+• cancel queries
+│
+└── • values
+      size: 1 column, 1 row
+pheromone:
+* (cancel queries)
+ └── * (project)
+      └── * (values)
+
+# cancelSessionsOp
+decompile
+CANCEL SESSIONS SELECT '1'
+----
+explain(shape):
+• cancel sessions
+│
+└── • values
+      size: 1 column, 1 row
+pheromone:
+* (cancel sessions)
+ └── * (project)
+      └── * (values)
+
+# ConstructCreateStatistics
+decompile
+CREATE STATISTICS s1 FROM foo
+----
+explain(shape):
+• create statistics
+pheromone:
+* (create statistics)
+
+# ConstructExport
+decompile
+EXPORT INTO CSV "tmp" FROM SELECT * FROM foo
+----
+explain(shape):
+• export
+│
+└── • scan
+      table: foo@foo_pkey
+      spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (export)
+      └── * (project)
+           └── scan | placeholder-scan
+                table: foo
+                index: foo_pkey
+
+# ConstructValues
+decompile
+SELECT 1
+----
+explain(shape):
+• values
+  size: 1 column, 1 row
+pheromone:
+* (project)
+ └── * (values)
+
+
+# See what gist does on an explain query
+decompile
+EXPLAIN SELECT * from foo LIMIT 1
+----
+explain(shape):
+• explain
+pheromone:
+* (project)
+ └── * (explain)
+
+# ConstructShowCompletions
+decompile
+SHOW COMPLETIONS AT OFFSET 10 FOR 'select 123'
+----
+explain(shape):
+• show completions
+  offset: 10
+  syntax: "select 123"
+pheromone:
+* (project)
+ └── * (show completions)
+
+exec-ddl
+CREATE TABLE ts (a int, b STRING)
+----
+
+decompile
+SELECT max(a), b FROM ts WHERE a = 1 AND b LIKE '$ internal%' GROUP BY b
+----
+explain(shape):
+• group (hash)
+│ group by: b
+│
+└── • filter
+    │ filter: (a = _) AND (b LIKE _)
+    │
+    └── • scan
+          table: ts@ts_pkey
+          spans: FULL SCAN
+pheromone:
+* (project)
+ └── * (group by)
+      └── * (filter)
+           └── scan | placeholder-scan
+                table: ts
+                index: ts_pkey
+
+decompile
+SELECT b_name, sum(tr_qty * tr_bid_price)::FLOAT8
+FROM sector, industry, company, security, trade_request, broker
+WHERE tr_b_id = b_id
+  AND s_symb = tr_s_symb
+  AND co_id = s_co_id
+  AND in_id = co_in_id
+  AND sc_id = in_sc_id
+  AND b_name = ANY ARRAY[
+                     'Broker1', 'Broker2', 'Broker3', 'Broker4', 'Broker5',
+                     'Broker6', 'Broker7', 'Broker8', 'Broker9', 'Broker10',
+                     'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15',
+                     'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker20',
+                     'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25',
+                     'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker30'
+                   ]
+  AND sc_name = 'Energy'
+GROUP BY b_name
+ORDER BY 2 DESC
+----
+explain(shape):
+• sort
+│ order: -sum
+│
+└── • render
+    │
+    └── • group (hash)
+        │ group by: b_name
+        │
+        └── • render
+            │
+            └── • lookup join
+                │ table: broker@broker_pkey
+                │ equality: (tr_b_id) = (b_id)
+                │ equality cols are key
+                │ pred: b_name IN _
+                │
+                └── • hash join
+                    │ equality: (tr_s_symb) = (s_symb)
+                    │ right cols are key
+                    │
+                    ├── • scan
+                    │     table: trade_request@trade_request_tr_b_id_tr_s_symb_idx
+                    │     spans: FULL SCAN
+                    │
+                    └── • lookup join
+                        │ table: security@security_s_co_id_s_issue_key
+                        │ equality: (co_id) = (s_co_id)
+                        │
+                        └── • lookup join
+                            │ table: company@company_co_in_id_idx
+                            │ equality: (in_id) = (co_in_id)
+                            │
+                            └── • lookup join
+                                │ table: industry@industry_in_sc_id_idx
+                                │ equality: (sc_id) = (in_sc_id)
+                                │
+                                └── • scan
+                                      table: sector@sector_sc_name_key
+                                      spans: 1+ spans
+pheromone:
+* (project)
+ └── sort
+      └── * (render)
+           └── * (group by)
+                └── * (render)
+                     └── lookup-join | lock
+                          table: broker
+                          index: broker_pkey
+                          └── inner-join
+                               ├── scan | placeholder-scan
+                               │    table: trade_request
+                               │    index: trade_request_tr_b_id_tr_s_symb_idx
+                               └── lookup-join | lock
+                                    table: security
+                                    index: security_s_co_id_s_issue_key
+                                    └── lookup-join | lock
+                                         table: company
+                                         index: company_co_in_id_idx
+                                         └── lookup-join | lock
+                                              table: industry
+                                              index: industry_in_sc_id_idx
+                                              └── scan | placeholder-scan
+                                                   table: sector
+                                                   index: sector_sc_name_key
