@@ -660,6 +660,7 @@ An event of type `status_change` is recorded when a job changes statuses.
 | `RunNum` | The run number of the job. | no |
 | `Error` | An error that may have occurred while the job was running. | yes |
 | `FinalResumeErr` | An error that occurred that requires the job to be reverted. | yes |
+| `User` | User is the owner of the job. | yes |
 
 
 #### Common fields
