@@ -139,3 +139,13 @@ delete statement_hints
       │    └── distribution: test
       └── filters
            └── fingerprint:12 = 'SELECT * FROM t WHERE x = _' [outer=(12), constraints=(/12: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(12)]
+
+# Initial scan query used by the per-node hint cache.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT DISTINCT hash FROM system.statement_hints WHERE hash >= 123456 ORDER BY hash LIMIT 10000
+----
+
+# Query used to check if a hint exists for a given fingerprint hash.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT 1 FROM system.statement_hints WHERE hash = 123456 LIMIT 1
+----
