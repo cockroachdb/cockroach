@@ -1774,3 +1774,32 @@ SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = (('othe
 ----
 
 subtest end
+
+subtest cluster_inspect_errors_view
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+query TT colnames
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'crdb_internal' AND table_name = 'cluster_inspect_errors'
+ORDER BY ordinal_position
+----
+column_name                 data_type
+error_id                   uuid
+job_id                     bigint
+error_type                 text
+aost                       timestamp with time zone
+database_id                oid
+schema_id                  oid
+id                         oid
+primary_key                text
+details                    jsonb
+crdb_internal_expiration   timestamp with time zone
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+statement ok
+SELECT count(*) FROM crdb_internal.cluster_inspect_errors
+
+subtest end
