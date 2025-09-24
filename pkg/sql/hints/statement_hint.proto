@@ -8,8 +8,10 @@ package hints;
 
 import "gogoproto/gogo.proto";
 
-// StatementHints consolidates the "external" hints that can be applied to
-// statements with a given fingerprint using the system.statement_hints table.
-message StatementHints {
+// StatementHintsUnion contains exactly one type of "external" statement hint
+// that can be applied to statements with a given fingerprint using the
+// system.statement_hints table.
+message StatementHintUnion {
   // TODO: add a field for each type of statement hint.
+  // oneof value {}
 }
