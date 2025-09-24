@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -136,20 +138,12 @@ func (s *SQLProvider) New(ctx context.Context) error {
 		return errors.Wrap(err, "dropping table")
 	}
 
-	var opClass string
-	switch s.distMetric {
-	case vecpb.CosineDistance:
-		opClass = " vector_cosine_ops"
-	case vecpb.InnerProductDistance:
-		opClass = " vector_ip_ops"
-	}
-
+	// Create table without vector index.
 	_, err = s.pool.Exec(ctx, fmt.Sprintf(`
 		CREATE TABLE %s (
 			id BYTES PRIMARY KEY,
-			embedding VECTOR(%d),
-			VECTOR INDEX (embedding%s)
-		)`, s.tableName, s.dims, opClass))
+			embedding VECTOR(%d)
+		)`, s.tableName, s.dims))
 	return errors.Wrap(err, "creating table")
 }
 
@@ -191,6 +185,112 @@ func (s *SQLProvider) InsertVectors(
 
 		return err
 	}
+}
+
+// Finalize implements the VectorProvider interface.
+func (s *SQLProvider) Finalize(ctx context.Context) error {
+	// Enable vector indexes if not already enabled.
+	_, err := s.pool.Exec(ctx, "SET CLUSTER SETTING feature.vector_index.enabled = true")
+	if err != nil {
+		return errors.Wrap(err, "enabling vector indexes")
+	}
+
+	var opClass string
+	switch s.distMetric {
+	case vecpb.CosineDistance:
+		opClass = " vector_cosine_ops"
+	case vecpb.InnerProductDistance:
+		opClass = " vector_ip_ops"
+	}
+
+	indexName := fmt.Sprintf("vecbench_%s_embedding_idx", sanitizeIdentifier(s.datasetName))
+
+	// Use a WaitGroup to wait for progress tracking to complete.
+	var wg sync.WaitGroup
+	var progressErr error
+
+	// Track progress of the index creation job.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.trackIndexCreationProgress(ctx, indexName); err != nil {
+			progressErr = err
+		}
+	}()
+
+	_, err = s.pool.Exec(ctx, fmt.Sprintf(`
+		CREATE VECTOR INDEX %s ON %s (embedding%s)`, indexName, s.tableName, opClass))
+	if err != nil {
+		return errors.Wrap(err, "creating vector index")
+	}
+
+	// Wait for progress tracking to complete.
+	wg.Wait()
+	if progressErr != nil {
+		return errors.Wrap(progressErr, "tracking index creation progress")
+	}
+
+	return nil
+}
+
+// trackIndexCreationProgress polls SHOW JOBS to track vector index creation progress.
+func (s *SQLProvider) trackIndexCreationProgress(ctx context.Context, indexName string) error {
+	fmt.Printf(White+"\nCreating vector index %s...\n"+Reset, indexName)
+
+	var startAt crtime.Mono
+	for {
+		time.Sleep(time.Second)
+
+		var status string
+		var fractionCompleted float64
+		var runningStatus string
+
+		// Query for jobs related to our index creation.
+		rows, err := s.pool.Query(ctx, `
+			SELECT status, fraction_completed, running_status
+			FROM [SHOW JOBS]
+			WHERE description LIKE '%%vecbench%%'
+			AND job_type = 'NEW SCHEMA CHANGE'
+			ORDER BY created DESC
+			LIMIT 1`)
+		if err != nil {
+			return errors.Wrap(err, "querying job progress")
+		}
+
+		if !rows.Next() {
+			if err := rows.Err(); err != nil {
+				return errors.Wrap(err, "querying job progress")
+			} else if startAt != 0 {
+				return errors.Newf("index creation job disappeared unexpectedly")
+			} else if startAt.Elapsed().Seconds() > 5 {
+				return errors.Newf("index creation job failed to start")
+			}
+			continue
+		}
+
+		if startAt == 0 {
+			startAt = crtime.NowMono()
+		}
+		if err := rows.Scan(&status, &fractionCompleted, &runningStatus); err != nil {
+			return errors.Wrap(err, "scanning job progress")
+		}
+		rows.Close()
+
+		// Display progress.
+		progressPercent := fractionCompleted * 100
+		fmt.Printf(ClearLine+White+"\rIndex creation progress: %.1f%% (%s) in %v"+Reset,
+			progressPercent, status, roundDuration(startAt.Elapsed()))
+
+		if status == "succeeded" {
+			break
+		} else if status != "running" {
+			fmt.Printf(Red+"\nVector index creation failed with status: %s: %s\n"+Reset, status, runningStatus)
+			return errors.Newf("index creation job failed with status: %s", status)
+		}
+	}
+
+	fmt.Printf(White + "\nVector index creation completed successfully.\n" + Reset)
+	return nil
 }
 
 // SetupSearch implements the VectorProvider interface.

@@ -149,6 +149,12 @@ func (m *MemProvider) InsertVectors(
 	})
 }
 
+// Finalize implements the VectorProvider interface.
+func (m *MemProvider) Finalize(ctx context.Context) error {
+	// No-op for in-memory provider as no additional setup is needed after insertion.
+	return nil
+}
+
 // SetupSearch implements the VectorProvider interface.
 func (m *MemProvider) SetupSearch(
 	ctx context.Context, maxResults int, beamSize int,

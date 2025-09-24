@@ -54,6 +54,10 @@ type VectorProvider interface {
 	// identified by a key.
 	InsertVectors(ctx context.Context, keys []cspann.KeyBytes, vectors vector.Set) error
 
+	// Finalize performs any final steps needed after all vectors have been
+	// inserted, such as creating indexes or optimizing the data structure.
+	Finalize(ctx context.Context) error
+
 	// SetupSearch allows the provider to perform expensive up-front steps in
 	// preparation for many calls to Search. It returns provider-specific state
 	// that will be passed to Search.

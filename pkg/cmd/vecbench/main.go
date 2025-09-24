@@ -48,6 +48,7 @@ const (
 )
 
 const (
+	ClearLine  = "\033[2K"
 	HideCursor = "\033[?25l"
 	ShowCursor = "\033[?25h"
 )
@@ -125,7 +126,7 @@ func main() {
 	// Hide the cursor, but ensure it's restored on exit, including Ctrl+C.
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	stopper.RunAsyncTask(ctx, "Ctrl+C", func(context.Context) {
+	err := stopper.RunAsyncTask(ctx, "Ctrl+C", func(context.Context) {
 		select {
 		case <-c:
 			fmt.Print(ShowCursor)
@@ -136,12 +137,17 @@ func main() {
 			break
 		}
 	})
+	if err != nil {
+		fmt.Printf("Failed to install Ctrl-C handler: %v\n", err)
+	}
 	fmt.Print(HideCursor)
 	defer fmt.Print(ShowCursor)
 
 	// Start pprof server at http://localhost:8080/debug/pprof/
 	go func() {
-		http.ListenAndServe("localhost:8080", nil)
+		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
+			fmt.Printf("Failed to start pprof server: %v\n", err)
+		}
 	}()
 
 	switch flag.Arg(0) {
@@ -454,6 +460,12 @@ func (vb *vectorBench) BuildIndex() {
 				break
 			}
 		}
+	}
+
+	// Finalize the provider (e.g., create indexes for SQL provider).
+	err = vb.provider.Finalize(vb.ctx)
+	if err != nil {
+		panic(err)
 	}
 
 	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(startAt.Elapsed()))
