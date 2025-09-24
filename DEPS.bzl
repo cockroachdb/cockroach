@@ -2150,10 +2150,20 @@ def go_deps():
         name = "com_github_coreos_go_oidc",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/coreos/go-oidc",
-        sha256 = "b997f93fbff8a4aed3bb2d78a3bf115ba4f06b1d1e4b9ef4cc9d1f63d3ce4036",
-        strip_prefix = "github.com/coreos/go-oidc@v2.2.1+incompatible",
+        sha256 = "e2e123270614dd7d47d95ae1fce80a9102df019f9e820d4f5cf5c92c64e1ad91",
+        strip_prefix = "github.com/coreos/go-oidc@v2.1.0+incompatible",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/coreos/go-oidc/com_github_coreos_go_oidc-v2.2.1+incompatible.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/coreos/go-oidc/com_github_coreos_go_oidc-v2.1.0+incompatible.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_coreos_go_oidc_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/coreos/go-oidc/v3",
+        sha256 = "70e7e08dce12ae0feb50c6a6befe9e73ddef046da79f705e0dec449298f6669e",
+        strip_prefix = "github.com/coreos/go-oidc/v3@v3.15.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/coreos/go-oidc/v3/com_github_coreos_go_oidc_v3-v3.15.0.zip",
         ],
     )
     go_repository(
@@ -3235,6 +3245,16 @@ def go_deps():
         strip_prefix = "github.com/go-ini/ini@v1.25.4",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-ini/ini/com_github_go_ini_ini-v1.25.4.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_go_jose_go_jose_v4",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/go-jose/go-jose/v4",
+        sha256 = "7bb0205c235a4bc2bbca729a08d2d86f31ac0199cfc1c70b2d780f7594366407",
+        strip_prefix = "github.com/go-jose/go-jose/v4@v4.0.5",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/go-jose/go-jose/v4/com_github_go_jose_go_jose_v4-v4.0.5.zip",
         ],
     )
     go_repository(
@@ -7364,10 +7384,10 @@ def go_deps():
         name = "com_github_pquerna_cachecontrol",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pquerna/cachecontrol",
-        sha256 = "aee5feeaf00551b3448ba6ab0d56314924cbe2aff3eb56257839b528502c4b1a",
-        strip_prefix = "github.com/pquerna/cachecontrol@v0.0.0-20200921180117-858c6e7e6b7e",
+        sha256 = "d6cc37c2f66b55943c56be5199cf3182b6c6ac6878bba7d7184425e4faf22301",
+        strip_prefix = "github.com/pquerna/cachecontrol@v0.0.0-20171018203845-0dec1b30a021",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pquerna/cachecontrol/com_github_pquerna_cachecontrol-v0.0.0-20200921180117-858c6e7e6b7e.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pquerna/cachecontrol/com_github_pquerna_cachecontrol-v0.0.0-20171018203845-0dec1b30a021.zip",
         ],
     )
     go_repository(
