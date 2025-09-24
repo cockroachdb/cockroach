@@ -499,11 +499,11 @@ func (v *validator) processOp(op Operation) {
 		if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
 			// If the CPut failed, the actual value (in the ConditionFailedError) is
 			// observed, and the CPut's write is not observed.
+			observedVal := roachpb.Value{}
 			if e.ActualValue != nil {
-				if valueBytes, err := e.ActualValue.GetBytes(); err == nil {
-					readObservation.Value = roachpb.MakeValueFromBytes(valueBytes)
-				}
+				observedVal.RawBytes = e.ActualValue.RawBytes
 			}
+			readObservation.Value = observedVal
 			v.curObservations = append(v.curObservations, readObservation)
 		} else {
 			// If the CPut succeeded, the expected value is observed, and the CPut's
@@ -512,7 +512,11 @@ func (v *validator) processOp(op Operation) {
 				// If AllowIfDoesNotExist == true, we don't know if the read found the
 				// expected value or no value, so we can't add a read observation.
 				// Otherwise, it must have observed the expected value.
-				readObservation.Value = roachpb.MakeValueFromBytes(t.ExpVal)
+				observedVal := roachpb.Value{}
+				if t.ExpVal != nil {
+					observedVal = roachpb.MakeValueFromBytes(t.ExpVal)
+				}
+				readObservation.Value = observedVal
 				v.curObservations = append(v.curObservations, readObservation)
 			}
 			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
