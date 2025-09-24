@@ -103,7 +103,7 @@ code for more details.
  - [ ] Regenerate docs (`./dev gen docs`)
  - [ ] Regenerate expected test data results as needed
 
-**Example PR:** [#113912](https://github.com/cockroachdb/cockroach/pull/113912)
+**Example PR:** [#153906](https://github.com/cockroachdb/cockroach/pull/153906)
 
 ### R.2: Mint release
 
