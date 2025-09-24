@@ -12,10 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -220,12 +222,21 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 
 // makeProcessor will create an inspect processor for test.
 func makeProcessor(
-	t *testing.T, checkFactory inspectCheckFactory, src spanSource, concurrency int,
+	t *testing.T,
+	checkFactory inspectCheckFactory,
+	src spanSource,
+	concurrency int,
+	asOf hlc.Timestamp,
 ) (*inspectProcessor, *testIssueCollector) {
 	t.Helper()
+	clock := hlc.NewClockForTesting(nil)
 	logger := &testIssueCollector{}
 	proc := &inspectProcessor{
-		spec:           execinfrapb.InspectSpec{},
+		spec: execinfrapb.InspectSpec{
+			InspectDetails: jobspb.InspectDetails{
+				AsOf: asOf,
+			},
+		},
 		checkFactories: []inspectCheckFactory{checkFactory},
 		cfg: &execinfra.ServerConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
@@ -233,6 +244,7 @@ func makeProcessor(
 		spanSrc:     src,
 		logger:      logger,
 		concurrency: concurrency,
+		clock:       clock,
 	}
 	return proc, logger
 }
@@ -310,12 +322,12 @@ func TestInspectProcessor_ControlFlow(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			factory := func() inspectCheck {
+			factory := func(asOf hlc.Timestamp) inspectCheck {
 				return &testingInspectCheck{
 					configs: tc.configs,
 				}
 			}
-			proc, _ := makeProcessor(t, factory, tc.spanSrc, len(tc.configs))
+			proc, _ := makeProcessor(t, factory, tc.spanSrc, len(tc.configs), hlc.Timestamp{})
 			runProcessorAndWait(t, proc, tc.expectErr)
 		})
 	}
@@ -329,7 +341,7 @@ func TestInspectProcessor_EmitIssues(t *testing.T) {
 		mode:     spanModeNormal,
 		maxSpans: 1,
 	}
-	factory := func() inspectCheck {
+	factory := func(asOf hlc.Timestamp) inspectCheck {
 		return &testingInspectCheck{
 			configs: []testingCheckConfig{
 				{
@@ -342,9 +354,78 @@ func TestInspectProcessor_EmitIssues(t *testing.T) {
 			},
 		}
 	}
-	proc, logger := makeProcessor(t, factory, spanSrc, 1)
+	proc, logger := makeProcessor(t, factory, spanSrc, 1, hlc.Timestamp{})
 
 	runProcessorAndWait(t, proc, true /* expectErr */)
 
 	require.Equal(t, 2, logger.numIssuesFound())
+}
+
+func TestInspectProcessor_AsOfTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name            string
+		asOf            hlc.Timestamp
+		verifyTimestamp func(t *testing.T, actualTime time.Time, capturedTimestamp hlc.Timestamp, testStartTime time.Time)
+	}{
+		{
+			name: "empty timestamp uses clock time",
+			asOf: hlc.Timestamp{}, // Empty timestamp
+			verifyTimestamp: func(t *testing.T, actualTime time.Time, capturedTimestamp hlc.Timestamp, testStartTime time.Time) {
+				// Verify that the AOST time in the issue is >= the test start time
+				require.True(t, actualTime.After(testStartTime) || actualTime.Equal(testStartTime),
+					"AOST time (%v) should be >= test start time (%v)", actualTime, testStartTime)
+				// Also verify the timestamp was not empty
+				require.False(t, capturedTimestamp.IsEmpty(),
+					"Captured timestamp should not be empty when AsOf is not specified")
+			},
+		},
+		{
+			name: "specific timestamp is preserved",
+			asOf: hlc.Timestamp{WallTime: 12345},
+			verifyTimestamp: func(t *testing.T, actualTime time.Time, capturedTimestamp hlc.Timestamp, testStartTime time.Time) {
+				// Verify that the exact timestamp is preserved
+				require.Equal(t, hlc.Timestamp{WallTime: 12345}.GoTime(), actualTime)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spanSrc := &testingSpanSource{
+				mode:     spanModeNormal,
+				maxSpans: 1,
+			}
+
+			// Record start time before creating the processor
+			testStartTime := time.Now()
+
+			var capturedTimestamp hlc.Timestamp
+			factory := func(asOf hlc.Timestamp) inspectCheck {
+				capturedTimestamp = asOf
+				return &testingInspectCheck{
+					configs: []testingCheckConfig{
+						{
+							mode: checkModeNone,
+							issues: []*inspectIssue{
+								{ErrorType: "test_error", PrimaryKey: "pk1", AOST: asOf.GoTime()},
+							},
+						},
+					},
+				}
+			}
+
+			proc, logger := makeProcessor(t, factory, spanSrc, 1, tc.asOf)
+
+			runProcessorAndWait(t, proc, true /* expectErr */)
+
+			require.Equal(t, 1, logger.numIssuesFound())
+
+			// Run the test-specific timestamp verification
+			actualTime := logger.issue(0).AOST
+			tc.verifyTimestamp(t, actualTime, capturedTimestamp, testStartTime)
+		})
+	}
 }
