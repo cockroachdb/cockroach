@@ -10916,10 +10916,10 @@ def go_deps():
         name = "io_storj_drpc",
         build_file_proto_mode = "disable_global",
         importpath = "storj.io/drpc",
-        sha256 = "ebb4b3ca9a6c5944255506b4cf5091b86b76851e52211940b609c98e8bcc7aab",
-        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20250807091527-65dcebaa113e",
+        sha256 = "45f8763aa374c79032f954256977aec4371f9f8756897883a75dbb9b4a1a3b44",
+        strip_prefix = "github.com/shubhamdhama/drpc@v0.0.0-20250924063056-9afbffb4b001",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20250807091527-65dcebaa113e.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shubhamdhama/drpc/com_github_shubhamdhama_drpc-v0.0.0-20250924063056-9afbffb4b001.zip",
         ],
     )
     go_repository(
