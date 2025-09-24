@@ -1643,7 +1643,9 @@ func TestDrainSqlStats_partialOutage(t *testing.T) {
 func TestDrainSqlStatsPermissionDenied(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	ctx := context.Background()
 	nonRootUser := apiconstants.TestingUserNameNoAdmin()
 	sqlutils.MakeSQLRunner(ts.SQLConn(t)).Exec(t, fmt.Sprintf("CREATE USER IF NOT EXISTS %s", nonRootUser))
