@@ -124,12 +124,13 @@ func (s *Sender) HTML() string {
 	header(fmt.Sprintf("Connections (%d)", len(s.connsMu.conns)))
 	nids := make([]roachpb.NodeID, 0, len(s.connsMu.conns))
 	for nid := range s.connsMu.conns {
-		nids = append(nids, nid)
+		nids = append(nids, nid.nodeID)
 	}
 	slices.Sort(nids)
 	now := timeutil.Now()
 	for _, nid := range nids {
-		state := s.connsMu.conns[nid].getState()
+		connKey := connKey{nodeID: nid, id: s.connsMu.conSeq[nid]}
+		state := s.connsMu.conns[connKey].getState()
 		fmt.Fprintf(sb, "n%d: ", nid)
 		if state.connected {
 			fmt.Fprintf(sb, "connected at: %s (%s ago)\n", state.connectedTime.Truncate(time.Millisecond), now.Sub(state.connectedTime).Truncate(time.Second))
