@@ -332,45 +332,6 @@ func DrainAndClose(
 	dst.ProducerDone()
 }
 
-// NoMetadataRowSource is a wrapper on top of a RowSource that automatically
-// forwards metadata to a RowReceiver. Data rows are returned through an
-// interface similar to RowSource, except that, since metadata is taken care of,
-// only the data rows are returned.
-//
-// The point of this struct is that it'd be burdensome for some row consumers to
-// have to deal with metadata.
-type NoMetadataRowSource struct {
-	src          RowSource
-	metadataSink RowReceiver
-}
-
-// MakeNoMetadataRowSource builds a NoMetadataRowSource.
-func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSource {
-	return NoMetadataRowSource{src: src, metadataSink: sink}
-}
-
-// NextRow is analogous to RowSource.Next. If the producer sends an error, we
-// can't just forward it to metadataSink. We need to let the consumer know so
-// that it's not under the impression that everything is hunky-dory and it can
-// continue consuming rows. So, this interface returns the error. Just like with
-// a raw RowSource, the consumer should generally call ConsumerDone() and drain.
-func (rs *NoMetadataRowSource) NextRow() (rowenc.EncDatumRow, error) {
-	for {
-		row, meta := rs.src.Next()
-		if meta == nil {
-			return row, nil
-		}
-		if meta.Err != nil {
-			return nil, meta.Err
-		}
-		// We forward the metadata and ignore the returned ConsumerStatus. There's
-		// no good way to use that status here; eventually the consumer of this
-		// NoMetadataRowSource will figure out the same status and act on it as soon
-		// as a non-metadata row is received.
-		_ = rs.metadataSink.Push(nil /* row */, meta)
-	}
-}
-
 // RowChannelMsg is the message used in the channels that implement
 // local physical streams (i.e. the RowChannel's).
 type RowChannelMsg struct {
