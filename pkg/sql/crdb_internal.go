@@ -231,6 +231,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalFullyQualifiedNamesViewID:          crdbInternalFullyQualifiedNamesView,
 		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
 		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
+		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9665,4 +9666,25 @@ func populateStoreLivenessSupportResponse(
 		}
 	}
 	return nil
+}
+
+// crdb_internal.cluster_inspect_errors is a view to give permission to
+// non-admins to access the system.inspect_errors table
+var crdbInternalClusterInspectErrorsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.cluster_inspect_errors AS
+	SELECT * FROM system.inspect_errors`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "error_id", Typ: types.Uuid},
+		{Name: "job_id", Typ: types.Int},
+		{Name: "error_type", Typ: types.String},
+		{Name: "aost", Typ: types.TimestampTZ},
+		{Name: "database_id", Typ: types.Oid},
+		{Name: "schema_id", Typ: types.Oid},
+		{Name: "id", Typ: types.Oid},
+		{Name: "primary_key", Typ: types.String},
+		{Name: "details", Typ: types.Jsonb},
+		{Name: "crdb_internal_expiration", Typ: types.TimestampTZ},
+	},
+	comment: `wrapper over system.inspect_errors`,
 }
