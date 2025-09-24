@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -75,8 +76,13 @@ var testSinkFlushFrequency = 100 * time.Millisecond
 // maybeDisableDeclarativeSchemaChangesForTest will disable the declarative
 // schema changer with a probability of 10% using the provided SQL DB
 // connection. This returns true if the declarative schema changer is disabled.
-func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.SQLRunner) bool {
-	disable := rand.Float32() < 0.1
+func maybeDisableDeclarativeSchemaChangesForTest(
+	t testing.TB, rng *rand.Rand, sqlDB *sqlutils.SQLRunner,
+) bool {
+	if rng == nil {
+		rng, _ = randutil.NewPseudoRand()
+	}
+	disable := rng.Float32() < 0.1
 	if disable {
 		t.Log("using legacy schema changer")
 		sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
@@ -1964,7 +1970,7 @@ func runWithAndWithoutRegression141453(
 				var useLegacySchemaChanger bool
 				if options.maybeUseLegacySchemaChanger {
 					sqlDB := sqlutils.MakeSQLRunner(s.DB)
-					useLegacySchemaChanger = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+					useLegacySchemaChanger = maybeDisableDeclarativeSchemaChangesForTest(t, nil, sqlDB)
 				}
 
 				// This regression scenario doesn't always happen with the legacy schema changer
