@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 type inspectResumer struct {
@@ -84,10 +84,17 @@ func (c *inspectResumer) getPrimaryIndexSpans(
 ) ([]roachpb.Span, error) {
 	details := c.job.Details().(jobspb.InspectDetails)
 
-	spans := make([]roachpb.Span, 0, len(details.Checks))
+	// Deduplicate by table ID to avoid processing the same span multiple times
+	// when there are multiple checks on the same table.
+	uniqueTableIDs := make(map[descpb.ID]struct{})
+	for i := range details.Checks {
+		uniqueTableIDs[details.Checks[i].TableID] = struct{}{}
+	}
+
+	spans := make([]roachpb.Span, 0, len(uniqueTableIDs))
 	err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		for i := range details.Checks {
-			desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.Checks[i].TableID)
+		for tableID := range uniqueTableIDs {
+			desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -104,9 +111,6 @@ func (c *inspectResumer) getPrimaryIndexSpans(
 func (c *inspectResumer) planInspectProcessors(
 	ctx context.Context, jobExecCtx sql.JobExecContext, entirePKSpans []roachpb.Span,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-	if len(entirePKSpans) > 1 {
-		return nil, nil, errors.AssertionFailedf("we only support one check: %d", len(entirePKSpans))
-	}
 	distSQLPlanner := jobExecCtx.DistSQLPlanner()
 	planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, jobExecCtx.ExtendedEvalContext(), jobExecCtx.ExecCfg())
 	if err != nil {

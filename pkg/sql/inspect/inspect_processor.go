@@ -257,13 +257,15 @@ func buildInspectCheckFactories(
 ) ([]inspectCheckFactory, error) {
 	checkFactories := make([]inspectCheckFactory, 0, len(spec.InspectDetails.Checks))
 	for _, specCheck := range spec.InspectDetails.Checks {
+		tableID := specCheck.TableID
+		indexID := specCheck.IndexID
 		switch specCheck.Type {
 		case jobspb.InspectCheckIndexConsistency:
 			checkFactories = append(checkFactories, func() inspectCheck {
 				return &indexConsistencyCheck{
 					flowCtx: flowCtx,
-					tableID: specCheck.TableID,
-					indexID: specCheck.IndexID,
+					tableID: tableID,
+					indexID: indexID,
 					asOf:    spec.InspectDetails.AsOf,
 				}
 			})
