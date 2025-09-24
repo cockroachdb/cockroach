@@ -34,7 +34,7 @@ setting split_queue_enabled=false
 # TODO(tbg): it's interesting that sma-only does better on write throughput than
 # mma-only. Looking at the graphs, the mma-only flavor is much slower in moving
 # load around. Possibly a bug?
-eval duration=35m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-and-count) metrics=(cpu,cpu_util,leases,replicas,write_bytes_per_second)
+eval duration=35m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(cpu,cpu_util,leases,replicas,write_bytes_per_second)
 ----
 cpu#1: last:  [s1=984642922, s2=1126669982, s3=703798726, s4=419425213, s5=432156047, s6=559114683, s7=142318086, s8=283346689, s9=424209084] (stddev=303225920.55, mean=563964603.56, sum=5075681432)
 cpu#1: thrash_pct: [s1=14%, s2=49%, s3=47%, s4=9%, s5=9%, s6=11%, s7=4%, s8=14%, s9=25%]  (sum=182%)
@@ -76,5 +76,5 @@ replicas#1: last:  [s1=36, s2=34, s3=36, s4=37, s5=36, s6=36, s7=37, s8=36, s9=3
 replicas#1: thrash_pct: [s1=150%, s2=455%, s3=325%, s4=127%, s5=125%, s6=150%, s7=352%, s8=150%, s9=150%]  (sum=1985%)
 write_bytes_per_second#1: last:  [s1=5194, s2=5256, s3=5415, s4=6318, s5=6216, s6=6171, s7=6283, s8=6298, s9=6257] (stddev=461.69, mean=5934.22, sum=53408)
 write_bytes_per_second#1: thrash_pct: [s1=1721%, s2=1566%, s3=1458%, s4=714%, s5=542%, s6=570%, s7=1227%, s8=694%, s9=803%]  (sum=9293%)
-artifacts[mma-and-count]: 9acfd49d51ee3d3c
+artifacts[mma-count]: 9acfd49d51ee3d3c
 ==========================

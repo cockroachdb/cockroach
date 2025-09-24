@@ -517,7 +517,7 @@ func TestDataDriven(t *testing.T) {
 							})
 					},
 					// Both the replicate/lease queues and the MMA are enabled.
-					"mma-and-count": func(eg *gen.StaticEvents) {
+					"mma-count": func(eg *gen.StaticEvents) {
 						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
 							event.SetSimulationSettingsEvent{
 								IsClusterSetting: true,
