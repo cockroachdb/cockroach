@@ -155,3 +155,11 @@ func PickRandomDelay(rng *rand.Rand, isLocal bool, durations []time.Duration) ti
 
 	return dur
 }
+
+type Context struct{}
+
+func (c Context) Clone() StepContext {
+	return Context{}
+}
+
+type Helper struct{}
