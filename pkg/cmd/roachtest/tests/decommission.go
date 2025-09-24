@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -118,7 +117,7 @@ func registerDecommission(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:             "decommission/mixed-versions",
 			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode()),
+			Cluster:          r.MakeClusterSpec(numNodes),
 			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 			Monitor:          true,

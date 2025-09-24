@@ -666,7 +666,7 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 
 	// Run workload and kafka consumer.
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
-	_ = mvt.BackgroundCommand("run workload", tester.workloadNodes, runWorkloadCmd)
+	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd)
 	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
 
 	// Scatter the ranges throughout the test to make it more likely that every

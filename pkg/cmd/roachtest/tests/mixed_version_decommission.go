@@ -35,7 +35,6 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
-		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 	n1 := 1
 	n2 := 2
@@ -53,10 +52,9 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 	mvt.OnStartup(
 		"preload data",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			_, db := h.RandomDB(rng)
-			cmd := fmt.Sprintf(
-				`%s workload fixtures import tpcc --warehouses=100 {pgurl:1}`, h.CockroachBinaryForWorkload(t))
-			if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
+			node, db := h.RandomDB(rng)
+			cmd := `./cockroach workload fixtures import tpcc --warehouses=100 {pgurl:1}`
+			if err := c.RunE(ctx, option.WithNodes(c.Node(node)), cmd); err != nil {
 				return errors.Wrap(err, "failed to import fixtures")
 			}
 
