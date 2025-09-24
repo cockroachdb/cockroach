@@ -45,6 +45,9 @@ type mmaState interface {
 	// AdjustPendingChangesDisposition is called by the allocator sync to adjust
 	// the disposition of pending changes.
 	AdjustPendingChangesDisposition(changeIDs []mmaprototype.ChangeID, success bool)
+	// IsInConflictWithMMA is called by the allocator to help guide the decision
+	// on whether a change is in conflict with MMA's goal and may cause thrashing.
+	IsInConflictWithMMA(existing roachpb.StoreID, cand roachpb.StoreID, cands []roachpb.StoreID, cpuOnly bool) bool
 }
 
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
@@ -227,4 +230,10 @@ func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
 				chg.Target.StoreID, trackedChange.usage, chg.ChangeType)
 		}
 	}
+}
+
+func (as *AllocatorSync) IsInConflictWithMMA(
+	existing roachpb.StoreID, cand roachpb.StoreID, cands []roachpb.StoreID, cpuOnly bool,
+) bool {
+	return as.mmaAllocator.IsInConflictWithMMA(existing, cand, cands, cpuOnly)
 }

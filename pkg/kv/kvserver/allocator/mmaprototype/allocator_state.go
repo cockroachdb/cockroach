@@ -889,6 +889,36 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 	return changeIDs
 }
 
+// IsInConflictWithMMA returns true if the change from existing to cand is in
+// conflict with MMA's goal. cpuOnly is true if only CPU dimension should be
+// considered (when this is for lease transfers). It is considered in conflict
+// if the candidate is more overloaded than the existing store with respect to
+// the cands means. We should include the existing store when computing the
+// means.
+//
+// NB: cands may or may not include the existing store.
+func (a *allocatorState) IsInConflictWithMMA(
+	existing roachpb.StoreID, cand roachpb.StoreID, cands []roachpb.StoreID, cpuOnly bool,
+) bool {
+	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call. We
+	// should reuse the scratchNodes instead.
+	var means meansForStoreSet
+	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
+	storeIDs := makeStoreIDPostingList(cands)
+	storeIDs.insert(existing)
+	means.stores = storeIDs
+	computeMeansForStoreSet(a.cs, &means, scratchNodes)
+	if len(storeIDs) <= 1 {
+		return false
+	}
+	candSLS := a.cs.computeLoadSummary(context.Background(), cand, &means.storeLoad, &means.nodeLoad)
+	existingSLS := a.cs.computeLoadSummary(context.Background(), existing, &means.storeLoad, &means.nodeLoad)
+	if cpuOnly {
+		return candSLS.dimSummary[CPURate] > existingSLS.dimSummary[CPURate]
+	}
+	return candSLS.sls > existingSLS.sls
+}
+
 // ComputeChanges implements the Allocator interface.
 func (a *allocatorState) ComputeChanges(
 	ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions,
