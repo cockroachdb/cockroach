@@ -76,23 +76,13 @@ func TestCacheBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv := serverutils.StartServerOnly(t,
-		base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				ProtectedTS: &protectedts.TestingKnobs{
-					DisableProtectedTimestampForMultiTenant: true,
-					UseMetaTable:                            true,
-				},
-			},
-		})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	insqlDB := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
-		DisableProtectedTimestampForMultiTenant: true,
-		UseMetaTable:                            true,
-	})
+			})
 	p := withDatabase(m, insqlDB)
 
 	// Set the poll interval to be very short.
@@ -153,9 +143,7 @@ func TestRefresh(t *testing.T) {
 	ctx := context.Background()
 	st := &scanTracker{}
 	ptsKnobs := &protectedts.TestingKnobs{
-		DisableProtectedTimestampForMultiTenant: true,
-		UseMetaTable:                            true,
-	}
+			}
 	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -299,9 +287,7 @@ func TestStart(t *testing.T) {
 			base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					ProtectedTS: &protectedts.TestingKnobs{
-						DisableProtectedTimestampForMultiTenant: true,
-						UseMetaTable:                            true,
-					},
+											},
 				},
 			})
 		s := srv.ApplicationLayer()
@@ -349,9 +335,7 @@ func TestQueryRecord(t *testing.T) {
 
 	db := s.InternalDB().(isql.DB)
 	storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
-		DisableProtectedTimestampForMultiTenant: true,
-		UseMetaTable:                            true,
-	})
+			})
 	p := withDatabase(storage, db)
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -414,9 +398,7 @@ func TestIterate(t *testing.T) {
 
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
-		DisableProtectedTimestampForMultiTenant: true,
-		UseMetaTable:                            true,
-	})
+			})
 	p := withDatabase(m, db)
 
 	// Set the poll interval to be very long.
@@ -485,9 +467,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				ProtectedTS: &protectedts.TestingKnobs{
-					DisableProtectedTimestampForMultiTenant: true,
-					UseMetaTable:                            true,
-				},
+									},
 			},
 		})
 	defer srv.Stopper().Stop(ctx)
@@ -566,9 +546,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
-				DisableProtectedTimestampForMultiTenant: true,
-				UseMetaTable:                            true,
-			})
+							})
 			p := withDatabase(storage, s.InternalDB().(isql.DB))
 			c := ptcache.New(ptcache.Config{
 				Settings: s.ClusterSettings(),
@@ -597,9 +575,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 
 	db := s.InternalDB().(isql.DB)
 	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
-		DisableProtectedTimestampForMultiTenant: true,
-		UseMetaTable:                            true,
-	})
+			})
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -647,11 +623,15 @@ func tableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
 func protect(
 	t *testing.T, p *storageWithLastCommit, protectTS hlc.Timestamp, spans ...roachpb.Span,
 ) (r *ptpb.Record, createdAt hlc.Timestamp) {
+	// For testing purposes, use a cluster target since we removed deprecated spans
+	// The cache tests are primarily testing the caching behavior, not span-specific functionality
+	target := ptpb.MakeClusterTarget()
+	
 	r = &ptpb.Record{
-		ID:              uuid.MakeV4().GetBytes(),
-		Timestamp:       protectTS,
-		Mode:            ptpb.PROTECT_AFTER,
-		DeprecatedSpans: spans,
+		ID:        uuid.MakeV4().GetBytes(),
+		Timestamp: protectTS,
+		Mode:      ptpb.PROTECT_AFTER,
+		Target:    target,
 	}
 	ctx := context.Background()
 	require.NoError(t, p.Protect(ctx, r))
