@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
@@ -1613,6 +1614,7 @@ func (o *LoadScorerOptions) getRebalanceTargetToMinimizeDelta(
 // details.
 func rankedCandidateListForRebalancing(
 	ctx context.Context,
+	rangeUsageInfo allocator.RangeUsageInfo,
 	allStores storepool.StoreList,
 	removalConstraintsChecker constraintsCheckFn,
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,

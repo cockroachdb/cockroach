@@ -4092,6 +4092,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 		t.Run(fmt.Sprintf("%d/rebalance", testIdx), func(t *testing.T) {
 			rebalanceOpts := rankedCandidateListForRebalancing(
 				ctx,
+				allocator.RangeUsageInfo{},
 				sl,
 				removalConstraintsChecker,
 				rebalanceConstraintsChecker,
@@ -5862,6 +5863,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 
 		results := rankedCandidateListForRebalancing(
 			ctx,
+			allocator.RangeUsageInfo{},
 			sl,
 			removalConstraintsChecker,
 			rebalanceConstraintsChecker,

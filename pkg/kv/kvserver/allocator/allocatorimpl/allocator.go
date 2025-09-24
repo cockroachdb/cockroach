@@ -1852,6 +1852,7 @@ func (a Allocator) RebalanceTarget(
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	results := rankedCandidateListForRebalancing(
 		ctx,
+		rangeUsageInfo,
 		sl,
 		removalConstraintsChecker,
 		rebalanceConstraintsChecker,
