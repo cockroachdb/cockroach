@@ -2453,7 +2453,7 @@ func (a *Allocator) TransferLeaseTarget(
 				}
 				fallthrough
 			case decideWithoutStats:
-				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, validTargets) {
+				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, usageInfo, storePool, sl, source, validTargets) {
 					return roachpb.ReplicaDescriptor{}
 				}
 			case shouldTransfer:
@@ -2840,7 +2840,7 @@ func (a *Allocator) ShouldTransferLease(
 	case shouldTransfer:
 		result = TransferLeaseForAccessLocality
 	case decideWithoutStats:
-		if a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
+		if a.shouldTransferLeaseForLeaseCountConvergence(ctx, usageInfo, storePool, sl, source, existing) {
 			result = TransferLeaseForCountBalance
 		} else {
 			result = DontTransferLeaseBalanced
@@ -3067,6 +3067,7 @@ func loadBasedLeaseRebalanceScore(
 
 func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	ctx context.Context,
+	rangeUsageInfo allocator.RangeUsageInfo,
 	storePool storepool.AllocatorStorePool,
 	sl storepool.StoreList,
 	source roachpb.StoreDescriptor,
