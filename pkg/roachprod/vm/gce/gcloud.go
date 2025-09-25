@@ -422,6 +422,11 @@ func (p *Provider) SupportsSpotVMs() bool {
 	return true
 }
 
+// IsLocalProvider returns false because gcloud is a remote provider.
+func (p *Provider) IsLocalProvider() bool {
+	return false
+}
+
 // GetPreemptedSpotVMs checks the preemption status of the given VMs, by querying the GCP logging service.
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
@@ -3178,6 +3183,10 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	}
 
 	return vms, nil
+}
+
+func (p *Provider) String() string {
+	return fmt.Sprintf("%s-%s", ProviderName, strings.Join(p.Projects, "_"))
 }
 
 // populateCostPerHour adds an approximate cost per hour to each VM in the list,
