@@ -51,15 +51,15 @@ replicas#1: last:  [s1=68, s2=100, s3=32, s4=100, s5=100, s6=100, s7=0, s8=0, s9
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 artifacts[mma-only]: a6c9461b2f3a0720
 ==========================
-cpu#1: last:  [s1=720323150, s2=640734620, s3=641569643, s4=999342, s5=999342, s6=999342, s7=0, s8=0, s9=0] (stddev=315184732.58, mean=222847271.00, sum=2005625439)
-cpu#1: thrash_pct: [s1=10%, s2=16%, s3=27%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=54%)
-cpu_util#1: last:  [s1=0.14, s2=0.13, s3=0.13, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.06, mean=0.04, sum=0)
-cpu_util#1: thrash_pct: [s1=10%, s2=16%, s3=27%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=54%)
+cpu#1: last:  [s1=720456024, s2=620712231, s3=661731287, s4=1000019, s5=1000019, s6=1000019, s7=0, s8=0, s9=0] (stddev=315376582.10, mean=222877733.22, sum=2005899599)
+cpu#1: thrash_pct: [s1=10%, s2=16%, s3=32%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=58%)
+cpu_util#1: last:  [s1=0.14, s2=0.12, s3=0.13, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.06, mean=0.04, sum=0)
+cpu_util#1: thrash_pct: [s1=10%, s2=16%, s3=32%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=58%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
-leases#1: last:  [s1=36, s2=32, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.75, mean=11.11, sum=100)
-leases#1: thrash_pct: [s1=0%, s2=0%, s3=13%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=13%)
+leases#1: last:  [s1=36, s2=31, s3=33, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.76, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=19%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=19%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
-replicas#1: last:  [s1=68, s2=68, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
-replicas#1: thrash_pct: [s1=10%, s2=6%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=16%)
-artifacts[mma-count]: e65969f90be6e433
+replicas#1: last:  [s1=67, s2=69, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
+artifacts[mma-count]: b3530bb0cec28017
 ==========================

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -327,6 +328,15 @@ type ScorerOptions interface {
 	getIOOverloadOptions() IOOverloadOptions
 	// getDiskOptions returns the scorer options for disk fullness.
 	getDiskOptions() DiskCapacityOptions
+	// isInConflictWithMMA returns true if the change from existing to candidate
+	// is in conflict with MMA's goal. All scorer options should return false
+	// except for LoadAwareRangeCountScorerOptions.
+	// LoadAwareRangeCountScorerOptions is used when
+	// LBRebalancingMultiMetricAndCount mode is set. When this mode is set,
+	// allocator should check with MMA to see if the change is in conflict with
+	// MMA's goal, thus preventing thrashing. Note that candidateSL may or may not
+	// include the existing store.
+	isInConflictWithMMA(existing roachpb.StoreID, candidate roachpb.StoreID, candidateSL storepool.StoreList) bool
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -399,6 +409,12 @@ func (bo BaseScorerOptions) maybeJitterStoreStats(
 // that does not want to consider range count in its scoring, so it returns 0.
 func (bo BaseScorerOptions) adjustRangeCountForScoring(rangeCount int) int {
 	return rangeCount
+}
+
+func (bo BaseScorerOptions) isInConflictWithMMA(
+	_ roachpb.StoreID, _ roachpb.StoreID, _ storepool.StoreList,
+) bool {
+	return false
 }
 
 // BaseScorerOptionsNoConvergence is the base scorer options that does not
@@ -568,6 +584,37 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 		return 1
 	}
 	return 0
+}
+
+// LoadAwareRangeCountScorerOptions is used by the replicateQueue to tell the
+// allocator's rebalancing machinery to base its balance/convergence scores on
+// range counts, but also check with MMA to see if the change is in conflict
+// with MMA's goal, thus preventing thrashing. For simplicity, candidates that
+// are in conflict with MMA's goal are filtered out early.
+type LoadAwareRangeCountScorerOptions struct {
+	*RangeCountScorerOptions
+	*mmaintegration.AllocatorSync
+}
+
+func (a *Allocator) LoadAwareRangeCountScorerOptions() LoadAwareRangeCountScorerOptions {
+	return LoadAwareRangeCountScorerOptions{
+		a.ScorerOptions(context.Background()),
+		a.as,
+	}
+}
+
+var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
+
+// isInConflictWithMMA returns true if the change from existing to candidate
+// is in conflict with MMA's goal.
+func (lr LoadAwareRangeCountScorerOptions) isInConflictWithMMA(
+	existing roachpb.StoreID, cand roachpb.StoreID, candidateSL storepool.StoreList,
+) bool {
+	storeIDs := make([]roachpb.StoreID, 0, len(candidateSL.Stores))
+	for _, s := range candidateSL.Stores {
+		storeIDs = append(storeIDs, s.StoreID)
+	}
+	return lr.IsInConflictWithMMA(existing, cand, storeIDs, false /* cpuOnly */)
 }
 
 // LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
@@ -1823,6 +1870,15 @@ func rankedCandidateListForRebalancing(
 			// We handled the possible candidates for removal above. Don't process
 			// anymore here.
 			if _, ok := existingStores[cand.store.StoreID]; ok {
+				continue
+			}
+			// Filter out candidates that are in conflict with MMA's goal if the
+			// scorer options is LoadAwareRangeCountScorerOptions.
+			// TODO(wenyihu6): for simplicity, we filter out candidates that are in
+			// conflict with MMA's goal early. We should consider following the same
+			// pattern as overloaded by adding a field to candidate and filter out in
+			// the end
+			if options.isInConflictWithMMA(existing.store.StoreID, cand.store.StoreID, comparable.candidateSL) {
 				continue
 			}
 			// We already computed valid, necessary, fullDisk, and diversityScore
