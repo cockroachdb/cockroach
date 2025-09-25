@@ -1277,6 +1277,11 @@ func (m *Manager) purgeOldVersions(
 		}
 		// We encountered an error telling us to renew the lease.
 		newest := m.findNewest(id)
+		// It is possible that a concurrent drop / removal of this descriptor is
+		// occurring. If the newest version just doesn't exist, bail out.
+		if newest == nil {
+			break
+		}
 		// Assert this should never happen due to a fixed expiration, since the range
 		// feed is responsible for purging old versions and acquiring new versions.
 		if newest.hasFixedExpiration() {
