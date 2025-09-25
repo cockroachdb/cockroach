@@ -166,7 +166,7 @@ func (t *testDNSServer) execFunc(cmd *exec.Cmd) ([]byte, error) {
 // test DNS provider, and the provider name.
 func ProviderWithTestDNSServer(rng *rand.Rand) (TestDNSServer, vm.DNSProvider, string) {
 	testServer := &testDNSServer{records: make(map[string]vm.DNSRecord)}
-	testDNS := gce.NewDNSProviderWithExec(testServer.execFunc)
+	testDNS := gce.NewDNSProviderWithExec(testServer.execFunc, gce.NewDNSProviderDefaultOptions())
 	// Since this is a global variable, we need to make sure the provider name is
 	// unique, in order to avoid conflicts with other tests.
 	providerName := fmt.Sprintf("testProvider-%d", rng.Uint32())
