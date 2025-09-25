@@ -931,6 +931,9 @@ func (p *Provider) createVM(
 		startupArgs.AttachedDiskLun = &lun
 	}
 
+	// Check if we only require a boot disk (workload only machines).
+	startupArgs.BootDiskOnly = providerOpts.BootDiskOnly
+
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
 		return machine, err
@@ -1058,7 +1061,7 @@ func (p *Provider) createVM(
 		machine.VirtualMachineProperties.StorageProfile.DiskControllerType = compute.NVMe
 	}
 
-	if !opts.SSDOpts.UseLocalSSD {
+	if !opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly {
 		caching := compute.CachingTypesNone
 
 		switch providerOpts.DiskCaching {

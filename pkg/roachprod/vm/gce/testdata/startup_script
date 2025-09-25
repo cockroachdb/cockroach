@@ -9,6 +9,8 @@ function setup_disks() {
 
 
 
+
+
 	use_multiple_disks=''
 
 	mount_prefix="/mnt/data"
@@ -17,6 +19,7 @@ function setup_disks() {
 	# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
 	# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
 	# Scenarios:
+	#   (local SSD = 0, Persistent Disk - 0) - no additional disks to mount, early bailout
 	#   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
 	#   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
 	#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted

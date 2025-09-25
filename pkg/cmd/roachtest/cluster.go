@@ -841,24 +841,27 @@ func (f *clusterFactory) genName(cfg clusterConfig) string {
 }
 
 // createFlagsOverride updates opts with the override values passed from the cli.
-func createFlagsOverride(opts *vm.CreateOpts) {
+func createFlagsOverride(opts *vm.CreateOpts, workload bool) {
 	if roachtestflags.Changed(&roachtestflags.Lifetime) != nil {
 		opts.Lifetime = roachtestflags.Lifetime
 	}
-	if roachtestflags.Changed(&roachtestflags.OverrideUseLocalSSD) != nil {
-		opts.SSDOpts.UseLocalSSD = roachtestflags.OverrideUseLocalSSD
-	}
-	if roachtestflags.Changed(&roachtestflags.OverrideFilesystem) != nil {
-		opts.SSDOpts.FileSystem = roachtestflags.OverrideFilesystem
-	}
-	if roachtestflags.Changed(&roachtestflags.OverrideNoExt4Barrier) != nil {
-		opts.SSDOpts.NoExt4Barrier = roachtestflags.OverrideNoExt4Barrier
-	}
-	if roachtestflags.Changed(&roachtestflags.OverrideOSVolumeSizeGB) != nil {
-		opts.OsVolumeSize = roachtestflags.OverrideOSVolumeSizeGB
-	}
-	if roachtestflags.Changed(&roachtestflags.OverrideGeoDistributed) != nil {
-		opts.GeoDistributed = roachtestflags.OverrideGeoDistributed
+	// Only applies to non-workload machines.
+	if !workload {
+		if roachtestflags.Changed(&roachtestflags.OverrideUseLocalSSD) != nil {
+			opts.SSDOpts.UseLocalSSD = roachtestflags.OverrideUseLocalSSD
+		}
+		if roachtestflags.Changed(&roachtestflags.OverrideFilesystem) != nil {
+			opts.SSDOpts.FileSystem = roachtestflags.OverrideFilesystem
+		}
+		if roachtestflags.Changed(&roachtestflags.OverrideNoExt4Barrier) != nil {
+			opts.SSDOpts.NoExt4Barrier = roachtestflags.OverrideNoExt4Barrier
+		}
+		if roachtestflags.Changed(&roachtestflags.OverrideOSVolumeSizeGB) != nil {
+			opts.OsVolumeSize = roachtestflags.OverrideOSVolumeSizeGB
+		}
+		if roachtestflags.Changed(&roachtestflags.OverrideGeoDistributed) != nil {
+			opts.GeoDistributed = roachtestflags.OverrideGeoDistributed
+		}
 	}
 }
 
@@ -930,12 +933,13 @@ func (f *clusterFactory) newCluster(
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
 	// N.B. selectedArch may not be the same as PreferredArch, depending on (spec.CPU, spec.Mem)
-	createVMOpts, providerOpts, workloadProviderOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
+	createVMOpts, createdWorkloadVMOpts, providerOpts, workloadProviderOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	createFlagsOverride(&createVMOpts)
+	createFlagsOverride(&createVMOpts, false)
+	createFlagsOverride(&createdWorkloadVMOpts, true)
 	// Make sure expiration is changed if --lifetime override flag
 	// is passed.
 	cfg.spec.Lifetime = createVMOpts.Lifetime
@@ -997,9 +1001,10 @@ func (f *clusterFactory) newCluster(
 		// There can only be one local cluster so creating two sequentially overwrites the first.
 		// There isn't a point to creating a different sized vm for local clusters, so skip it.
 		if cfg.spec.WorkloadNode && !cfg.localCluster {
+			createdWorkloadVMOpts.ClusterName = c.name
 			opts = []*cloud.ClusterCreateOpts{
 				{Nodes: cfg.spec.NodeCount - cfg.spec.WorkloadNodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
-				{Nodes: cfg.spec.WorkloadNodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
+				{Nodes: cfg.spec.WorkloadNodeCount, CreateOpts: createdWorkloadVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
 			}
 		}
 		err = create(ctx, l, cfg.username, opts...)

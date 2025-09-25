@@ -184,6 +184,7 @@ go_library(
         "scrub.go",
         "secondary_indexes.go",
         "sequelize.go",
+        "simple.go",
         "slow_drain.go",
         "split.go",
         "sqlalchemy.go",
