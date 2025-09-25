@@ -1706,6 +1706,7 @@ GO_TARGETS = [
     "//pkg/roachpb:roachpb_test",
     "//pkg/roachprod/blobfixture:blobfixture",
     "//pkg/roachprod/blobfixture:blobfixture_test",
+    "//pkg/roachprod/cloud/types:types",
     "//pkg/roachprod/cloud:cloud",
     "//pkg/roachprod/cloud:cloud_test",
     "//pkg/roachprod/config:config",
