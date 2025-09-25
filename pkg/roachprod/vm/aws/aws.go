@@ -300,6 +300,11 @@ func (p *Provider) SupportsSpotVMs() bool {
 	return true
 }
 
+// IsLocalProvider returns false because AWS is a remote provider.
+func (p *Provider) IsLocalProvider() bool {
+	return false
+}
+
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]vm.PreemptedVM, error) {
@@ -1876,4 +1881,9 @@ func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
 	// This Provider has no concept of load balancers yet, return an empty list.
 	return nil, nil
+}
+
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	return fmt.Sprintf("%s-%s", ProviderName, strings.Join(p.AccountIDs, "_"))
 }

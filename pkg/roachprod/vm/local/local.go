@@ -120,6 +120,11 @@ type Provider struct {
 	vm.DNSProvider
 }
 
+// IsLocalProvider returns true because it is a local provider.
+func (p *Provider) IsLocalProvider() bool {
+	return true
+}
+
 func (p *Provider) DefaultZones(_ string, _ bool) []string {
 	return []string{}
 }
@@ -363,4 +368,9 @@ func (p *Provider) Active() bool {
 // ProjectActive is part of the vm.Provider interface.
 func (p *Provider) ProjectActive(project string) bool {
 	return project == ""
+}
+
+// String is part of the vm.Provider interface.
+func (p *Provider) String() string {
+	return ProviderName
 }
