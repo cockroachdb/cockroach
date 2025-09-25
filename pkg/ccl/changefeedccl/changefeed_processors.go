@@ -932,12 +932,6 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
-	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),
-	// it might be a while before frontier advances again (particularly if
-	// the number of ranges and closed timestamp settings are high).
-	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
-	//  works in the frontier where if we missed the window to checkpoint, we will attempt
-	//  the checkpoint at the next opportune moment.
 	checkpointFrontier := (advanced && forceFlush) || ca.frontierFlushLimiter.canSave(ctx)
 
 	if checkpointFrontier {
