@@ -27,6 +27,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -232,6 +233,8 @@ func readFileContent(t *testing.T, fileName, uploadID string) string {
 func TestTSDumpUploadWithEmbeddedMetadataDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "Failing Bazel extended CI job. See CRDB-53617")
 	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
 		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
 	})()
