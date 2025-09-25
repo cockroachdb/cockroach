@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
@@ -2934,6 +2933,10 @@ func registerBackupMixedVersion(r registry.Registry) {
 			)
 			testRNG := mvt.RNG()
 
+			// Workload can only take a positive int as a seed, but seed could be a
+			// negative int. Ensure the seed passed to workload is an int.
+			workloadSeed := testRNG.Int63()
+
 			dbs := []string{"bank", "tpcc"}
 			backupTest, err := newMixedVersionBackup(t, c, c.CRDBNodes(), dbs)
 			if err != nil {
@@ -2951,8 +2954,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// for the cluster used in this test without overloading it,
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
-			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, roachtestflags.GlobalSeed, c.CRDBNodes(), false)
-			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, roachtestflags.GlobalSeed, numWarehouses, c.CRDBNodes())
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, workloadSeed, c.CRDBNodes(), false)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, workloadSeed, numWarehouses, c.CRDBNodes())
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
