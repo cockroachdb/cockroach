@@ -57,6 +57,10 @@ type StatementHintsCache struct {
 		// system.statement_hints table. Cached hints are never modified after being
 		// added to the cache, and so can be returned directly without copying.
 		hintCache *cache.UnorderedCache
+
+		// Used for testing; keeps track of how many times we actually read hints
+		// from the system table.
+		numInternalQueries int
 	}
 
 	// Used to start/coordinate the rangefeed.
@@ -359,6 +363,7 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		waitCond: sync.Cond{L: &c.mu},
 	}
 	c.mu.hintCache.Add(statementHash, entry)
+	c.mu.numInternalQueries++
 
 	var err error
 	func() {
@@ -446,4 +451,34 @@ func (entry *cacheEntry) getMatchingHints(statementFingerprint string) []Stateme
 		}
 	}
 	return res
+}
+
+// ============================================================================
+// Test helpers.
+// ============================================================================
+
+// TestingHashCount returns the number of hashes with hints.
+func (c *StatementHintsCache) TestingHashCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.mu.hintedHashes)
+}
+
+// TestingLookupHash returns the number of hints for a given hash. Returns 0 if
+// the hash is not present in hintedHashes.
+func (c *StatementHintsCache) TestingLookupHash(hash int64) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mu.hintedHashes == nil {
+		return 0
+	}
+	return c.mu.hintedHashes[hash]
+}
+
+// TestingNumTableReads returns the number of times hints have been read from
+// the system.statement_hints table.
+func (c *StatementHintsCache) TestingNumTableReads() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.numInternalQueries
 }
