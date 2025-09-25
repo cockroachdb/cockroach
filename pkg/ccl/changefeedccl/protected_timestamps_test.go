@@ -970,7 +970,8 @@ func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 		require.Equal(t, int64(0), managePTSCount)
 		require.Equal(t, int64(0), managePTSErrorCount)
 
-		createStmt := `CREATE CHANGEFEED FOR foo, bar WITH resolved='10ms', initial_scan='no'`
+		createStmt := `CREATE CHANGEFEED FOR foo, bar
+WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
@@ -1114,7 +1115,8 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 			}
 		}
 
-		createStmt := `CREATE CHANGEFEED FOR table1, table2, table3 WITH resolved='100ms'`
+		createStmt := `CREATE CHANGEFEED FOR table1, table2, table3
+WITH resolved='100ms', min_checkpoint_frequency='100ms'`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
