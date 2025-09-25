@@ -41,10 +41,18 @@ func WithAccountID(accountID string) OptionFunc {
 	}
 }
 
+// WithAssumeSTSRole returns an option to assume an STS role.
+func WithAssumeSTSRole(role string) OptionFunc {
+	return func(p *Provider) {
+		p.AssumeSTSRole = role
+	}
+}
+
 // ProviderOptions holds options for configuring the AWS provider.
 type ProviderOptions struct {
 	Profile       string
 	AccountID     string
+	AssumeSTSRole string
 }
 
 // ToOptions converts ProviderOptions to a slice of Option functions to be used
@@ -56,6 +64,9 @@ func (po *ProviderOptions) ToOptions() []Option {
 	}
 	if po.AccountID != "" {
 		opts = append(opts, WithAccountID(po.AccountID))
+	}
+	if po.AssumeSTSRole != "" {
+		opts = append(opts, WithAssumeSTSRole(po.AssumeSTSRole))
 	}
 	return opts
 }
