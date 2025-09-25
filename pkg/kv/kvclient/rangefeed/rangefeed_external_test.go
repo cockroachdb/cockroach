@@ -560,8 +560,7 @@ func TestWithOnSSTable(t *testing.T) {
 		// handle duplicated events.
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			Settings:          settings,
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
+			Settings: settings,
 		})
 		defer srv.Stopper().Stop(ctx)
 		tsrv := srv.ApplicationLayer()
