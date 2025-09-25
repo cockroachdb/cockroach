@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -93,9 +94,10 @@ type Sender struct {
 	// will continuously try to reconnect.
 	connsMu struct {
 		syncutil.Mutex
-		conSeq     map[roachpb.NodeID]uint64
-		conns      map[connKey]conn
-		quarantine map[connKey]hlc.Timestamp
+		conSeq          map[roachpb.NodeID]uint64
+		conns           map[connKey]conn
+		quarantine      map[connKey]hlc.Timestamp
+		needToReconnect chan connKey
 	}
 }
 
@@ -227,6 +229,7 @@ func newSenderWithConnFactory(
 	s.connsMu.conSeq = make(map[roachpb.NodeID]uint64)
 	s.connsMu.conns = make(map[connKey]conn)
 	s.connsMu.quarantine = make(map[connKey]hlc.Timestamp)
+	s.connsMu.needToReconnect = make(chan connKey)
 	return s
 }
 
@@ -298,7 +301,9 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 								if s.clock.Now().Less(quarantineUntil) {
 									continue
 								}
-								delete(quarantine, connKey)
+								s.connsMu.Lock()
+								delete(s.connsMu.quarantine, connKey)
+								s.connsMu.Unlock()
 							}
 
 							// log.Dev.Infof(ctx, "side-transport sender worker %d processing connection to n%d", workerID, nodeID)
@@ -318,16 +323,9 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 									break
 								}
 
-								if err := rpcConn.maybeConnectLocked(ctx, s.stopper); err != nil {
-									if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && rpcConn.mu.everyN.ShouldLog() {
-										log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", nodeID, err)
-									}
-
+								if !rpcConn.checkConnected(ctx, s.stopper) {
 									rpcConn.mu.Unlock()
-
-									s.connsMu.Lock()
-									s.connsMu.quarantine[connKey] = s.clock.Now().AddDuration(errSleepTime)
-									s.connsMu.Unlock()
+									s.connsMu.needToReconnect <- connKey
 									break
 								}
 
@@ -385,6 +383,44 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 									rpcConn.mu.Unlock()
 								}
 							}
+						}
+
+					case <-s.stopper.ShouldQuiesce():
+						return
+					}
+				}
+			})
+	}
+
+	// Create 4 worker goroutines to process connections in parallel
+	for workerID := 0; workerID < nomWorkers; workerID++ {
+		_ /* err */ = s.stopper.RunAsyncTask(ctx, fmt.Sprintf("closedts side-transport connection worker %d", workerID),
+			func(ctx context.Context) {
+				errSleepTime := sleepOnErr
+				for {
+					select {
+					case connkey := <-s.connsMu.needToReconnect:
+						s.connsMu.Lock()
+						connection := s.connsMu.conns[connkey]
+						s.connsMu.quarantine[connkey] = hlc.Timestamp{WallTime: math.MaxInt64}
+						s.connsMu.Unlock()
+
+						if rpcConn, ok := connection.(*rpcConn); ok {
+
+							if err := rpcConn.connectAsync(ctx, s.stopper); err != nil {
+								if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && rpcConn.mu.everyN.ShouldLog() {
+									log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", nodeID, err)
+								}
+
+								s.connsMu.Lock()
+								s.connsMu.quarantine[connkey] = s.clock.Now().AddDuration(errSleepTime)
+								s.connsMu.Unlock()
+								break
+							}
+
+							s.connsMu.Lock()
+							delete(s.connsMu.quarantine, connkey)
+							s.connsMu.Unlock()
 						}
 
 					case <-s.stopper.ShouldQuiesce():
@@ -1004,6 +1040,15 @@ func (r *rpcConn) maybeConnect(ctx context.Context, s *stop.Stopper) error {
 	return r.maybeConnectLocked(ctx, s)
 }
 
+func (r *rpcConn) checkConnected(ctx context.Context, _ *stop.Stopper) bool {
+	if r.mu.stream != nil {
+		// Already connected.
+		return true
+	}
+
+	return false
+}
+
 func (r *rpcConn) maybeConnectLocked(ctx context.Context, _ *stop.Stopper) error {
 	if r.mu.stream != nil {
 		// Already connected.
@@ -1022,6 +1067,41 @@ func (r *rpcConn) maybeConnectLocked(ctx context.Context, _ *stop.Stopper) error
 		cancel()
 		return err
 	}
+	r.recordConnectLocked()
+	r.mu.stream = stream
+	// This will need to be called when we're done with the stream.
+	r.mu.cancelStreamCtx = cancel
+	return nil
+}
+
+func (r *rpcConn) connectAsync(ctx context.Context, _ *stop.Stopper) error {
+	r.mu.Lock()
+	nodeID := r.mu.nodeID
+	dialer := r.mu.dialer
+	producer := r.producer
+	r.mu.Unlock()
+
+	if r.mu.stream != nil {
+		// Already connected.
+		r.mu.Unlock()
+		return nil
+	}
+
+	log.Dev.Infof(ctx, "side-transport connecting to n%d", nodeID)
+
+	client, err := ctpb.DialSideTransportClient(dialer, ctx, nodeID, rpcbase.SystemClass, producer.st)
+	if err != nil {
+		return err
+	}
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := client.PushUpdates(streamCtx)
+	if err != nil {
+		cancel()
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.recordConnectLocked()
 	r.mu.stream = stream
 	// This will need to be called when we're done with the stream.

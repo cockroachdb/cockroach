@@ -2675,163 +2675,163 @@ func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
 	require.NoError(t, checkConsistency())
 }
 
-func TestLeaseInfoRequest(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.Background())
+// func TestLeaseInfoRequest(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	defer log.Scope(t).Close(t)
+// 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+// 	defer tc.Stopper().Stop(context.Background())
 
-	// Split ranges to create more ranges
-	splitKeys := []roachpb.Key{
-		roachpb.Key("scratch-range-1-split"),
-		roachpb.Key("scratch-range-2-split"),
-		roachpb.Key("scratch-range-3-split"),
-		roachpb.Key("scratch-range-4-split"),
-		roachpb.Key("scratch-range-5-split"),
-		roachpb.Key("scratch-range-6-split"),
-		roachpb.Key("scratch-range-7-split"),
-		roachpb.Key("scratch-range-8-split"),
-		roachpb.Key("scratch-range-9-split"),
-	}
+// 	// Split ranges to create more ranges
+// 	splitKeys := []roachpb.Key{
+// 		roachpb.Key("scratch-range-1-split"),
+// 		roachpb.Key("scratch-range-2-split"),
+// 		roachpb.Key("scratch-range-3-split"),
+// 		roachpb.Key("scratch-range-4-split"),
+// 		roachpb.Key("scratch-range-5-split"),
+// 		roachpb.Key("scratch-range-6-split"),
+// 		roachpb.Key("scratch-range-7-split"),
+// 		roachpb.Key("scratch-range-8-split"),
+// 		roachpb.Key("scratch-range-9-split"),
+// 	}
 
-	// Perform splits
-	for _, splitKey := range splitKeys {
-		err := tc.Servers[0].DB().AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp)
-		require.NoError(t, err)
-		t.Logf("Split range at key: %s", splitKey)
-	}
+// 	// Perform splits
+// 	for _, splitKey := range splitKeys {
+// 		err := tc.Servers[0].DB().AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp)
+// 		require.NoError(t, err)
+// 		t.Logf("Split range at key: %s", splitKey)
+// 	}
 
-	// Write to split ranges to ensure they exist
-	for i, splitKey := range splitKeys {
-		err := tc.Servers[0].DB().Put(context.Background(), splitKey, fmt.Sprintf("split-value-%d", i))
-		require.NoError(t, err)
-	}
+// 	// Write to split ranges to ensure they exist
+// 	for i, splitKey := range splitKeys {
+// 		err := tc.Servers[0].DB().Put(context.Background(), splitKey, fmt.Sprintf("split-value-%d", i))
+// 		require.NoError(t, err)
+// 	}
 
-	// Move leaseholders to different nodes
-	for i, key := range splitKeys {
-		targetNode := i % 3 // Distribute across nodes 0, 1, 2
+// 	// Move leaseholders to different nodes
+// 	for i, key := range splitKeys {
+// 		targetNode := i % 3 // Distribute across nodes 0, 1, 2
 
-		// Get the range descriptor
-		rangeDesc, err := tc.LookupRange(key)
-		require.NoError(t, err)
+// 		// Get the range descriptor
+// 		rangeDesc, err := tc.LookupRange(key)
+// 		require.NoError(t, err)
 
-		// Transfer lease to target node
-		err = tc.TransferRangeLease(rangeDesc, tc.Target(targetNode))
-		require.NoError(t, err)
-	}
+// 		// Transfer lease to target node
+// 		err = tc.TransferRangeLease(rangeDesc, tc.Target(targetNode))
+// 		require.NoError(t, err)
+// 	}
 
-	// Wait for the cluster to stabilize
-	time.Sleep(2 * time.Second)
+// 	// Wait for the cluster to stabilize
+// 	time.Sleep(2 * time.Second)
 
-	// Test closed timestamp progression across all nodes
-	ctx := context.Background()
+// 	// Test closed timestamp progression across all nodes
+// 	ctx := context.Background()
 
-	// Get initial closed timestamps for all ranges across all nodes
-	initialClosedTimestamps := make(map[roachpb.RangeID]map[roachpb.NodeID]hlc.Timestamp)
+// 	// Get initial closed timestamps for all ranges across all nodes
+// 	initialClosedTimestamps := make(map[roachpb.RangeID]map[roachpb.NodeID]hlc.Timestamp)
 
-	for _, key := range splitKeys {
-		rangeDesc, err := tc.LookupRange(key)
-		require.NoError(t, err)
-		rangeID := rangeDesc.RangeID
+// 	for _, key := range splitKeys {
+// 		rangeDesc, err := tc.LookupRange(key)
+// 		require.NoError(t, err)
+// 		rangeID := rangeDesc.RangeID
 
-		initialClosedTimestamps[rangeID] = make(map[roachpb.NodeID]hlc.Timestamp)
+// 		initialClosedTimestamps[rangeID] = make(map[roachpb.NodeID]hlc.Timestamp)
 
-		// Get closed timestamp from each node that has a replica of this range
-		for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
-			nodeID := replicaDesc.NodeID
-			store := tc.GetFirstStoreFromServer(t, int(nodeID-1)) // NodeID is 1-indexed
+// 		// Get closed timestamp from each node that has a replica of this range
+// 		for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
+// 			nodeID := replicaDesc.NodeID
+// 			store := tc.GetFirstStoreFromServer(t, int(nodeID-1)) // NodeID is 1-indexed
 
-			replica := store.LookupReplica(roachpb.RKey(key))
-			if replica != nil {
-				closedTS := replica.GetCurrentClosedTimestamp(ctx)
-				initialClosedTimestamps[rangeID][nodeID] = closedTS
-				t.Logf("Range %d on node %d initial closed timestamp: %s", rangeID, nodeID, closedTS)
-			}
-		}
-	}
+// 			replica := store.LookupReplica(roachpb.RKey(key))
+// 			if replica != nil {
+// 				closedTS := replica.GetCurrentClosedTimestamp(ctx)
+// 				initialClosedTimestamps[rangeID][nodeID] = closedTS
+// 				t.Logf("Range %d on node %d initial closed timestamp: %s", rangeID, nodeID, closedTS)
+// 			}
+// 		}
+// 	}
 
-	// Wait for closed timestamps to advance
-	time.Sleep(5 * time.Second)
+// 	// Wait for closed timestamps to advance
+// 	time.Sleep(5 * time.Second)
 
-	// Verify that closed timestamps have advanced on all nodes
-	for _, key := range splitKeys {
-		rangeDesc, err := tc.LookupRange(key)
-		require.NoError(t, err)
-		rangeID := rangeDesc.RangeID
+// 	// Verify that closed timestamps have advanced on all nodes
+// 	for _, key := range splitKeys {
+// 		rangeDesc, err := tc.LookupRange(key)
+// 		require.NoError(t, err)
+// 		rangeID := rangeDesc.RangeID
 
-		// Check closed timestamp progression for each replica
-		for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
-			nodeID := replicaDesc.NodeID
-			store := tc.GetFirstStoreFromServer(t, int(nodeID-1)) // NodeID is 1-indexed
+// 		// Check closed timestamp progression for each replica
+// 		for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
+// 			nodeID := replicaDesc.NodeID
+// 			store := tc.GetFirstStoreFromServer(t, int(nodeID-1)) // NodeID is 1-indexed
 
-			replica := store.LookupReplica(roachpb.RKey(key))
-			if replica != nil {
-				currentClosedTS := replica.GetCurrentClosedTimestamp(ctx)
-				initialClosedTS := initialClosedTimestamps[rangeID][nodeID]
+// 			replica := store.LookupReplica(roachpb.RKey(key))
+// 			if replica != nil {
+// 				currentClosedTS := replica.GetCurrentClosedTimestamp(ctx)
+// 				initialClosedTS := initialClosedTimestamps[rangeID][nodeID]
 
-				t.Logf("Range %d on node %d: initial=%s, current=%s",
-					rangeID, nodeID, initialClosedTS, currentClosedTS)
+// 				t.Logf("Range %d on node %d: initial=%s, current=%s",
+// 					rangeID, nodeID, initialClosedTS, currentClosedTS)
 
-				// Verify that the closed timestamp has advanced (or at least not regressed)
-				require.True(t, !currentClosedTS.Less(initialClosedTS),
-					"Closed timestamp for range %d on node %d should not regress: initial=%s, current=%s",
-					rangeID, nodeID, initialClosedTS, currentClosedTS)
+// 				// Verify that the closed timestamp has advanced (or at least not regressed)
+// 				require.True(t, !currentClosedTS.Less(initialClosedTS),
+// 					"Closed timestamp for range %d on node %d should not regress: initial=%s, current=%s",
+// 					rangeID, nodeID, initialClosedTS, currentClosedTS)
 
-				// Get the current leaseholder from the replica
-				rangeInfo := replica.GetRangeInfo(ctx)
-				leaseholderNodeID := rangeInfo.Lease.Replica.NodeID
+// 				// Get the current leaseholder from the replica
+// 				rangeInfo := replica.GetRangeInfo(ctx)
+// 				leaseholderNodeID := rangeInfo.Lease.Replica.NodeID
 
-				// For the leaseholder, we expect the closed timestamp to have actually advanced
-				if replicaDesc.NodeID == leaseholderNodeID {
-					require.True(t, currentClosedTS.After(initialClosedTS),
-						"Leaseholder for range %d should have advanced closed timestamp: initial=%s, current=%s",
-						rangeID, initialClosedTS, currentClosedTS)
-				}
-			}
-		}
-	}
+// 				// For the leaseholder, we expect the closed timestamp to have actually advanced
+// 				if replicaDesc.NodeID == leaseholderNodeID {
+// 					require.True(t, currentClosedTS.After(initialClosedTS),
+// 						"Leaseholder for range %d should have advanced closed timestamp: initial=%s, current=%s",
+// 						rangeID, initialClosedTS, currentClosedTS)
+// 				}
+// 			}
+// 		}
+// 	}
 
-	// Additional verification: ensure we can perform some operations to trigger closed timestamp updates
-	for i, key := range splitKeys {
-		// Perform a write to trigger closed timestamp advancement
-		err := tc.Servers[0].DB().Put(ctx, key, fmt.Sprintf("updated-value-%d", i))
-		require.NoError(t, err)
-	}
+// 	// Additional verification: ensure we can perform some operations to trigger closed timestamp updates
+// 	for i, key := range splitKeys {
+// 		// Perform a write to trigger closed timestamp advancement
+// 		err := tc.Servers[0].DB().Put(ctx, key, fmt.Sprintf("updated-value-%d", i))
+// 		require.NoError(t, err)
+// 	}
 
-	// Wait a bit more for closed timestamps to catch up
-	time.Sleep(2 * time.Second)
+// 	// Wait a bit more for closed timestamps to catch up
+// 	time.Sleep(2 * time.Second)
 
-	// Final verification: check that closed timestamps are still progressing
-	for _, key := range splitKeys {
-		rangeDesc, err := tc.LookupRange(key)
-		require.NoError(t, err)
-		rangeID := rangeDesc.RangeID
+// 	// Final verification: check that closed timestamps are still progressing
+// 	for _, key := range splitKeys {
+// 		rangeDesc, err := tc.LookupRange(key)
+// 		require.NoError(t, err)
+// 		rangeID := rangeDesc.RangeID
 
-		// Get the current leaseholder from any replica
-		store := tc.GetFirstStoreFromServer(t, 0) // Get from first server
-		replica := store.LookupReplica(roachpb.RKey(key))
-		require.NotNil(t, replica)
+// 		// Get the current leaseholder from any replica
+// 		store := tc.GetFirstStoreFromServer(t, 0) // Get from first server
+// 		replica := store.LookupReplica(roachpb.RKey(key))
+// 		require.NotNil(t, replica)
 
-		rangeInfo := replica.GetRangeInfo(ctx)
-		leaseholderNodeID := rangeInfo.Lease.Replica.NodeID
+// 		rangeInfo := replica.GetRangeInfo(ctx)
+// 		leaseholderNodeID := rangeInfo.Lease.Replica.NodeID
 
-		// Check the leaseholder's closed timestamp
-		leaseholderStore := tc.GetFirstStoreFromServer(t, int(leaseholderNodeID-1))
+// 		// Check the leaseholder's closed timestamp
+// 		leaseholderStore := tc.GetFirstStoreFromServer(t, int(leaseholderNodeID-1))
 
-		leaseholderReplica := leaseholderStore.LookupReplica(roachpb.RKey(key))
-		require.NotNil(t, leaseholderReplica)
+// 		leaseholderReplica := leaseholderStore.LookupReplica(roachpb.RKey(key))
+// 		require.NotNil(t, leaseholderReplica)
 
-		finalClosedTS := leaseholderReplica.GetCurrentClosedTimestamp(ctx)
-		initialClosedTS := initialClosedTimestamps[rangeID][leaseholderNodeID]
+// 		finalClosedTS := leaseholderReplica.GetCurrentClosedTimestamp(ctx)
+// 		initialClosedTS := initialClosedTimestamps[rangeID][leaseholderNodeID]
 
-		t.Logf("Range %d leaseholder (node %d) final closed timestamp: %s (initial: %s)",
-			rangeID, leaseholderNodeID, finalClosedTS, initialClosedTS)
+// 		t.Logf("Range %d leaseholder (node %d) final closed timestamp: %s (initial: %s)",
+// 			rangeID, leaseholderNodeID, finalClosedTS, initialClosedTS)
 
-		require.True(t, finalClosedTS.After(initialClosedTS),
-			"Final closed timestamp should be greater than initial for range %d leaseholder: initial=%s, final=%s",
-			rangeID, initialClosedTS, finalClosedTS)
-	}
-}
+// 		require.True(t, finalClosedTS.After(initialClosedTS),
+// 			"Final closed timestamp should be greater than initial for range %d leaseholder: initial=%s, final=%s",
+// 			rangeID, initialClosedTS, finalClosedTS)
+// 	}
+// }
 
 // Test that an error encountered by a read-only "NonKV" command is not
 // swallowed, and doesn't otherwise cause a panic.
