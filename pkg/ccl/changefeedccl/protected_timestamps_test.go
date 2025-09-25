@@ -1208,6 +1208,95 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+// TestPerTableProtectedTimestampsWithColumnFamilies tests that per-table protected timestamp
+// records work correctly with tables containing multiple column families.
+func TestPerTableProtectedTimestampsWithColumnFamilies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE table1 (a INT PRIMARY KEY, b STRING, c STRING, d STRING, e STRING, FAMILY most (a,b), FAMILY only_c (c), FAMILY only_de (d,e))`)
+		sqlDB.Exec(t, `INSERT INTO table1 values (0, 'dog', 'cat', 'ddd', 'eee')`)
+		sqlDB.Exec(t, `CREATE TABLE table2 (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY only_c (c))`)
+		sqlDB.Exec(t, `INSERT INTO table2 values (0, 'fish', 'bird')`)
+		sqlDB.Exec(t, `CREATE TABLE table3 (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY only_c (c))`)
+		sqlDB.Exec(t, `INSERT INTO table3 values (0, 'snake', 'turtle')`)
+
+		// Get table IDs for controlling lagging behavior
+		var table1ID, table2ID, table3ID descpb.ID
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table1' AND database_name = current_database()`).Scan(&table1ID)
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table2' AND database_name = current_database()`).Scan(&table2ID)
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table3' AND database_name = current_database()`).Scan(&table3ID)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		var table1Lagging, table2Lagging, table3Lagging atomic.Bool
+		knobs.IsTableLagging = func(tableID descpb.ID) bool {
+			switch tableID {
+			case table1ID:
+				return table1Lagging.Load()
+			case table2ID:
+				return table2Lagging.Load()
+			case table3ID:
+				return table3Lagging.Load()
+			default:
+				return false
+			}
+		}
+
+		createStmt := `CREATE CHANGEFEED FOR
+		TABLE table1 FAMILY most,
+		TABLE table1 FAMILY only_c,
+		TABLE table1 FAMILY only_de,
+		TABLE table2 FAMILY most,
+		TABLE table2 FAMILY only_c,
+		TABLE table3 FAMILY only_c
+		WITH split_column_families`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		assertPayloads(t, testFeed, []string{
+			`table1.most: [0]->{"after": {"a": 0, "b": "dog"}}`,
+			`table1.only_c: [0]->{"after": {"c": "cat"}}`,
+			`table1.only_de: [0]->{"after": {"d": "ddd", "e": "eee"}}`,
+			`table2.most: [0]->{"after": {"a": 0, "b": "fish"}}`,
+			`table2.only_c: [0]->{"after": {"c": "bird"}}`,
+			`table3.only_c: [0]->{"after": {"c": "turtle"}}`,
+		})
+
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
+func TestWebhookDebug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE table2 (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY only_c (c))`)
+		sqlDB.Exec(t, `INSERT INTO table2 values (0, 'fish', 'bird')`)
+
+		createStmt :=
+			`CREATE CHANGEFEED FOR
+				TABLE table2 FAMILY only_c`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		assertPayloads(t, testFeed, []string{
+			`table2.only_c: [0]->{"after": {"c": "bird"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+}
+
 func fetchRoleMembers(
 	ctx context.Context, execCfg *sql.ExecutorConfig, ts hlc.Timestamp,
 ) ([][]string, error) {

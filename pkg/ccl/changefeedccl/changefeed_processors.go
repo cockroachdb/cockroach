@@ -2143,6 +2143,8 @@ func (cf *changeFrontier) createPerTablePTSTargets(
 ) (changefeedbase.Targets, error) {
 	targets := changefeedbase.Targets{}
 	if found, err := cf.targets.EachHavingTableID(tableID, func(target changefeedbase.Target) error {
+		// Note that it is completely possible to have multiple targets for a
+		// single table id in the case of multiple column families.
 		targets.Add(target)
 		return nil
 	}); err != nil {
@@ -2152,9 +2154,6 @@ func (cf *changeFrontier) createPerTablePTSTargets(
 			"attempted to create a per-table PTS record for table %d, but no target was found",
 			tableID,
 		)
-	}
-	if targets.Size != 1 {
-		return changefeedbase.Targets{}, errors.AssertionFailedf("expected 1 target, got %d", targets.Size)
 	}
 	return targets, nil
 }
