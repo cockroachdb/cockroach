@@ -143,6 +143,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 
 	github := &githubIssues{
 		disable:     runner.config.disableIssue,
+		dryRun:      runner.config.dryRunIssuePosting,
 		issuePoster: issues.Post,
 		teamLoader:  team.DefaultLoadTeams,
 	}

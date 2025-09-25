@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
+
 // This block defines all roachtest flags (for the list and run/bench commands).
 var (
 	Cloud spec.Cloud = spec.GCE
@@ -444,6 +445,12 @@ var (
 	_            = registerRunFlag(&DisableIssue, FlagInfo{
 		Name:  "disable-issue",
 		Usage: `Disable posting GitHub issue for failures`,
+	})
+
+	DryRunIssuePosting bool
+	_                  = registerRunFlag(&DryRunIssuePosting, FlagInfo{
+		Name:  "dry-run-issue-posting",
+		Usage: `Enable dry-run mode for GitHub issue posting (formats issues but doesn't post them)`,
 	})
 
 	PromPort int = 2113
