@@ -129,7 +129,9 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
+	//
+	// Limit is the hard limit of the scan, a limit of 0 means no limit.
+	generator func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, limit int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
 
 	// unimplemented indicates that we do not yet implement the contents of this
 	// table. If the stub_catalog_tables session variable is enabled, the table
@@ -634,10 +636,11 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 func (e *virtualDefEntry) getPlanInfo(
 	table catalog.TableDescriptor,
 	index catalog.Index,
-	idxConstraint *constraint.Constraint,
+	scanParams exec.ScanParams,
 	stopper *stop.Stopper,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
 	var columns colinfo.ResultColumns
+	idxConstraint := scanParams.IndexConstraint
 	for _, col := range e.desc.PublicColumns() {
 		columns = append(columns, colinfo.ResultColumn{
 			Name:           col.GetName(),
@@ -668,7 +671,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			}
 
 			if def.generator != nil && !def.preferIndexOverGenerator(ctx, p, index, idxConstraint) {
-				next, cleanup, err := def.generator(ctx, p, dbDesc, stopper)
+				next, cleanup, err := def.generator(ctx, p, dbDesc, scanParams.HardLimit, stopper)
 				if err != nil {
 					return nil, err
 				}
