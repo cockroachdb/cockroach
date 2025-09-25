@@ -9117,22 +9117,21 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
 		// we have at least 1 span for which we don't emit resolved timestamp (to force checkpointing).
-		haveGaps := false
+		// We however also need to ensure there's at least one span that isn't filtered out.
+		var allowedOne, haveGaps bool
 		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			if r.Span.Equal(tableSpan) {
-				// Do not emit resolved events for the entire table span.
-				// We "simulate" large table by splitting single table span into many parts, so
-				// we want to resolve those sub-spans instead of the entire table span.
-				// However, we have to emit something -- otherwise the entire changefeed
-				// machine would not work.
-				r.Span.EndKey = tableSpan.Key.Next()
+				return true, nil
+			}
+			if !allowedOne {
+				allowedOne = true
 				return false, nil
 			}
-			if haveGaps {
-				return rnd.Intn(10) > 7, nil
+			if !haveGaps {
+				haveGaps = true
+				return true, nil
 			}
-			haveGaps = true
-			return true, nil
+			return rnd.Intn(10) > 7, nil
 		}
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
