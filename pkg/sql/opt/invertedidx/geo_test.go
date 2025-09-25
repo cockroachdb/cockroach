@@ -498,6 +498,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tc.indexOrd),
+			false,     /* forceInvertedIndex */
 			nil,       /* computedColumns */
 			func() {}, /* checkCancellation */
 		)

@@ -65,6 +65,10 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 // condition is derived, it is returned with ok=true. If no condition can be
 // derived, then TryFilterInvertedIndex returns ok=false.
 //
+// forceInvertedIndex is a temporary gate the use of inverted indexes
+// for jsonb_path_exists filters. We should remove this gate when we have
+// boarder coverage json path expressions for inverted expression conversion.
+//
 // In addition to the inverted filter condition (spanExpr), returns:
 //   - a constraint of the prefix columns if there are any,
 //   - remaining filters that must be applied if the span expression is not tight,
@@ -79,6 +83,7 @@ func TryFilterInvertedIndex(
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
+	forceInvertedIndex bool,
 	computedColumns map[opt.ColumnID]opt.ScalarExpr,
 	checkCancellation func(),
 ) (
@@ -150,9 +155,7 @@ func TryFilterInvertedIndex(
 	var invertedExpr inverted.Expression
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
-		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(
-			ctx, evalCtx, factory, filters[i].Condition, filterPlanner,
-		)
+		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(ctx, evalCtx, factory, filters[i].Condition, filterPlanner, forceInvertedIndex)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
 			pfState = pfStateLocal
@@ -645,7 +648,12 @@ type invertedFilterPlanner interface {
 	// - remaining filters that must be applied if the inverted expression is not
 	//   tight, and
 	// - pre-filterer state that can be used to reduce false positives.
-	extractInvertedFilterConditionFromLeaf(ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr) (
+	extractInvertedFilterConditionFromLeaf(
+		ctx context.Context,
+		evalCtx *eval.Context,
+		forceInvertedIndex bool,
+		expr opt.ScalarExpr,
+	) (
 		invertedExpr inverted.Expression,
 		remainingFilters opt.ScalarExpr,
 		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
@@ -672,6 +680,7 @@ func extractInvertedFilterCondition(
 	factory *norm.Factory,
 	filterCond opt.ScalarExpr,
 	filterPlanner invertedFilterPlanner,
+	forceInvertedIndex bool,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -679,8 +688,8 @@ func extractInvertedFilterCondition(
 ) {
 	switch t := filterCond.(type) {
 	case *memo.AndExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner, forceInvertedIndex)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner, forceInvertedIndex)
 		if remLeft == nil {
 			remainingFilters = remRight
 		} else if remRight == nil {
@@ -691,8 +700,8 @@ func extractInvertedFilterCondition(
 		return inverted.And(l, r), remainingFilters, nil
 
 	case *memo.OrExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner, forceInvertedIndex)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner, forceInvertedIndex)
 		if remLeft != nil || remRight != nil {
 			// If either child has remaining filters, we must return the original
 			// condition as the remaining filter. It would be incorrect to return
@@ -702,7 +711,7 @@ func extractInvertedFilterCondition(
 		return inverted.Or(l, r), remainingFilters, nil
 
 	default:
-		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, filterCond)
+		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, forceInvertedIndex, filterCond)
 	}
 }
 

@@ -110,6 +110,7 @@ func TestTryFilterTrigram(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(trigramOrd),
+			false,     /* forceInvertedIndex */
 			nil,       /* computedColumns */
 			func() {}, /* checkCancellation */
 		)

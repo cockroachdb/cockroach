@@ -13579,7 +13579,7 @@ scan t124455
 
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a.b')
 ----
 project
  ├── columns: k:1!null
@@ -13595,14 +13595,15 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── [???, "a"/Arr/Arr/)
-                     └── [???, "a"/Arr/)
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── [???, "a"/Arr/Arr/)
+           │         └── [???, "a"/Arr/)
+           └── flags: force-index=j_inv_idx
 
 
 memo expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a.b')
 ----
 memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
@@ -13611,8 +13612,8 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  │         └── cost: 113329.84
  ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
  │    └── []
- │         ├── best: (select G5 G6)
- │         └── cost: 587519.12
+ │         ├── best: (index-join G4 b,cols=(1,4))
+ │         └── cost: 794493.33
  ├── G3: (projections)
  ├── G4: (inverted-filter G7 j_inverted_key)
  │    └── []
@@ -13621,7 +13622,7 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G5: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
- │         └── cost: 582519.19
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
  ├── G6: (filters G8)
  ├── G7: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
  │    └── []
@@ -13633,7 +13634,7 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  └── G11: (const '$."a"."b"')
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a')
 ----
 project
  ├── columns: k:1!null
@@ -13647,11 +13648,12 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans: [???, Arr/)
+           ├── inverted constraint: /9/1
+           │    └── spans: [???, Arr/)
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*]')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a[*]')
 ----
 project
  ├── columns: k:1!null
@@ -13665,11 +13667,12 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans: [???, Arr/)
+           ├── inverted constraint: /9/1
+           │    └── spans: [???, Arr/)
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*].b')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a[*].b')
 ----
 project
  ├── columns: k:1!null
@@ -13685,13 +13688,14 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── [???, "a"/Arr/Arr/)
-                     └── [???, "a"/Arr/)
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── [???, "a"/Arr/Arr/)
+           │         └── [???, "a"/Arr/)
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*].b.c')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a[*].b.c')
 ----
 project
  ├── columns: k:1!null
@@ -13709,15 +13713,16 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── [???, "a"/Arr/"b"/Arr/Arr/)
-                     ├── [???, "a"/Arr/"b"/Arr/)
-                     ├── [???, "a"/"b"/Arr/Arr/)
-                     └── [???, "a"/"b"/Arr/)
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
+           │         ├── [???, "a"/Arr/"b"/Arr/)
+           │         ├── [???, "a"/"b"/Arr/Arr/)
+           │         └── [???, "a"/"b"/Arr/)
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*][*].b[*].c[*][*]')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a[*][*].b[*].c[*][*]')
 ----
 project
  ├── columns: k:1!null
@@ -13735,15 +13740,16 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── [???, "a"/Arr/"b"/Arr/Arr/)
-                     ├── [???, "a"/Arr/"b"/Arr/)
-                     ├── [???, "a"/"b"/Arr/Arr/)
-                     └── [???, "a"/"b"/Arr/)
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
+           │         ├── [???, "a"/Arr/"b"/Arr/)
+           │         ├── [???, "a"/"b"/Arr/Arr/)
+           │         └── [???, "a"/"b"/Arr/)
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == "y")')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a ? (@.x == "y")')
 ----
 project
  ├── columns: k:1!null
@@ -13761,15 +13767,16 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── ["a"/Arr/"x"/"y", "a"/Arr/"x"/"y"]
-                     ├── ["a"/Arr/"x"/Arr/"y", "a"/Arr/"x"/Arr/"y"]
-                     ├── ["a"/"x"/"y", "a"/"x"/"y"]
-                     └── ["a"/"x"/Arr/"y", "a"/"x"/Arr/"y"]
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── ["a"/Arr/"x"/"y", "a"/Arr/"x"/"y"]
+           │         ├── ["a"/Arr/"x"/Arr/"y", "a"/Arr/"x"/Arr/"y"]
+           │         ├── ["a"/"x"/"y", "a"/"x"/"y"]
+           │         └── ["a"/"x"/Arr/"y", "a"/"x"/Arr/"y"]
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == 123)')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a ? (@.x == 123)')
 ----
 project
  ├── columns: k:1!null
@@ -13787,15 +13794,16 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── ["a"/Arr/"x"/123, "a"/Arr/"x"/123]
-                     ├── ["a"/Arr/"x"/Arr/123, "a"/Arr/"x"/Arr/123]
-                     ├── ["a"/"x"/123, "a"/"x"/123]
-                     └── ["a"/"x"/Arr/123, "a"/"x"/Arr/123]
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── ["a"/Arr/"x"/123, "a"/Arr/"x"/123]
+           │         ├── ["a"/Arr/"x"/Arr/123, "a"/Arr/"x"/Arr/123]
+           │         ├── ["a"/"x"/123, "a"/"x"/123]
+           │         └── ["a"/"x"/Arr/123, "a"/"x"/Arr/123]
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == true)')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a ? (@.x == true)')
 ----
 project
  ├── columns: k:1!null
@@ -13813,15 +13821,16 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── ["a"/Arr/"x"/True, "a"/Arr/"x"/True]
-                     ├── ["a"/Arr/"x"/Arr/True, "a"/Arr/"x"/Arr/True]
-                     ├── ["a"/"x"/True, "a"/"x"/True]
-                     └── ["a"/"x"/Arr/True, "a"/"x"/Arr/True]
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── ["a"/Arr/"x"/True, "a"/Arr/"x"/True]
+           │         ├── ["a"/Arr/"x"/Arr/True, "a"/Arr/"x"/Arr/True]
+           │         ├── ["a"/"x"/True, "a"/"x"/True]
+           │         └── ["a"/"x"/Arr/True, "a"/"x"/Arr/True]
+           └── flags: force-index=j_inv_idx
 
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == false)')
+SELECT k FROM b@j_inv_idx WHERE jsonb_path_exists(j, '$.a ? (@.x == false)')
 ----
 project
  ├── columns: k:1!null
@@ -13839,9 +13848,10 @@ project
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
-           └── inverted constraint: /9/1
-                └── spans
-                     ├── ["a"/Arr/"x"/False, "a"/Arr/"x"/False]
-                     ├── ["a"/Arr/"x"/Arr/False, "a"/Arr/"x"/Arr/False]
-                     ├── ["a"/"x"/False, "a"/"x"/False]
-                     └── ["a"/"x"/Arr/False, "a"/"x"/Arr/False]
+           ├── inverted constraint: /9/1
+           │    └── spans
+           │         ├── ["a"/Arr/"x"/False, "a"/Arr/"x"/False]
+           │         ├── ["a"/Arr/"x"/Arr/False, "a"/Arr/"x"/Arr/False]
+           │         ├── ["a"/"x"/False, "a"/"x"/False]
+           │         └── ["a"/"x"/Arr/False, "a"/"x"/Arr/False]
+           └── flags: force-index=j_inv_idx

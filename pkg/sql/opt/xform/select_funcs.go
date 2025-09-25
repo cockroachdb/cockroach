@@ -911,7 +911,15 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 
 		// Check whether the filter can constrain the index.
 		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
+			c.e.ctx,
+			c.e.evalCtx,
+			c.e.f,
+			filters,
+			optionalFilters,
+			scanPrivate.Table,
+			index,
+			scanPrivate.Flags.ForceInvertedIndex || scanPrivate.Flags.ForceIndex,
+			tabMeta.ComputedCols,
 			c.checkCancellation,
 		)
 		if !ok {
@@ -1713,6 +1721,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			nil, /* optionalFilters */
 			scanPrivate.Table,
 			index,
+			scanPrivate.Flags.ForceInvertedIndex || scanPrivate.Flags.ForceIndex,
 			nil, /* computedColumns */
 			c.checkCancellation,
 		)
