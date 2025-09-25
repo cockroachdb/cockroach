@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -541,6 +542,10 @@ func (r *TxnRegistry) findTxnRequestLocked(requestID RequestID) bool {
 // pollTxnRequests reads the pending rows from system.transaction_diagnostics_requests and
 // updates r.mu.requests accordingly.
 func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
+	if !r.st.Version.IsActive(ctx, clusterversion.V25_4) {
+		return nil
+	}
+
 	var rows []tree.Datums
 
 	// Loop until we run the query without straddling an epoch increment.
