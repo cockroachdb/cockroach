@@ -20,7 +20,7 @@ func registerSimple(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "simple/herko-simple",
 		Owner:            registry.OwnerTestEng,
-		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNodeCount(1), spec.WorkloadNodeCPU(4)),
+		Cluster:          r.MakeClusterSpec(2, spec.CPU(4), spec.WorkloadNodeCount(1), spec.WorkloadNodeCPU(4)),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.DefaultLeases,
