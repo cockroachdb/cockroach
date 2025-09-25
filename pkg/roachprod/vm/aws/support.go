@@ -162,9 +162,16 @@ func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
 	if p.Profile != "" {
 		args = append(args[:len(args):len(args)], "--profile", p.Profile)
 	}
+
+	credentialsEnv, err := p.getEnvironmentAWSCredentials()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get AWS credentials")
+	}
+
 	var stderrBuf bytes.Buffer
 	cmd := exec.Command("aws", args...)
 	cmd.Stderr = &stderrBuf
+	cmd.Env = append(os.Environ(), credentialsEnv...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
