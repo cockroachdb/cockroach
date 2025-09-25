@@ -560,13 +560,19 @@ func TestWithOnSSTable(t *testing.T) {
 		// handle duplicated events.
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			Settings:          settings,
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
+			Settings: settings,
 		})
 		defer srv.Stopper().Stop(ctx)
 		tsrv := srv.ApplicationLayer()
 
-		_, _, err := srv.SplitRange(roachpb.Key("a"))
+		scratchKey := append(tsrv.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+		_, _, err := srv.SplitRange(scratchKey)
+		require.NoError(t, err)
+		scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+		mkKey := func(k string) roachpb.Key {
+			return encoding.EncodeStringAscending(scratchKey, k)
+		}
+		_, _, err = srv.SplitRange(mkKey("a"))
 		require.NoError(t, err)
 
 		for _, l := range []serverutils.ApplicationLayerInterface{tsrv, srv.SystemLayer()} {
@@ -583,7 +589,7 @@ func TestWithOnSSTable(t *testing.T) {
 		var once sync.Once
 		checkpointC := make(chan struct{})
 		sstC := make(chan kvcoord.RangeFeedMessage)
-		spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
+		spans := []roachpb.Span{{Key: mkKey("c"), EndKey: mkKey("e")}}
 		r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
 			func(ctx context.Context, value *kvpb.RangeFeedValue) {},
 			rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
@@ -620,10 +626,10 @@ func TestWithOnSSTable(t *testing.T) {
 		now.Logical = 0
 		ts := int(now.WallTime)
 		sstKVs := kvs{
-			pointKV("a", ts, "1"),
-			pointKV("b", ts, "2"),
-			pointKV("c", ts, "3"),
-			rangeKV("d", "e", ts, ""),
+			pointKV(string(mkKey("a")), ts, "1"),
+			pointKV(string(mkKey("b")), ts, "2"),
+			pointKV(string(mkKey("c")), ts, "3"),
+			rangeKV(string(mkKey("d")), string(mkKey("e")), ts, ""),
 		}
 		sst, sstStart, sstEnd := storageutils.MakeSST(t, tsrv.ClusterSettings(), sstKVs)
 		_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
