@@ -555,6 +555,8 @@ func ShouldEnableDRPC(
 	case base.TestDRPCEnabledRandomly:
 		rng, _ := randutil.NewTestRand()
 		enableDRPC = rng.Intn(2) == 0
+	case base.TestDRPCUnset:
+		return base.TestDRPCUnset
 	}
 
 	if enableDRPC {
