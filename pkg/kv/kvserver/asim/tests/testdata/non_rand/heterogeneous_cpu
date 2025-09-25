@@ -37,11 +37,11 @@ failed assertion sample 1
 	max/mean=1.20 tick=4
 	max/mean=1.20 tick=5
 ==========================
-cpu#1: last:  [s1=6400839999, s2=6398904166, s3=7199131191] (stddev=376775185.87, mean=6666291785.33, sum=19998875356)
-cpu#1: thrash_pct: [s1=34%, s2=30%, s3=37%]  (sum=102%)
-cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.17, mean=0.68, sum=2)
-cpu_util#1: thrash_pct: [s1=8%, s2=7%, s3=4%]  (sum=20%)
-artifacts[mma-only]: 9d1c00f7d08f8c6d
+cpu#1: last:  [s1=6399850833, s2=6395993333, s3=7203112093] (stddev=379573477.72, mean=6666318753.00, sum=19998956259)
+cpu#1: thrash_pct: [s1=32%, s2=37%, s3=40%]  (sum=110%)
+cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.16, mean=0.68, sum=2)
+cpu_util#1: thrash_pct: [s1=8%, s2=9%, s3=5%]  (sum=21%)
+artifacts[mma-only]: 10d7af8d9edcf883
 failed assertion sample 1
   balance stat=cpu_util threshold=(≤1.10) ticks=6
 	max/mean=1.17 tick=0
@@ -51,11 +51,11 @@ failed assertion sample 1
 	max/mean=1.17 tick=4
 	max/mean=1.17 tick=5
 ==========================
-cpu#1: last:  [s1=6397924999, s2=6398685833, s3=7202298517] (stddev=379006109.77, mean=6666303116.33, sum=19998909349)
-cpu#1: thrash_pct: [s1=33%, s2=37%, s3=40%]  (sum=110%)
+cpu#1: last:  [s1=6399850833, s2=6395993333, s3=7203112093] (stddev=379573477.72, mean=6666318753.00, sum=19998956259)
+cpu#1: thrash_pct: [s1=32%, s2=37%, s3=40%]  (sum=110%)
 cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.16, mean=0.68, sum=2)
 cpu_util#1: thrash_pct: [s1=8%, s2=9%, s3=5%]  (sum=21%)
-artifacts[mma-count]: e783594cc55d9a0
+artifacts[mma-count]: 10d7af8d9edcf883
 failed assertion sample 1
   balance stat=cpu_util threshold=(≤1.10) ticks=6
 	max/mean=1.17 tick=0

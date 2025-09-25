@@ -30,5 +30,5 @@ eval duration=20m cfgs=(sma-count,mma-only)
 ----
 artifacts[sma-count]: 8e9d6ada04cb9561
 ==========================
-artifacts[mma-only]: 239144d63ffded95
+artifacts[mma-only]: 8d6fbe46b5c14575
 ==========================
