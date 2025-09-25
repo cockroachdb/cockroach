@@ -127,7 +127,11 @@ func upgradeDescriptors(
 				}
 				b := txn.KV().NewBatch()
 				for _, mut := range muts {
-					if !mut.GetPostDeserializationChanges().HasChanges() {
+					// Both newly created and altered descriptors never write the modification time
+					// to storage. This post-deserialization change is always expected now.
+					changes := mut.GetPostDeserializationChanges()
+					hasChanges := changes.Len() > 1 || !changes.Contains(catalog.SetModTimeToMVCCTimestamp)
+					if !hasChanges {
 						// In the upgrade to 25.4, we do a one-time rewrite of all
 						// descriptors in order to upgrade them to use the new type
 						// serialization format.
@@ -137,6 +141,7 @@ func upgradeDescriptors(
 						}
 					}
 					key := catalogkeys.MakeDescMetadataKey(d.Codec, mut.GetID())
+					mut.MaybeIncrementVersion()
 					b.CPut(key, mut.DescriptorProto(), mut.GetRawBytesInStorage())
 				}
 				return txn.KV().Run(ctx, b)
