@@ -5,7 +5,9 @@
 
 package server
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 type serveModeHandler struct {
 	mode serveMode
@@ -35,6 +37,24 @@ const (
 	// shutting down. The difference is that readiness checks will fail.
 	modeDraining
 )
+
+var rpcsAllowedWhileBootstrapping = map[string]struct{}{
+	"/cockroach.rpc.Heartbeat/Ping":             {},
+	"/cockroach.gossip.Gossip/Gossip":           {},
+	"/cockroach.server.serverpb.Init/Bootstrap": {},
+	"/cockroach.server.serverpb.Admin/Health":   {},
+}
+
+// intercept implements filtering rules for each server state.
+func (s *serveModeHandler) intercept(fullName string) error {
+	if s.operational() {
+		return nil
+	}
+	if _, allowed := rpcsAllowedWhileBootstrapping[fullName]; !allowed {
+		return NewWaitingForInitError(fullName)
+	}
+	return nil
+}
 
 func (s *serveMode) set(mode serveMode) {
 	atomic.StoreInt32((*int32)(s), int32(mode))
