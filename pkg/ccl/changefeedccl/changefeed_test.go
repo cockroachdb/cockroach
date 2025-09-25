@@ -2810,7 +2810,8 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t,
-		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH resolved='50ms', no_initial_scan, cursor=$1`, tsStr,
+		`CREATE CHANGEFEED FOR foo INTO 'null://'
+WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$1`, tsStr,
 	).Scan(&jobID)
 
 	// Helper to read job progress
@@ -2952,7 +2953,8 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Setup changefeed job details, avoid relying on initial scan functionality
-		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', min_checkpoint_frequency='100ms', no_initial_scan`)
+		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
@@ -9149,7 +9151,8 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 		// Some test feeds (kafka) are not buffered, so we have to consume messages.
 		var shouldDrain int32 = 1
 		g := ctxgroup.WithContext(context.Background())
@@ -12009,7 +12012,8 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		require.Equal(t, int64(0), managePTSCount)
 		require.Equal(t, int64(0), managePTSErrorCount)
 
-		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		createStmt := `CREATE CHANGEFEED FOR foo
+WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
@@ -12122,7 +12126,8 @@ func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 			return errors.New("test error")
 		}
 
-		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		createStmt := `CREATE CHANGEFEED FOR foo
+WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 

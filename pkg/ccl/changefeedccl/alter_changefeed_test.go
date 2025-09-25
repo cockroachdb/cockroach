@@ -1542,7 +1542,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '100ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved = '100ms', min_checkpoint_frequency='1ns'`)
 
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
