@@ -494,7 +494,6 @@ func TestDataDriven(t *testing.T) {
 					metricsMap[s] = struct{}{}
 				}
 
-				seedGen := rand.New(rand.NewSource(seed))
 				require.NotZero(t, rangeGen)
 
 				knownConfigurations := map[string]func(eg *gen.StaticEvents){
@@ -555,6 +554,7 @@ func TestDataDriven(t *testing.T) {
 						// parameter to the `eval` command.
 						testName := name + "_" + mv
 
+						seedGen := rand.New(rand.NewSource(seed))
 						for sample := 0; sample < samples; sample++ {
 							recIdx := map[int64]int{}
 							settingsGen.Settings.OnRecording = func(storeID int64, rec tracingpb.Recording) {

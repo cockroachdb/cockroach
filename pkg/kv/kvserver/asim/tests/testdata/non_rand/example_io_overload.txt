@@ -38,7 +38,7 @@ leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 replicas#1: first: [s1=500, s2=456, s3=262, s4=165, s5=117] (stddev=153.29, mean=300.00, sum=1500)
 replicas#1: last:  [s1=500, s2=456, s3=262, s4=165, s5=117] (stddev=153.29, mean=300.00, sum=1500)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
-artifacts[mma-only]: 752089ccd9817df9
+artifacts[mma-only]: 88981cebae8fb4b9
 failed assertion sample 1
   stat=replicas value=(=0.00) ticks=5
 	store=5 stat=117.00
