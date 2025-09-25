@@ -1765,7 +1765,7 @@ func (r *testRunner) inspectArtifacts(
 		}
 
 		t.L().Printf("Attempting to gather ip node mapping")
-		ipNodeMapOut, err := gatherNodeIpMapping(t, c, testLogger)
+		ipNodeMapOut, err := gatherNodeIpMapping(t, c)
 		if err != nil {
 			if joinErr := errors.Join(inspectArtifactsErr, err); joinErr != nil {
 				return joinErr
@@ -1777,66 +1777,28 @@ func (r *testRunner) inspectArtifacts(
 	return inspectArtifactsErr
 }
 
-// gatherNodeIpMapping attempts to gather cluster node to ip map from
-// _runner-logs/cluster-create
-func gatherNodeIpMapping(t *testImpl, c *clusterImpl, testLogger *logger.Logger) (string, error) {
-
-	// Find the correct cluster creation log
-	filePattern := fmt.Sprintf("%s*.log", c.Name())
-	var artifactsDir string
-	if roachtestflags.LiteralArtifactsDir == "" {
-		artifactsDir = roachtestflags.ArtifactsDir
-	} else {
-		artifactsDir = roachtestflags.LiteralArtifactsDir
-	}
-	logPath := filepath.Join(artifactsDir, runnerLogsDir, clusterCreateDir, filePattern)
-	targetFiles, err := filepath.Glob(logPath)
+// gatherNodeIpMapping attempts to gather cluster node ip information for debug
+func gatherNodeIpMapping(t *testImpl, c *clusterImpl) (string, error) {
+	var table [][]string
+	table = append(table, []string{"Node", "Private IP", "Public IP"})
+	cachedCluster, err := getCachedCluster(c.name)
 	if err != nil {
 		return "", err
-	} else if len(targetFiles) == 0 {
-		return "", errors.Newf("No matching log files found for log pattern: %s and file pattern: %s",
-			logPath, filePattern)
 	}
-	sort.Strings(targetFiles)
-	targetFile := ""
-	/*
-		Cluster name remains consistent through retries, but cluster creation
-		retries will create log names that have their retry attempt appended.
-		To get the correct log, if there are no retries, just take the only match.
-		Otherwise, sort the file names, and the most recent retry attempt will be
-		the 2nd to last.
-		Note: This only works if retry attempts are <10 because lexicographic
-		numeric sort order
-		[
-		   cluster-1758568926-01-n1cpu4-retry1.log,
-		   cluster-1758568926-01-n1cpu4-retry2.log,
-		   cluster-1758568926-01-n1cpu4.log
-		]
-	*/
-	if len(targetFiles) == 1 {
-		targetFile = targetFiles[0]
-	} else {
-		targetFile = targetFiles[len(targetFiles)-2]
+	for _, vmInstance := range cachedCluster.VMs {
+		table = append(table, []string{vmInstance.Name, vmInstance.PrivateIP, vmInstance.PublicIP})
 	}
-
-	// regex looks for lines that contain Name, DNS header and
-	// lines that contain 2 nonspace tokens followed by 2 IP addresses
-	logPattern := `^(Name[[:space:]]+DNS|[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3}[[:space:]]+([0-9]{1,3}\.){3}[0-9]{1,3})`
-	args := append([]string{"-E", "-m", "10", "-a", logPattern}, targetFile)
-	command := "grep"
-	t.L().Printf("Gathering ip node mapping logs with command: %q %s", command, strings.Join(args, " "))
-	cmd := exec.Command(command, args...)
-	out, err := cmd.CombinedOutput()
+	nodeIpTable, err := roachtestutil.ToMarkdownTable(table)
 	if err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) && ee.ExitCode() == 1 {
-			testLogger.Printf("ip node mapping logs not found")
-			// Not finding files isn't necessarily an error so don't return an error
-			return "", nil
-		}
 		return "", err
 	}
-	return string(out), nil
+	testClusterLogger, err := c.l.ChildLogger("node-ips", logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		t.L().Printf("unable to create logger %s: %s", "node-ips", err)
+		return "", err
+	}
+	testClusterLogger.Printf("\n%s", nodeIpTable)
+	return nodeIpTable, nil
 }
 
 // gatherFatalNodeLogs attempts to gather fatal level node logs to help with

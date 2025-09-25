@@ -75,7 +75,7 @@ var crasherRE = regexp.MustCompile(`(?s)( *rsg_test.go:\d{3}: Crash detected:.*?
 var reproRE = regexp.MustCompile(`(?s)( *rsg_test.go:\d{3}: To reproduce, use schema:)`)
 
 var roachtestNodeFatalRE = regexp.MustCompile(`(?ms)\A(.*?\n)((?:^F\d{6}\b[^\n]*(?:\n|$))+)`)
-var roachtestNodeToIpRE = regexp.MustCompile(`(?ms)^Name[[:space:]]+DNS.*\n(?:^\S+[[:space:]]+\S+[[:space:]]+(?:[0-9]{1,3}\.){3}[0-9]{1,3}[[:space:]]+(?:[0-9]{1,3}\.){3}[0-9]{1,3}.*\n?)+`)
+var roachtestNodeToIpRE = regexp.MustCompile(`(?m)^[[:space:]]*\|(?:[^|\n]*\|)+[[:space:]]*\n^[[:space:]]*\|(?:[[:space:]]*:?-{3,}:?[[:space:]]*\|)+[[:space:]]*\n(?:^[[:space:]]*\|(?:[^|\n]*\|)+[[:space:]]*(?:\n|$))+`)
 
 // FatalOrPanic constructs a FatalOrPanic. If no fatal or panic occurred in the
 // test, ok=false is returned.
