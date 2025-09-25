@@ -66,8 +66,14 @@ func Init() error {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	providerInstance := &Provider{}
-	providerInstance.Config.awsConfig = *DefaultConfig
+	providerInstance, err := NewProvider()
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{},
+			fmt.Sprintf("unable to init aws provider: %s", err),
+		)
+		return errors.Wrap(err, "unable to init aws provider")
+	}
 
 	haveRequiredVersion := func() bool {
 		// `aws --version` takes around 400ms on my machine.
@@ -125,6 +131,21 @@ func Init() error {
 	}
 	vm.Providers[ProviderName] = providerInstance
 	return nil
+}
+
+func NewProvider(options ...Option) (*Provider, error) {
+	p := &Provider{
+		Config: awsConfigValue{
+			awsConfig: *DefaultConfig,
+		},
+	}
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+
+	return p, nil
 }
 
 // ebsDisk represent EBS disk device.

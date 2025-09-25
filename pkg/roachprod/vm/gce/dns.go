@@ -95,19 +95,19 @@ type dnsProvider struct {
 	resolvers []*net.Resolver
 }
 
-func NewDNSProvider() *dnsProvider {
+func NewDNSProvider(opts DNSProviderOpts) *dnsProvider {
 	return NewDNSProviderWithExec(func(cmd *exec.Cmd) ([]byte, error) {
 		return cmd.CombinedOutput()
-	})
+	}, opts)
 }
 
-func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
+func NewDNSProviderWithExec(execFn ExecFn, opts DNSProviderOpts) *dnsProvider {
 	return &dnsProvider{
-		dnsProject:    defaultDNSProject,
-		publicZone:    dnsDefaultZone,
-		publicDomain:  dnsDefaultDomain,
-		managedZone:   dnsDefaultManagedZone,
-		managedDomain: dnsDefaultManagedDomain,
+		dnsProject:    opts.DNSProject,
+		publicZone:    opts.PublicZone,
+		publicDomain:  opts.PublicDomain,
+		managedZone:   opts.ManagedZone,
+		managedDomain: opts.ManagedDomain,
 		recordsCache: struct {
 			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
@@ -118,6 +118,24 @@ func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
 		}{locks: make(map[string]*syncutil.Mutex)},
 		execFn:    execFn,
 		resolvers: googleDNSResolvers(),
+	}
+}
+
+type DNSProviderOpts struct {
+	DNSProject    string
+	PublicZone    string
+	PublicDomain  string
+	ManagedZone   string
+	ManagedDomain string
+}
+
+func NewDNSProviderDefaultOptions() DNSProviderOpts {
+	return DNSProviderOpts{
+		DNSProject:    defaultDNSProject,
+		PublicZone:    dnsDefaultZone,
+		PublicDomain:  dnsDefaultDomain,
+		ManagedZone:   dnsDefaultManagedZone,
+		ManagedDomain: dnsDefaultManagedDomain,
 	}
 }
 
