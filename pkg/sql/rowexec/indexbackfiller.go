@@ -342,6 +342,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 		var vectorInputEntry rowenc.IndexEntry
 		for indexBatch := range indexEntryCh {
+			addedToVectorIndex := false
 			for _, indexEntry := range indexBatch.indexEntries {
 				// Pace the admission control before processing each index entry.
 				if err := pacer.Pace(ctx); err != nil {
@@ -359,6 +360,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 					if err != nil {
 						return ib.wrapDupError(ctx, err)
 					} else if isVectorIndex {
+						addedToVectorIndex = true
 						continue
 					}
 				}
@@ -374,6 +376,12 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			mu.Lock()
 			mu.addedSpans = append(mu.addedSpans, indexBatch.completedSpan)
 			mu.Unlock()
+			// Vector indexes don't add to the bulk adder and take a long time to add
+			// entries, so flush progress manually after every indexBatch is processed
+			// that contained vector index entries.
+			if addedToVectorIndex {
+				flushAddedSpans(kvpb.BulkOpSummary{})
+			}
 
 			// After the index KVs have been copied to the underlying BulkAdder, we can
 			// free the memory which was accounted when building the index entries of the
