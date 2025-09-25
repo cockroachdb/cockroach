@@ -1363,8 +1363,6 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 	e := eventpb.StoreStats{
 		CacheSize:                  m.BlockCache.Size,
 		CacheCount:                 m.BlockCache.Count,
-		CacheHits:                  m.BlockCache.Hits,
-		CacheMisses:                m.BlockCache.Misses,
 		CompactionCountDefault:     m.Compact.DefaultCount,
 		CompactionCountDeleteOnly:  m.Compact.DeleteOnlyCount,
 		CompactionCountElisionOnly: m.Compact.ElisionOnlyCount,
@@ -1395,6 +1393,7 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		TableZombieSize:            m.Table.ZombieSize,
 		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
 	}
+	e.CacheHits, e.CacheMisses = m.BlockCache.HitsAndMisses.Aggregate()
 	for i, l := range m.Levels {
 		if l.TablesCount == 0 {
 			continue

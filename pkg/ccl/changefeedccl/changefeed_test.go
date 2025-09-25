@@ -245,7 +245,7 @@ func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 
 		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`)
 		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo,foo2`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
+		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES d.bar.fizz, foo.foo2, foo`)
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.*`,
 			`at or near "*": syntax error`)
 		// TODO(#147421): Assert payload once the filter works
@@ -258,26 +258,85 @@ func TestDatabaseLevelChangefeedWithExcludeFilter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		expectSuccess := func(stmt string) {
-			successfulFeed := feed(t, f, stmt)
-			defer closeFeed(t, successfulFeed)
-			_, err := successfulFeed.Next()
-			require.NoError(t, err)
-		}
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `UPSERT INTO foo2 VALUES (0, 'updated')`)
+		for i := range 4 {
+			name := fmt.Sprintf("foo%d", i+1)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s (a INT PRIMARY KEY, b STRING)`, name))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO %s VALUES (0, 'initial')`, name))
+			sqlDB.Exec(t, fmt.Sprintf(`UPSERT INTO %s VALUES (0, 'updated')`, name))
+		}
 
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo,foo2`)
-		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo.bar.fizz, foo.foo2, foo`)
+		sqlDB.Exec(t, `CREATE SCHEMA private`)
+		sqlDB.Exec(t, `CREATE TABLE private.foo1 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO private.foo1 VALUES (0, 'initial')`)
+		// Test that if there are multiple tables with the same name the correct
+		// one will still be found using the default schema of public.
+		feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo1`)
+		defer closeFeed(t, feed1)
+		assertPayloads(t, feed1, []string{
+			`foo1: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			`foo2: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo3: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo4: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		feed2 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo2`)
+		defer closeFeed(t, feed2)
+		assertPayloads(t, feed2, []string{
+			`foo1: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			`foo1: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo3: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo4: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		// Test that we can exclude multiple tables.
+		feed3 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo2,foo3`)
+		defer closeFeed(t, feed3)
+		assertPayloads(t, feed3, []string{
+			`foo1: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			`foo1: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo4: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		// Test that we can handle fully qualfied, partially qualified, and unqualified table names.
+		feed4 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES d.public.foo2, public.foo3, foo4`)
+		defer closeFeed(t, feed4)
+		assertPayloads(t, feed4, []string{
+			`foo1: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			`foo1: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		// Test that we can handle tables that don't exist.
+		feed5 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES bob`)
+		defer closeFeed(t, feed5)
+		assertPayloads(t, feed5, []string{
+			`foo1: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			`foo1: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo2: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo3: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo4: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+		// Test that fully qualified table names outside of the target database will
+		// cause an error.
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES fizz.buzz.foo`,
+			`table "fizz.buzz.foo" must be in target database "d"`)
+
+		// Table patterns are not supported.
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo.*`,
 			`at or near "*": syntax error`)
-		// TODO(#147421): Assert payload once the filter works
+
+		// Test that name resolution is not dependent on search_path() or current DB
+		sqlDB.Exec(t, `CREATE DATABASE notd`)
+		sqlDB.Exec(t, `USE notd`)
+		sqlDB.Exec(t, `SET search_path TO notpublic`)
+		feed6 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo1, private.foo1`)
+		defer closeFeed(t, feed6)
+		assertPayloads(t, feed6, []string{
+			`foo2: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo3: [0]->{"after": {"a": 0, "b": "updated"}}`,
+			`foo4: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }

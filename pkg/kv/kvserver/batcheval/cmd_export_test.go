@@ -53,11 +53,11 @@ func TestExportCmd(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109429),
-		ExternalIODir:     dir,
+		ExternalIODir: dir,
 	})
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
+	ss := srv.SystemLayer()
 
 	export := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
@@ -184,28 +184,22 @@ func TestExportCmd(t *testing.T) {
 		t, sqlDB.DB, "mvcclatest", "public", "export",
 	))
 
-	const (
-		targetSizeSetting = "kv.bulk_sst.target_size"
-		maxOverageSetting = "kv.bulk_sst.max_allowed_overage"
-	)
 	var (
-		setSetting = func(t *testing.T, variable, val string) {
-			sqlDB.Exec(t, "SET CLUSTER SETTING "+variable+" = "+val)
-		}
-		resetSetting = func(t *testing.T, variable string) {
-			setSetting(t, variable, "DEFAULT")
-		}
-		setExportTargetSize = func(t *testing.T, val string) {
-			setSetting(t, targetSizeSetting, val)
+		setExportTargetSize = func(t *testing.T, val int64) {
+			batcheval.ExportRequestTargetFileSize.Override(ctx, &ss.ClusterSettings().SV, val)
 		}
 		resetExportTargetSize = func(t *testing.T) {
-			resetSetting(t, targetSizeSetting)
+			batcheval.ExportRequestTargetFileSize.Override(
+				ctx, &ss.ClusterSettings().SV, batcheval.ExportRequestTargetFileSize.Default(),
+			)
 		}
-		setMaxOverage = func(t *testing.T, val string) {
-			setSetting(t, maxOverageSetting, val)
+		setMaxOverage = func(t *testing.T, val int64) {
+			batcheval.ExportRequestMaxAllowedFileSizeOverage.Override(ctx, &ss.ClusterSettings().SV, val)
 		}
 		resetMaxOverage = func(t *testing.T) {
-			resetSetting(t, maxOverageSetting)
+			batcheval.ExportRequestMaxAllowedFileSizeOverage.Override(
+				ctx, &ss.ClusterSettings().SV, batcheval.ExportRequestMaxAllowedFileSizeOverage.Default(),
+			)
 		}
 	)
 
@@ -220,7 +214,7 @@ func TestExportCmd(t *testing.T) {
 		res1 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
 		expect(t, res1, 1, 2, 1, 4)
 		defer resetExportTargetSize(t)
-		setExportTargetSize(t, "'1b'")
+		setExportTargetSize(t, 1)
 		res1 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
 		expect(t, res1, 2, 2, 3, 4)
 	})
@@ -264,7 +258,7 @@ func TestExportCmd(t *testing.T) {
 
 		// Re-run the test with a 1b target size which will lead to more files.
 		defer resetExportTargetSize(t)
-		setExportTargetSize(t, "'1b'")
+		setExportTargetSize(t, 1)
 		res5 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
 		expect(t, res5, 2, 2, 4, 7)
 	})
@@ -287,15 +281,17 @@ INTO
 
 		// Re-run the test with a 1b target size which will lead to 100 files.
 		defer resetExportTargetSize(t)
-		setExportTargetSize(t, "'1b'")
+		setExportTargetSize(t, 1)
 		res6 = exportAndSlurp(t, res5.end, noTargetBytes)
 		expect(t, res6, 100, 100, 100, 100)
 
 		// Set the MaxOverage to 1b and ensure that we get errors due to
 		// the max overage being exceeded.
 		defer resetMaxOverage(t)
-		setMaxOverage(t, "'1b'")
-		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
+		setMaxOverage(t, 1)
+		// NB: Depending on which version of the test we're running (system tenant
+		// vs. secondary), we'll get a different size for the export request.
+		const expectedError = `export size \((11|13) bytes\) exceeds max size \(2 bytes\)`
 		_, pErr := export(t, res5.end, kvpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 		hints := errors.GetAllHints(pErr.GoError())
@@ -307,7 +303,7 @@ INTO
 
 		// Disable the TargetSize and ensure that we don't get any errors
 		// to the max overage being exceeded.
-		setExportTargetSize(t, "'0b'")
+		setExportTargetSize(t, 0)
 		res6 = exportAndSlurp(t, res5.end, noTargetBytes)
 		expect(t, res6, 2, 100, 2, 100)
 	})
@@ -316,6 +312,11 @@ INTO
 	t.Run("ts7", func(t *testing.T) {
 		var maxResponseSSTBytes int64
 		kvByteSize := int64(11)
+		if !ts.Codec().IsSystem() {
+			// The kv byte size is different between the system tenant and secondary
+			// tenants because of the extra tenant prefix.
+			kvByteSize = 13
+		}
 		// Because of the above split, there are going to be two ExportRequests by
 		// the DistSender. One for the first KV and the next one for the remaining
 		// KVs.
@@ -337,6 +338,12 @@ INTO
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 
+		var optTenantPrefix string
+		endKey := "/Max"
+		if !srv.Codec().IsSystem() {
+			optTenantPrefix = srv.Codec().TenantPrefix().String()
+			endKey = srv.Codec().TenantPrefix().PrefixEnd().String()
+		}
 		// No TargetSize and TargetBytes is equal to the size of a single KV. The
 		// first ExportRequest will reduce the limit for the second request to zero
 		// and so we should only see a single ExportRequest and an accurate
@@ -346,16 +353,16 @@ INTO
 		expect(t, res7, 1, 1, 1, 1)
 		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    []byte(fmt.Sprintf("%s/Table/%d/1/2", optTenantPrefix, tableID)),
+				EndKey: []byte(endKey),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    []byte(fmt.Sprintf("%s/Table/%d/1/2", optTenantPrefix, tableID)),
+				EndKey: []byte(endKey),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
@@ -364,22 +371,22 @@ INTO
 
 		// TargetSize to one KV and TargetBytes to two KVs. We should see one KV in
 		// each ExportRequest SST.
-		setExportTargetSize(t, "'11b'")
+		setExportTargetSize(t, 11)
 		maxResponseSSTBytes = 2 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 2, 2, 2, 2)
 		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    []byte(fmt.Sprintf("%s/Table/%d/1/3/0", optTenantPrefix, tableID)),
+				EndKey: []byte(endKey),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    []byte(fmt.Sprintf("%s/Table/%d/1/3/0", optTenantPrefix, tableID)),
+				EndKey: []byte(endKey),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
@@ -387,22 +394,22 @@ INTO
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 
 		// TargetSize to one KV and TargetBytes to one less than the total KVs.
-		setExportTargetSize(t, "'11b'")
+		setExportTargetSize(t, 11)
 		maxResponseSSTBytes = 99 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 99, 99, 99, 99)
 		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    []byte(fmt.Sprintf("%s/Table/%d/1/100/0", optTenantPrefix, tableID)),
+				EndKey: []byte(endKey),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    []byte(fmt.Sprintf("%s/Table/%d/1/100/0", optTenantPrefix, tableID)),
+				EndKey: []byte(endKey),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
@@ -412,7 +419,7 @@ INTO
 		// Target Size to one KV and TargetBytes to greater than all KVs. Checks if
 		// final NumBytes is accurate.
 		defer resetExportTargetSize(t)
-		setExportTargetSize(t, "'11b'")
+		setExportTargetSize(t, 11)
 		maxResponseSSTBytes = 101 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 100, 100, 100, 100)
