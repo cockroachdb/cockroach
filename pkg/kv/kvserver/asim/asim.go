@@ -29,7 +29,7 @@ import (
 // in that cluster.
 type Simulator struct {
 	log.AmbientContext
-	onRecording func(storeID state.StoreID, rec tracingpb.Recording)
+	onRecording func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording)
 
 	curr time.Time
 	end  time.Time
@@ -100,9 +100,9 @@ func NewSimulator(
 
 	s := &Simulator{
 		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
-		onRecording: func(storeID state.StoreID, rec tracingpb.Recording) {
+		onRecording: func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording) {
 			if fn := settings.OnRecording; fn != nil {
-				fn(int64(storeID), rec)
+				fn(int64(storeID), atDuration, rec)
 			}
 		},
 		curr:        settings.StartTime,
@@ -323,6 +323,25 @@ func (s *Simulator) tickStoreClocks(tick time.Time) {
 	s.state.TickClock(tick)
 }
 
+func (s *Simulator) doAndMaybeTrace(
+	ctx context.Context,
+	storeID state.StoreID,
+	tick time.Time,
+	op string,
+	f func(ctx context.Context),
+) {
+	atDuration := tick.Sub(s.settings.StartTime)
+
+	var finishAndGetRecording func() tracingpb.Recording
+	if s.onRecording != nil {
+		ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, s.Tracer, op)
+	}
+	f(ctx)
+	if finishAndGetRecording != nil {
+		s.onRecording(storeID, atDuration, finishAndGetRecording())
+	}
+}
+
 // tickQueues iterates over the next replicas for each store to
 // consider. It then enqueues each of these and ticks the replicate queue for
 // processing.
@@ -334,10 +353,16 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 
 		// Tick the split queue.
 		s.sqs[storeID].Tick(ctx, tick, state)
+
 		// Tick the replicate queue.
-		s.rqs[storeID].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, storeID, tick, "replicateQueue.PlanOneChange", func(ctx context.Context) {
+			s.rqs[storeID].Tick(ctx, tick, state)
+		})
+
 		// Tick the lease queue.
-		s.lqs[storeID].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, storeID, tick, "leaseQueue.PlanOneChange", func(ctx context.Context) {
+			s.lqs[storeID].Tick(ctx, tick, state)
+		})
 
 		// Tick changes that may have been enqueued with a lower completion
 		// than the current tick, from the queues.
@@ -389,14 +414,9 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, 
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
-		var finishAndGetRecording func() tracingpb.Recording
-		if s.onRecording != nil {
-			ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, s.Tracer, "mma.ComputeChanges")
-		}
-		s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
-		if finishAndGetRecording != nil {
-			s.onRecording(store.StoreID(), finishAndGetRecording())
-		}
+		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "mma.ComputeChanges", func(ctx context.Context) {
+			s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
+		})
 	}
 }
 
