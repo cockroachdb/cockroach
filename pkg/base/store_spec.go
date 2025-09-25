@@ -20,19 +20,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/redact"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/pflag"
 )
 
 // This file implements method receivers for server.Config struct
 // -- 'Stores', which satisfies pflag's value interface
-
-// MinimumStoreSize is the smallest size in bytes that a store can have. This
-// number is based on config's defaultZoneConfig's RangeMaxBytes, which is
-// extremely stable. To avoid adding the dependency on config here, it is just
-// hard coded to 640MiB.
-const MinimumStoreSize = 10 * 64 << 20
 
 // GetAbsoluteFSPath takes a (possibly relative) and returns the absolute path.
 // Returns an error if the path begins with '~' or Abs fails.
@@ -49,39 +42,6 @@ func GetAbsoluteFSPath(fieldName string, p string) (string, error) {
 	return ret, nil
 }
 
-func parseStoreProvisionedRate(
-	field redact.SafeString, value string,
-) (storageconfig.ProvisionedRate, error) {
-	split := strings.Split(value, "=")
-	if len(split) != 2 {
-		return storageconfig.ProvisionedRate{}, errors.Errorf("%s field has invalid value %s", field, value)
-	}
-	subField := split[0]
-	subValue := split[1]
-	if subField != "bandwidth" {
-		return storageconfig.ProvisionedRate{}, errors.Errorf("%s field does not have bandwidth sub-field", field)
-	}
-	if len(subValue) == 0 {
-		return storageconfig.ProvisionedRate{}, errors.Errorf("%s field has no value specified for bandwidth", field)
-	}
-	if len(subValue) <= 2 || subValue[len(subValue)-2:] != "/s" {
-		return storageconfig.ProvisionedRate{},
-			errors.Errorf("%s field does not have bandwidth sub-field %s ending in /s",
-				field, subValue)
-	}
-	bandwidthString := subValue[:len(subValue)-2]
-	bandwidth, err := humanizeutil.ParseBytes(bandwidthString)
-	if err != nil {
-		return storageconfig.ProvisionedRate{},
-			errors.Wrapf(err, "could not parse bandwidth in field %s", field)
-	}
-	if bandwidth == 0 {
-		return storageconfig.ProvisionedRate{},
-			errors.Errorf("%s field is trying to set bandwidth to 0", field)
-	}
-	return storageconfig.ProvisionedRate{ProvisionedBandwidth: bandwidth}, nil
-}
-
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec = storageconfig.Store
@@ -96,19 +56,15 @@ func StoreSpecCmdLineString(ss storageconfig.Store) string {
 	if ss.InMemory {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
-	if ss.Size.Bytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Bytes))
+	if ss.Size.IsBytes() {
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.Bytes()))
+	} else if ss.Size.IsPercent() {
+		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent()))
 	}
-	if ss.Size.Percent > 0 {
-		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
-	}
-	if ss.BallastSize != nil {
-		if ss.BallastSize.Bytes > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Bytes))
-		}
-		if ss.BallastSize.Percent > 0 {
-			fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
-		}
+	if ss.BallastSize.IsBytes() {
+		fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.Bytes()))
+	} else if ss.BallastSize.IsPercent() {
+		fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent()))
 	}
 	if len(ss.Attributes) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
@@ -196,24 +152,16 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			ss.Path = value
 		case "size":
 			var err error
-			constraints := storageconfig.SizeSpecConstraints{
-				MinBytes:   MinimumStoreSize,
-				MinPercent: 1,
-				MaxPercent: 100,
-			}
-			ss.Size, err = storageconfig.ParseSizeSpec(value, constraints)
+			ss.Size, err = storageconfig.ParseSizeSpec(value)
 			if err != nil {
 				return StoreSpec{}, err
 			}
 		case "ballast-size":
-			constraints := storageconfig.SizeSpecConstraints{
-				MaxPercent: 50,
-			}
-			ballastSize, err := storageconfig.ParseSizeSpec(value, constraints)
+			ballastSize, err := storageconfig.ParseSizeSpec(value)
 			if err != nil {
 				return StoreSpec{}, errors.Wrap(err, "ballast")
 			}
-			ss.BallastSize = &ballastSize
+			ss.BallastSize = ballastSize
 		case "attrs":
 			// Check to make sure there are no duplicate attributes.
 			attrMap := make(map[string]struct{})
@@ -270,7 +218,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			}
 			ss.PebbleOptions = buf.String()
 		case "provisioned-rate":
-			rateSpec, err := parseStoreProvisionedRate("provisioned-rate", value)
+			rateSpec, err := storageconfig.ParseProvisionedRate(value)
 			if err != nil {
 				return StoreSpec{}, err
 			}
@@ -280,19 +228,8 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}
 	}
-	if ss.InMemory {
-		// Only in memory stores don't need a path and require a size.
-		if ss.Path != "" {
-			return StoreSpec{}, fmt.Errorf("path specified for in memory store")
-		}
-		if ss.Size.Percent == 0 && ss.Size.Bytes == 0 {
-			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
-		}
-		if ss.BallastSize != nil {
-			return StoreSpec{}, fmt.Errorf("ballast-size specified for in memory store")
-		}
-	} else if ss.Path == "" {
-		return StoreSpec{}, fmt.Errorf("no path specified")
+	if err := ss.Validate(); err != nil {
+		return StoreSpec{}, err
 	}
 	return ss, nil
 }

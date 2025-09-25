@@ -29,11 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
-	"github.com/dustin/go-humanize"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -1478,11 +1476,10 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	// unless a ballast size was specified explicitly by the user.
 	for i := range serverCfg.Stores.Specs {
 		spec := &serverCfg.Stores.Specs[i]
-		if spec.BallastSize == nil {
+		if !spec.BallastSize.IsSet() {
 			// Only override if there was no ballast size specified to start
 			// with.
-			zero := storageconfig.Size{Bytes: 0, Percent: 0}
-			spec.BallastSize = &zero
+			spec.BallastSize = storageconfig.BytesSize(0)
 		}
 	}
 	return nil
@@ -1514,10 +1511,7 @@ func newSizeFlagVal(spec *storageconfig.Size) *sizeFlagVal {
 // String returns a string representation of the Size. It is part of the
 // pflag.Value interface.
 func (sv *sizeFlagVal) String() string {
-	if sv.spec.Percent != 0 {
-		return humanize.Ftoa(sv.spec.Percent) + "%"
-	}
-	return string(humanizeutil.IBytes(sv.spec.Bytes))
+	return sv.spec.String()
 }
 
 // Type returns the underlying type in string form.  It is part of the
@@ -1529,7 +1523,7 @@ func (sv *sizeFlagVal) Type() string {
 // Set adds a new value to the StoreSpecValue. It is part of the pflag.Value
 // interface.
 func (sv *sizeFlagVal) Set(value string) error {
-	spec, err := storageconfig.ParseSizeSpec(value, storageconfig.SizeSpecConstraints{})
+	spec, err := storageconfig.ParseSizeSpec(value)
 	if err != nil {
 		return err
 	}
