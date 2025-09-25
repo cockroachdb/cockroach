@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "replicationutils",
-    srcs = ["utils.go"],
+    srcs = [
+        "stats.go",
+        "utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils",
     visibility = ["//visibility:public"],
     deps = [
@@ -18,6 +21,8 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
@@ -28,18 +33,24 @@ go_library(
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
 go_test(
     name = "replicationutils_test",
-    srcs = ["utils_test.go"],
+    srcs = [
+        "stats_test.go",
+        "utils_test.go",
+    ],
     embed = [":replicationutils"],
     deps = [
         "//pkg/clusterversion",
         "//pkg/kv/kvpb",
+        "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",

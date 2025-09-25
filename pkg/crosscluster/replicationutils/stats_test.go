@@ -1,9 +1,9 @@
-// Copyright 2024 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package replicationutils
 
 import (
 	"testing"
@@ -72,7 +72,7 @@ func TestRangeStats(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := newRangeStatsCollector(3)
+			r := NewAggregateRangeStatsCollector(3)
 			for id, stats := range tc.inputStats {
 				r.Add(id, stats)
 			}
@@ -82,7 +82,7 @@ func TestRangeStats(t *testing.T) {
 			require.Equal(t, tc.fraction, fraction)
 			require.Equal(t, tc.expectedMsg, msg)
 
-			rInitializing := newRangeStatsCollector(4)
+			rInitializing := NewAggregateRangeStatsCollector(4)
 			for id, stats := range tc.inputStats {
 				r.Add(id, stats)
 			}
@@ -90,7 +90,6 @@ func TestRangeStats(t *testing.T) {
 			require.Equal(t, total, streampb.StreamEvent_RangeStats{})
 			require.Equal(t, float32(0), fraction)
 			require.Contains(t, msg, "starting streams")
-
 		})
 	}
 }

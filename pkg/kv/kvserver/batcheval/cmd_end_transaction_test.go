@@ -2203,9 +2203,16 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	err = sl.SetVersion(ctx, batch, nil, &version)
 	require.NoError(t, err)
 
+	in := splitTriggerHelperInput{
+		leftLease:      lease,
+		gcThreshold:    &gcThreshold,
+		gcHint:         &gcHint,
+		replicaVersion: version,
+	}
+
 	// Run the split trigger, which is normally run as a subset of EndTxn request
 	// evaluation.
-	_, _, err = splitTrigger(ctx, rec, batch, enginepb.MVCCStats{}, split, hlc.Timestamp{})
+	_, _, err = splitTrigger(ctx, rec, batch, enginepb.MVCCStats{}, split, in, hlc.Timestamp{})
 	require.NoError(t, err)
 
 	// Verify that range state was migrated to the right-hand side properly.
