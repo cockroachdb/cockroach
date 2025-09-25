@@ -28,15 +28,23 @@ func createProtectedTimestampRecord(
 	jobID jobspb.JobID,
 	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
+	includeSystemTables bool,
 ) *ptpb.Record {
 	ptsID := uuid.MakeV4()
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
-	targetToProtect := makeTargetToProtect(targets)
+	targetToProtect := makeTargetToProtect(targets, includeSystemTables)
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
 		ptsID, int64(jobID), resolved, deprecatedSpansToProtect,
 		jobsprotectedts.Jobs, targetToProtect)
+}
+
+func createSystemTablesProtectedTimestampRecord(
+	ctx context.Context, codec keys.SQLCodec, jobID jobspb.JobID, resolved hlc.Timestamp,
+) *ptpb.Record {
+	targets := changefeedbase.Targets{}
+	return createProtectedTimestampRecord(ctx, codec, jobID, targets, resolved, true /* includeSystemTables */)
 }
 
 // systemTablesToProtect holds the descriptor IDs of the system tables
@@ -53,13 +61,21 @@ var systemTablesToProtect = []descpb.ID{
 	// These can be identified by the TestChangefeedIdentifyDependentTablesForProtecting test.
 }
 
-func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
-	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
+func makeTargetToProtect(targets changefeedbase.Targets, includeSystemTables bool) *ptpb.Target {
+	if includeSystemTables {
+		tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
+		_ = targets.EachTableID(func(id descpb.ID) error {
+			tablesToProtect = append(tablesToProtect, id)
+			return nil
+		})
+		tablesToProtect = append(tablesToProtect, systemTablesToProtect...)
+		return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
+	}
+	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables())
 	_ = targets.EachTableID(func(id descpb.ID) error {
 		tablesToProtect = append(tablesToProtect, id)
 		return nil
 	})
-	tablesToProtect = append(tablesToProtect, systemTablesToProtect...)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 

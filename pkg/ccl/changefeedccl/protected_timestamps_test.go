@@ -379,6 +379,11 @@ func TestChangefeedAlterPTS(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+
+		perTablePTSEnabled :=
+			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
+				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
 			resolved='1s', min_checkpoint_frequency='1s'`)
 		defer closeFeed(t, f2)
@@ -396,7 +401,13 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		expectedNumPTSRecords := func() int {
+			if perTablePTSEnabled {
+				return 2
+			}
+			return 1
+		}()
+		require.Equal(t, expectedNumPTSRecords, getNumPTSRecords())
 
 		require.NoError(t, jobFeed.Pause())
 		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d ADD TABLE foo2 with initial_scan='yes'", jobFeed.JobID()))
@@ -404,7 +415,7 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		require.Equal(t, expectedNumPTSRecords, getNumPTSRecords())
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
@@ -601,7 +612,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	waitForJobState(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
-	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
+	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts, true /* includeSystemTables */)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
@@ -737,6 +748,10 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		// No per-table PTS records should be created without targets, so none
+		// will need to be migrated.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -853,6 +868,11 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+
+		// No old style PTS records should be created when per-table PTS
+		// records are enabled.
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -1040,7 +1060,7 @@ WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
 				return err
 			}
 
-			require.Equal(t, 0, ptsEntries.Size())
+			require.Equal(t, 0, len(ptsEntries.PerTableRecords))
 			return nil
 		})
 
@@ -1055,7 +1075,7 @@ WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
 		verifyFunc = vf
 	})
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withTxnRetries)
 }
 
 // TestChangefeedPerTableProtectedTimestampProgression tests that
@@ -1139,12 +1159,18 @@ WITH resolved='100ms', min_checkpoint_frequency='100ms'`
 						return err
 					}
 
-					if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
-						return errors.Newf("expected %d per-table PTS records, got %d", len(expectedTables), len(ptsEntries.ProtectedTimestampRecords))
+					require.NotEqual(t, uuid.Nil, ptsEntries.SystemTablesRecord)
+
+					if len(ptsEntries.PerTableRecords) != len(expectedTables) {
+						return errors.Newf(
+							"expected %d per-table PTS records, got %d",
+							len(expectedTables),
+							len(ptsEntries.PerTableRecords),
+						)
 					}
 
 					for tableID := range expectedTables {
-						if ptsEntries.ProtectedTimestampRecords[tableID] == nil {
+						if ptsEntries.PerTableRecords[tableID] == uuid.Nil {
 							return errors.Newf("expected PTS record for table %d", tableID)
 						}
 					}
