@@ -79,15 +79,6 @@ BACKUP TABLE foo INTO $1 IN $1 -- literals removed
 BACKUP TABLE _ INTO $1 IN $2 -- identifiers removed
 
 parse
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH updates_cluster_monitoring_metrics
-----
-BACKUP TABLE foo INTO LATEST IN '*****' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- normalized!
-BACKUP TABLE (foo) INTO LATEST IN ('*****') WITH OPTIONS (updates_cluster_monitoring_metrics = (true)) -- fully parenthesized
-BACKUP TABLE foo INTO LATEST IN '_' WITH OPTIONS (updates_cluster_monitoring_metrics = _) -- literals removed
-BACKUP TABLE _ INTO LATEST IN '*****' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- identifiers removed
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH OPTIONS (updates_cluster_monitoring_metrics = true) -- passwords exposed
-
-parse
 EXPLAIN BACKUP TABLE foo INTO 'bar'
 ----
 EXPLAIN BACKUP TABLE foo INTO '*****' -- normalized!
@@ -836,14 +827,6 @@ BACKUP INTO 'bar' WITH include_all_virtual_clusters=false, include_all_secondary
                                                                                         ^
 
 error
-BACKUP foo INTO 'bar' WITH updates_cluster_monitoring_metrics=false, updates_cluster_monitoring_metrics, detached
-----
-at or near ",": syntax error: updates_cluster_monitoring_metrics option specified multiple times
-DETAIL: source SQL:
-BACKUP foo INTO 'bar' WITH updates_cluster_monitoring_metrics=false, updates_cluster_monitoring_metrics, detached
-                                                                                                       ^
-
-error
 BACKUP foo INTO 'bar' WITH detached=$1, revision_history
 ----
 at or near "1": syntax error
@@ -1012,38 +995,11 @@ BACKUP TABLE foo TO 'bar' INCREMENTAL FROM 'baz'
 HINT: try \h BACKUP
 
 error
-BACKUP TO 'bar' WITH updates_cluster_monitoring_metrics
-----
-at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
-DETAIL: source SQL:
-BACKUP TO 'bar' WITH updates_cluster_monitoring_metrics
-          ^
-HINT: try \h BACKUP
-
-error
-BACKUP TABLE foo TO 'bar' WITH updates_cluster_monitoring_metrics
-----
-at or near "bar": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
-DETAIL: source SQL:
-BACKUP TABLE foo TO 'bar' WITH updates_cluster_monitoring_metrics
-                    ^
-HINT: try \h BACKUP
-
-error
 BACKUP foo, bar TO 'baz'
 ----
 at or near "baz": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
 DETAIL: source SQL:
 BACKUP foo, bar TO 'baz'
-                   ^
-HINT: try \h BACKUP
-
-error
-BACKUP foo, bar TO 'baz' WITH updates_cluster_monitoring_metrics
-----
-at or near "baz": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
-DETAIL: source SQL:
-BACKUP foo, bar TO 'baz' WITH updates_cluster_monitoring_metrics
                    ^
 HINT: try \h BACKUP
 
@@ -1062,15 +1018,6 @@ BACKUP foo, bar TO ('baz', 'qux')
 at or near "(": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
 DETAIL: source SQL:
 BACKUP foo, bar TO ('baz', 'qux')
-                   ^
-HINT: try \h BACKUP
-
-error
-BACKUP foo, bar TO ('baz', 'qux') WITH updates_cluster_monitoring_metrics
-----
-at or near "(": syntax error: The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection.
-DETAIL: source SQL:
-BACKUP foo, bar TO ('baz', 'qux') WITH updates_cluster_monitoring_metrics
                    ^
 HINT: try \h BACKUP
 

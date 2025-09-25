@@ -28,14 +28,13 @@ func TestBackupResolveOptionsForJobDescription(t *testing.T) {
 	// The input struct must have a non-zero value for every
 	// element of the struct.
 	input := tree.BackupOptions{
-		CaptureRevisionHistory:          tree.NewDString("test expr"),
-		IncludeAllSecondaryTenants:      tree.NewDString("test expr"),
-		EncryptionPassphrase:            tree.NewDString("test expr"),
-		Detached:                        tree.DBoolTrue,
-		EncryptionKMSURI:                []tree.Expr{tree.NewDString("test expr")},
-		IncrementalStorage:              []tree.Expr{tree.NewDString("test expr")},
-		ExecutionLocality:               tree.NewDString("test expr"),
-		UpdatesClusterMonitoringMetrics: tree.NewDString("test expr"),
+		CaptureRevisionHistory:     tree.NewDString("test expr"),
+		IncludeAllSecondaryTenants: tree.NewDString("test expr"),
+		EncryptionPassphrase:       tree.NewDString("test expr"),
+		Detached:                   tree.DBoolTrue,
+		EncryptionKMSURI:           []tree.Expr{tree.NewDString("test expr")},
+		IncrementalStorage:         []tree.Expr{tree.NewDString("test expr")},
+		ExecutionLocality:          tree.NewDString("test expr"),
 	}
 
 	ensureAllStructFieldsSet := func(s tree.BackupOptions, name string) {

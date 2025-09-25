@@ -481,10 +481,7 @@ message BackupDetails {
   // tenants.
   bool include_all_secondary_tenants = 25;
 
-  // UpdatesClusterMonitoring indicates whether the backup job should update
-  // cluster-wide metrics, such as the last successful backup time, or the last
-  // time of a backup failure due to a KMS error.
-  bool updates_cluster_monitoring_metrics = 26;
+	reserved 26;
 
   // Compact is set if the job is a compaction job. In that case, the StartTime
   // and EndTime describe the time range of the compaction. StartTime will be

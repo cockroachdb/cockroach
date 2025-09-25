@@ -970,7 +970,7 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
         return filterOption
     }
     return nil
-} 
+}
 
 %}
 
@@ -1093,7 +1093,7 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNIDIRECTIONAL UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
-%token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
+%token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VECTOR VERIFY_BACKUP_TABLE_DATA VIEW VARIABLES VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
 %token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
@@ -3590,14 +3590,6 @@ backup_options:
 | include_all_clusters '=' a_expr
   {
     $$.val = &tree.BackupOptions{IncludeAllSecondaryTenants: $3.expr()}
-  }
-| UPDATES_CLUSTER_MONITORING_METRICS
-  {
-    $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: tree.MakeDBool(true)}
-  }
-| UPDATES_CLUSTER_MONITORING_METRICS '=' a_expr
-  {
-    $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: $3.expr()}
   }
 
 include_all_clusters:
@@ -6516,7 +6508,7 @@ db_level_changefeed_filter_option:
   {
     $$.val = &tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.IncludeFilter}
   }
-| /* EMPTY */ 
+| /* EMPTY */
   {
     $$.val = nil
   }
@@ -18913,7 +18905,6 @@ unreserved_keyword:
 | UNSPLIT
 | UNTIL
 | UPDATE
-| UPDATES_CLUSTER_MONITORING_METRICS
 | UPSERT
 | USE
 | USERS
@@ -19520,7 +19511,6 @@ bare_label_keywords:
 | UNSPLIT
 | UNTIL
 | UPDATE
-| UPDATES_CLUSTER_MONITORING_METRICS
 | UPSERT
 | USE
 | USER

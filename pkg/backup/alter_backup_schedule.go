@@ -392,9 +392,6 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 			outOpts.IncrementalStorage = inOpts.IncrementalStorage
 		}
 	}
-	if inOpts.UpdatesClusterMonitoringMetrics != nil {
-		outOpts.UpdatesClusterMonitoringMetrics = inOpts.UpdatesClusterMonitoringMetrics
-	}
 	return nil
 }
 
