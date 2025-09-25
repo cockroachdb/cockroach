@@ -131,6 +131,11 @@ func (c *inspectRunner) Step(
 	return false, nil
 }
 
+// CheckCount returns the number of remaining checks to be processed.
+func (c *inspectRunner) CheckCount() int {
+	return len(c.checks)
+}
+
 // Close cleans up all checks in the runner. It will attempt to close each check,
 // even if errors occur during closing. If multiple checks fail to close, then
 // a combined error is returned.

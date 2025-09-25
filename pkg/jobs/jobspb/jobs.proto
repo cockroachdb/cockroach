@@ -1537,7 +1537,13 @@ message HotRangesLoggerProgress {
 }
 
 message InspectProgress {
+  int64 job_total_check_count = 1;
+  int64 job_completed_check_count = 2;
+}
 
+message InspectProcessorProgress {
+  int64 checks_completed = 1;  // Number of checks completed since last update.
+  bool finished = 2;           // Processor finished all checks.
 }
 
 message ImportRollbackProgress {}

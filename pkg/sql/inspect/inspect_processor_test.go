@@ -12,13 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -200,6 +203,21 @@ func (t *testingInspectCheck) Close(context.Context) error {
 	return nil
 }
 
+// discardRowReceiver is a minimal RowReceiver that discards all data.
+type discardRowReceiver struct{}
+
+var _ execinfra.RowReceiver = &discardRowReceiver{}
+
+// Push is part of the execinfra.RowReceiver interface.
+func (d *discardRowReceiver) Push(
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	return execinfra.NeedMoreRows
+}
+
+// ProducerDone is part of the execinfra.RowReceiver interface.
+func (d *discardRowReceiver) ProducerDone() {}
+
 // runProcessorAndWait executes the given inspectProcessor and waits for it to complete.
 // It asserts that the processor finishes within a fixed timeout, and that the result
 // matches the expected error outcome.
@@ -210,7 +228,7 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 	defer cancel()
 	processorResultCh := make(chan error, 1)
 	go func() {
-		processorResultCh <- proc.runInspect(ctx, nil)
+		processorResultCh <- proc.runInspect(ctx, &discardRowReceiver{})
 	}()
 
 	select {
@@ -232,15 +250,24 @@ func makeProcessor(
 ) (*inspectProcessor, *testIssueCollector) {
 	t.Helper()
 	logger := &testIssueCollector{}
+
+	// Mock a FlowCtx for test purposes.
+	var c base.NodeIDContainer
+	c.Set(context.Background(), 1) // Set a test node ID
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:    &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		NodeID: base.NewSQLIDContainerForNode(&c),
+		ID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},
+	}
+
 	proc := &inspectProcessor{
 		spec:           execinfrapb.InspectSpec{},
 		checkFactories: []inspectCheckFactory{checkFactory},
-		cfg: &execinfra.ServerConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-		},
-		spanSrc:     src,
-		logger:      logger,
-		concurrency: concurrency,
+		cfg:            flowCtx.Cfg,
+		flowCtx:        flowCtx,
+		spanSrc:        src,
+		logger:         logger,
+		concurrency:    concurrency,
 	}
 	return proc, logger
 }
