@@ -7,6 +7,7 @@
 package aws
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,11 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	awsststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -144,8 +150,61 @@ func NewProvider(options ...Option) (*Provider, error) {
 		option.apply(p)
 	}
 
+	// If AssumeSTSRole is set, we need to set a default session name
+	// if none was provided.
+	if p.AssumeSTSRole != "" && p.AssumeSTSSessionName == "" {
+		if hostname, err := os.Hostname(); err != nil {
+			p.AssumeSTSSessionName = fmt.Sprintf("roachprod-%d", timeutil.Now().Unix())
+		} else {
+			p.AssumeSTSSessionName = fmt.Sprintf("roachprod-%s", hostname)
+		}
+	}
 
 	return p, nil
+}
+
+func (p *Provider) getEnvironmentAWSCredentials() ([]string, error) {
+
+	// If we don't need to assume a role, return an empty slice.
+	if p.AssumeSTSRole == "" || len(p.AccountIDs) == 0 {
+		return []string{}, nil
+	}
+
+	// Our provider needs to assume a role.
+
+	// In case we need to assume a role, we need to generate and return temporary
+	// credentials.
+	// We lock the provider to avoid concurrent generations.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// If we never fetched the credentials or they're about to expire, fetch them.
+	if p.mu.credentials == nil || p.mu.credentials.Expiration.Before(timeutil.Now().Add(time.Minute*2)) {
+		cfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion("us-east-1"))
+		if err != nil {
+			return nil, errors.Wrap(err, "assumeRole: failed to load config")
+		}
+
+		roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", p.AccountIDs[0], p.AssumeSTSRole)
+		roleSessionName := fmt.Sprintf("%s-%s", p.AssumeSTSSessionName, p.AccountIDs[0])
+
+		stsClient := sts.NewFromConfig(cfg)
+		tmpCredentials, err := stsClient.AssumeRole(context.TODO(), &sts.AssumeRoleInput{
+			RoleArn:         aws.String(roleArn),
+			RoleSessionName: aws.String(roleSessionName),
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to assume role %s", roleArn)
+		}
+
+		p.mu.credentials = tmpCredentials.Credentials
+	}
+
+	return []string{
+		fmt.Sprintf("%s=%s", amazon.AWSAccessKeyParam, *p.mu.credentials.AccessKeyId),
+		fmt.Sprintf("%s=%s", amazon.AWSSecretParam, *p.mu.credentials.SecretAccessKey),
+		fmt.Sprintf("%s=%s", amazon.AWSTempTokenParam, *p.mu.credentials.SessionToken),
+	}, nil
 }
 
 // ebsDisk represent EBS disk device.
@@ -320,6 +379,19 @@ type Provider struct {
 
 	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
 	AccountIDs []string
+
+	// If AssumeSTSRole is set to a non-empty string, the provider will use STS
+	// to assume the role. It should be set to the role part of the ARN to assume.
+	// e.g. "arn:aws:iam::123456789012:role/{MyRole}"
+	AssumeSTSRole        string
+	AssumeSTSSessionName string
+
+	mu struct {
+		syncutil.Mutex
+
+		// credentials are the AWS credentials.
+		credentials *awsststypes.Credentials
+	}
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
