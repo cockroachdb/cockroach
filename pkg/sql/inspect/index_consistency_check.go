@@ -196,7 +196,6 @@ func (c *indexConsistencyCheck) Start(
 	)
 
 	// Wrap the query with AS OF SYSTEM TIME to ensure it uses the specified timestamp
-	// TODO(148573): use a protected timestamp record for this timestamp.
 	queryWithAsOf := fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", checkQuery, c.asOf.AsOfSystemTime())
 
 	// Store the query for error reporting
