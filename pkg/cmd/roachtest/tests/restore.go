@@ -310,6 +310,12 @@ func registerRestore(r registry.Registry) {
 			suites:   registry.Suites(registry.Nightly),
 		},
 		{
+			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			backup:   backupSpecs{cloud: spec.Azure, fixture: SmallFixture},
+			timeout:  2 * time.Hour,
+			suites:   registry.Suites(registry.Nightly),
+		},
+		{
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
 			// performance but nodes should not OOM.
 			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
