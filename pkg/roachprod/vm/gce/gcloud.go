@@ -123,28 +123,57 @@ func Init() error {
 	initGCEProjectDefaults()
 	initDNSDefault()
 
-	providerInstance := &Provider{}
-	providerInstance.Projects = []string{defaultDefaultProject}
+	providerOpts := []Option{}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
 		fmt.Printf("WARN: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead\n")
-		providerInstance.Projects = []string{projectFromEnv}
+		providerOpts = append(providerOpts, WithProject(projectFromEnv))
 	}
+
+	// Init the default provider
+	providerInstance, err := NewProvider(providerOpts...)
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{},
+			fmt.Sprintf("unable to init gce provider: %s", err),
+		)
+		return err
+	}
+
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		vm.Providers[ProviderName] = flagstub.New(&Provider{}, "please install the gcloud CLI utilities "+
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
-	providerInstance.dnsProvider = NewDNSProvider()
-
-	providerInstance.defaultProject = defaultDefaultProject
-	providerInstance.metadataProject = defaultMetadataProject
 
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	Infrastructure = providerInstance
 
 	return nil
+}
+
+// NewProvider returns a new GCE provider with the given options applied.
+func NewProvider(options ...Option) (*Provider, error) {
+
+	// Create a new provider with the default options.
+	p := &Provider{
+		dnsProvider:     NewDNSProvider(NewDNSProviderDefaultOptions()),
+		Projects:        []string{},
+		defaultProject:  defaultDefaultProject,
+		metadataProject: defaultMetadataProject,
+	}
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+	// If no projects were specified by the options, use the default project.
+	if len(p.Projects) == 0 {
+		p.Projects = []string{defaultDefaultProject}
+	}
+
+	return p, nil
 }
 
 func runJSONCommand(args []string, parsed interface{}) error {
