@@ -111,6 +111,11 @@ func (p *Provider) SupportsSpotVMs() bool {
 	return false
 }
 
+// IsLocalProvider returns false because Azure is a remote provider.
+func (p *Provider) IsLocalProvider() bool {
+	return false
+}
+
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]vm.PreemptedVM, error) {
@@ -1955,4 +1960,9 @@ func MachineSupportsNVMe(machineType string) bool {
 		}
 	}
 	return false
+}
+
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	return fmt.Sprintf("%s-%s", ProviderName, strings.Join(p.SubscriptionNames, "_"))
 }
