@@ -35,9 +35,9 @@ func TestChangefeedJobInfoRoundTrip(t *testing.T) {
 	uuid1 := uuid.MakeV4()
 	uuid2 := uuid.MakeV4()
 	ptsRecords := cdcprogresspb.ProtectedTimestampRecords{
-		ProtectedTimestampRecords: map[descpb.ID]*uuid.UUID{
-			descpb.ID(100): &uuid1,
-			descpb.ID(200): &uuid2,
+		ProtectedTimestampRecords: map[descpb.ID]uuid.UUID{
+			descpb.ID(100): uuid1,
+			descpb.ID(200): uuid2,
 		},
 	}
 
