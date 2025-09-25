@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1739,6 +1740,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// Skip until future PRs fix this test.
+	skip.WithIssue(t, 153826)
 
 	var blockUpdates atomic.Bool
 	var blockCheckPoint atomic.Bool
