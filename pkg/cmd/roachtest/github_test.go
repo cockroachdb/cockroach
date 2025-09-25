@@ -233,8 +233,9 @@ F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n
 						case "error-with-ip-node-info":
 							refError = errors.Newf(`(roachtest.go:93).func6: manual failure
 test artifacts and logs in: artifacts/roachtest/manual/fail/run_1
-Name                                DNS                                                                Private IP    Public IP       Machine Type   CPU Arch  CPU Family  Provision Model  
-willchoe-1758655052-01-n1cpu4-0001  willchoe-1758655052-01-n1cpu4-0001.us-east1-c.cockroach-ephemeral  10.142.0.181  34.148.166.222  n2-standard-4  amd64     ice lake    ondemand         
+| Node | Private IP | Public IP | Machine Type |
+| --- | --- | --- | --- |
+| teamcity-1758834520-01-n1cpu4-0001 | 10.142.0.2 | 34.139.44.53 | n2-standard-4 |
 `)
 						}
 					}

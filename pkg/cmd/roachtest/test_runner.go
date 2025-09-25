@@ -1780,13 +1780,16 @@ func (r *testRunner) inspectArtifacts(
 // gatherNodeIpMapping attempts to gather cluster node ip information for debug
 func gatherNodeIpMapping(t *testImpl, c *clusterImpl) (string, error) {
 	var table [][]string
-	table = append(table, []string{"Node", "Private IP", "Public IP"})
 	cachedCluster, err := getCachedCluster(c.name)
 	if err != nil {
 		return "", err
 	}
+	// The regex to select out this table in issues.roachtestNodeToIpRE is not
+	// strict on the number of columns i.e. columns can be added / removed
+	// without a regex change
+	table = append(table, []string{"Node", "Private IP", "Public IP", "Machine Type"})
 	for _, vmInstance := range cachedCluster.VMs {
-		table = append(table, []string{vmInstance.Name, vmInstance.PrivateIP, vmInstance.PublicIP})
+		table = append(table, []string{vmInstance.Name, vmInstance.PrivateIP, vmInstance.PublicIP, vmInstance.MachineType})
 	}
 	nodeIpTable, err := roachtestutil.ToMarkdownTable(table)
 	if err != nil {
