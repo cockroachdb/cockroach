@@ -30,7 +30,7 @@ var _ invertedFilterPlanner = &tsqueryFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
 // interface.
 func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	_ context.Context, _ *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, forceInvertedIndex bool, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,

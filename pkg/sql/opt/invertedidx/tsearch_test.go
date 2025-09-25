@@ -101,6 +101,7 @@ func TestTryFilterTSVector(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tsvectorOrd),
+			false,     /* forceInvertedIndex */
 			nil,       /* computedColumns */
 			func() {}, /* checkCancellation */
 		)

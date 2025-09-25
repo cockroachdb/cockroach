@@ -490,17 +490,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 		// We're not testing that the correct SpanExpression is returned here;
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
-		spanExpr, _, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			context.Background(),
-			evalCtx,
-			&f,
-			filters,
-			nil, /* optionalFilters */
-			tab,
-			md.Table(tab).Index(tc.indexOrd),
-			nil,       /* computedColumns */
-			func() {}, /* checkCancellation */
-		)
+		spanExpr, _, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(context.Background(), evalCtx, &f, filters, nil, tab, md.Table(tab).Index(tc.indexOrd), false, nil, func() {})
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
 		}

@@ -910,10 +910,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 		}
 
 		// Check whether the filter can constrain the index.
-		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
-			c.checkCancellation,
-		)
+		spanExpr, con, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, scanPrivate.Flags.ForceInvertedIndex || scanPrivate.Flags.ForceIndex, tabMeta.ComputedCols, c.checkCancellation)
 		if !ok {
 			// A span expression to constrain the inverted index could not be
 			// generated.
@@ -1706,16 +1703,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// TODO(mgartner): Once we support multi-column inverted indexes, pass
 		// optional filters generated from CHECK constraints and computed column
 		// expressions to help constrain non-inverted prefix columns.
-		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.ctx,
-			c.e.evalCtx,
-			c.e.f, filters,
-			nil, /* optionalFilters */
-			scanPrivate.Table,
-			index,
-			nil, /* computedColumns */
-			c.checkCancellation,
-		)
+		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(c.e.ctx, c.e.evalCtx, c.e.f, filters, nil, scanPrivate.Table, index, scanPrivate.Flags.ForceInvertedIndex || scanPrivate.Flags.ForceIndex, nil, c.checkCancellation)
 		if !ok {
 			return
 		}

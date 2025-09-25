@@ -544,7 +544,7 @@ func (g *geoFilterPlanner) maybeDeriveUsefulInvertedFilterCondition(
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, forceInvertedIndex bool, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
