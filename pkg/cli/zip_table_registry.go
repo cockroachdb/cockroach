@@ -162,6 +162,17 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
 	},
+	"crdb_internal.cluster_inspect_errors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"error_id",
+			"job_id",
+			"error_type",
+			"aost",
+			"database_id",
+			"schema_id",
+			"id",
+		},
+	},
 	"crdb_internal.cluster_locks": {
 		// `lock_key` column contains the txn lock key, which may contain
 		// sensitive row-level data.
