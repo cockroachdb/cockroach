@@ -288,3 +288,38 @@ func PrefixCmdOutputWithTimestamp(cmd string) string {
 	awkCmd := `awk 'NF { cmd="date +\"%H:%M:%S\""; cmd | getline ts; close(cmd); print ts ":", $0; next } { print }'`
 	return fmt.Sprintf(`bash -c '%s' 2>&1 |`, cmd) + awkCmd
 }
+
+// ExecWithRetry executes the given SQL statement with the specified retry logic.
+func ExecWithRetry(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	retryOpts retry.Options,
+	query string,
+	args ...any,
+) (gosql.Result, error) {
+	var result gosql.Result
+	err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = db.ExecContext(ctx, query, args...)
+		if err != nil {
+			l.Printf("%s failed (retrying): %v", query, err)
+			return err
+		}
+		return nil
+	})
+
+	return result, err
+}
+
+// ClusterSettingRetryOpts are retry options intended for cluster setting operations.
+//
+// We use relatively high backoff parameters with the assumption that:
+//  1. If we fail, it's likely due to cluster overload, and we want to give
+//     the cluster adequate time to recover.
+//  2. Setting a cluster setting in roachtest is not latency sensitive.
+var ClusterSettingRetryOpts = retry.Options{
+	InitialBackoff: 3 * time.Second,
+	MaxBackoff:     5 * time.Second,
+	MaxRetries:     5,
+}

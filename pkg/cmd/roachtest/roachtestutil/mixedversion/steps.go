@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -275,7 +276,9 @@ func (s preserveDowngradeOptionStep) Run(
 		return err
 	}
 
-	return service.Exec(rng, "SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", bv.String())
+	return service.ExecWithRetry(rng, service.Descriptor.Nodes, roachtestutil.ClusterSettingRetryOpts,
+		"SET CLUSTER SETTING cluster.preserve_downgrade_option = $1", bv.String(),
+	)
 }
 
 // restartWithNewBinaryStep restarts a certain `node` with a new
@@ -367,8 +370,10 @@ func (s allowUpgradeStep) Description() string {
 func (s allowUpgradeStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	return serviceByName(h, s.virtualClusterName).Exec(
-		rng, "RESET CLUSTER SETTING cluster.preserve_downgrade_option",
+	service := serviceByName(h, s.virtualClusterName)
+	return service.ExecWithRetry(
+		rng, service.Descriptor.Nodes, roachtestutil.ClusterSettingRetryOpts,
+		"RESET CLUSTER SETTING cluster.preserve_downgrade_option",
 	)
 }
 
@@ -462,8 +467,8 @@ func (s setClusterSettingStep) Run(
 		args = []interface{}{val}
 	}
 
-	return serviceByName(h, serviceName).ExecWithGateway(
-		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt, args...,
+	return serviceByName(h, serviceName).ExecWithRetry(
+		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), roachtestutil.ClusterSettingRetryOpts, stmt, args...,
 	)
 }
 
@@ -506,7 +511,9 @@ func (s setClusterVersionStep) Run(
 	}
 
 	l.Printf("setting cluster version to '%s'", binaryVersion)
-	return service.Exec(rng, "SET CLUSTER SETTING version = $1", binaryVersion)
+	return service.ExecWithRetry(rng, service.Descriptor.Nodes, roachtestutil.ClusterSettingRetryOpts,
+		"SET CLUSTER SETTING version = $1", binaryVersion,
+	)
 }
 
 // resetClusterSetting resets cluster setting `name`.
@@ -526,8 +533,8 @@ func (s resetClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	stmt := fmt.Sprintf("RESET CLUSTER SETTING %s", s.name)
-	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
-		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt,
+	return serviceByName(h, s.virtualClusterName).ExecWithRetry(
+		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), roachtestutil.ClusterSettingRetryOpts, stmt,
 	)
 }
 
