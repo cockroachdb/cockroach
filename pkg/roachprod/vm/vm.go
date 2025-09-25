@@ -431,6 +431,7 @@ type ListOptions struct {
 	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
 	IncludeProviders     []string
+	LimitConcurrency     int
 }
 
 type PreemptedVM struct {
