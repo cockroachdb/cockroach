@@ -166,6 +166,7 @@ func TestChangefeedBasics(t *testing.T) {
 func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -227,6 +228,7 @@ func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectSuccess := func(stmt string) {
@@ -256,6 +258,7 @@ func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 func TestDatabaseLevelChangefeedWithExcludeFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectSuccess := func(stmt string) {
@@ -1031,6 +1034,7 @@ func TestChangefeedDiff(t *testing.T) {
 func TestDatabaseLevelChangefeedDiff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1164,6 +1168,8 @@ func TestMissingTableErr(t *testing.T) {
 func TestChangefeedMissingDatabaseErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
+
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`, `database "foo" does not exist`)
 	})
@@ -1172,6 +1178,8 @@ func TestChangefeedMissingDatabaseErr(t *testing.T) {
 func TestChangefeedCannotTargetSystemDatabaseErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
+
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE system`, `changefeed cannot target the system database`)
 	})
@@ -4003,7 +4011,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
 		)
 		userDB.ExpectErr(t,
-			`user "user1" requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`,
+			`database-level changefeed is not implemented yet`,
 			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
 		)
 	})
@@ -4014,7 +4022,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
 		)
 		userDB.ExpectErr(t,
-			`user "user1" requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`,
+			`database-level changefeed is not implemented yet`,
 			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
 		)
 	})
@@ -4024,7 +4032,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
 		)
 		userDB.ExpectErr(t,
-			`user "user1" requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`,
+			`database-level changefeed is not implemented yet`,
 			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
 		)
 	})
@@ -4038,7 +4046,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'kafka://nope'",
 		)
 		userDB.ExpectErr(t,
-			"pq: the CHANGEFEED privilege on the target database can only be used with external connection sinks",
+			"database-level changefeed is not implemented yet",
 			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
 		)
 	})
@@ -4049,7 +4057,8 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 		)
 	})
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.Exec(t,
+		userDB.ExpectErr(t,
+			"database-level changefeed is not implemented yet",
 			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'external://nope'",
 		)
 	})
@@ -12526,6 +12535,7 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -12554,6 +12564,7 @@ func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -12606,6 +12617,29 @@ func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectSuccess(`CREATE CHANGEFEED FOR d.bar`)
 		})
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+func TestDatabaseLevelChangefeedUnimplemented(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE bar (id INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1);`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d`,
+			`database-level changefeed is not implemented yet`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH diff`,
+			`database-level changefeed is not implemented yet`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`,
+			`database-level changefeed is not implemented yet`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`,
+			`database-level changefeed is not implemented yet`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE system`,
+			`database-level changefeed is not implemented yet`)
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE doesnotexist`,
+			`database-level changefeed is not implemented yet`)
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
