@@ -1113,10 +1113,7 @@ message ChangefeedTargetSpecification {
 }
 
 message FilterList {
-  enum FilterType {
-    EXCLUDE_TABLES = 0;
-  }
-  FilterType filter_type = 1;
+  uint32 filter_type = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.FilterType"];
   map<string, google.protobuf.Empty> tables = 2 [(gogoproto.nullable) = false];
 }
 
