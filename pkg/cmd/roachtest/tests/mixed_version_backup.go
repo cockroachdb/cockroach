@@ -1287,7 +1287,7 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 		}
 	}
 	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
-	if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
 		return fmt.Errorf("failed descriptor check: %w", err)
 	}
 
