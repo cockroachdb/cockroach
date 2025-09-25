@@ -385,7 +385,7 @@ var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, forceInvertedIndex bool, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -415,7 +415,7 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
 	case *memo.FunctionExpr:
-		if t.Properties.Category == builtinconstants.CategoryJsonpath {
+		if t.Properties.Category == builtinconstants.CategoryJsonpath && forceInvertedIndex {
 			if len(t.Args) > 1 {
 				if ce, ok := t.Args[1].(*memo.ConstExpr); ok {
 					if ce != nil {

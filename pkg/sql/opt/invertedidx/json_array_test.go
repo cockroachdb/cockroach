@@ -240,12 +240,13 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 	jsonOrd, arrayOrd := 1, 2
 
 	testCases := []struct {
-		filters          string
-		indexOrd         int
-		ok               bool
-		tight            bool
-		unique           bool
-		remainingFilters string
+		filters            string
+		indexOrd           int
+		forceInvertedIndex bool
+		ok                 bool
+		tight              bool
+		unique             bool
+		remainingFilters   string
 	}{
 		// If we can create an inverted filter with the given filter expression and
 		// index, ok=true. If the spans in the resulting inverted index constraint
@@ -1168,17 +1169,33 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd: jsonOrd,
 			ok:       false,
 		},
+		// forceInvertedIndex is necessary for jsonb_path_exists filter to
+		// use an inverted index.
 		{
 			filters:  `jsonb_path_exists(j, '$.a')`,
 			indexOrd: jsonOrd,
-			ok:       true,
+			ok:       false,
 			tight:    true,
+		},
+		{
+			filters:            `jsonb_path_exists(j, '$.a')`,
+			indexOrd:           jsonOrd,
+			forceInvertedIndex: true,
+			ok:                 true,
+			tight:              true,
 		},
 		{
 			filters:  `jsonb_path_exists(j, '$.a.b')`,
 			indexOrd: jsonOrd,
-			ok:       true,
+			ok:       false,
 			tight:    true,
+		},
+		{
+			filters:            `jsonb_path_exists(j, '$.a.b')`,
+			indexOrd:           jsonOrd,
+			forceInvertedIndex: true,
+			ok:                 true,
+			tight:              true,
 		},
 		{
 			filters:  `jsonb_path_exists(j, '$')`,
@@ -1203,8 +1220,9 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			nil, /* optionalFilters */
 			tab,
 			md.Table(tab).Index(tc.indexOrd),
-			nil,       /* computedColumns */
-			func() {}, /* checkCancellation */
+			tc.forceInvertedIndex, /* forceInvertedIndex */
+			nil,                   /* computedColumns */
+			func() {},             /* checkCancellation */
 		)
 		if tc.ok != ok {
 			t.Fatalf("[%s]: expected %v, got %v", tc.filters, tc.ok, ok)
