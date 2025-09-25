@@ -361,6 +361,29 @@ func ExecWithRetry(
 	return result, err
 }
 
+// QueryWithRetry queries the given SQL statement with the specified retry logic.
+func QueryWithRetry(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	retryOpts retry.Options,
+	query string,
+	args ...any,
+) (*gosql.Rows, error) {
+	var rows *gosql.Rows
+	err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		var err error
+		rows, err = db.QueryContext(ctx, query, args...)
+		if err != nil {
+			l.Printf("%s failed (retrying): %v", query, err)
+			return err
+		}
+		return nil
+	})
+
+	return rows, err
+}
+
 // ClusterSettingRetryOpts are retry options intended for cluster setting operations.
 //
 // We use relatively high backoff parameters with the assumption that:
