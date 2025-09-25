@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -30,13 +31,28 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// indexConsistencyCheck verifies consistency between a table’s primary index
+// indexConsistencyCheckApplicability is a lightweight version that only implements applicability logic.
+type indexConsistencyCheckApplicability struct {
+	tableID descpb.ID
+}
+
+var _ inspectCheckApplicability = (*indexConsistencyCheckApplicability)(nil)
+
+// AppliesTo implements the inspectCheckApplicability interface.
+func (c *indexConsistencyCheckApplicability) AppliesTo(
+	codec keys.SQLCodec, span roachpb.Span,
+) (bool, error) {
+	return spanContainsTable(c.tableID, codec, span)
+}
+
+// indexConsistencyCheck verifies consistency between a table's primary index
 // and a specified secondary index by streaming rows from both sides of a
 // query. It reports an issue if a key exists in the primary but not the
 // secondary, or vice versa.
 type indexConsistencyCheck struct {
+	indexConsistencyCheckApplicability
+
 	flowCtx *execinfra.FlowCtx
-	tableID descpb.ID
 	indexID descpb.IndexID
 	asOf    hlc.Timestamp
 
@@ -57,6 +73,7 @@ type indexConsistencyCheck struct {
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
+var _ inspectCheckApplicability = (*indexConsistencyCheck)(nil)
 
 // Started implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Started() bool {
@@ -67,13 +84,8 @@ func (c *indexConsistencyCheck) Started() bool {
 func (c *indexConsistencyCheck) Start(
 	ctx context.Context, cfg *execinfra.ServerConfig, span roachpb.Span, workerIndex int,
 ) error {
-	// Early out for spans that don't apply to the table we are running the check on.
-	_, tableID, err := cfg.Codec.DecodeTablePrefix(span.Key)
-	if err != nil {
+	if err := assertCheckApplies(c, cfg.Codec, span); err != nil {
 		return err
-	}
-	if descpb.ID(tableID) != c.tableID {
-		return nil
 	}
 
 	// Load up the index and table descriptors.

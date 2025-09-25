@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -112,6 +113,13 @@ type testingInspectCheck struct {
 }
 
 var _ inspectCheck = (*testingInspectCheck)(nil)
+var _ inspectCheckApplicability = (*testingInspectCheck)(nil)
+
+// AppliesTo implements the inspectCheckApplicability interface.
+func (t *testingInspectCheck) AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error) {
+	// For testing, assume all checks apply to all spans
+	return true, nil
+}
 
 // Started implements the inspectCheck interface.
 func (t *testingInspectCheck) Started() bool {

@@ -8,10 +8,34 @@ package inspect
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/errors"
 )
+
+// inspectCheckApplicability defines the interface for determining if a check
+// applies to a span.
+type inspectCheckApplicability interface {
+	// AppliesTo reports whether this check applies to the given span.
+	AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error)
+}
+
+// assertCheckApplies is a helper that calls AppliesTo and asserts the check applies.
+func assertCheckApplies(
+	check inspectCheckApplicability, codec keys.SQLCodec, span roachpb.Span,
+) error {
+	applies, err := check.AppliesTo(codec, span)
+	if err != nil {
+		return err
+	}
+	if !applies {
+		return errors.AssertionFailedf(
+			"check does not apply to this span: span=%s", span.String())
+	}
+	return nil
+}
 
 // inspectCheck defines a single validation operation used by the INSPECT system.
 // Each check represents a specific type of data validation, such as index consistency.
@@ -25,6 +49,8 @@ import (
 // under the hood to detect inconsistencies. All results are surfaced through the
 // inspectIssue type.
 type inspectCheck interface {
+	inspectCheckApplicability
+
 	// Started reports whether the check has been initialized.
 	Started() bool
 
@@ -116,4 +142,13 @@ func (c *inspectRunner) Close(ctx context.Context) error {
 		}
 	}
 	return retErr
+}
+
+// spanContainsTable checks if the given span contains data for the specified table.
+func spanContainsTable(tableID descpb.ID, codec keys.SQLCodec, span roachpb.Span) (bool, error) {
+	_, spanTableID, err := codec.DecodeTablePrefix(span.Key)
+	if err != nil {
+		return false, err
+	}
+	return descpb.ID(spanTableID) == tableID, nil
 }
