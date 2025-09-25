@@ -214,7 +214,7 @@ func TestHistogram(t *testing.T) {
 		expSum += float64(m)
 	}
 
-	act := *h.ToPrometheusMetric().Histogram
+	act := h.ToPrometheusMetric().Histogram
 	exp := prometheusgo.Histogram{
 		SampleCount: u(len(measurements)),
 		SampleSum:   &expSum,
@@ -229,8 +229,8 @@ func TestHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	if !reflect.DeepEqual(act, &exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(&exp, act))
 	}
 
 	histWindow := h.WindowedSnapshot()
@@ -303,7 +303,7 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.NoError(t, histogram.Write(pMetric))
 	h.Update(histogram, pMetric.Histogram)
 
-	act := *h.ToPrometheusMetric().Histogram
+	act := h.ToPrometheusMetric().Histogram
 	exp := prometheusgo.Histogram{
 		SampleCount: u(len(measurements)),
 		SampleSum:   &expSum,
@@ -318,8 +318,8 @@ func TestManualWindowHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	if !reflect.DeepEqual(act, &exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(&exp, act))
 	}
 
 	// Rotate and RecordValue are not supported when using Update. See comment on
@@ -352,7 +352,7 @@ func TestManualWindowHistogram(t *testing.T) {
 	histogram.Observe(5)
 	histogram.Observe(5)
 
-	act = *h.WindowedSnapshot().h
+	act = h.WindowedSnapshot().h
 	exp = prometheusgo.Histogram{
 		SampleCount: u(len(measurements) + len(measurements2)),
 		SampleSum:   &expSum,
@@ -365,8 +365,8 @@ func TestManualWindowHistogram(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	if !reflect.DeepEqual(act, &exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(&exp, act))
 	}
 }
 
@@ -478,8 +478,10 @@ func TestHistogramWindowed(t *testing.T) {
 		BucketConfig: IOLatencyBuckets,
 	})
 
-	measurements := []int64{200000000, 0, 4000000, 5000000, 10000000, 20000000,
-		25000000, 30000000, 40000000, 90000000}
+	measurements := []int64{
+		200000000, 0, 4000000, 5000000, 10000000, 20000000,
+		25000000, 30000000, 40000000, 90000000,
+	}
 
 	// Sort the measurements so we can calculate the expected quantile values
 	// for the first windowed histogram after the measurements have been recorded.
@@ -646,7 +648,6 @@ func (cv *CounterVec) assertPrometheusMetrics(t *testing.T, tc []toPromMetricsTC
 			},
 		}, m)
 	}
-
 }
 
 func TestCounterVec(t *testing.T) {
@@ -829,7 +830,6 @@ func TestCounterVec(t *testing.T) {
 
 func TestHistogramVec(t *testing.T) {
 	t.Run("Observe", func(t *testing.T) {
-
 		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
 		h.Observe(map[string]string{
 			"label1": "value1",
@@ -864,7 +864,6 @@ func TestHistogramVec(t *testing.T) {
 
 		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
 		require.Equal(t, float64(10), *metrics[1].Histogram.SampleSum)
-
 	})
 
 	t.Run("Observe no matching labels", func(t *testing.T) {

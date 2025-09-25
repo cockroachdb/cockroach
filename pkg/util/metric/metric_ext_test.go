@@ -30,7 +30,7 @@ func TestHistogramPrometheus(t *testing.T) {
 	h.RecordValue(5)
 	h.RecordValue(5)
 	h.RecordValue(10)
-	act, err := json.MarshalIndent(*h.ToPrometheusMetric().Histogram, "", "  ")
+	act, err := json.MarshalIndent(h.ToPrometheusMetric().Histogram, "", "  ")
 	require.NoError(t, err)
 	echotest.Require(t, string(act), datapathutils.TestDataPath(t, "histogram.txt"))
 }
