@@ -46,7 +46,7 @@ type CreateChangefeed struct {
 	TableTargets   ChangefeedTableTargets
 	DatabaseTarget ChangefeedDatabaseTarget
 	Level          ChangefeedLevel
-	FilterOption   *ChangefeedFilterOption
+	FilterOption   ChangefeedFilterOption
 	SinkURI        Expr
 	Options        KVOptions
 	Select         *SelectClause
@@ -73,7 +73,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.TableTargets)
 	} else {
 		ctx.FormatNode(&node.DatabaseTarget)
-		if node.FilterOption != nil {
+		if len(node.FilterOption.Tables) > 0 {
 			ctx.WriteString(" ")
 			ctx.WriteString(node.FilterOption.FilterType.String())
 			ctx.WriteString(" TABLES ")
