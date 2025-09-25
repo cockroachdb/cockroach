@@ -556,6 +556,11 @@ type Provider interface {
 	CreateProviderOpts() ProviderOpts
 	CleanSSH(l *logger.Logger) error
 
+	// IsCentralizedProvider returns true if the provider is a centralized provider.
+	// This is used to determine if this provider will pull its state from a centralized
+	// service and trigger actions remotely, or if all will be managed locally.
+	IsCentralizedProvider() bool
+
 	// ConfigSSH takes a list of zones and configures SSH for machines in those
 	// zones for the given provider.
 	ConfigSSH(l *logger.Logger, zones []string) error
@@ -630,6 +635,9 @@ type Provider interface {
 	// ListLoadBalancers returns a list of load balancer IPs and ports that are currently
 	// routing to services for the given VMs.
 	ListLoadBalancers(l *logger.Logger, vms List) ([]ServiceAddress, error)
+
+	// String returns a human-readable identifier for the provider
+	String() string
 }
 
 // DeleteCluster is an optional capability for a Provider which can

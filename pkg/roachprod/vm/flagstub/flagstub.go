@@ -28,6 +28,11 @@ type provider struct {
 	unimplemented string
 }
 
+// IsCentralizedProvider implements vm.Provider and returns false.
+func (p *provider) IsCentralizedProvider() bool {
+	return false
+}
+
 // ConfigureProviderFlags implements vm.Provider.
 func (p *provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
@@ -187,4 +192,9 @@ func (p *provider) ProjectActive(project string) bool {
 // CreateProviderFlags is part of the vm.Provider interface.
 func (p *provider) CreateProviderOpts() vm.ProviderOpts {
 	return nil
+}
+
+// String is part of the vm.Provider interface.
+func (p *provider) String() string {
+	return "stub"
 }

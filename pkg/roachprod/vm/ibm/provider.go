@@ -334,8 +334,22 @@ func (p *Provider) Name() string {
 	return ProviderName
 }
 
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	_, accountID, err := p.getIdentityFromAuthenticator()
+	if err != nil {
+		return fmt.Sprintf("%s-unknown-account", ProviderName)
+	}
+	return fmt.Sprintf("%s-%s", ProviderName, accountID)
+}
+
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
+	return true
+}
+
+// IsCentralizedProvider returns true because IBM is a remote provider.
+func (p *Provider) IsCentralizedProvider() bool {
 	return true
 }
 
