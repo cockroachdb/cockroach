@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -47,6 +48,12 @@ var maxRetries = settings.RegisterIntSetting(
 	"cloudstorage.azure.max_retries",
 	"the maximum number of retries per Azure operation",
 	10)
+
+var tryTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.azure.try.timeout",
+	"the timeout for individual retry attempts in Azure operations",
+	60*time.Second)
 
 // A note on Azure authentication:
 //
@@ -242,6 +249,11 @@ func makeAzureStorage(
 	// Azure SDK defaults to 3 retries, which is too low to survive the 30 second
 	// brownout in TestAzureFaultInjection.
 	opts.Retry.MaxRetries = int32(maxRetries.Get(&args.Settings.SV))
+	// We occasionally see individual requests get stuck for 10+ minutes. If the
+	// source of the stuckness is transient or applies to individual
+	// connections/requests, then starting a new request after a timeout may
+	// succeed and allow the client to make forward progress.
+	opts.Retry.TryTimeout = tryTimeout.Get(&args.Settings.SV)
 
 	var azClient *service.Client
 	switch conf.Auth {
