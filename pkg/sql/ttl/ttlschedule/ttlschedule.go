@@ -173,6 +173,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 // NotifyJobTermination implements the jobs.ScheduledJobController interface.
 func (s rowLevelTTLExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.State,

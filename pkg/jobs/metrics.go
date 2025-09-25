@@ -399,9 +399,6 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 	if MakeStreamIngestMetricsHook != nil {
 		m.StreamIngest = MakeStreamIngestMetricsHook(histogramWindowInterval)
 	}
-	if MakeBackupMetricsHook != nil {
-		m.Backup = MakeBackupMetricsHook(histogramWindowInterval)
-	}
 
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
@@ -478,9 +475,6 @@ var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
 
 // MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
 var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
-
-// MakeBackupMetricsHook allows for registration of backup metrics.
-var MakeBackupMetricsHook func(time.Duration) metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {

@@ -32,9 +32,11 @@ type ScheduledJobExecutor interface {
 	// NotifyJobTermination notifies that the system.job started by the
 	// ScheduledJob completed. Implementation may use provided transaction to
 	// perform any additional mutations. Modifications to the ScheduledJob
-	// object will be persisted.
+	// object will be persisted. We use `any` for execCfg instead of
+	// *sql.ExecutorConfig to avoid import cycles.
 	NotifyJobTermination(
 		ctx context.Context,
+		execCfg any,
 		txn isql.Txn,
 		jobID jobspb.JobID,
 		jobState State,
@@ -170,6 +172,7 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, fmtOrMsg string, args ...int
 // with the job status changes.
 func NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	env scheduledjobs.JobSchedulerEnv,
 	jobID jobspb.JobID,
@@ -191,7 +194,7 @@ func NotifyJobTermination(
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, txn, jobID, jobStatus, jobDetails, env, schedule)
+	err = executor.NotifyJobTermination(ctx, execCfg, txn, jobID, jobStatus, jobDetails, env, schedule)
 	if err != nil {
 		return err
 	}

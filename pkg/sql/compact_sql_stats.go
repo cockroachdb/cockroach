@@ -72,11 +72,7 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		return err
 	}
 
-	return r.maybeNotifyJobTerminated(
-		ctx,
-		p.ExecCfg().InternalDB,
-		p.ExecCfg().JobsKnobs(),
-		jobs.StateSucceeded)
+	return r.maybeNotifyJobTerminated(ctx, p.ExecCfg(), jobs.StateSucceeded)
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
@@ -85,7 +81,9 @@ func (r *sqlStatsCompactionResumer) OnFailOrCancel(
 ) error {
 	p := execCtx.(JobExecContext)
 	execCfg := p.ExecCfg()
-	return r.maybeNotifyJobTerminated(ctx, execCfg.InternalDB, execCfg.JobsKnobs(), jobs.StateFailed)
+	return r.maybeNotifyJobTerminated(
+		ctx, execCfg, jobs.StateFailed,
+	)
 }
 
 // CollectProfile implements the jobs.Resumer interface.
@@ -96,9 +94,11 @@ func (r *sqlStatsCompactionResumer) CollectProfile(_ context.Context, _ interfac
 // maybeNotifyJobTerminated will notify the job termination
 // (with termination status).
 func (r *sqlStatsCompactionResumer) maybeNotifyJobTerminated(
-	ctx context.Context, db isql.DB, jobKnobs *jobs.TestingKnobs, status jobs.State,
+	ctx context.Context, execCfg *ExecutorConfig, status jobs.State,
 ) error {
 	log.Dev.Infof(ctx, "sql stats compaction job terminated with status = %s", status)
+	db := execCfg.InternalDB
+	jobKnobs := execCfg.JobsKnobs()
 	if r.sj == nil {
 		return nil
 	}
@@ -108,7 +108,7 @@ func (r *sqlStatsCompactionResumer) maybeNotifyJobTerminated(
 			env = jobKnobs.JobSchedulerEnv
 		}
 		return jobs.NotifyJobTermination(
-			ctx, txn, env, r.job.ID(), status, r.job.Details(), r.sj.ScheduleID(),
+			ctx, execCfg, txn, env, r.job.ID(), status, r.job.Details(), r.sj.ScheduleID(),
 		)
 	})
 }
@@ -202,6 +202,7 @@ func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 // NotifyJobTermination implements the jobs.ScheduledJobExecutor interface.
 func (e *scheduledSQLStatsCompactionExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.State,

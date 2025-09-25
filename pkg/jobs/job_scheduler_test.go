@@ -247,6 +247,7 @@ func (n *recordScheduleExecutor) ExecuteJob(
 
 func (n *recordScheduleExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobState State,
@@ -474,6 +475,7 @@ func (e *returnErrorExecutor) ExecuteJob(
 
 func (e *returnErrorExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobState State,
@@ -648,6 +650,7 @@ func (e *txnConflictExecutor) ExecuteJob(
 
 func (e *txnConflictExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus State,
@@ -764,6 +767,7 @@ func (e *blockUntilCancelledExecutor) ExecuteJob(
 
 func (e *blockUntilCancelledExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobState State,

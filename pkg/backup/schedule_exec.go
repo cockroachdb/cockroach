@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -37,8 +38,9 @@ type backupMetrics struct {
 	*jobs.ExecutorPTSMetrics
 	// TODO(rui): move this to the backup job so it can be controlled by the
 	// updates_cluster_monitoring_metrics option.
-	RpoMetric       *metric.Gauge
-	RpoTenantMetric *metric.GaugeVec
+	RpoMetric                    *metric.Gauge
+	RpoTenantMetric              *metric.GaugeVec
+	LastKMSInaccessibleErrorTime *metric.Gauge
 }
 
 var _ metric.Struct = &backupMetrics{}
@@ -179,6 +181,7 @@ func planBackup(
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (e *scheduledBackupExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobState jobs.State,
@@ -192,13 +195,13 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
 	}
 
-	e.metrics.NumFailed.Inc(1)
-	err := errors.Errorf(
-		"backup job %d scheduled by %d failed with state %s",
-		jobID, schedule.ScheduleID(), jobState)
-	log.Dev.Errorf(ctx, "backup error: %v	", err)
-	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
-	return nil
+	sqlExecCfg, ok := execCfg.(*sql.ExecutorConfig)
+	if !ok {
+		return errors.Newf("unexpected execCfg type %T", execCfg)
+	}
+	return e.backupFailed(
+		ctx, sqlExecCfg, txn, schedule, jobID, jobState,
+	)
 }
 
 func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
@@ -405,6 +408,40 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	return nil
 }
 
+func (e *scheduledBackupExecutor) backupFailed(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn isql.Txn,
+	schedule *jobs.ScheduledJob,
+	jobID jobspb.JobID,
+	jobState jobs.State,
+) error {
+	e.metrics.NumFailed.Inc(1)
+	err := errors.Errorf(
+		"backup job %d scheduled by %d failed with state %s",
+		jobID, schedule.ScheduleID(), jobState,
+	)
+	log.Dev.Errorf(ctx, "backup error: %v	", err)
+	jobs.DefaultHandleFailedRun(schedule, "backup job %d failed with err=%v", jobID, err)
+
+	args := &backuppb.ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+
+	if args.UpdatesLastBackupMetric {
+		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+		if err != nil {
+			return errors.Wrapf(err, "loading failed backup job %d", jobID)
+		}
+		finalResumeErr := errors.DecodeError(ctx, *job.Payload().FinalResumeError)
+		if cloud.IsKMSInaccessible(finalResumeErr) {
+			e.metrics.LastKMSInaccessibleErrorTime.Update(execCfg.Clock.Now().GoTime().Unix())
+		}
+	}
+	return nil
+}
+
 // Metrics implements ScheduledJobExecutor interface
 func (e *scheduledBackupExecutor) Metrics() metric.Struct {
 	return &e.metrics
@@ -607,6 +644,12 @@ func init() {
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
 					}, []string{"tenant_id"}),
+					LastKMSInaccessibleErrorTime: metric.NewGauge(metric.Metadata{
+						Name:        "backup.last-failed-time.kms-inaccessible",
+						Help:        "The unix timestamp of the most recent failure of backup due to errKMSInaccessible by a backup specified as maintaining this metric",
+						Measurement: "Jobs",
+						Unit:        metric.Unit_TIMESTAMP_SEC,
+					}),
 				},
 			}, nil
 		})

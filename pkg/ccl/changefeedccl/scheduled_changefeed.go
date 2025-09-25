@@ -88,6 +88,7 @@ func (s *scheduledChangefeedExecutor) ExecuteJob(
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (s *scheduledChangefeedExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobState jobs.State,

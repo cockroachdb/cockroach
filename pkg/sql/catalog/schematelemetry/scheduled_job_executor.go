@@ -77,6 +77,7 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 // NotifyJobTermination is part of the jobs.ScheduledJobExecutor interface.
 func (s schemaTelemetryExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.State,

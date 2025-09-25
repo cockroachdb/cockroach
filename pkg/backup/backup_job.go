@@ -1862,7 +1862,9 @@ func (b *backupResumer) processScheduledBackupCompletion(
 			return nil
 		}
 		scheduleID = jobspb.ScheduleID(tree.MustBeDInt(datums[0]))
-		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobState, b.job.Details(), scheduleID); err != nil {
+		if err := jobs.NotifyJobTermination(
+			ctx, execCtx.ExecCfg(), txn, env, b.job.ID(), jobState, b.job.Details(), scheduleID,
+		); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
@@ -1900,16 +1902,6 @@ func (b *backupResumer) OnFailOrCancel(
 		return releaseProtectedTimestamp(ctx, pts, details.ProtectedTimestampRecord)
 	}); err != nil {
 		return err
-	}
-
-	// If this backup should update cluster monitoring metrics, update the
-	// metrics.
-	if details.UpdatesClusterMonitoringMetrics {
-		metrics := p.ExecCfg().JobRegistry.MetricsStruct().Backup.(*BackupMetrics)
-		if cloud.IsKMSInaccessible(jobErr) {
-			now := timeutil.Now()
-			metrics.LastKMSInaccessibleErrorTime.Update(now.Unix())
-		}
 	}
 
 	// This should never return an error unless resolving the schedule that the

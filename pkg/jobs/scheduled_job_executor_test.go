@@ -37,6 +37,7 @@ func (s *statusTrackingExecutor) ExecuteJob(
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
 	ctx context.Context,
+	execCfg any,
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobState State,
@@ -97,7 +98,7 @@ func TestJobTerminationNotification(t *testing.T) {
 	for _, s := range []State{StateCanceled, StateFailed, StateSucceeded} {
 		require.NoError(t, h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return NotifyJobTermination(
-				ctx, txn, h.env, 123, s, nil, schedule.ScheduleID(),
+				ctx, h.server.ExecutorConfig(), txn, h.env, 123, s, nil, schedule.ScheduleID(),
 			)
 		}))
 	}

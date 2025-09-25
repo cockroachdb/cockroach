@@ -10,12 +10,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
@@ -56,6 +64,57 @@ func TestBackupSucceededUpdatesMetrics(t *testing.T) {
 		verifyRPOTenantMetricLabels(t, executor.metrics.RpoTenantMetric, expectedTenantIDs)
 		verifyRPOTenantMetricGaugeValue(t, executor.metrics.RpoTenantMetric, details.EndTime)
 	})
+}
+
+func TestBackupFailedUpdatesMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	registry := srv.ApplicationLayer().JobRegistry().(*jobs.Registry)
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+
+	executor := &scheduledBackupExecutor{
+		metrics: backupMetrics{
+			ExecutorMetrics: &jobs.ExecutorMetrics{
+				NumFailed: metric.NewCounter(metric.Metadata{}),
+			},
+			LastKMSInaccessibleErrorTime: metric.NewGauge(metric.Metadata{}),
+		},
+	}
+	schedule := createSchedule(t, true)
+
+	// Create a dummy job with a KMS error
+	jobID := registry.MakeJobID()
+	dummyRecord := jobs.Record{
+		Details:  jobspb.BackupDetails{},
+		Progress: jobspb.BackupProgress{},
+		Username: username.TestUserName(),
+	}
+	_, err := registry.CreateJobWithTxn(ctx, dummyRecord, jobID, nil /* txn */)
+	require.NoError(t, err)
+	require.NoError(
+		t, registry.UpdateJobWithTxn(
+			ctx, jobID, nil, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				kmsError := cloud.KMSInaccessible(errors.New("failed to access KMS"))
+				encodedKmsErr := errors.EncodeError(ctx, kmsError)
+				md.Payload.FinalResumeError = &encodedKmsErr
+				ju.UpdatePayload(md.Payload)
+				return nil
+			},
+		),
+	)
+
+	require.NoError(
+		t,
+		executor.backupFailed(
+			ctx, &execCfg, nil /* txn */, schedule, jobID, jobs.StateFailed,
+		),
+	)
+	require.Equal(t, int64(1), executor.metrics.ExecutorMetrics.NumFailed.Count())
+	require.Greater(t, executor.metrics.LastKMSInaccessibleErrorTime.Value(), int64(0))
 }
 
 func createSchedule(t *testing.T, updatesLastBackupMetric bool) *jobs.ScheduledJob {
