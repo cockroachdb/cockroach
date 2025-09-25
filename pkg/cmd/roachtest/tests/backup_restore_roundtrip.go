@@ -134,7 +134,11 @@ func backupRestoreRoundTrip(
 ) {
 	pauseProbability := 0.2
 	testRNG, seed := randutil.NewLockedPseudoRand()
-	t.L().Printf("random seed: %d", seed)
+
+	// Workload can only take a positive int as a seed, but seed could be a
+	// negative int. Ensure the seed passed to workload is an int.
+	workloadSeed := testRNG.Int63()
+	t.L().Printf("random seed: %d; workload seed: %d", seed, workloadSeed)
 
 	envOption := install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
@@ -157,7 +161,7 @@ func backupRestoreRoundTrip(
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, seed, testUtils, dbs,
+			ctx, t, c, m, testRNG, workloadSeed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
@@ -421,12 +425,12 @@ func createDriversForBackupRestore(
 	c cluster.Cluster,
 	m cluster.Monitor,
 	rng *rand.Rand,
-	seed int64,
+	workloadSeed int64,
 	testUtils *CommonTestUtils,
 	dbs []string,
 ) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
 	runBackgroundWorkload, err := startBackgroundWorkloads(
-		ctx, t.L(), c, m, rng, seed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+		ctx, t.L(), c, m, rng, workloadSeed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
