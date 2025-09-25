@@ -58,6 +58,10 @@ INSERT INTO child (c, p, crdb_region) VALUES (1000, 100, 'us-east-1'), (2000, 20
 statement ok
 ANALYZE great_grandparent;
 
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 # Only the scan in the main query is parallelized when we don't have stats on
 # the descendant tables.
 query I
@@ -68,6 +72,10 @@ SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 
 statement ok
 ANALYZE grandparent;
 
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 # Now we also should parallelize lookup join into the grandparent table.
 query I
 SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
@@ -77,6 +85,10 @@ SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 
 statement ok
 ANALYZE parent;
 
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 # Now we also should parallelize lookup join into the parent table.
 query I
 SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
@@ -85,6 +97,10 @@ SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 
 
 statement ok
 ANALYZE child;
+
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 # Finally, all three lookup joins as well as the scan in the main query should
 # be parallelized.
@@ -288,6 +304,10 @@ ALTER TABLE grandparent INJECT STATISTICS '[
     }
 ]'
 
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 query I
 SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
 ----
@@ -328,6 +348,10 @@ ALTER TABLE grandparent INJECT STATISTICS '[
         "row_count": 1000000
     }
 ]'
+
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 query I
 SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
