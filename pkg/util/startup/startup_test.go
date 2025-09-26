@@ -89,7 +89,7 @@ func TestStartupFailureRandomRange(t *testing.T) {
 	// CI. We also skip race builds as the test uses multiple nodes, which can
 	// cause the test to grind to a halt and flake out.
 	skip.UnderRace(t, "6 nodes with replication is too slow for race")
-	if !skip.Stress() {
+	if !skip.NightlyStress() {
 		skip.IgnoreLint(t, "test takes 30s to run due to circuit breakers and timeouts")
 	}
 
