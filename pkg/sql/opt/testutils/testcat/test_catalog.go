@@ -60,6 +60,8 @@ type Catalog struct {
 
 	users       map[username.SQLUsername]roleMembership
 	currentUser username.SQLUsername
+
+	sessionVars map[string]string
 }
 
 type roleMembership struct {
@@ -531,6 +533,14 @@ func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
 // LeaseByStableID does not do anything since no leasing is used here.
 func (tc *Catalog) LeaseByStableID(ctx context.Context, id cat.StableID) (uint64, error) {
 	return 1, nil
+}
+
+// ForEachSessionVar applies the given function to the session variable
+// name-value pairs determined by previous SET statements.
+func (tc *Catalog) ForEachSessionVar(fn func(name string, value string)) {
+	for k, v := range tc.sessionVars {
+		fn(k, v)
+	}
 }
 
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
