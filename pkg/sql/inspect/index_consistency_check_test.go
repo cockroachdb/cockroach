@@ -571,7 +571,7 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 	// TODO(148365): Run INSPECT instead of SCRUB.
 	_, err := db.Exec(`SET enable_scrub_job=true`)
 	require.NoError(t, err)
-	_, err = db.Query(`EXPERIMENTAL SCRUB TABLE test.reserved_table AS OF SYSTEM TIME '-1us' WITH OPTIONS INDEX ALL`)
+	_, err = db.Query(`EXPERIMENTAL SCRUB TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
 	require.NoError(t, err, "should succeed on table with reserved word column names")
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 

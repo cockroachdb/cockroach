@@ -1483,6 +1483,7 @@ message InspectDetails {
   repeated Check checks = 1;
 
   // AsOf specifies the timestamp at which the inspect checks should be performed.
+  // If empty, the current timestamp will be used for each span processed.
   util.hlc.Timestamp as_of = 2 [(gogoproto.nullable) = false];
 
   // ProtectedTimestampRecord is the id of the protected timestamp record that
