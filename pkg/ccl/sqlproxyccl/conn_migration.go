@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -46,11 +47,16 @@ type transferContext struct {
 }
 
 func newTransferContext(backgroundCtx context.Context) (*transferContext, context.CancelFunc) {
-	transferCtx, cancel := context.WithTimeout(backgroundCtx, defaultTransferTimeout) // nolint:context
+	forkedSpanCtx, sp := tracing.ForkSpan(backgroundCtx, "transfer-connection")
+	transferCtx, ctxCancel := context.WithTimeout(forkedSpanCtx, defaultTransferTimeout) // nolint:context
 	ctx := &transferContext{
 		Context: transferCtx,
 	}
 	ctx.mu.recoverableConn = true
+	cancel := func() {
+		sp.Finish()
+		ctxCancel()
+	}
 	return ctx, cancel
 }
 
