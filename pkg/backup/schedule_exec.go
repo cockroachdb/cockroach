@@ -98,6 +98,21 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
 
+	// We currently set two different options that control whether two different
+	// backup metrics are updated:
+	// 1. updates_last_backup_metric on the schedule
+	// 2. updates_cluster_monitoring_metrics on the backup statement
+	// We should probably consolidate these two options int one, but for now we
+	// will ensure that setting updates_last_backup_metric on the schedule also
+	// sets updates_cluster_monitoring_metrics on the backup statement.
+	args := &backuppb.ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+	if args.UpdatesLastBackupMetric {
+		backupStmt.Options.UpdatesClusterMonitoringMetrics = tree.DBoolTrue
+	}
+
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker(ctx, "exec-backup", txn.KV(), sj.Owner())
 	defer cleanup()
