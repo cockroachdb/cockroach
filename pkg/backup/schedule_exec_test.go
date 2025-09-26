@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
@@ -56,6 +58,35 @@ func TestBackupSucceededUpdatesMetrics(t *testing.T) {
 		verifyRPOTenantMetricLabels(t, executor.metrics.RpoTenantMetric, expectedTenantIDs)
 		verifyRPOTenantMetricGaugeValue(t, executor.metrics.RpoTenantMetric, details.EndTime)
 	})
+}
+
+func TestBackupFailedUpdatesMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+	schedules, err := th.createBackupSchedule(
+		t,
+		`CREATE SCHEDULE FOR
+		BACKUP INTO 'nodelocal://1/backup' WITH kms = 'aws-kms:///not-a-real-kms-jpeg?AUTH=implicit&REGION=us-east-1'
+		RECURRING '@hourly' FULL BACKUP ALWAYS
+		WITH SCHEDULE OPTIONS updates_cluster_last_backup_time_metric`,
+	)
+	require.NoError(t, err)
+	require.Len(t, schedules, 1)
+	schedule := schedules[0]
+
+	th.env.SetTime(schedule.NextRun().Add(1 * time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForScheduledJobState(t, schedule.ScheduleID(), jobs.StateFailed)
+
+	metrics, ok := th.server.JobRegistry().(*jobs.Registry).MetricsStruct().Backup.(*BackupMetrics)
+	require.True(t, ok)
+
+	require.Greater(t, metrics.LastKMSInaccessibleErrorTime.Value(), int64(0))
 }
 
 func createSchedule(t *testing.T, updatesLastBackupMetric bool) *jobs.ScheduledJob {
