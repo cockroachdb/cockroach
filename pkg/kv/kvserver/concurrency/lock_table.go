@@ -3132,6 +3132,7 @@ func (kl *keyLocks) discoveredLock(
 	accessStrength lock.Strength,
 	notRemovable bool,
 	clock *hlc.Clock,
+	st *cluster.Settings,
 ) error {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -3144,7 +3145,14 @@ func (kl *keyLocks) discoveredLock(
 	if kl.isLockedBy(foundLock.Txn.ID) {
 		e := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
+
+		beforeTs := tl.writeTS()
+
 		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
+
+		if beforeTs.Less(tl.writeTS()) {
+			kl.recomputeWaitQueues(st)
+		}
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
@@ -4352,7 +4360,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock, g.lt.settings)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()
