@@ -96,12 +96,16 @@ func startDistIngestion(
 		updateStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
 	}
 
-	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB,
-		streamclient.WithStreamID(streamID))
+	clusterUris, err := getClusterUris(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+	client, err := streamclient.GetFirstActiveClient(ctx, clusterUris, execCtx.ExecCfg().InternalDB, streamclient.WithStreamID(streamID))
 	if err != nil {
 		return err
 	}
 	defer closeAndLog(ctx, client)
+
 	if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
 		return err
 	}
@@ -197,11 +201,23 @@ func startDistIngestion(
 		}
 		return ingestor.ingestSpanConfigs(ctx, details.SourceTenantName)
 	}
+
+	refreshConnStopper := make(chan struct{})
+
+	refreshConn := replicationutils.GetAlterConnectionChecker(
+		ingestionJob.ID(),
+		clusterUris[0].Serialize(),
+		geURIFromIngestionJobDetails,
+		execCtx.ExecCfg(),
+		refreshConnStopper,
+	)
+
 	execInitialPlan := func(ctx context.Context) error {
 		defer func() {
 			stopReplanner()
 			close(tracingAggCh)
 			close(spanConfigIngestStopper)
+			close(refreshConnStopper)
 		}()
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
@@ -273,11 +289,15 @@ func startDistIngestion(
 		return err
 	}
 
-	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs)
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs, refreshConn)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
 	return err
+}
+
+func geURIFromIngestionJobDetails(details jobspb.Details) string {
+	return details.(jobspb.StreamIngestionDetails).SourceClusterConnUri
 }
 
 func sortSpans(partitions []streamclient.PartitionInfo) roachpb.Spans {
