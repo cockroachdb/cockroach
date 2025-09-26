@@ -143,6 +143,7 @@ const (
 	dropTable    // DROP TABLE <table>
 	dropTrigger  // DROP TRIGGER <trigger> ON <table>
 	dropView     // DROP VIEW <view>
+	truncateTable
 
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
@@ -264,6 +265,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	renameSequence:                    (*operationGenerator).renameSequence,
 	renameTable:                       (*operationGenerator).renameTable,
 	renameView:                        (*operationGenerator).renameView,
+	truncateTable:                     (*operationGenerator).truncateTable,
 }
 
 var opWeights = []int{
@@ -321,6 +323,7 @@ var opWeights = []int{
 	renameSequence:                    1,
 	renameTable:                       1,
 	renameView:                        1,
+	truncateTable:                     1,
 }
 
 // This workload will maintain its own list of minimal supported versions for
@@ -358,4 +361,5 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	dropTable:                         clusterversion.MinSupported,
 	dropTrigger:                       clusterversion.MinSupported,
 	dropView:                          clusterversion.MinSupported,
+	truncateTable:                     clusterversion.V25_4,
 }
