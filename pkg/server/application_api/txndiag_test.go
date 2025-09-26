@@ -6,11 +6,19 @@
 package application_api
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -20,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -231,4 +240,224 @@ func TestTransactionDiagnosticsReportAPI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdminAPITransactionDiagnosticsBundle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name              string
+		grantRole         string
+		isAdmin           bool
+		expectedStatus    int
+		shouldValidateZip bool
+	}{
+		{
+			name:              "admin_role",
+			isAdmin:           true,
+			expectedStatus:    http.StatusOK,
+			shouldValidateZip: true,
+		},
+		{
+			name:              "no_permissions",
+			isAdmin:           false,
+			expectedStatus:    http.StatusForbidden,
+			shouldValidateZip: false,
+		},
+		{
+			name:              "viewactivityredacted_role",
+			grantRole:         "VIEWACTIVITYREDACTED",
+			isAdmin:           false,
+			expectedStatus:    http.StatusForbidden,
+			shouldValidateZip: false,
+		},
+		{
+			name:              "viewactivity_role",
+			grantRole:         "VIEWACTIVITY",
+			isAdmin:           false,
+			expectedStatus:    http.StatusOK,
+			shouldValidateZip: true,
+		},
+	}
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	ts := s.ApplicationLayer()
+	conn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+
+	// Set up the test table
+	conn.Exec(t, "CREATE TABLE test (id INT)")
+
+	// Insert into transaction_diagnostics first
+	txnFingerprintID, err := sqlstatsutil.DecodeStringToTxnFingerprintID("5a808c2f3780b2c8")
+	require.NoError(t, err)
+	stmt1FingerprintID, err := sqlstatsutil.DecodeStringToStmtFingerprintID("2ca050d725bfd5f0")
+	require.NoError(t, err)
+	stmt2FingerprintID, err := sqlstatsutil.DecodeStringToStmtFingerprintID("fece62580b006715")
+	require.NoError(t, err)
+
+	// Create a transaction diagnostic request that should match our data
+	req := &serverpb.CreateTransactionDiagnosticsReportRequest{
+		TransactionFingerprintId: sqlstatsutil.EncodeUint64ToBytes(uint64(txnFingerprintID)),
+		StatementFingerprintIds: [][]byte{
+			sqlstatsutil.EncodeUint64ToBytes(uint64(stmt1FingerprintID)),
+			sqlstatsutil.EncodeUint64ToBytes(uint64(stmt2FingerprintID)),
+		},
+	}
+
+	var resp serverpb.CreateTransactionDiagnosticsReportResponse
+	err = srvtestutils.PostStatusJSONProto(ts, "txndiagreports", req, &resp)
+	require.NoError(t, err)
+	require.NotZero(t, resp.Report.Id)
+
+	txn := conn.Begin(t)
+	_, err = txn.Exec("INSERT INTO test VALUES (123)")
+	require.NoError(t, err)
+	_, err = txn.Query("SELECT * FROM test")
+	require.NoError(t, err)
+	err = txn.Commit()
+	require.NoError(t, err)
+
+	// Wait a bit for the diagnostic to be processed
+	require.Eventually(t, func() bool {
+		rows := conn.Query(t, `
+			SELECT id FROM system.transaction_diagnostics
+			WHERE bundle_chunks IS NOT NULL
+			ORDER BY collected_at DESC
+			LIMIT 1
+		`)
+		defer rows.Close()
+		return rows.Next()
+	}, 5*time.Second, 100*time.Millisecond, "Expected transaction diagnostic bundle to be created")
+
+	// Get the bundle ID
+	bundleRows := conn.Query(t, `
+		SELECT id FROM system.transaction_diagnostics
+		WHERE bundle_chunks IS NOT NULL
+		ORDER BY collected_at DESC
+		LIMIT 1
+	`)
+	require.True(t, bundleRows.Next(), "Expected to find transaction diagnostic bundle")
+	var bundleID int64
+	err = bundleRows.Scan(&bundleID)
+	require.NoError(t, err)
+	bundleRows.Close()
+
+	expectedStmtCount := 2
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Grant role if specified
+			if tc.grantRole != "" {
+				conn.Exec(t, fmt.Sprintf("GRANT SYSTEM %s TO %s",
+					tc.grantRole, apiconstants.TestingUserNameNoAdmin().Normalized()))
+				defer conn.Exec(t, fmt.Sprintf("REVOKE SYSTEM %s FROM %s",
+					tc.grantRole, apiconstants.TestingUserNameNoAdmin().Normalized()))
+			}
+
+			// Download bundle
+			resp, body, err := downloadTransactionBundle(ts, bundleID, tc.isAdmin)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			// Log the response for debugging
+			if resp.StatusCode != tc.expectedStatus {
+				t.Logf("Expected status %d but got %d with body %s", tc.expectedStatus, resp.StatusCode, body)
+			}
+			require.Equal(t, tc.expectedStatus, resp.StatusCode)
+
+			// Validate ZIP contents if successful
+			if tc.shouldValidateZip {
+				validateTransactionBundle(t, body, expectedStmtCount)
+			}
+		})
+	}
+}
+
+// downloadTransactionBundle downloads a transaction diagnostic bundle with the specified auth level
+func downloadTransactionBundle(
+	ts serverutils.ApplicationLayerInterface, bundleID int64, isAdmin bool,
+) (*http.Response, []byte, error) {
+	client, err := ts.GetAuthenticatedHTTPClient(isAdmin, serverutils.SingleTenantSession)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	url := ts.AdminURL().WithPath("/_admin/v1/txnbundle/" + strconv.FormatInt(bundleID, 10)).String()
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp, nil, err
+	}
+
+	return resp, body, nil
+}
+
+// validateTransactionBundle unzips and validates the contents of a transaction diagnostic bundle
+func validateTransactionBundle(t *testing.T, data []byte, expectedStmtCount int) {
+	// Open the ZIP archive
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+
+	// Track what we find
+	var foundTxnBundle bool
+	var foundStmtBundles int
+	var foundCommitBundle bool
+
+	for _, file := range reader.File {
+		if strings.HasPrefix(file.Name, "transaction-") && strings.HasSuffix(file.Name, ".zip") {
+			foundTxnBundle = true
+
+			// Validate transaction bundle contents
+			rc, err := file.Open()
+			require.NoError(t, err)
+			txnData, err := io.ReadAll(rc)
+			require.NoError(t, err)
+			rc.Close()
+
+			// Verify it's a valid ZIP
+			txnReader, err := zip.NewReader(bytes.NewReader(txnData), int64(len(txnData)))
+			require.NoError(t, err)
+			require.Greater(t, len(txnReader.File), 0, "Transaction bundle should contain files")
+
+		} else if strings.HasSuffix(file.Name, "-INSERT.zip") || strings.HasSuffix(file.Name, "-SELECT.zip") {
+			foundStmtBundles++
+
+			// Validate statement bundle contents
+			rc, err := file.Open()
+			require.NoError(t, err)
+			stmtData, err := io.ReadAll(rc)
+			require.NoError(t, err)
+			rc.Close()
+
+			// Verify it's a valid ZIP
+			stmtReader, err := zip.NewReader(bytes.NewReader(stmtData), int64(len(stmtData)))
+			require.NoError(t, err)
+			require.Greater(t, len(stmtReader.File), 0, "Statement bundle should contain files")
+		} else if strings.HasSuffix(file.Name, "-COMMIT.zip") {
+			foundCommitBundle = true
+
+			// Validate commit bundle contents
+			rc, err := file.Open()
+			require.NoError(t, err)
+			txnData, err := io.ReadAll(rc)
+			require.NoError(t, err)
+			rc.Close()
+
+			// Verify it's a valid ZIP
+			txnReader, err := zip.NewReader(bytes.NewReader(txnData), int64(len(txnData)))
+			require.NoError(t, err)
+			require.Greater(t, len(txnReader.File), 0, "Commit bundle should contain files")
+		}
+	}
+
+	// Verify we found the expected components
+	require.True(t, foundTxnBundle, "Should find transaction bundle in archive")
+	require.True(t, foundCommitBundle, "Should find commit bundle in archive")
+	require.Equal(t, foundStmtBundles, expectedStmtCount, "Should find at least one statement bundle")
 }
