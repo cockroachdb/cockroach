@@ -128,6 +128,19 @@ func (c broadcastPacerConfig) GetSmear() time.Duration {
 	return 1 * time.Millisecond
 }
 
+// dynamicBroadcastPacerConfig implements taskpacer.Config using cluster settings.
+type dynamicBroadcastPacerConfig struct {
+	st *cluster.Settings
+}
+
+func (c *dynamicBroadcastPacerConfig) GetRefresh() time.Duration {
+	return closedts.SideTransportPacingRefreshInterval.Get(&c.st.SV)
+}
+
+func (c *dynamicBroadcastPacerConfig) GetSmear() time.Duration {
+	return 1 * time.Millisecond
+}
+
 // trackedRange contains the information that the side-transport last published
 // about a particular range.
 type trackedRange struct {
@@ -224,7 +237,7 @@ func newSenderWithConnFactory(
 		st:          st,
 		clock:       clock,
 		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		buf:         newUpdatesBuf(st),
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
@@ -248,6 +261,12 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 		}
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
+	// Set up callback for pacing refresh interval changes.
+	pacingConfChanged := func(ctx context.Context) {
+		s.buf.updatePacer(s.st)
+	}
+	closedts.SideTransportPacingRefreshInterval.SetOnChange(&s.st.SV, pacingConfChanged)
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
@@ -552,6 +571,9 @@ type updatesBuf struct {
 	mu struct {
 		syncutil.Mutex
 
+		// pacer controls the timing of broadcast updates to avoid overloading the system.
+		pacer *taskpacer.Pacer
+
 		// We maintain two conditional variables to acheive this effect:
 		// Multiple goroutines can be waiting on one of the conditional variables,
 		// and when a new item is inserted, we signal the conditional variable that
@@ -594,12 +616,26 @@ type updatesBuf struct {
 // little while and not have to send a snapshot when it resumes.
 const updatesBufSize = 50
 
-func newUpdatesBuf() *updatesBuf {
+func newUpdatesBuf(st *cluster.Settings) *updatesBuf {
 	buf := &updatesBuf{}
 	buf.mu.updated1.L = &buf.mu
 	buf.mu.updated2.L = &buf.mu
 	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
+	buf.mu.pacer = taskpacer.New(&dynamicBroadcastPacerConfig{st: st})
 	return buf
+}
+
+func (b *updatesBuf) TestingGetTotalNumWaiters() uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.mu.numWaiters1 + b.mu.numWaiters2
+}
+
+// updatePacer atomically replaces the task pacer with a new one using the current cluster settings.
+func (b *updatesBuf) updatePacer(st *cluster.Settings) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.pacer = taskpacer.New(&dynamicBroadcastPacerConfig{st: st})
 }
 
 // Push adds a new update to the back of the buffer.
@@ -658,7 +694,11 @@ func (b *updatesBuf) PaceBroadcastUpdate(
 		return
 	}
 
-	pacer := taskpacer.New(broadcastPacerConfig{})
+	// Get the current pacer (which uses the cluster setting).
+	b.mu.Lock()
+	pacer := b.mu.pacer
+	b.mu.Unlock()
+
 	pacer.StartTask(timeutil.Now())
 
 	workLeft := originalNumWaiters

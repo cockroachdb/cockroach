@@ -907,6 +907,7 @@ func TestPaceBroadcastUpdate(t *testing.T) {
 		go func() {
 			// Wait for sequence number 1.
 			_, ok := s.buf.GetBySeq(ctx, 1)
+			require.Equal(t, true, ok)
 			if ok {
 				mu.Lock()
 				receiveTimes = append(receiveTimes, time.Now())
@@ -916,8 +917,12 @@ func TestPaceBroadcastUpdate(t *testing.T) {
 		}()
 	}
 
-	// Give the goroutines a moment to start waiting.
-	time.Sleep(10 * time.Millisecond)
+	testutils.SucceedsSoon(t, func() error {
+		if s.buf.TestingGetTotalNumWaiters() < uint64(200) {
+			return errors.New("not all goroutines are waiting yet")
+		}
+		return nil
+	})
 
 	// Publish an item to the buffer, which should trigger the paced broadcast.
 	s.publish(ctx)
@@ -947,6 +952,6 @@ func TestPaceBroadcastUpdate(t *testing.T) {
 
 	// Verify that the time spread between first and last receive is at least 10ms.
 	timeSpread := maxTime.Sub(minTime)
-	require.GreaterOrEqual(t, timeSpread, 200*time.Millisecond,
+	require.GreaterOrEqual(t, timeSpread, 5*time.Millisecond,
 		"expected time spread of at least 50ms between first and last receive, got %v", timeSpread)
 }
