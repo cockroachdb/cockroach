@@ -57,6 +57,11 @@ func (r *apiInternalServer) registerStatusRoutes() {
 		{POST, "/_status/stmtdiagreports/cancel", createHandler(r.status.CancelStatementDiagnosticsReport)},
 		{GET, "/_status/stmtdiag/{statement_diagnostics_id}", createHandler(r.status.StatementDiagnostics)},
 
+		// Transaction diagnostics
+		{GET, "/_status/txndiagreports", createHandler(r.status.TransactionDiagnosticsRequests)},
+		{POST, "/_status/txndiagreports", createHandler(r.status.CreateTransactionDiagnosticsReport)},
+		{POST, "/_status/txndiagreports/cancel", createHandler(r.status.CancelTransactionDiagnosticsReport)},
+
 		// Index statistics
 		{GET, "/_status/indexusagestatistics", createHandler(r.status.IndexUsageStatistics)},
 		{POST, "/_status/resetindexusagestats", createHandler(r.status.ResetIndexUsageStats)},
