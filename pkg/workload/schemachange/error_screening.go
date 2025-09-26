@@ -1794,3 +1794,38 @@ func (og *operationGenerator) tableHasForeignKeyMutation(
 			AND (m->'constraint'->>'foreign_key') IS NOT NULL
 		);`, tableName)
 }
+
+// getTableForeignKeyReferences returns a list of tables that reference
+// the specified table via foreign key references.
+func (og *operationGenerator) getTableForeignKeyReferences(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) ([]tree.TableName, error) {
+	rows, err := tx.Query(ctx,
+		`WITH fk_refs AS (
+					SELECT conrelid FROM pg_constraint WHERE
+						confrelid = $1::REGCLASS AND
+						conrelid <> $1::REGCLASS
+				)
+				SELECT
+					n.nspname as schema_name,  c.relname AS object_name
+				FROM fk_refs AS f
+					JOIN pg_class AS c ON c.oid = f.conrelid
+					JOIN pg_namespace AS n ON c.relnamespace = n.oid
+`,
+		tableName.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []tree.TableName
+	for rows.Next() {
+		var table, schema string
+		err = rows.Scan(&schema, &table)
+		if err != nil {
+			return nil, err
+		}
+		name := tree.MakeTableNameWithSchema(tableName.CatalogName, tree.Name(schema), tree.Name(table))
+		result = append(result, name)
+	}
+	return result, rows.Err()
+}
