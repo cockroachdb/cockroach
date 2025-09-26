@@ -904,7 +904,7 @@ INSERT INTO d.t VALUES (10),(11);
 CREATE TABLE d.ts (a TIMESTAMP, b DATE);
 CREATE TABLE d.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
-CREATE TABLE d.str (s STRING, b BYTES);
+CREATE TABLE d.str (s STRING, b BYTES) WITH (schema_locked=false);
 CREATE TABLE d.arr (a INT[], b TEXT[]);
 CREATE TABLE d.emptynorows (); -- zero columns, zero rows
 CREATE TABLE d.emptyrows (x INT);

@@ -56,7 +56,19 @@ WITH x AS (INSERT INTO parent VALUES (2) RETURNING p) SELECT f_fk_c(101, 2);
 (101,2)
 
 statement ok
+ALTER TABLE parent SET (schema_locked=false)
+
+statement ok
+ALTER TABLE child SET (schema_locked=false)
+
+statement ok
 TRUNCATE parent CASCADE
+
+statement ok
+ALTER TABLE parent RESET (schema_locked)
+
+statement ok
+ALTER TABLE child RESET (schema_locked)
 
 statement ok
 INSERT INTO parent (p) VALUES (1);
@@ -114,8 +126,21 @@ subtest end
 
 subtest delete
 
+
+statement ok
+ALTER TABLE parent SET (schema_locked=false)
+
+statement ok
+ALTER TABLE child SET (schema_locked=false)
+
 statement ok
 TRUNCATE parent CASCADE
+
+statement ok
+ALTER TABLE parent RESET (schema_locked)
+
+statement ok
+ALTER TABLE child RESET (schema_locked)
 
 statement ok
 INSERT INTO parent (p) VALUES (1), (2), (3), (4);
@@ -204,7 +229,19 @@ subtest end
 subtest upsert
 
 statement ok
+ALTER TABLE child SET (schema_locked=false)
+
+statement ok
+ALTER TABLE parent SET (schema_locked=false)
+
+statement ok
 TRUNCATE parent CASCADE
+
+statement ok
+ALTER TABLE child RESET (schema_locked)
+
+statement ok
+ALTER TABLE parent RESET (schema_locked)
 
 statement ok
 CREATE FUNCTION f_fk_c_ocdu(k INT, r INT) RETURNS RECORD AS $$
@@ -667,8 +704,15 @@ SELECT i, j FROM child@child_j_idx;
 statement ok
 DROP TABLE IF EXISTS child CASCADE;
 
+
+statement ok
+ALTER TABLE parent SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE parent;
+
+statement ok
+ALTER TABLE parent RESET (schema_locked)
 
 statement ok
 CREATE TABLE child (i INT PRIMARY KEY, j INT UNIQUE REFERENCES parent (j) ON UPDATE CASCADE ON DELETE CASCADE, INDEX (j));

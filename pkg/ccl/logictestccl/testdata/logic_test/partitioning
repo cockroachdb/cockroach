@@ -1518,7 +1518,13 @@ bar  CREATE TABLE public.bar (
 
 
 statement ok
+ALTER TABLE bar SET (schema_locked=false)
+
+statement ok
 TRUNCATE bar;
+
+statement ok
+ALTER TABLE bar RESET (schema_locked)
 
 query TT
 SHOW CREATE TABLE bar;

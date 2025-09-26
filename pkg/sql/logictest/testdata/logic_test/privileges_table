@@ -46,7 +46,13 @@ statement ok
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t
@@ -204,7 +210,13 @@ statement error user testuser does not have SELECT privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t
@@ -248,7 +260,13 @@ statement ok
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t

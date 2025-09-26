@@ -38,7 +38,13 @@ SELECT * FROM kview
 7 8
 
 statement ok
+ALTER TABLE kv SET (schema_locked=false)
+
+statement ok
 TRUNCATE TABLE kv
+
+statement ok
+ALTER TABLE kv RESET (schema_locked)
 
 query II
 SELECT * FROM kv
@@ -61,7 +67,13 @@ CREATE TABLE selfref (
 )
 
 statement ok
+ALTER TABLE selfref SET (schema_locked=false)
+
+statement ok
 TRUNCATE table selfref
+
+statement ok
+ALTER TABLE selfref RESET (schema_locked)
 
 statement ok
 INSERT INTO selfref VALUES (1, NULL);
@@ -83,7 +95,13 @@ CREATE TABLE bar (
 );
 
 statement ok
+ALTER TABLE bar SET (schema_locked=false)
+
+statement ok
 TRUNCATE bar
+
+statement ok
+ALTER TABLE bar RESET (schema_locked)
 
 statement ok
 DROP TABLE bar;
@@ -117,7 +135,13 @@ SELECT get_min_t0();
 0
 
 statement ok
+ALTER TABLE t0 SET (schema_locked=false)
+
+statement ok
 TRUNCATE TABLE t0;
+
+statement ok
+ALTER TABLE t0 RESET (schema_locked)
 
 query I
 SELECT * FROM v0 ORDER BY c0;
@@ -186,7 +210,15 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.x IS '''hi''); DROP TABLE t;';
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3';
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 query TT
 SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT] ORDER BY column_name

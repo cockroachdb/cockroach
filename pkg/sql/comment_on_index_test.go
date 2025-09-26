@@ -22,7 +22,7 @@ func TestCommentOnIndex(t *testing.T) {
 		if _, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (c INT, INDEX t_c_idx (c));
+		CREATE TABLE t (c INT, INDEX t_c_idx (c)) WITH (schema_locked=false);
 	`); err != nil {
 			t.Fatal(err)
 		}

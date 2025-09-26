@@ -158,8 +158,15 @@ INSERT INTO child VALUES (1, 10) ON CONFLICT (c) DO UPDATE SET p = 1
 statement error foreign key
 INSERT INTO child VALUES (1, 10) ON CONFLICT (c) DO UPDATE SET p = 10
 
+
+statement ok
+ALTER TABLE child SET (schema_locked=false)
+
 statement ok
 TRUNCATE child
+
+statement ok
+ALTER TABLE child RESET (schema_locked)
 
 statement ok
 INSERT INTO child VALUES (1, 1)
@@ -613,11 +620,11 @@ ALTER TABLE "user content"."customer reviews"
 # Cross database references are used below
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE "user content"."customer reviews" SET (schema_locked=true);
+ALTER TABLE "user content"."customer reviews" RESET (schema_locked);
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE orders SET (schema_locked=true);
+ALTER TABLE orders RESET (schema_locked);
 
 # This is allowed because we match using MATCH SIMPLE.
 statement ok
@@ -637,8 +644,21 @@ INSERT INTO "user content"."customer reviews" (id, product, body, shipment, "ord
 statement ok
 ALTER TABLE delivery DROP CONSTRAINT delivery_order_shipment_fkey
 
+
+statement ok
+ALTER TABLE orders SET (schema_locked=false);
+
+statement ok
+ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
+
 statement ok
 TRUNCATE orders, "user content"."customer reviews"
+
+statement ok
+ALTER TABLE orders RESET (schema_locked)
+
+statement ok
+ALTER TABLE "user content"."customer reviews" RESET (schema_locked)
 
 # Changing now non-referenced and secondary field is fine.
 statement ok
@@ -651,24 +671,78 @@ UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 statement error pgcode 23503 delete on table "products" violates foreign key constraint "delivery_item_fkey" on table "delivery"\nDETAIL: Key \(upc\)=\('885155001450'\) is still referenced from table "delivery"\.
 DELETE FROM products WHERE sku = '750'
 
+statement ok
+ALTER TABLE products SET (schema_locked=false);
+
 statement error "products" is referenced by foreign key from table "orders"
 TRUNCATE products
+
+statement ok
+ALTER TABLE products RESET (schema_locked)
 
 query I
 SELECT count(*) FROM delivery
 ----
 4
 
+
+statement ok
+ALTER TABLE products SET (schema_locked=false);
+
+statement ok
+ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
+
+statement ok
+ALTER TABLE orders SET (schema_locked=false);
+
+statement ok
+ALTER TABLE delivery SET (schema_locked=false);
+
 statement ok
 TRUNCATE products CASCADE
+
+statement ok
+ALTER TABLE products RESET (schema_locked)
+
+statement ok
+ALTER TABLE "user content"."customer reviews" RESET (schema_locked)
+
+statement ok
+ALTER TABLE orders RESET (schema_locked)
+
+statement ok
+ALTER TABLE delivery RESET (schema_locked)
 
 query I
 SELECT count(*) FROM delivery
 ----
 0
 
+
+statement ok
+ALTER TABLE delivery SET (schema_locked=false);
+
+statement ok
+ALTER TABLE products SET (schema_locked=false);
+
+statement ok
+ALTER TABLE orders SET (schema_locked=false);
+
+statement ok
+ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
+
 statement ok
 TRUNCATE delivery, products, orders, "user content"."customer reviews"
+
+statement ok
+ALTER TABLE delivery RESET (schema_locked)
+
+
+statement ok
+ALTER TABLE orders RESET (schema_locked)
+
+statement ok
+ALTER TABLE "user content"."customer reviews" RESET (schema_locked)
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM orders] ORDER BY constraint_name
@@ -1978,7 +2052,13 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
@@ -1987,7 +2067,13 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
@@ -2349,7 +2435,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
@@ -2358,7 +2450,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
@@ -2367,7 +2465,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
@@ -2376,7 +2480,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
@@ -2385,7 +2495,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
@@ -2394,7 +2510,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
@@ -2403,7 +2525,13 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
@@ -2412,7 +2540,13 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
@@ -2590,7 +2724,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2605,7 +2745,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2620,7 +2766,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2635,7 +2787,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2650,7 +2808,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2665,7 +2829,13 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2680,7 +2850,13 @@ statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2',
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2695,7 +2871,13 @@ statement error pq: foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2',
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
+ALTER TABLE b SET (schema_locked=false);
+
+statement ok
 TRUNCATE b
+
+statement ok
+ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2816,11 +2998,11 @@ INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE parentid SET (schema_locked=false)
+ALTER TABLE parentid SET (schema_locked=false);
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE childid SET (schema_locked=false)
+ALTER TABLE childid SET (schema_locked=false);
 
 statement error column \"id\" does not exist
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -2834,11 +3016,11 @@ ROLLBACK;
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE parentid SET (schema_locked=true)
+ALTER TABLE parentid RESET (schema_locked)
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE childid SET (schema_locked=true)
+ALTER TABLE childid RESET (schema_locked)
 
 subtest dont_check_nulls
 # Make sure that nulls are never checked while executing FK constraints.
@@ -2976,7 +3158,13 @@ statement error update on table "self" violates foreign key constraint "self_y_f
 UPDATE self SET x = 5 WHERE y = 1
 
 statement ok
+ALTER TABLE self SET (schema_locked=false);
+
+statement ok
 TRUNCATE self
+
+statement ok
+ALTER TABLE self RESET (schema_locked);
 
 statement ok
 INSERT INTO self VALUES (1, 1)
@@ -3290,10 +3478,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE NO ACTION', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3319,10 +3519,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE RESTRICT', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3349,10 +3561,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE RESTRICT', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3378,10 +3602,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE CASCADE', followed by 'ON DELETE SET DEFAULT'
 statement ok
@@ -3407,10 +3643,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE CASCADE', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3436,10 +3684,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3465,10 +3725,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3494,10 +3766,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE SET NULL', followed by 'ON DELETE SET DEFAULT'
 statement ok
@@ -3524,10 +3808,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 statement ok
 DROP TABLE t2 CASCADE;
@@ -3573,10 +3869,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE NO ACTION', followed by 'ON UPDATE CASCADE'
 statement ok
@@ -3603,10 +3911,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE RESTRICT', followed by 'ON UPDATE SET NULL'
 statement ok
@@ -3633,10 +3953,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE RESTRICT', followed by 'ON UPDATE CASCADE'
 statement ok
@@ -3663,10 +3995,22 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE CASCADE', followed by 'ON UPDATE SET DEFAULT'
 statement ok
@@ -3692,11 +4036,24 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
+
+statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE CASCADE', followed by 'ON UPDATE SET NULL'
 statement ok
@@ -3722,11 +4079,24 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
+
+statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE CASCADE'
 statement ok
@@ -3752,11 +4122,24 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
+
+statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE SET NULL'
 statement ok
@@ -3782,11 +4165,24 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
+
+statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE SET NULL', followed by 'ON UPDATE SET DEFAULT'
 statement ok
@@ -3812,11 +4208,24 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
+
+statement ok
+ALTER TABLE t2 SET (schema_locked=false);
+
+statement ok
+ALTER TABLE t1 SET (schema_locked=false);
+
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
+
+statement ok
+ALTER TABLE t2 RESET (schema_locked)
+
+statement ok
+ALTER TABLE t1 RESET (schema_locked)
 
 statement ok
 DROP TABLE t2 CASCADE;
