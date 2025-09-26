@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,17 +35,6 @@ type Parser struct {
 	lexer      lexer
 	parserImpl plpgsqlParserImpl
 	tokBuf     [8]plpgsqlSymType
-}
-
-// INT8 is the historical interpretation of INT. This should be left
-// alone in the future, since there are many sql fragments stored
-// in various descriptors. Any user input that was created after
-// INT := INT4 will simply use INT4 in any resulting code.
-var defaultNakedIntType = types.Int
-
-// Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (statements.PLpgStatement, error) {
-	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
 func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) {
@@ -79,27 +67,9 @@ func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) 
 	}
 }
 
-func (p *Parser) parseWithDepth(
-	depth int, plpgsql string, nakedIntType *types.T,
-) (statements.PLpgStatement, error) {
-	p.scanner.Init(plpgsql)
-	defer p.scanner.Cleanup()
-	sql, tokens, done := p.scanFnBlock()
-	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
-	if err != nil {
-		return statements.PLpgStatement{}, err
-	}
-	if !done {
-		return statements.PLpgStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", plpgsql)
-	}
-	return stmt, nil
-}
-
 // parse parses a statement from the given scanned tokens.
-func (p *Parser) parse(
-	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
-) (statements.PLpgStatement, error) {
-	p.lexer.init(sql, tokens, nakedIntType, &p.parserImpl)
+func (p *Parser) parse(sql string, tokens []plpgsqlSymType) (statements.PLpgStatement, error) {
+	p.lexer.init(sql, tokens, &p.parserImpl)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		if p.lexer.lastError == nil {
@@ -125,10 +95,9 @@ func (p *Parser) parse(
 		return statements.PLpgStatement{}, err
 	}
 	return statements.PLpgStatement{
-		AST:             p.lexer.stmt,
-		SQL:             sql,
-		NumPlaceholders: p.lexer.numPlaceholders,
-		NumAnnotations:  p.lexer.numAnnotations,
+		AST:            p.lexer.stmt,
+		SQL:            sql,
+		NumAnnotations: p.lexer.numAnnotations,
 	}, nil
 }
 
@@ -144,5 +113,15 @@ func (p *Parser) parse(
 // operate with table OIDTypeReferences.
 func Parse(sql string) (statements.PLpgStatement, error) {
 	var p Parser
-	return p.parseWithDepth(1, sql, defaultNakedIntType)
+	p.scanner.Init(sql)
+	defer p.scanner.Cleanup()
+	sql, tokens, done := p.scanFnBlock()
+	stmt, err := p.parse(sql, tokens)
+	if err != nil {
+		return statements.PLpgStatement{}, err
+	}
+	if !done {
+		return statements.PLpgStatement{}, errors.AssertionFailedf("invalid plpgsql function: %s", sql)
+	}
+	return stmt, nil
 }
