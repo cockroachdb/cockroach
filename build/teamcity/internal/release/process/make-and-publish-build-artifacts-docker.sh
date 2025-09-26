@@ -14,25 +14,30 @@ source "$dir/release/teamcity-support.sh"
 tc_start_block "Variable Setup"
 
 build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
+telemetry_disabled="${TELEMETRY_DISABLED:-false}"
+cockroach_archive_prefix="${COCKROACH_ARCHIVE_PREFIX:-cockroach}"
+if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]; then
+  echo "COCKROACH_ARCHIVE_PREFIX must be set to a non-default value when telemetry is disabled"
+  exit 1
+fi
 
-# On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_build_match="$(is_release_or_master_build "$TC_BUILD_BRANCH")"
 
 if [[ -z "${DRY_RUN}" ]] ; then
   if [[ -z "${release_build_match}" ]] ; then
     google_credentials=$GOOGLE_CREDENTIALS_CUSTOMIZED
-    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/${cockroach_archive_prefix}-customized"
     gcr_hostname="us-docker.pkg.dev"
   else
     google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
-    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
+    gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/${cockroach_archive_prefix}"
     # Used for docker login for gcloud
     gcr_hostname="us-docker.pkg.dev"
   fi
 else
   build_name="${build_name}.dryrun"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
-  gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
+  gcr_repository="us.gcr.io/cockroach-release/${cockroach_archive_prefix}-test"
   gcr_hostname="us.gcr.io"
 fi
 
