@@ -6,7 +6,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -17,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc/metadata"
 )
 
 type TxnDiagnosticsRequester interface {
@@ -247,4 +255,107 @@ func (s *statusServer) TransactionDiagnosticsRequests(
 		response.Reports[i] = request.toProto()
 	}
 	return response, nil
+}
+
+// BuildTransactionBundle constructs a complete transaction diagnostic bundle
+// including the transaction bundle and all associated statement bundles ordered by ID.
+func (s *adminServer) buildTransactionBundle(
+	ctx context.Context, txnID int64,
+) (bytes.Buffer, error) {
+	var z memzipper.Zipper
+	z.Init()
+
+	// First, get the transaction diagnostic bundle
+	txnRow, err := s.internalExecutor.QueryRowEx(
+		ctx, "admin-txn-bundle", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT bundle_chunks FROM system.transaction_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
+		txnID,
+	)
+	if err != nil {
+		return bytes.Buffer{}, errors.Wrap(err, "internal server error fetching transaction bundle")
+	}
+	if txnRow == nil {
+		return bytes.Buffer{}, errors.Newf("Not Found")
+	}
+
+	// Build the transaction bundle and add it to zip
+	txnChunkIDs := txnRow[0].(*tree.DArray)
+	txnBundle, err := s.buildBundle(ctx, txnChunkIDs)
+	if err != nil {
+		return bytes.Buffer{}, errors.Wrapf(err, "building transaction bundle")
+	}
+
+	z.AddFile(fmt.Sprintf("transaction-%d.zip", txnID), txnBundle.String())
+
+	// Get all associated statement bundles ordered by ID
+	it, err := s.internalExecutor.QueryIteratorEx(
+		ctx, "admin-txn-stmt-bundles", nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT id, bundle_chunks, statement_fingerprint FROM system.statement_diagnostics WHERE transaction_diagnostics_id=$1 AND bundle_chunks IS NOT NULL ORDER BY id",
+		txnID,
+	)
+	if err != nil {
+		return bytes.Buffer{}, errors.Wrap(err, "internal server error fetching statement bundles")
+	}
+	defer func() { _ = it.Close() }()
+
+	// Add each statement bundle in order
+	var ok bool
+	i := 1
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		stmtRow := it.Cur()
+		stmtChunkIDs := stmtRow[1].(*tree.DArray)
+		stmtFingerprint := stmtRow[2].(*tree.DString)
+		stmtBundle, err := s.buildBundle(ctx, stmtChunkIDs)
+		stmtName := strings.Split(string(*stmtFingerprint), " ")[0]
+		if err != nil {
+			return bytes.Buffer{}, errors.Wrapf(err, "building statement bundle")
+		}
+
+		z.AddFile(fmt.Sprintf("%d-%s.zip", i, stmtName), stmtBundle.String())
+		i++
+	}
+	if err != nil {
+		return bytes.Buffer{}, errors.Wrap(err, "internal server error iterating statement bundles")
+	}
+
+	result, err := z.Finalize()
+	if err != nil {
+		return bytes.Buffer{}, errors.Wrapf(err, "finalizing zip")
+	}
+
+	return *result, nil
+}
+
+func (s *adminServer) TxnBundleHandler(w http.ResponseWriter, req *http.Request) {
+	idStr := req.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	ctx := req.Context()
+	// The privilege checks in the privilege checker below checks the user in the incoming
+	// gRPC metadata.
+	md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(ctx, req)
+	authCtx := metadata.NewIncomingContext(req.Context(), md)
+	authCtx = s.AnnotateCtx(authCtx)
+	if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	bundle, err := s.buildTransactionBundle(ctx, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set(
+		"Content-Disposition",
+		fmt.Sprintf("attachment; filename=txn-bundle-%d.zip", id),
+	)
+
+	_, _ = io.Copy(w, &bundle)
 }
