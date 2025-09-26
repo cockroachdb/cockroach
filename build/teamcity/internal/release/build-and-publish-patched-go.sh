@@ -27,6 +27,12 @@ docker run --rm -i ${tty-} -v $this_dir/build-and-publish-patched-go:/bootstrap 
        us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:focal /bootstrap/impl.sh
 tc_end_block "Build Go toolchains"
 
+tc_start_block "Build Go Runtime Fuzz toolchains"
+docker run --rm -i ${tty-} -v $this_dir/build-and-publish-patched-go:/bootstrap \
+       -v "${toplevel}"/artifacts:/artifacts \
+       ubuntu:focal /bootstrap/impl-runtime-fuzz.sh
+tc_end_block "Build Go Runtime Fuzz toolchains"
+
 tc_start_block "Build FIPS Go toolchains (linux/amd64)"
 # UBI 9 image with Go toolchain installed. The same image Red Hat uses for their CI.
 UBI_DOCKER_IMAGE=registry.access.redhat.com/ubi9/go-toolset:1.18
