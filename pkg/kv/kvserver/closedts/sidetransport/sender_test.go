@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -928,4 +929,113 @@ func TestAllUpdatesBufAreSignalled(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestPaceUpdateSignalling verifies that the task pacer properly spaces out
+// signal calls after an update on the updatesBuf.
+func TestPaceUpdateSignalling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Flaky under duress.
+	skip.UnderDuress(t)
+
+	// Create a mock sender to get access to the buffer.
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	st := cluster.MakeTestingClusterSettings()
+	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 250*time.Millisecond)
+	s, stopper := newMockSenderWithSt(connFactory, st)
+	defer stopper.Stop(ctx)
+
+	// numWaiters controls how many goroutines will wait on updatesBuf.
+	numWaiters := 1000
+
+	// testPacing tests that when multiple goroutines are waiting on
+	// s.buf.GetBySeq, they receive their items spaced out by at least
+	// expectedMinSpread. If expectedMinSpread is 0, then pacing is disabled,
+	// and we expect all goroutines to receive their items within a few ms of
+	// each other.
+	//
+	// seqNum is the sequence number to wait for.
+	testPacing := func(expectedMinSpread time.Duration, seqNum ctpb.SeqNum) {
+		// Track the times when goroutines receive items from the buffer.
+		var receiveTimes []time.Time
+		var mu syncutil.Mutex
+
+		// Create numWaiters goroutines that wait on s.buf.GetBySeq and record
+		//receive times.
+		done := make(chan struct{}, numWaiters)
+		for i := 0; i < numWaiters; i++ {
+			go func() {
+				// Wait for the specified sequence number.
+				_, ok := s.buf.GetBySeq(ctx, seqNum)
+				require.Equal(t, true, ok)
+				if ok {
+					mu.Lock()
+					receiveTimes = append(receiveTimes, time.Now())
+					mu.Unlock()
+				}
+				done <- struct{}{}
+			}()
+		}
+
+		// Wait until all goroutines are waiting on the buffer.
+		testutils.SucceedsSoon(t, func() error {
+			if s.buf.TestingGetTotalNumWaiters() < numWaiters {
+				return errors.New("not all goroutines are waiting yet")
+			}
+			return nil
+		})
+
+		// Publish an item to the buffer, which should trigger the paced signalling.
+		s.publish(ctx)
+
+		// Wait for all goroutines to finish.
+		for i := 0; i < numWaiters; i++ {
+			<-done
+		}
+
+		// Verify that all goroutines received the message.
+		require.Len(t, receiveTimes, numWaiters)
+
+		// Find min and max receive times.
+		minTime := receiveTimes[0]
+		maxTime := receiveTimes[0]
+		for _, t := range receiveTimes[1:] {
+			if t.Before(minTime) {
+				minTime = t
+			}
+			if t.After(maxTime) {
+				maxTime = t
+			}
+		}
+
+		// Verify that the time spread matches expectations.
+		timeSpread := maxTime.Sub(minTime)
+		if expectedMinSpread <= 0 {
+			// When pacing is disabled, we expect all receives to happen within a few
+			// milliseconds.
+			require.LessOrEqualf(t, timeSpread, 25*time.Millisecond,
+				"expected time spread of less than 25ms between first and last receive",
+				" when pacing disabled, got %v", timeSpread)
+		} else {
+			require.GreaterOrEqualf(t, timeSpread, expectedMinSpread,
+				"expected time spread of at least %v between first and last receive,",
+				" got %v", expectedMinSpread, timeSpread)
+		}
+	}
+
+	// Test with 250ms pacing interval - expect at least 125ms spread just to be
+	// conservative. In practice, it should be closer to 250ms.
+	testPacing(125*time.Millisecond, 1 /* seqNum */)
+
+	// Change to 100ms pacing interval - expect at least 50ms spread.
+	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 100*time.Millisecond)
+	testPacing(50*time.Millisecond, 2 /* seqNum */)
+
+	// Change to 0ms (disabled) pacing interval - expect all goroutines to be
+	// woken within a few milliseconds of each other.
+	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 0)
+	testPacing(0, 3 /* seqNum */)
 }
