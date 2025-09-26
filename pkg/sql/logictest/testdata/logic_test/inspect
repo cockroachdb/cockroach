@@ -27,6 +27,23 @@ SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WH
 ----
 EXPERIMENTAL SCRUB TABLE t1 AS OF SYSTEM TIME '-1us'  succeeded  true
 
+# Verify the checks that were done.
+query TI
+SELECT
+  json_extract_path_text(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
+    'inspectDetails', 'checks', '0', 'type'
+  ) AS check_type,
+  jsonb_array_length(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) -> 'inspectDetails' -> 'checks'
+  ) AS num_checks
+FROM crdb_internal.system_jobs
+WHERE job_type = 'INSPECT'
+ORDER BY created DESC
+LIMIT 1
+----
+INSPECT_CHECK_INDEX_CONSISTENCY  1
+
 subtest end
 
 subtest scrub_job_multi_stmt_txn

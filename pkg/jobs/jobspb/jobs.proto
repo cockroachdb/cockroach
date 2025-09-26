@@ -1451,7 +1451,7 @@ message InspectDetails {
   message Check {
     enum InspectCheckType {
       option (gogoproto.goproto_enum_prefix) = false;
-      option (gogoproto.goproto_enum_stringer) = false;
+      option (gogoproto.goproto_enum_stringer) = true;
 
       // UNSPECIFIED indicates an unset check type. This is invalid.
       INSPECT_CHECK_UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "InspectCheckUnspecified"];
