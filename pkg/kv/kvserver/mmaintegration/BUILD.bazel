@@ -7,6 +7,7 @@ go_library(
         "allocator_sync.go",
         "mma_conversion.go",
         "store_load_msg.go",
+        "thrashing.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration",
     visibility = ["//visibility:public"],
