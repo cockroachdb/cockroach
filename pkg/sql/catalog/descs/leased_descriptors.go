@@ -181,7 +181,12 @@ func (ld *leasedDescriptors) maybeAssertExternalRowDataTS(desc catalog.Descripto
 
 // maybeInitReadTimestamp selects a read timestamp for the lease manager.
 func (ld *leasedDescriptors) maybeInitReadTimestamp(txn deadlineHolder) {
-	if ld.leaseTimestampSet {
+	// Refresh the leased timestamp if the read timestamp has changed on us
+	// or if it hasn't been populated yet.
+	// TODO (fqazi): For locked read timestamps inside leasing,
+	// we will need to have extra logic to ensure this is safe.
+	if ld.leaseTimestampSet &&
+		ld.leaseTimestamp.GetBaseTimestamp() == txn.ReadTimestamp() {
 		return
 	}
 	readTimestamp := txn.ReadTimestamp()
