@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/crosscluster/streamclient",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
@@ -33,6 +34,7 @@ go_library(
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
