@@ -119,7 +119,7 @@ type SimulationSettings struct {
 	ST *cluster.Settings
 	// OnRecording is called with trace spans obtained by recording the allocator.
 	// NB: we can't use state.StoreID here since that causes an import cycle.
-	OnRecording func(storeID int64, rec tracingpb.Recording)
+	OnRecording func(storeID int64, atDuration time.Duration, rec tracingpb.Recording)
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
