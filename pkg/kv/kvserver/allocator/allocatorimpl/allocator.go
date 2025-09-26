@@ -2543,9 +2543,17 @@ func (a *Allocator) TransferLeaseTarget(
 			return validTargets[a.randGen.Intn(len(validTargets))]
 		}
 
+		targetStores := make([]roachpb.StoreID, 0, len(sl.Stores))
+		for _, s := range sl.Stores {
+			targetStores = append(targetStores, s.StoreID)
+		}
+		handle := a.as.BuildMMARebalanceAdvisor(source.StoreID, targetStores)
 		var bestOption roachpb.ReplicaDescriptor
 		candidates := make([]roachpb.ReplicaDescriptor, 0, len(validTargets))
 		bestOptionLeaseCount := int32(math.MaxInt32)
+		// Similar to replicate queue, lease queue only filters out overloaded
+		// stores at the final target selection step. See comments on top of
+		// allocatorSync.BuildMMARebalanceAdvisor for more details.
 		for _, repl := range validTargets {
 			if leaseRepl.StoreID() == repl.StoreID {
 				continue
@@ -2555,7 +2563,13 @@ func (a *Allocator) TransferLeaseTarget(
 				continue
 			}
 			if float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
-				candidates = append(candidates, repl)
+				// Only include the candidate if it is not in conflict with mma's goals.
+				// Note that even if all candidates are excluded, the len(candidates) ==
+				// 0 branch below will still return the replica with the lowest lease
+				// count if we are required to shed the lease (excludeLeaseRepl==true).
+				if !a.as.IsInConflictWithMMA(ctx, repl.StoreID, handle, true /*cpuOnly*/) {
+					candidates = append(candidates, repl)
+				}
 			}
 			if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
 				bestOption = repl

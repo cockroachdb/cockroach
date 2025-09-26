@@ -2205,6 +2205,184 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 
 }
 
+// TestAllocatorTransferLeaseTargetMMAConflict tests that the MMA conflict
+// checking logic in TransferLeaseTarget works correctly. It should check with
+// mma but still allow transfer if the transfer is needed to shed due to IO
+// overload or lease preference violation.
+func TestAllocatorTransferLeaseTargetMMAConflict(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	existing := replicas(1, 2, 3)
+
+	leasePreferences := func() []roachpb.LeasePreference {
+		return []roachpb.LeasePreference{
+			{Constraints: []roachpb.Constraint{{Key: "region", Value: "us-east", Type: roachpb.Constraint_REQUIRED}}},
+		}
+	}
+
+	// Helper function to create default store descriptors
+	createDefaultStores := func() []*roachpb.StoreDescriptor {
+		var stores []*roachpb.StoreDescriptor
+		for i := 1; i <= 3; i++ {
+			region := "us-east"
+			if i == 1 {
+				region = "us-west" // Store 1 violates us-east preference
+			}
+
+			leaseCount := int32(50)
+			if i == 1 {
+				leaseCount = 100 // Store 1 has more leases for convergence testing
+			}
+
+			stores = append(stores, &roachpb.StoreDescriptor{
+				StoreID: roachpb.StoreID(i),
+				Node: roachpb.NodeDescriptor{
+					NodeID: roachpb.NodeID(i),
+					Locality: roachpb.Locality{
+						Tiers: []roachpb.Tier{
+							{Key: "region", Value: region},
+						},
+					},
+				},
+				Capacity: roachpb.StoreCapacity{
+					LeaseCount:     leaseCount,
+					IOThresholdMax: TestingIOThresholdWithScore(0.1), // Default low IO score
+				},
+			})
+		}
+		return stores
+	}
+
+	testCases := []struct {
+		name               string
+		leaseholder        roachpb.StoreID
+		mmaReturnsConflict bool
+		expected           roachpb.StoreID
+		conf               *roachpb.SpanConfig
+		enforcement        IOOverloadEnforcementLevel
+		setupStores        func() []*roachpb.StoreDescriptor // Function to create stores for this test case
+	}{
+		{
+			name:               "normal lease count convergence respects MMA conflict",
+			leaseholder:        1,
+			mmaReturnsConflict: true,
+			expected:           0, // Should be blocked by MMA conflict
+			conf:               emptySpanConfig(),
+			setupStores:        createDefaultStores,
+		},
+		{
+			name:               "normal lease count convergence proceeds when MMA allows",
+			leaseholder:        1,
+			mmaReturnsConflict: false,
+			// 2, 3 are both valid targets, 2 is picked since this is a random
+			// deterministic choice.
+			expected:    2,
+			conf:        emptySpanConfig(),
+			setupStores: createDefaultStores,
+		},
+		{
+			name:               "lease preferences bypass MMA conflict",
+			leaseholder:        1, // Store 1 violates preference (us-west)
+			mmaReturnsConflict: true,
+			// Pick store 2 regardless of MMA conflict.
+			expected:    2,
+			conf:        &roachpb.SpanConfig{LeasePreferences: leasePreferences()},
+			setupStores: createDefaultStores,
+		},
+		{
+			name:               "lease preferences respect MMA conflict when no violation",
+			leaseholder:        2, // Store 2 satisfies preference (us-east)
+			mmaReturnsConflict: true,
+			// Should be blocked by MMA conflict since no preference violation.
+			expected:    0,
+			conf:        &roachpb.SpanConfig{LeasePreferences: leasePreferences()},
+			setupStores: createDefaultStores,
+		},
+		{
+			name:               "lease preferences work when MMA allows",
+			leaseholder:        1, // Store 1 violates preference (us-west)
+			mmaReturnsConflict: false,
+			// Should move to store 2 (first preferred store).
+			expected:    2,
+			conf:        &roachpb.SpanConfig{LeasePreferences: leasePreferences()},
+			setupStores: createDefaultStores,
+		},
+		{
+			name:               "IO overload bypasses MMA conflict when needs to be shed",
+			leaseholder:        1,
+			mmaReturnsConflict: true,
+			// Pick store 2 even though it's in conflict with MMA.
+			expected:    2,
+			conf:        emptySpanConfig(),
+			enforcement: IOOverloadThresholdShed,
+			setupStores: func() []*roachpb.StoreDescriptor {
+				stores := createDefaultStores()
+				stores[0].Capacity.IOThresholdMax = TestingIOThresholdWithScore(0.5) // Store 1 is IO overloaded
+				return stores
+			},
+		},
+		{
+			name:               "transfer allowed by IO overload and mma",
+			leaseholder:        1,
+			mmaReturnsConflict: false,
+			// Should move to store 3. 2 is blocked by
+			// IOOverloadThresholdBlockTransfers. 3 is allowed by check and mma.
+			expected:    3,
+			conf:        emptySpanConfig(),
+			enforcement: IOOverloadThresholdBlockTransfers,
+			setupStores: func() []*roachpb.StoreDescriptor {
+				stores := createDefaultStores()
+				stores[1].Capacity.IOThresholdMax = TestingIOThresholdWithScore(0.5) // Store 2 is IO overloaded
+				return stores
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create allocator with custom MMA knobs for this test case
+			stopper, g, sp, a, _ := CreateTestAllocatorWithKnobs(ctx, 10, true /* deterministic */, nil, &mmaintegration.TestingKnobs{
+				OverrideIsInConflictWithMMA: func(cand roachpb.StoreID) bool {
+					return tc.mmaReturnsConflict
+				},
+			})
+			defer stopper.Stop(ctx)
+
+			// Set up stores using the test case's setup function
+			stores := tc.setupStores()
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(stores, t)
+
+			// Set up IO overload enforcement if specified
+			if tc.enforcement != 0 {
+				LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, tc.enforcement)
+			}
+
+			EnableLoadBasedLeaseRebalancing.Override(ctx, &a.st.SV, false)
+
+			target := a.TransferLeaseTarget(
+				ctx,
+				sp,
+				&roachpb.RangeDescriptor{},
+				tc.conf,
+				existing,
+				&mockRepl{
+					replicationFactor: 3,
+					storeID:           tc.leaseholder,
+				},
+				allocator.RangeUsageInfo{}, /* stats */
+				false,                      /* forceDecisionWithoutStats */
+				allocator.TransferLeaseOptions{
+					CheckCandidateFullness: true,
+				},
+			)
+			require.Equal(t, tc.expected, target.StoreID)
+		})
+	}
+}
+
 func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
