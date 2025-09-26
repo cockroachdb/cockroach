@@ -7,6 +7,9 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +44,8 @@ func TestChangefeedFrontierPersistence(t *testing.T) {
 		ctx := context.Background()
 
 		// Set a short interval for frontier persistence.
-		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'")
+		changefeedbase.FrontierPersistenceInterval.Override(ctx,
+			&s.Server.ClusterSettings().SV, 5*time.Second)
 
 		// Get frontier persistence metric.
 		registry := s.Server.JobRegistry().(*jobs.Registry)
@@ -178,4 +183,129 @@ RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+func TestChangefeedProgressSkewMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "per-table tracking", func(t *testing.T, perTableTracking bool) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			ctx := context.Background()
+
+			// Enable/disable per-table tracking.
+			changefeedbase.TrackPerTableProgress.Override(ctx,
+				&s.Server.ClusterSettings().SV, perTableTracking)
+
+			registry := s.Server.JobRegistry().(*jobs.Registry)
+			aggMetrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+			const scope = "skew"
+			scopedMetrics, err := aggMetrics.getOrCreateScope(scope)
+			require.NoError(t, err)
+
+			// Progress skew metrics should start at zero.
+			require.Zero(t, aggMetrics.SpanProgressSkew.Value())
+			require.Zero(t, aggMetrics.TableProgressSkew.Value())
+			require.Zero(t, scopedMetrics.SpanProgressSkew.Value())
+			require.Zero(t, scopedMetrics.TableProgressSkew.Value())
+
+			// Create two tables and insert some initial data.
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (1), (2), (3)`)
+
+			// Set up testing knobs to block all progress updates for bar.
+			var blockBarProgress atomic.Bool
+			blockBarProgress.Store(true)
+			{
+				barTableSpan := desctestutils.
+					TestingGetPublicTableDescriptor(s.Server.DB(), s.Codec, "d", "bar").
+					PrimaryIndexSpan(s.Codec)
+
+				knobs := s.TestingKnobs.
+					DistSQL.(*execinfra.TestingKnobs).
+					Changefeed.(*TestingKnobs)
+
+				knobs.FilterSpanWithMutation = func(rs *jobspb.ResolvedSpan) (bool, error) {
+					if blockBarProgress.Load() && barTableSpan.Contains(rs.Span) {
+						return true, nil
+					}
+					return false, nil
+				}
+			}
+
+			// Create changefeed for both tables with no initial scan.
+			feed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo, bar
+WITH no_initial_scan, min_checkpoint_frequency='1s', resolved, metrics_label='%s'`, scope))
+			defer closeFeed(t, feed)
+
+			assertSpanSkewInRange := func(start int64, end int64) int64 {
+				var spanSkew int64
+				testutils.SucceedsSoon(t, func() error {
+					spanSkew = aggMetrics.SpanProgressSkew.Value()
+					scopedSpanSkew := scopedMetrics.SpanProgressSkew.Value()
+					if spanSkew != scopedSpanSkew {
+						return errors.Newf("aggregate and scoped span skew don't match")
+					}
+					if spanSkew < start {
+						return errors.Newf("expected span skew to be at least %d, got %d", start, spanSkew)
+					}
+					if spanSkew >= end {
+						return errors.Newf("expected span skew to be less than %d, got %d", end, spanSkew)
+					}
+					return nil
+				})
+				return spanSkew
+			}
+			assertTableSkewInRange := func(start int64, end int64) int64 {
+				var tableSkew int64
+				testutils.SucceedsSoon(t, func() error {
+					tableSkew = aggMetrics.TableProgressSkew.Value()
+					scopedTableSkew := scopedMetrics.TableProgressSkew.Value()
+					if tableSkew != scopedTableSkew {
+						return errors.Newf("aggregate and scoped table skew don't match")
+					}
+					if !perTableTracking {
+						if tableSkew != 0 {
+							return errors.Newf("expected table skew to be 0, got %d", tableSkew)
+						}
+						return nil
+					}
+					if tableSkew < start {
+						return errors.Newf("expected table skew to be at least %d, got %d", start, tableSkew)
+					}
+					if tableSkew >= end {
+						return errors.Newf("expected table skew to be less than %d, got %d", end, tableSkew)
+					}
+					return nil
+				})
+				return tableSkew
+			}
+
+			// Verify that progress skew metrics show a non-negligible amount of lag
+			// since bar progress is blocked. Some amount of skew is often unavoidable
+			// due to the fact the aggregator processes the rangefeed checkpoints for
+			// different spans separately and at the time of a flush, may have only
+			// processed a portion of the checkpoints for a specific closed timestamp.
+			// The duration of 5s has been chosen given the default closed timestamp
+			// interval is 3s.
+			startingSpanSkew := assertSpanSkewInRange(int64(5*time.Second), math.MaxInt64)
+			startingTableSkew := assertTableSkewInRange(int64(5*time.Second), math.MaxInt64)
+
+			// Verify that skew continues to increase since bar progress is still blocked.
+			assertSpanSkewInRange(startingSpanSkew+int64(5*time.Second), math.MaxInt64)
+			assertTableSkewInRange(startingTableSkew+int64(5*time.Second), math.MaxInt64)
+
+			// Re-enable progress updates for bar.
+			blockBarProgress.Store(false)
+
+			// Verify that skew drops below the skew observed at the start.
+			assertSpanSkewInRange(0, startingSpanSkew)
+			assertTableSkewInRange(0, startingTableSkew)
+		}
+
+		cdcTest(t, testFn)
+	})
 }
