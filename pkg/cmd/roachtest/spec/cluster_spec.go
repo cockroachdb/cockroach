@@ -591,7 +591,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, s.VolumeSize)
-		workloadProviderOpts = getAzureWorkloadOpts(workloadMachineType)
+		workloadProviderOpts = getAzureOpts(machineType, s.VolumeSize)
 	case IBM:
 		providerOpts = getIBMOpts(machineType, s.TerminateOnMigration, s.VolumeSize,
 			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
@@ -603,7 +603,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	// The only difference for workload creation options is that we do not enable
 	// the use of local SSDs; otherwise, attached disks may still be provisioned
 	// based on the machine type and minimum SSD requirements.
-	createWorkloadVMOpts.SSDOpts.UseLocalSSD = false
+	// TODO _RESTORE_ createWorkloadVMOpts.SSDOpts.UseLocalSSD = false
 
 	return createVMOpts, createWorkloadVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
 }
