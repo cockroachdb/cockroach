@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -67,13 +66,19 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return err
 	}
 
-	if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan); err != nil {
+	progressTracker, cleanupProgress, err := c.setupProgressTracking(ctx, execCfg, pkSpans)
+	if err != nil {
+		return err
+	}
+	defer cleanupProgress()
+
+	if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
 		return err
 	}
 
 	c.maybeCleanupProtectedTimestamp(ctx, execCfg)
 
-	return c.markJobComplete(ctx)
+	return nil
 }
 
 // OnFailOrCancel implements the Resumer interface
@@ -181,19 +186,26 @@ func (c *inspectResumer) planInspectProcessors(
 }
 
 // runInspectPlan executes the distributed physical plan for the INSPECT job.
-// It sets up a metadata-only DistSQL receiver to collect any execution errors,
-// then runs the plan using the provided planning context and evaluation context.
-// This function returns any error surfaced via metadata from the processors.
+// It sets up a metadata-only DistSQL receiver to collect any execution errors
+// and progress updates, then runs the plan using the provided planning context
+// and evaluation context. This function returns any error surfaced via metadata
+// from the processors.
 func (c *inspectResumer) runInspectPlan(
 	ctx context.Context,
 	jobExecCtx sql.JobExecContext,
 	planCtx *sql.PlanningCtx,
 	plan *sql.PhysicalPlan,
+	progressTracker *inspectProgressTracker,
 ) error {
 	execCfg := jobExecCtx.ExecCfg()
 
 	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
-		func(context.Context, *execinfrapb.ProducerMetadata) error { return nil })
+		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+			if meta.BulkProcessorProgress != nil {
+				return progressTracker.handleProcessorProgress(ctx, meta)
+			}
+			return nil
+		})
 
 	distSQLReceiver := sql.MakeDistSQLReceiver(
 		ctx,
@@ -216,18 +228,62 @@ func (c *inspectResumer) runInspectPlan(
 	return metadataCallbackWriter.Err()
 }
 
-func (c *inspectResumer) markJobComplete(ctx context.Context) error {
-	// TODO(148297): add fine-grained progress reporting
-	return c.job.NoTxn().Update(ctx,
-		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			progress := md.Progress
-			progress.Progress = &jobspb.Progress_FractionCompleted{
-				FractionCompleted: 1,
-			}
-			ju.UpdateProgress(progress)
-			return nil
-		},
-	)
+// setupProgressTracking initializes and starts progress tracking for the INSPECT job.
+// It calculates the total number of applicable checks, initializes progress to 0%, and starts
+// the background update goroutine. Returns the progress tracker and cleanup function.
+func (c *inspectResumer) setupProgressTracking(
+	ctx context.Context, execCfg *sql.ExecutorConfig, pkSpans []roachpb.Span,
+) (*inspectProgressTracker, func(), error) {
+	fractionInterval := fractionUpdateInterval.Get(&execCfg.Settings.SV)
+	details := c.job.Details().(jobspb.InspectDetails)
+
+	// Build applicability checkers for progress tracking
+	applicabilityCheckers, err := buildApplicabilityCheckers(details)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Calculate total applicable checks: only count checks that will actually run
+	totalCheckCount, err := countApplicableChecks(pkSpans, applicabilityCheckers, execCfg.Codec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create and initialize progress tracker
+	progressTracker := newInspectProgressTracker(c.job, fractionInterval)
+	if err := progressTracker.initJobProgress(ctx, totalCheckCount); err != nil {
+		progressTracker.terminateTracker(ctx)
+		return nil, nil, err
+	}
+
+	// Start background progress updates
+	progressTracker.startBackgroundUpdates(ctx)
+
+	// Return cleanup function
+	cleanup := func() {
+		progressTracker.terminateTracker(ctx)
+	}
+
+	return progressTracker, cleanup, nil
+}
+
+// buildApplicabilityCheckers creates lightweight applicability checkers from InspectDetails.
+// These are used only for progress calculation and don't require the full check machinery.
+func buildApplicabilityCheckers(
+	details jobspb.InspectDetails,
+) ([]inspectCheckApplicability, error) {
+	checkers := make([]inspectCheckApplicability, 0, len(details.Checks))
+	for _, specCheck := range details.Checks {
+		switch specCheck.Type {
+		case jobspb.InspectCheckIndexConsistency:
+			checkers = append(checkers, &indexConsistencyCheckApplicability{
+				tableID: specCheck.TableID,
+			})
+		default:
+			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)
+		}
+	}
+	return checkers, nil
 }
 
 // maybeProtectTimestamp creates a protected timestamp record for the AsOf
