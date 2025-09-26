@@ -793,6 +793,11 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
+	// To help debug issues like #154179.
+	prevVModule := log.GetVModule()
+	defer func() { _ = log.SetVModule(prevVModule) }()
+	require.NoError(t, log.SetVModule("dist_sender=3"))
+
 	testutils.RunValues(t, "lease-type", roachpb.ExpirationAndLeaderLeaseType(),
 		func(t *testing.T, leaseType roachpb.LeaseType) {
 			// Use a context timeout, to prevent test hangs on failures.
