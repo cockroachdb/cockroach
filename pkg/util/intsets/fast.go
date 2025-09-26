@@ -46,9 +46,7 @@ func (s *Fast) fitsInSmall() bool {
 	return s.large == nil || s.large.Empty()
 }
 
-// Add adds a value to the set. No-op if the value is already in the set. If the
-// large set is not nil and the value is within the range [0, 63], the value is
-// added to both the large and small sets.
+// Add adds a value to the set. No-op if the value is already in the set.
 func (s *Fast) Add(i int) {
 	if i >= 0 && i < smallCutoff {
 		s.small.Set(i)
