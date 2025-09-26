@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package taskpacer
 
 import (
 	"testing"
@@ -16,30 +16,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockTaskPacerConfig is a test implementation of a task pacer configuration.
-type MockTaskPacerConfig struct {
+// MockConfig is a test implementation of a task pacer configuration.
+type MockConfig struct {
 	// refresh is the interval between task batches
 	refresh time.Duration
 	// smear is the interval between task batches
 	smear time.Duration
 }
 
-func newMockTaskPacerConfig(refresh, smear time.Duration) *MockTaskPacerConfig {
-	return &MockTaskPacerConfig{
+func newMockConfig(refresh, smear time.Duration) *MockConfig {
+	return &MockConfig{
 		refresh: refresh,
 		smear:   smear,
 	}
 }
 
-func (tp *MockTaskPacerConfig) getRefresh() time.Duration {
+func (tp *MockConfig) GetRefresh() time.Duration {
 	return tp.refresh
 }
 
-func (tp *MockTaskPacerConfig) getSmear() time.Duration {
+func (tp *MockConfig) GetSmear() time.Duration {
 	return tp.smear
 }
 
-func TestTaskPacer(t *testing.T) {
+func TestPacer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -62,7 +62,7 @@ func TestTaskPacer(t *testing.T) {
 		wantBy:   []time.Duration{200},
 		wantDone: 55,
 	}, {
-		// If smear is set to 0, the taskPacer should not smear the work over
+		// If smear is set to 0, the Pacer should not smear the work over
 		// time.
 		desc:     "zero-smear",
 		deadline: 200, smear: 0, work: 1234,
@@ -143,8 +143,8 @@ func TestTaskPacer(t *testing.T) {
 			start := timeutil.Unix(946684800, 0) // Jan 1, 2000
 			now := start
 
-			conf := newMockTaskPacerConfig(tc.deadline, tc.smear)
-			pacer := NewTaskPacer(conf)
+			conf := newMockConfig(tc.deadline, tc.smear)
+			pacer := New(conf)
 			pacer.StartTask(now)
 
 			for work, startAt := tc.work, now; work != 0; {
@@ -171,9 +171,9 @@ func TestTaskPacer(t *testing.T) {
 	}
 }
 
-// TestTaskPacerAccommodatesConfChanges tests that the taskPacer can accommodate
+// TestPacerAccommodatesConfChanges tests that the Pacer can accommodate
 // changing the refresh and the smear intervals mid-run.
-func TestTaskPacerAccommodatesConfChanges(t *testing.T) {
+func TestPacerAccommodatesConfChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -242,8 +242,8 @@ func TestTaskPacerAccommodatesConfChanges(t *testing.T) {
 			start := timeutil.Unix(946684800, 0) // Jan 1, 2000
 			now := start
 
-			conf := newMockTaskPacerConfig(tc.refreshes[0], tc.smears[0])
-			pacer := NewTaskPacer(conf)
+			conf := newMockConfig(tc.refreshes[0], tc.smears[0])
+			pacer := New(conf)
 			pacer.StartTask(now)
 
 			index := 0
@@ -274,5 +274,4 @@ func TestTaskPacerAccommodatesConfChanges(t *testing.T) {
 			assert.Equal(t, tc.wantDone, now.Sub(start))
 		})
 	}
-
 }
