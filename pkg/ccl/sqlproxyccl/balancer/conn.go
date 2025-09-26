@@ -19,7 +19,7 @@ type ConnectionHandle interface {
 	// TransferConnection performs a connection migration on the connection
 	// handle. Invoking this blocks until the connection migration process has
 	// been completed.
-	TransferConnection() error
+	TransferConnection(context.Context) error
 
 	// IsIdle returns true if the connection is idle, and false otherwise.
 	IsIdle() bool
