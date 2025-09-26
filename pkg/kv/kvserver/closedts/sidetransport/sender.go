@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -114,6 +115,17 @@ type streamState struct {
 type connTestingKnobs struct {
 	beforeSend         func(destNodeID roachpb.NodeID, msg *ctpb.Update)
 	sleepOnErrOverride time.Duration
+}
+
+// broadcastPacerConfig implements taskpacer.Config for pacing broadcast updates.
+type broadcastPacerConfig struct{}
+
+func (c broadcastPacerConfig) GetRefresh() time.Duration {
+	return 10 * time.Millisecond
+}
+
+func (c broadcastPacerConfig) GetSmear() time.Duration {
+	return 1 * time.Millisecond
 }
 
 // trackedRange contains the information that the side-transport last published
@@ -634,20 +646,36 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
 	b.mu.Unlock()
-	b.PaceBroadcastUpdate(condVar, numWaiters)
+	b.PaceBroadcastUpdate(ctx, condVar, numWaiters)
 }
 
 // PaceBroadcastUpdate paces the conditional variable signaling to avoid overloading the system.
-func (b *updatesBuf) PaceBroadcastUpdate(condVar *sync.Cond, numWaiters *uint64) {
-	// TODO: We can just hook this with the taskPacer.
-	originalNumWaiters := *numWaiters
+func (b *updatesBuf) PaceBroadcastUpdate(
+	ctx context.Context, condVar *sync.Cond, numWaiters *uint64,
+) {
+	originalNumWaiters := int(*numWaiters)
+	if originalNumWaiters <= 0 {
+		return
+	}
 
-	for originalNumWaiters > 0 {
+	pacer := taskpacer.New(broadcastPacerConfig{})
+	pacer.StartTask(timeutil.Now())
+
+	workLeft := originalNumWaiters
+	for workLeft > 0 {
+		todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
 		b.mu.Lock()
-		condVar.Signal()
+		for i := 0; i < todo && workLeft > 0; i++ {
+			log.KvExec.Infof(ctx, "signalling to a condvar")
+			condVar.Signal()
+			workLeft--
+		}
 		b.mu.Unlock()
-		originalNumWaiters--
-		time.Sleep(1 * time.Millisecond)
+
+		if workLeft > 0 && timeutil.Now().Before(by) {
+			time.Sleep(by.Sub(timeutil.Now()))
+		}
 	}
 }
 

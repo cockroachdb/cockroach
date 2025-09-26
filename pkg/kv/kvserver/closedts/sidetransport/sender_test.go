@@ -884,3 +884,69 @@ func TestRPCConnStopOnClose(t *testing.T) {
 		return nil
 	})
 }
+
+// TestPaceBroadcastUpdate verifies that the task pacer properly spaces out
+// broadcast updates across multiple connections.
+func TestPaceBroadcastUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Create a mock sender to get access to the buffer.
+	connFactory := &mockConnFactory{}
+	s, stopper := newMockSender(connFactory)
+	defer stopper.Stop(ctx)
+
+	// Track the times when goroutines receive items from the buffer.
+	var receiveTimes []time.Time
+	var mu syncutil.Mutex
+
+	// Create 10 goroutines that wait on s.buf.GetBySeq(ctx, 1) and record receive times.
+	done := make(chan struct{}, 200)
+	for i := 0; i < 200; i++ {
+		go func() {
+			// Wait for sequence number 1.
+			_, ok := s.buf.GetBySeq(ctx, 1)
+			if ok {
+				mu.Lock()
+				receiveTimes = append(receiveTimes, time.Now())
+				mu.Unlock()
+			}
+			done <- struct{}{}
+		}()
+	}
+
+	// Give the goroutines a moment to start waiting.
+	time.Sleep(10 * time.Millisecond)
+
+	// Publish an item to the buffer, which should trigger the paced broadcast.
+	s.publish(ctx)
+
+	// Wait for all goroutines to finish.
+	for i := 0; i < 200; i++ {
+		<-done
+	}
+
+	// Verify that all goroutines received the message.
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.Len(t, receiveTimes, 200, "expected 10 goroutines to receive the message")
+
+	// Find min and max receive times.
+	minTime := receiveTimes[0]
+	maxTime := receiveTimes[0]
+	for _, t := range receiveTimes[1:] {
+		if t.Before(minTime) {
+			minTime = t
+		}
+		if t.After(maxTime) {
+			maxTime = t
+		}
+	}
+
+	// Verify that the time spread between first and last receive is at least 10ms.
+	timeSpread := maxTime.Sub(minTime)
+	require.GreaterOrEqual(t, timeSpread, 200*time.Millisecond,
+		"expected time spread of at least 50ms between first and last receive, got %v", timeSpread)
+}
