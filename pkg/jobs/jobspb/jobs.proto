@@ -1464,6 +1464,14 @@ message InspectDetails {
 
   // AsOf specifies the timestamp at which the inspect checks should be performed.
   util.hlc.Timestamp as_of = 2 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestampRecord is the id of the protected timestamp record that
+  // prevents garbage collection of data at the AsOf timestamp. This is only
+  // set if a fixed timestamp was used for INSPECT (e.g. AsOf timestamp is non-empty).
+  bytes protected_timestamp_record = 3 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
 
 message UpdateTableMetadataCacheDetails {}
