@@ -199,6 +199,52 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Regression test for #119524. expect_and_ignore_not_visible_columns_in_copy
+# should behave correctly with inaccessible columns.
+send
+Query {"String": "CREATE TABLE t119524 (x INT PRIMARY KEY, y INT, INDEX ((x + y)))"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TABLE t119524 ADD COLUMN z INT NOT VISIBLE"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY t119524 FROM STDIN"}
+CopyData {"Data": "1\t2\t3\n"}
+CopyDone
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SELECT *, z FROM t119524"}
+----
+
+until ignore=RowDescription crdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"2"},null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 send crdb_only
 Query {"String": "SET expect_and_ignore_not_visible_columns_in_copy = false"}
 ----
