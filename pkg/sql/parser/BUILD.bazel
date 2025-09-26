@@ -37,6 +37,7 @@ go_library(
         "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/sem/tree/treewindow",  # keep
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/vector",  # keep
         "@com_github_cockroachdb_errors//:errors",
