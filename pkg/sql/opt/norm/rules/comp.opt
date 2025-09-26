@@ -281,3 +281,12 @@ $left
 (Ne $left:* (False))
 =>
 $left
+
+# Normalize patterns used in LIKE clause by removing redundant '%' characters
+[CollapseRepeatedLikeWildcards, Normalize]
+(Like | NotLike | ILike | NotILike | SimilarTo | NotSimilarTo
+    $left:*
+    $right:(ConstValue) & (CanCollapseRepeatedLikeWildcards $right)
+)
+=>
+((OpName) $left (CollapseRepeatedLikeWildcards $right))

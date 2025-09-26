@@ -136,3 +136,60 @@ func TestStringListBuilder(t *testing.T) {
 	b.Finish(&buf)
 	expect("[one, two]")
 }
+
+func TestCollapseRepeatedRune(t *testing.T) {
+	type testCase struct {
+		input    string
+		target   rune
+		expected string
+	}
+
+	tests := []testCase{
+		{"", 'a', ""},
+		{"", '∀', ""},
+		{"xyz", 'a', "xyz"},
+		{"aaa", 'a', "a"},
+		{"%abc", '%', "%abc"},
+		{"%%abc", '%', "%abc"},
+		{"abc%", '%', "abc%"},
+		{"abc%%", '%', "abc%"},
+		{"%%abc%%", '%', "%abc%"},
+		{"%%%a%%%b%%%c%%%", '%', "%a%b%c%"},
+		{"∀∀∀∀", '∀', "∀"},
+		{"∀∀∀∀a∀b∀∀∀c∀∀∀d∀∀∀∀∀", '∀', "∀a∀b∀c∀d∀"},
+		{"%test%%%%", '%', "%test%"},
+		{"%%%test%%%%", '%', "%test%"},
+		{"%%%test1%%%test2%%%test3%%%", '%', "%test1%test2%test3%"},
+		{"I work on ddddddifferent characters", 'd', "I work on different characters"},
+		{"%%%%%%%%tèʂt%", '%', "%tèʂt%"},
+		{"%a%b%%c%%d", '%', "%a%b%c%d"},
+		{"🐛🐛", '🐛', "🐛"},
+	}
+
+	for _, test := range tests {
+		if result := CollapseRepeatedRune(test.input, test.target); result != test.expected {
+			t.Errorf("%q: expected %q but got %q", test.input, test.expected, result)
+		}
+	}
+}
+
+func BenchmarkCollapseRepeatedRune(b *testing.B) {
+	type testCase struct {
+		name  string
+		input string
+	}
+	testCases := []testCase{
+		{"no-target", "abcedfghijklmnopqrstuvwxyz"},
+		{"no-dupe", "abce%dfghijklmno%pqrstuvwx%yz"},
+		{"start-dupe", "%%%abce%dfghijklmno%pqrstuvwx%yz%"},
+		{"end-dupe", "abce%dfghijklmno%pqrstuvwx%yz%%%"},
+		{"multiple-dupe", "%%%abce%%%%dfghijklmno%pqrstuvwx%%%%yz%%%"},
+	}
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				_ = CollapseRepeatedRune(tc.input, '%')
+			}
+		})
+	}
+}
