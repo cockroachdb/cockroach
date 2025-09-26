@@ -2810,7 +2810,8 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t,
-		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH resolved='50ms', no_initial_scan, cursor=$1`, tsStr,
+		`CREATE CHANGEFEED FOR foo INTO 'null://'
+WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$1`, tsStr,
 	).Scan(&jobID)
 
 	// Helper to read job progress
@@ -2952,7 +2953,8 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		}
 
 		// Setup changefeed job details, avoid relying on initial scan functionality
-		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms', min_checkpoint_frequency='100ms', no_initial_scan`)
+		baseFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 		jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
@@ -9124,22 +9126,21 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 
 		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
 		// we have at least 1 span for which we don't emit resolved timestamp (to force checkpointing).
-		haveGaps := false
+		// We however also need to ensure there's at least one span that isn't filtered out.
+		var allowedOne, haveGaps bool
 		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			if r.Span.Equal(tableSpan) {
-				// Do not emit resolved events for the entire table span.
-				// We "simulate" large table by splitting single table span into many parts, so
-				// we want to resolve those sub-spans instead of the entire table span.
-				// However, we have to emit something -- otherwise the entire changefeed
-				// machine would not work.
-				r.Span.EndKey = tableSpan.Key.Next()
+				return true, nil
+			}
+			if !allowedOne {
+				allowedOne = true
 				return false, nil
 			}
-			if haveGaps {
-				return rnd.Intn(10) > 7, nil
+			if !haveGaps {
+				haveGaps = true
+				return true, nil
 			}
-			haveGaps = true
-			return true, nil
+			return rnd.Intn(10) > 7, nil
 		}
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
@@ -9149,7 +9150,8 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 		// Some test feeds (kafka) are not buffered, so we have to consume messages.
 		var shouldDrain int32 = 1
 		g := ctxgroup.WithContext(context.Background())
@@ -12009,7 +12011,8 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 		require.Equal(t, int64(0), managePTSCount)
 		require.Equal(t, int64(0), managePTSErrorCount)
 
-		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		createStmt := `CREATE CHANGEFEED FOR foo
+WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
@@ -12122,7 +12125,8 @@ func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 			return errors.New("test error")
 		}
 
-		createStmt := `CREATE CHANGEFEED FOR foo WITH resolved='10ms', no_initial_scan`
+		createStmt := `CREATE CHANGEFEED FOR foo
+WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 

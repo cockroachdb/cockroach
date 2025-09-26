@@ -1520,19 +1520,27 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		// Emit resolved events for the majority of spans. Be extra paranoid and ensure that
 		// we have at least 1 span for which we don't emit resolvedFoo timestamp (to force checkpointing).
-		haveGaps := false
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+		// We however also need to ensure there's at least one span that isn't filtered out.
+		var allowedOne, haveGaps bool
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (filter bool, _ error) {
 			rndMu.Lock()
 			defer rndMu.Unlock()
+			defer func() {
+				t.Logf("resolved span: %s@%s, filter: %t", r.Span, r.Timestamp, filter)
+			}()
 
 			if r.Span.Equal(fooTableSpan) {
 				return true, nil
 			}
-			if haveGaps {
-				return rndMu.rnd.Intn(10) > 7, nil
+			if !allowedOne {
+				allowedOne = true
+				return false, nil
 			}
-			haveGaps = true
-			return true, nil
+			if !haveGaps {
+				haveGaps = true
+				return true, nil
+			}
+			return rndMu.rnd.Intn(10) > 7, nil
 		}
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
@@ -1542,7 +1550,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '100ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
+WITH resolved = '100ms', min_checkpoint_frequency='1ns'`)
 
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
@@ -1581,8 +1590,10 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolvedFoo []roachpb.Span
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
-			t.Logf("resolved span: %#v", r)
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (filter bool, _ error) {
+			defer func() {
+				t.Logf("resolved span: %s@%s, filter: %t", r.Span, r.Timestamp, filter)
+			}()
 			if !r.Span.Equal(fooTableSpan) {
 				resolvedFoo = append(resolvedFoo, r.Span)
 			}
