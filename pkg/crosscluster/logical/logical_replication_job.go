@@ -867,8 +867,8 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
 			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
-			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
-			progress.StatusMessage = status
+			aggRangeStats, fractionCompleted, _, statusMsg := rh.rangeStats.RollupStats()
+			progress.StatusMessage = statusMsg
 
 			if replicatedTime.IsSet() {
 				prog.ReplicatedTime = replicatedTime

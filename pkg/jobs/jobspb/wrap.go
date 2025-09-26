@@ -116,6 +116,7 @@ const (
 	ReplicationFailingOver     ReplicationStatus = 4
 	ReplicationError           ReplicationStatus = 5
 	InitialScan                ReplicationStatus = 7
+	CatchupScan                ReplicationStatus = 8
 )
 
 // String implements fmt.Stringer.
@@ -137,6 +138,8 @@ func (rs ReplicationStatus) String() string {
 		return "creating initial splits"
 	case InitialScan:
 		return "running initial scan"
+	case CatchupScan:
+		return "running catchup scan"
 	default:
 		return fmt.Sprintf("unimplemented-%d", int(rs))
 	}

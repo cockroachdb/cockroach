@@ -345,7 +345,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	sf.lastPartitionUpdate = timeutil.Now()
 	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
 
-	statusByStats := sf.aggregateAndUpdateRangeMetrics()
+	statsStatus, statsMsg := sf.aggregateAndUpdateRangeMetrics()
 
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
@@ -361,8 +361,16 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		if replicatedTime.IsSet() && streamProgress.ReplicationStatus == jobspb.InitialScan {
 			streamProgress.ReplicationStatus = jobspb.Replicating
 			md.Progress.StatusMessage = streamProgress.ReplicationStatus.String()
-		} else if statusByStats != "" {
-			md.Progress.StatusMessage = statusByStats
+		} else if statsMsg != "" {
+			// Because range updates are not coordinated with checkpoint events,
+			// it is possible for us to have a checkpoint event indicating that we are
+			// in initial scan after we've already received range updates indicating
+			// that we've completed initial scan. To avoid this, we do not update if
+			// the replicated time has been set, but the checkpoint events still
+			// indicate that we are in initial scan.
+			if !replicatedTime.IsSet() || statsStatus != jobspb.InitialScan {
+				md.Progress.StatusMessage = statsMsg
+			}
 		}
 
 		// Keep the recorded replicatedTime empty until some advancement has been made
@@ -452,8 +460,11 @@ func (sf *streamIngestionFrontier) maybeCollectRangeStats(
 // to update the job status with. We do this to avoid overwriting job statuses
 // with stale stats as the stats will be the same until the next checkpoint
 // event.
-func (sf *streamIngestionFrontier) aggregateAndUpdateRangeMetrics() string {
-	aggRangeStats, _, statusMsg := sf.rangeStats.RollupStats()
+func (sf *streamIngestionFrontier) aggregateAndUpdateRangeMetrics() (
+	jobspb.ReplicationStatus,
+	string,
+) {
+	aggRangeStats, _, status, statusMsg := sf.rangeStats.RollupStats()
 	if aggRangeStats.RangeCount != 0 {
 		sf.metrics.ScanningRanges.Update(aggRangeStats.ScanningRangeCount)
 		sf.metrics.CatchupRanges.Update(aggRangeStats.LaggingRangeCount)
@@ -461,10 +472,10 @@ func (sf *streamIngestionFrontier) aggregateAndUpdateRangeMetrics() string {
 	if sf.lastAggStats == aggRangeStats {
 		// This is the same stats as last time, so we don't need to update the job
 		// status.
-		return ""
+		return status, ""
 	}
 	sf.lastAggStats = aggRangeStats
-	return statusMsg
+	return status, statusMsg
 }
 
 // maybePersistFrontierEntries periodically persists the current state of the

@@ -8,6 +8,7 @@ package replicationutils
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -66,6 +67,7 @@ func (r *AggregateRangeStatsCollector) Add(
 func (r *AggregateRangeStatsCollector) RollupStats() (
 	streampb.StreamEvent_RangeStats,
 	float32,
+	jobspb.ReplicationStatus,
 	string,
 ) {
 	r.mu.Lock()
@@ -89,13 +91,13 @@ func (r *AggregateRangeStatsCollector) RollupStats() (
 		(float32(total.RangeCount-incompleteCount) / float32(total.RangeCount)))
 
 	if len(r.stats) != r.processorCount || total.RangeCount == 0 {
-		return streampb.StreamEvent_RangeStats{}, 0, fmt.Sprintf("starting streams (%d out of %d)", len(r.stats), r.processorCount)
+		return streampb.StreamEvent_RangeStats{}, 0, jobspb.InitializingReplication, fmt.Sprintf("starting streams (%d out of %d)", len(r.stats), r.processorCount)
 	}
 	if !initialScanComplete {
-		return total, fractionCompleted, fmt.Sprintf("initial scan on %d out of %d ranges", total.ScanningRangeCount, total.RangeCount)
+		return total, fractionCompleted, jobspb.InitialScan, fmt.Sprintf("initial scan on %d out of %d ranges", total.ScanningRangeCount, total.RangeCount)
 	}
 	if total.LaggingRangeCount != 0 {
-		return total, fractionCompleted, fmt.Sprintf("catching up on %d out of %d ranges", total.LaggingRangeCount, total.RangeCount)
+		return total, fractionCompleted, jobspb.CatchupScan, fmt.Sprintf("catching up on %d out of %d ranges", total.LaggingRangeCount, total.RangeCount)
 	}
-	return total, 1, ""
+	return total, 1, jobspb.Replicating, ""
 }
