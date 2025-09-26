@@ -29,6 +29,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/sqlerrors",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
