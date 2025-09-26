@@ -1935,6 +1935,7 @@ message BulkOpSummary {
   // generation logic is also available in the BulkOpSummaryID helper. It does
   // not take MVCC range tombstones into account.
   map<uint64, int64> entry_counts = 5;
+  // Please update BulkOpSummary.DeepCopy() if new fields are added.
 }
 
 // ExportResponse is the response to an Export() operation.
