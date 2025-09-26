@@ -8,6 +8,8 @@ package scbuildstmt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -15,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/errors"
 )
 
 func Truncate(b BuildCtx, stmt *tree.Truncate) {
@@ -51,7 +52,7 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 		if stmt.DropBehavior != tree.DropCascade {
 			name := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 			refName := refElts.FilterNamespace().MustGetZeroOrOneElement()
-			panic(errors.Errorf("%q is %s table %q", name.Name, "referenced by foreign key from", refName.Name))
+			panic(pgerror.Newf(pgcode.FeatureNotSupported, "%q is %s table %q", name.Name, "referenced by foreign key from", refName.Name))
 		}
 		if !tablesToTruncate.Contains(referencingTableID) {
 			tablesToTruncate.Add(referencingTableID)
