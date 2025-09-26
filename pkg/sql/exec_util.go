@@ -2160,8 +2160,6 @@ type StreamingTestingKnobs struct {
 	// for whether the job record is updated on a progress update.
 	CutoverProgressShouldUpdate func() bool
 
-	//ExternalConnectionPollingInterval override the LDR alter
-	// connection polling frequency.
 	ExternalConnectionPollingInterval *time.Duration
 
 	DistSQLRetryPolicy *retry.Options
