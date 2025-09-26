@@ -16,12 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -124,6 +125,55 @@ func newCSVExporter(sp execinfrapb.ExportSpec) *csvExporter {
 	return exporter
 }
 
+// exportState represents the state of the processor.
+type exportState int
+
+const (
+	_ exportState = iota
+	// exportNewChunk indicates that the chunk state needs to be reset for the
+	// new one. The processor always transitions into the exportContinueChunk
+	// state next.
+	exportNewChunk
+	// exportContinueChunk indicates that the processor is currently reading
+	// rows from its input and buffers them up to be written as a single file.
+	// Once the desired chunk size is reached, the processor transitions into the
+	// exportFlushChunk state. If input is exhausted and no rows have been
+	// buffered, it transitions into the exportDone state.
+	exportContinueChunk
+	// exportFlushChunk indicates that the processor writes a new file into the
+	// external storage, producing a single output row to its consumer with
+	// details about that file. The processor always transitions into the
+	// exportNewChunk state next.
+	exportFlushChunk
+	// exportDone is the final state of the processor at which point it only
+	// drains its input.
+	exportDone
+)
+
+type csvWriter struct {
+	execinfra.ProcessorBase
+
+	spec       execinfrapb.ExportSpec
+	input      execinfra.RowSource
+	inputTypes []*types.T
+	uniqueID   int64
+
+	writer  *csvExporter
+	f       *tree.FmtCtx
+	nullsAs string
+
+	runningState exportState
+	done         bool
+	csvRow       []string
+	chunk        int
+	rows         int64
+
+	alloc tree.DatumAlloc
+}
+
+var _ execinfra.RowSourcedProcessor = &csvWriter{}
+var _ execopnode.OpNode = &csvWriter{}
+
 func NewCSVWriterProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -132,178 +182,179 @@ func NewCSVWriterProcessor(
 	post *execinfrapb.PostProcessSpec,
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
-	c := &csvWriter{
-		flowCtx:     flowCtx,
-		processorID: processorID,
-		spec:        spec,
-		input:       input,
+	sp := &csvWriter{
+		spec:       spec,
+		input:      input,
+		inputTypes: input.OutputTypes(),
+		uniqueID:   unique.GenerateUniqueInt(unique.ProcessUniqueID(flowCtx.EvalCtx.NodeID.SQLInstanceID())),
+		writer:     newCSVExporter(spec),
+		f:          tree.NewFmtCtx(tree.FmtExport),
+		csvRow:     make([]string, len(input.OutputTypes())),
 	}
-	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := c.out.Init(ctx, post, colinfo.ExportColumnTypes, &semaCtx, flowCtx.EvalCtx, flowCtx); err != nil {
+	if spec.Format.Csv.NullEncoding != nil {
+		sp.nullsAs = *spec.Format.Csv.NullEncoding
+	}
+	if err := sp.Init(
+		ctx, sp, post, colinfo.ExportColumnTypes, flowCtx, processorID, nil, /* memMonitor */
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{sp.input},
+		},
+	); err != nil {
 		return nil, err
 	}
-	return c, nil
+	return sp, nil
 }
 
-type csvWriter struct {
-	flowCtx     *execinfra.FlowCtx
-	processorID int32
-	spec        execinfrapb.ExportSpec
-	input       execinfra.RowSource
-	out         execinfra.ProcOutputHelper
+func (sp *csvWriter) Start(ctx context.Context) {
+	ctx = sp.StartInternal(ctx, "csvWriter")
+	sp.input.Start(ctx)
+	if sp.spec.HeaderRow {
+		if err := sp.writer.Write(sp.spec.ColNames); err != nil {
+			sp.MoveToDraining(err)
+		}
+	}
+	sp.runningState = exportNewChunk
 }
 
-var _ execinfra.Processor = &csvWriter{}
+func (sp *csvWriter) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for sp.State == execinfra.StateRunning {
+		switch sp.runningState {
+		case exportNewChunk:
+			sp.writer.ResetBuffer()
+			sp.rows = 0
+			sp.runningState = exportContinueChunk
+			continue
 
-func (sp *csvWriter) OutputTypes() []*types.T {
-	return sp.out.OutputTypes
-}
-
-func (sp *csvWriter) MustBeStreaming() bool {
-	return false
-}
-
-func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
-	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
-	defer span.Finish()
-
-	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
-	uniqueID := unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID))
-
-	err := func() error {
-		typs := sp.input.OutputTypes()
-		sp.input.Start(ctx)
-		input := execinfra.MakeNoMetadataRowSource(sp.input, output)
-
-		alloc := &tree.DatumAlloc{}
-
-		writer := newCSVExporter(sp.spec)
-		if sp.spec.HeaderRow {
-			if err := writer.Write(sp.spec.ColNames); err != nil {
-				return err
+		case exportContinueChunk:
+			// If the bytes.Buffer sink exceeds the target size of a CSV file,
+			// we flush before exporting any additional rows.
+			if int64(sp.writer.buf.Len()) >= sp.spec.ChunkSize {
+				sp.runningState = exportFlushChunk
+				continue
 			}
-		}
-
-		var nullsAs string
-		if sp.spec.Format.Csv.NullEncoding != nil {
-			nullsAs = *sp.spec.Format.Csv.NullEncoding
-		}
-		f := tree.NewFmtCtx(tree.FmtExport)
-		defer f.Close()
-
-		csvRow := make([]string, len(typs))
-
-		chunk := 0
-		done := false
-		for {
-			var rows int64
-			writer.ResetBuffer()
-			for {
-				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
-				// flush before exporting any additional rows.
-				if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
-					break
+			if sp.spec.ChunkRows > 0 && sp.rows >= sp.spec.ChunkRows {
+				sp.runningState = exportFlushChunk
+				continue
+			}
+			row, meta := sp.input.Next()
+			if meta != nil {
+				return nil, meta
+			}
+			if row == nil {
+				sp.done = true
+				if sp.rows > 0 {
+					sp.runningState = exportFlushChunk
+				} else {
+					sp.runningState = exportDone
 				}
-				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
-					break
-				}
-				row, err := input.NextRow()
-				if err != nil {
-					return err
-				}
-				if row == nil {
-					done = true
-					break
-				}
-				rows++
-
-				for i, ed := range row {
-					if ed.IsNull() {
-						if sp.spec.Format.Csv.NullEncoding != nil {
-							csvRow[i] = nullsAs
-							continue
-						} else {
-							return errors.New("NULL value encountered during EXPORT, " +
-								"use `WITH nullas` to specify the string representation of NULL")
-						}
+				continue
+			}
+			sp.rows++
+			for i, ed := range row {
+				if ed.IsNull() {
+					if sp.spec.Format.Csv.NullEncoding != nil {
+						sp.csvRow[i] = sp.nullsAs
+						continue
+					} else {
+						sp.MoveToDraining(errors.New("NULL value encountered during EXPORT, " +
+							"use `WITH nullas` to specify the string representation of NULL"))
+						return nil, sp.DrainHelper()
 					}
-					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
-						return err
-					}
-					ed.Datum.Format(f)
-					csvRow[i] = f.String()
-					f.Reset()
 				}
-				if err := writer.Write(csvRow); err != nil {
-					return err
+				if err := ed.EnsureDecoded(sp.inputTypes[i], &sp.alloc); err != nil {
+					sp.MoveToDraining(err)
+					return nil, sp.DrainHelper()
 				}
+				ed.Datum.Format(sp.f)
+				sp.csvRow[i] = sp.f.String()
+				sp.f.Reset()
 			}
-			if rows < 1 {
-				break
+			if err := sp.writer.Write(sp.csvRow); err != nil {
+				sp.MoveToDraining(err)
+				return nil, sp.DrainHelper()
 			}
-			if err := writer.Flush(); err != nil {
-				return errors.Wrap(err, "failed to flush csv writer")
+			// continue building the current chunk
+
+		case exportFlushChunk:
+			if err := sp.writer.Flush(); err != nil {
+				sp.MoveToDraining(errors.Wrap(err, "failed to flush csv writer"))
+				return nil, sp.DrainHelper()
 			}
-
-			res, err := func() (rowenc.EncDatumRow, error) {
-				conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
-				if err != nil {
-					return nil, err
-				}
-				es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-				if err != nil {
-					return nil, err
-				}
-				defer es.Close()
-
-				part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
-				chunk++
-				filename := writer.FileName(sp.spec, part)
-				// Close writer to ensure buffer and any compression footer is flushed.
-				err = writer.Close()
-				if err != nil {
-					return nil, errors.Wrapf(err, "failed to close exporting writer")
-				}
-
-				size := writer.Len()
-
-				if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
-					return nil, err
-				}
-				return rowenc.EncDatumRow{
-					rowenc.DatumToEncDatum(types.String, tree.NewDString(filename)),
-					rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rows))),
-					rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(size))),
-				}, nil
-			}()
+			row, err := sp.exportFile()
 			if err != nil {
-				return err
+				sp.MoveToDraining(err)
+				return nil, sp.DrainHelper()
 			}
+			sp.runningState = exportNewChunk
+			if outRow := sp.ProcessRowHelper(row); outRow != nil {
+				return outRow, nil
+			}
+			// Either find that we're no longer in StateRunning, or proceed to
+			// the next chunk.
 
-			cs, err := sp.out.EmitRow(ctx, res, output)
-			if err != nil {
-				return err
-			}
-			if cs != execinfra.NeedMoreRows {
-				// We don't return an error here because we want the error (if any) that
-				// actually caused the consumer to enter a closed/draining state to take precendence.
-				return nil
-			}
-			if done {
-				break
-			}
+		case exportDone:
+			sp.MoveToDraining(nil /* err */)
+
+		default:
+			log.Dev.Fatalf(sp.Ctx(), "unsupported state: %d", sp.runningState)
 		}
+	}
 
-		return nil
-	}()
-
-	execinfra.DrainAndClose(ctx, sp.flowCtx, sp.input, output, err)
+	return nil, sp.DrainHelper()
 }
 
-// Resume is part of the execinfra.Processor interface.
-func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
-	panic("not implemented")
+func (sp *csvWriter) exportFile() (rowenc.EncDatumRow, error) {
+	conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
+	if err != nil {
+		return nil, err
+	}
+	es, err := sp.FlowCtx.Cfg.ExternalStorage(sp.Ctx(), conf)
+	if err != nil {
+		return nil, err
+	}
+	defer es.Close()
+
+	part := fmt.Sprintf("n%d.%d", sp.uniqueID, sp.chunk)
+	sp.chunk++
+	filename := sp.writer.FileName(sp.spec, part)
+	// Close writer to ensure buffer and any compression footer is flushed.
+	err = sp.writer.Close()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to close exporting writer")
+	}
+
+	size := sp.writer.Len()
+
+	if err := cloud.WriteFile(sp.Ctx(), es, filename, bytes.NewReader(sp.writer.Bytes())); err != nil {
+		return nil, err
+	}
+	return rowenc.EncDatumRow{
+		rowenc.DatumToEncDatum(types.String, tree.NewDString(filename)),
+		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(sp.rows))),
+		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(size))),
+	}, nil
 }
 
-// Close is part of the execinfra.Processor interface.
-func (*csvWriter) Close(context.Context) {}
+func (sp *csvWriter) ConsumerClosed() {
+	if sp.InternalClose() {
+		_ = sp.writer.Close()
+		sp.f.Close()
+	}
+}
+
+func (sp *csvWriter) ChildCount(verbose bool) int {
+	if _, ok := sp.input.(execopnode.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+func (sp *csvWriter) Child(nth int, verbose bool) execopnode.OpNode {
+	if nth == 0 {
+		if n, ok := sp.input.(execopnode.OpNode); ok {
+			return n
+		}
+		panic("input to csvWriter is not an execopnode.OpNode")
+	}
+	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
