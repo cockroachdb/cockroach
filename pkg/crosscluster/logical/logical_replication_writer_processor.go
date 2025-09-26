@@ -272,9 +272,11 @@ func newLogicalReplicationWriterProcessor(
 //
 // Start implements the RowSource interface.
 func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
-	ctx = logtags.AddTag(ctx, "job", lrw.spec.JobID)
-	ctx = logtags.AddTag(ctx, "src-node", lrw.spec.PartitionSpec.PartitionID)
-	ctx = logtags.AddTag(ctx, "proc", lrw.ProcessorID)
+	tags := logtags.BuildBuffer()
+	tags.Add("job", lrw.spec.JobID)
+	tags.Add("src-node", lrw.spec.PartitionSpec.PartitionID)
+	tags.Add("proc", lrw.ProcessorID)
+	ctx = logtags.AddTags(ctx, tags.Finish())
 	lrw.agg = tracing.TracingAggregatorForContext(ctx)
 	var listeners []tracing.EventListener
 	if lrw.agg != nil {

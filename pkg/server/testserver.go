@@ -2731,9 +2731,11 @@ func newClientRPCContext(
 	cid *base.ClusterIDContainer,
 	s serverutils.ApplicationLayerInterface,
 ) *rpc.Context {
-	ctx = logtags.AddTag(ctx, "testclient", nil)
-	ctx = logtags.AddTag(ctx, "user", user)
-	ctx = logtags.AddTag(ctx, "nsql", s.SQLInstanceID())
+	tags := logtags.BuildBuffer()
+	tags.Add("testclient", nil)
+	tags.Add("user", user)
+	tags.Add("nsql", s.SQLInstanceID())
+	ctx = logtags.AddTags(ctx, tags.Finish())
 
 	stopper := s.AppStopper()
 	if ctx.Done() == nil {

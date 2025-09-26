@@ -2266,14 +2266,14 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 				continue
 			}
 
-			tags := &logtags.Buffer{}
-			tags = tags.Add("r", req.RangeID)
-			tags = tags.Add("sm", req.Replica.StoreID)
-			tags = tags.Add("sid", req.StreamID)
+			tags := logtags.BuildBuffer()
+			tags.Add("r", req.RangeID)
+			tags.Add("sm", req.Replica.StoreID)
+			tags.Add("sid", req.StreamID)
 			if req.ConsumerID != 0 {
-				tags = tags.Add("cid", req.ConsumerID)
+				tags.Add("cid", req.ConsumerID)
 			}
-			streamCtx := logtags.AddTags(ctx, tags)
+			streamCtx := logtags.AddTags(ctx, tags.Finish())
 
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)
 

@@ -189,11 +189,11 @@ func (o *offlineInitialScanProcessor) setup(ctx context.Context) error {
 }
 
 func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
-	tags := &logtags.Buffer{}
-	tags = tags.Add("job", o.spec.JobID)
-	tags = tags.Add("src-node", o.spec.PartitionSpec.PartitionID)
-	tags = tags.Add("proc", o.ProcessorID)
-	ctx = logtags.AddTags(ctx, tags)
+	tags := logtags.BuildBuffer()
+	tags.Add("job", o.spec.JobID)
+	tags.Add("src-node", o.spec.PartitionSpec.PartitionID)
+	tags.Add("proc", o.ProcessorID)
+	ctx = logtags.AddTags(ctx, tags.Finish())
 
 	ctx = o.StartInternal(ctx, offlineInitialScanProcessorName)
 

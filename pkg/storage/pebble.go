@@ -910,9 +910,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	// The store id, could not necessarily be determined when this function
 	// is called. Therefore, we use a container for the store id.
+	tags := logtags.BuildBuffer()
 	storeIDContainer := &base.StoreIDContainer{}
-	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
-	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+	tags.Add("s", storeIDContainer)
+	tags.Add("pebble", nil)
+	logCtx = logtags.AddTags(logCtx, tags.Finish())
 
 	cfg.opts.Local.ReadaheadConfig = objstorageprovider.NewReadaheadConfig()
 	updateReadaheadFn := func(ctx context.Context) {
