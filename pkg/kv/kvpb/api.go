@@ -2133,6 +2133,21 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	}
 }
 
+// DeepCopy returns a deep copy of the original BulkOpSummary.
+func (b *BulkOpSummary) DeepCopy() BulkOpSummary {
+	cpy := BulkOpSummary{
+		DataSize:    b.DataSize,
+		SSTDataSize: b.SSTDataSize,
+	}
+	if b.EntryCounts != nil {
+		cpy.EntryCounts = make(map[uint64]int64, len(b.EntryCounts))
+		for k, v := range b.EntryCounts {
+			cpy.EntryCounts[k] = v
+		}
+	}
+	return cpy
+}
+
 // MustSetValue is like SetValue, except it resets the enum and panics if the
 // provided value is not a valid variant type.
 func (e *RangeFeedEvent) MustSetValue(value interface{}) {
