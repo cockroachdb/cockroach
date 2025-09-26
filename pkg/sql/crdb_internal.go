@@ -1035,7 +1035,7 @@ var crdbInternalJobsView = virtualSchemaView{
 		j.created::timestamptz,
 		j.finished,
 		greatest(j.created, j.finished, p.written, s.written)::timestamptz AS modified,
-		p.fraction as fraction_completed,
+		coalesce(p.fraction, 0)::FLOAT as fraction_completed,
 		p.resolved as high_water_timestamp,
 		coalesce(j.error_msg, '') as error,
 		j.claim_instance_id as coordinator_id
