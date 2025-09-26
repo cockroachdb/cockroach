@@ -1800,3 +1800,62 @@ func splitPrimaryKeyIndexSpan(
 	require.NoError(t, db.AdminSplit(ctx, pkStartKey, hlc.MaxTimestamp))
 	require.NoError(t, db.AdminSplit(ctx, pkEndKey, hlc.MaxTimestamp))
 }
+
+func TestAlterExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	pollingInterval := 100 * time.Millisecond
+
+	var alreadyReplanned atomic.Int32
+
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		ExternalConnectionPollingInterval: &pollingInterval,
+		AfterRetryIteration: func(err error) {
+			alreadyReplanned.Add(1)
+		},
+	}
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	externalConnection := "replication-source-addr"
+	ogConnection := c.SrcURL.String()
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS "%s"`,
+		externalConnection, ogConnection))
+	c.DestSysSQL.Exec(c.T, c.BuildCreateTenantQuery(externalConnection))
+	streamProducerJobID, ingestionJobID := replicationtestutils.GetStreamJobIds(c.T, ctx, c.DestSysSQL, c.Args.DestTenantName)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(streamProducerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
+	// Alter the external connection to break the stream, to test that pcr watches for new connection changes
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	srcAppURL, cleanupSinkCert := pgurlutils.PGUrl(t, c.SrcSysServer.AdvSQLAddr(), t.Name(), url.User(username.TestUser))
+	defer cleanupSinkCert()
+
+	beforeReplanCount := alreadyReplanned.Load()
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER EXTERNAL CONNECTION "%s" AS "%s"`,
+		externalConnection, &srcAppURL))
+
+	testutils.SucceedsSoon(t, func() error {
+		if alreadyReplanned.Load() <= beforeReplanCount+2 {
+			return errors.New("not yet replanned twice")
+		}
+		return nil
+	})
+
+	// Alter the external connection to fix the stream, and ensure replication resumes
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER EXTERNAL CONNECTION "%s" AS "%s"`,
+		externalConnection, ogConnection))
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	// ensure the stream advances
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+}
