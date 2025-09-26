@@ -920,7 +920,7 @@ func (s *Server) SetupConn(
 	// to use the InternalMetrics. However, some external connections use the prefix as well, for example
 	// the debug zip cli tool.
 	metrics := &s.Metrics
-	if strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
+	if sd.IsInternalAppName() {
 		metrics = &s.InternalMetrics
 	}
 
@@ -1255,7 +1255,6 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
-
 	ex.applicationStats = applicationStats
 	// We ignore statements and transactions run by the internal executor by
 	// passing a nil writer.

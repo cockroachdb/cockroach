@@ -49,7 +49,7 @@ func CheckInternalsAccess(
 	sv *settings.Values,
 ) error {
 	// If the querier is internal, we should allow it.
-	if sd.Internal {
+	if sd.Internal || sd.IsInternalAppName() {
 		return nil
 	}
 
