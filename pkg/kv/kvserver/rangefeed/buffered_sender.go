@@ -50,13 +50,11 @@ import (
 
 // RangefeedSingleBufferedSenderQueueMaxSize is the maximum number of events
 // that the buffered sender will buffer before it starts returning capacity
-// exceeded errors. Updates to this setting are only applied to need
-// MuxRangefeedCalls, existing streams will use the previous value until
+// exceeded errors. Updates to this setting are only applied to new
+// MuxRangefeedCalls. Existing streams will use the previous value until
 // restarted.
 //
-// # The main goal of this limit is to provide a backstop against the
-//
-// The default here has been somewhat arbitrarily chosen considering that:
+// The default here has been arbitrarily chosen. Ideally,
 //
 //   - We want to avoid capacity exceeded errors that wouldn't have occurred
 //     when the buffered registrations were in use.
@@ -64,7 +62,11 @@ import (
 //   - We don't want to drastically increase the amount of queueing allowed for a
 //     single registration.
 //
-//   - One buffered sender is feeding a single gRPC client.
+// A small buffer may be justified given that:
+//
+//   - One buffered sender is feeding a single gRPC client, so scaling based on
+//     registrations doesn't necessarily make sense. If the consumer is behind, it
+//     is behind.
 //
 //   - Events emitted during catchup scans have their own per-registration buffer
 //     still.
