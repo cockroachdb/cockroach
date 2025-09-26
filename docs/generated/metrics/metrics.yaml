@@ -7118,6 +7118,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: physical_replication.catchup_ranges
+      exported_name: physical_replication_catchup_ranges
+      description: Source side ranges undergoing catch up scans
+      y_axis_label: Ranges
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: physical_replication.commit_latency
       exported_name: physical_replication_commit_latency
       description: 'Event commit latency: a difference between event MVCC timestamp and the time it was flushed into disk. If we batch events, then the difference between the oldest event in the batch and flush is recorded'
@@ -7178,6 +7186,14 @@ layers:
       exported_name: physical_replication_running
       description: Number of currently running replication streams
       y_axis_label: Replication Streams
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: physical_replication.scanning_ranges
+      exported_name: physical_replication_scanning_ranges
+      description: Source side ranges undergoing an initial scan
+      y_axis_label: Ranges
       type: GAUGE
       unit: COUNT
       aggregation: AVG

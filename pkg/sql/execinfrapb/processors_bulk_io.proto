@@ -282,6 +282,9 @@ message StreamIngestionFrontierSpec {
 
   // PartitionSpecs contains the topology of the physical replication stream.
   optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
+
+  // NumIngestionProcessors is the number of ingestion processors in the job.
+  optional int32 num_ingestion_processors = 10 [(gogoproto.nullable) = false];
 }
 
 enum ElidePrefix {
@@ -568,7 +571,7 @@ message CompactBackupsSpec {
 	// if it is only provided the assigned spans, so to be safe we send the entire
 	// set of spans.
   repeated roachpb.Span spans = 8 [(gogoproto.nullable) = false];
-  // assigned_spans represents the spans assigned to this particular processor 
+  // assigned_spans represents the spans assigned to this particular processor
   // to compact.
   repeated roachpb.Span assigned_spans = 9 [(gogoproto.nullable) = false];
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
