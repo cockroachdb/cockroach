@@ -101,7 +101,7 @@ func InitLDRMixed(
 func workloadInitCmd(
 	nodes option.NodeListOption, initRows int, h *mixedversion.Helper, t test.Test,
 ) *roachtestutil.Command {
-	return roachtestutil.NewCommand(`%s workload init kv`, h.CockroachBinaryForWorkload(t)).
+	return roachtestutil.NewCommand(`%s workload init kv`, h.VersionedCockroachPath(t)).
 		MaybeFlag(initRows > 0, "insert-count", initRows).
 		// Only set the max block byte values for the init command if we
 		// actually need to insert rows.

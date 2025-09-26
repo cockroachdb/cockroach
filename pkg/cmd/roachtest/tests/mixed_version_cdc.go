@@ -452,7 +452,7 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 		return err
 	}
 	bankInit := roachtestutil.NewCommand(
-		"%s workload init bank", h.CockroachBinaryForWorkload(cmvt.t)).
+		"%s workload init bank", h.VersionedCockroachPath(cmvt.t)).
 		Flag("ranges", targetTableRanges).
 		Flag("rows", targetTableRows).
 		Flag("seed", r.Int63()).

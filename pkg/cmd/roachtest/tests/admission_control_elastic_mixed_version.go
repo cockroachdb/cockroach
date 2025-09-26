@@ -78,7 +78,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
 					"%s workload init kv --drop --splits=1000 --insert-count=3000 "+
 						"--min-block-bytes=512 --max-block-bytes=1024 {pgurl%s}",
-					h.CockroachBinaryForWorkload(t), c.Node(1)))
+					h.VersionedCockroachPath(t), c.Node(1)))
 			}
 			labels := map[string]string{
 				"concurrency":  "500",
@@ -94,7 +94,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 					"--min-block-bytes=512 --max-block-bytes=1024 "+
 					"--txn-qos='regular' "+
 					"--duration=%v {pgurl%s}",
-					h.CockroachBinaryForWorkload(t), roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration,
+					h.VersionedCockroachPath(t), roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration,
 					c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
@@ -106,7 +106,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 					"--max-rate=10000 --read-percent=0 "+
 					"--min-block-bytes=2048 --max-block-bytes=4096 "+
 					"--txn-qos='background' "+
-					"--duration=%v {pgurl%s}", h.CockroachBinaryForWorkload(t),
+					"--duration=%v {pgurl%s}", h.VersionedCockroachPath(t),
 					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}

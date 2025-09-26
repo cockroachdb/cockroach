@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -103,8 +102,6 @@ func Test_validDeploymentModesForCloud(t *testing.T) {
 }
 
 func Test_assertValidTest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 	var fatalErr error
 	fatalFunc := func() func(...interface{}) {
 		fatalErr = nil
@@ -122,14 +119,14 @@ func Test_assertValidTest(t *testing.T) {
 	notEnoughNodes := option.NodeListOption{1, 2, 3}
 	tooManyNodes := option.NodeListOption{1, 2, 3, 5, 6}
 	for _, crdbNodes := range []option.NodeListOption{notEnoughNodes, tooManyNodes} {
-		mvt := newTest(ctrl)
+		mvt := newTest()
 		mvt.crdbNodes = crdbNodes
 
 		assertValidTest(mvt, fatalFunc())
 		require.Error(t, fatalErr)
 		require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid cluster: use of fixtures requires 4 cockroach nodes")
 
-		mvt = newTest(ctrl, NeverUseFixtures)
+		mvt = newTest(NeverUseFixtures)
 		mvt.crdbNodes = crdbNodes
 
 		assertValidTest(mvt, fatalFunc())
@@ -137,12 +134,12 @@ func Test_assertValidTest(t *testing.T) {
 	}
 
 	// Validating number of upgrades specified by the test.
-	mvt := newTest(ctrl, MinUpgrades(10))
+	mvt := newTest(MinUpgrades(10))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (4) must be greater than minUpgrades (10)")
 
-	mvt = newTest(ctrl, MaxUpgrades(0))
+	mvt = newTest(MaxUpgrades(0))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (0) must be greater than minUpgrades (1)")
@@ -150,7 +147,7 @@ func Test_assertValidTest(t *testing.T) {
 	// Validating minimum supported version.
 	defer withTestBuildVersion("v23.1.2")()
 
-	mvt = newTest(ctrl, MinimumSupportedVersion("v24.1.0"))
+	mvt = newTest(MinimumSupportedVersion("v24.1.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
@@ -160,7 +157,7 @@ func Test_assertValidTest(t *testing.T) {
 
 	// minimum supported version is older than current version, but
 	// still in the same release series.
-	mvt = newTest(ctrl, MinimumSupportedVersion("v23.1.8"))
+	mvt = newTest(MinimumSupportedVersion("v23.1.8"))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
@@ -169,7 +166,7 @@ func Test_assertValidTest(t *testing.T) {
 	)
 
 	// no deployment mode is enabled for a test.
-	mvt = newTest(ctrl, EnabledDeploymentModes())
+	mvt = newTest(EnabledDeploymentModes())
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
@@ -178,7 +175,7 @@ func Test_assertValidTest(t *testing.T) {
 	)
 
 	// an invalid deployment mode is chosen
-	mvt = newTest(ctrl, EnabledDeploymentModes(SystemOnlyDeployment, "my-deployment"))
+	mvt = newTest(EnabledDeploymentModes(SystemOnlyDeployment, "my-deployment"))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
@@ -187,7 +184,7 @@ func Test_assertValidTest(t *testing.T) {
 	)
 
 	// simulate a NewTest call with an actual `cluster` implementation
-	mvt = newTest(ctrl, EnabledDeploymentModes(SeparateProcessDeployment))
+	mvt = newTest(EnabledDeploymentModes(SeparateProcessDeployment))
 	mvt.options.enabledDeploymentModes = validDeploymentModesForCloud(spec.AWS, mvt.options.enabledDeploymentModes)
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
@@ -197,7 +194,7 @@ func Test_assertValidTest(t *testing.T) {
 	)
 
 	// separate-process deployments requires cluster validation
-	mvt = newTest(ctrl, NeverUseFixtures, EnabledDeploymentModes(allDeploymentModes...))
+	mvt = newTest(NeverUseFixtures, EnabledDeploymentModes(allDeploymentModes...))
 	mvt.crdbNodes = option.NodeListOption{1}
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
@@ -206,14 +203,14 @@ func Test_assertValidTest(t *testing.T) {
 		fatalErr.Error(),
 	)
 
-	mvt = newTest(ctrl, MinimumSupportedVersion("v22.2.0"))
+	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)
 
 	// Test that if there are fewer upgrades possible between the minimum
 	// bootstrap version and the current version than MaxUpgrades, maxUpgrades
 	// is overridden to the former.
-	mvt = newTest(ctrl, MinimumBootstrapVersion("v21.2.0"), MaxUpgrades(10))
+	mvt = newTest(MinimumBootstrapVersion("v21.2.0"), MaxUpgrades(10))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)
 	require.Equal(t, 3, mvt.options.maxUpgrades)
@@ -221,7 +218,7 @@ func Test_assertValidTest(t *testing.T) {
 	// Test that if there are fewer upgrades possible between the minimum
 	// bootstrap version and the current version than MinUpgrades, the test
 	// is invalid.
-	mvt = newTest(ctrl, MinimumBootstrapVersion("v21.2.0"), MinUpgrades(10))
+	mvt = newTest(MinimumBootstrapVersion("v21.2.0"), MinUpgrades(10))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
@@ -229,7 +226,7 @@ func Test_assertValidTest(t *testing.T) {
 		fatalErr.Error(),
 	)
 
-	mvt = newTest(ctrl, MinimumBootstrapVersion("v24.2.0"))
+	mvt = newTest(MinimumBootstrapVersion("v24.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
@@ -240,8 +237,6 @@ func Test_assertValidTest(t *testing.T) {
 
 func Test_choosePreviousReleases(t *testing.T) {
 	defer withTestBuildVersion("v24.3.0")()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	testCases := []struct {
 		name              string
@@ -294,7 +289,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 				opts = append(opts, DisableSkipVersionUpgrades)
 			}
 
-			mvt := newTest(ctrl, opts...)
+			mvt := newTest(opts...)
 			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
@@ -321,9 +316,7 @@ func TestTest_plan(t *testing.T) {
 	// Assert that planning failures are owned by test-eng. At the time
 	// of writing, planning can only return an error if we fail to find
 	// a required predecessor of a certain release.
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mvt := newTest(ctrl, NumUpgrades(100))
+	mvt := newTest(NumUpgrades(100))
 	_, err := mvt.plan()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no known predecessor for")

@@ -863,7 +863,7 @@ func (t *Test) Workload(
 	if initCmd != nil {
 		addSeed(initCmd)
 		t.OnStartup(fmt.Sprintf("initialize %s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-			initCmd.Binary = h.CockroachBinaryForWorkload(t.rt)
+			initCmd.Binary = h.VersionedCockroachPath(t.rt)
 			l.Printf("running command `%s` on nodes %v", initCmd.String(), node)
 			return t.cluster.RunE(ctx, option.WithNodes(node), initCmd.String())
 		})
@@ -871,7 +871,7 @@ func (t *Test) Workload(
 
 	addSeed(runCmd)
 	return t.BackgroundFunc(fmt.Sprintf("%s workload", name), func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
-		runCmd.Binary = h.CockroachBinaryForWorkload(t.rt)
+		runCmd.Binary = h.VersionedCockroachPath(t.rt)
 		l.Printf("running command `%s` on nodes %v", runCmd.String(), node)
 		return t.cluster.RunE(ctx, option.WithNodes(node), runCmd.String())
 	})

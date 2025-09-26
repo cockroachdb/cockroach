@@ -355,10 +355,10 @@ func (h *Helper) IsSkipVersionUpgrade() bool {
 	return numReleases > 1
 }
 
-// CockroachBinaryForWorkload returns the correct binary path to use when
+// VersionedCockroachPath returns the correct binary path to use when
 // executing workload commands in user-defined hooks that will match the
 // current cluster's version e.g., v25.3.1/cockroach
-func (h *Helper) CockroachBinaryForWorkload(rt test.Test) string {
+func (h *Helper) VersionedCockroachPath(rt test.Test) string {
 	return clusterupgrade.BinaryPathForVersion(
 		rt, h.System.FromVersion, "cockroach")
 }

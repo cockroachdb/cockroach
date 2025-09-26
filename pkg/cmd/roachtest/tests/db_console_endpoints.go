@@ -121,7 +121,7 @@ func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluste
 	mvt.InMixedVersion(
 		"test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand,
 			h *mixedversion.Helper) error {
-			if err := initializeSchemaAndIDs(ctx, c, l, h.CockroachBinaryForWorkload(t)); err != nil {
+			if err := initializeSchemaAndIDs(ctx, c, l, h.VersionedCockroachPath(t)); err != nil {
 				t.Fatal(err)
 			}
 			return testEndpoints(ctx, c, l, getEndpoints(t), true)

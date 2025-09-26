@@ -129,7 +129,7 @@ func (t schemaChangeMixedVersionTester) schemaChangeAndValidationStep(
 		Flag("max-ops", t.maxOps).
 		Flag("concurrency", t.concurrency).
 		Arg("{pgurl%s}", t.c.All()).
-		InlineEnvVarAssignment("COCKROACH_RANDOM_SEED", strconv.FormatInt(workloadSeed, 10)).
+		EnvVar("COCKROACH_RANDOM_SEED", strconv.FormatInt(workloadSeed, 10)).
 		String()
 
 	if err := t.c.RunE(ctx, option.WithNodes(t.c.WorkloadNode()), runCmd); err != nil {

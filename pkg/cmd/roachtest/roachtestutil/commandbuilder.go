@@ -97,7 +97,7 @@ func (c *Command) ITEFlag(condition bool, name string, trueVal, falseVal interfa
 	return c.Flag(name, falseVal)
 }
 
-func (c *Command) InlineEnvVarAssignment(name string, val interface{}) *Command {
+func (c *Command) EnvVar(name string, val interface{}) *Command {
 	c.EnvVars[name] = stringP(fmt.Sprint(val))
 	return c
 }

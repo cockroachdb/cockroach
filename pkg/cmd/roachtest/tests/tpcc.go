@@ -618,7 +618,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		<-tenantFeaturesEnabled
 
 		randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
-		cmd := tpccImportCmdWithCockroachBinary(h.CockroachBinaryForWorkload(t), "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
+		cmd := tpccImportCmdWithCockroachBinary(h.VersionedCockroachPath(t), "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
@@ -631,7 +631,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		<-tenantFeaturesEnabled
 
 		cmd := roachtestutil.NewCommand(
-			"%s workload fixtures import bank", h.CockroachBinaryForWorkload(t)).
+			"%s workload fixtures import bank", h.VersionedCockroachPath(t)).
 			Arg("{pgurl%s}", randomNode).
 			Flag("payload-bytes", 10240).
 			Flag("rows", bankRows).
@@ -665,7 +665,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		if t.ExportOpenmetrics() {
 			labelsMap = getTpccLabels(headroomWarehouses, rampDur, workloadDur/time.Millisecond, nil)
 		}
-		cmd := roachtestutil.NewCommand("%s workload run tpcc", h.CockroachBinaryForWorkload(t)).
+		cmd := roachtestutil.NewCommand("%s workload run tpcc", h.VersionedCockroachPath(t)).
 			Arg("{pgurl%s}", h.AvailableNodes()).
 			Flag("duration", workloadDur).
 			Flag("warehouses", headroomWarehouses).
