@@ -21,7 +21,7 @@ import (
 
 func makeExternalConnectionSink(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	user username.SQLUsername,
 	p externalConnectionProvider,
 	serverCfg *execinfra.ServerConfig,
