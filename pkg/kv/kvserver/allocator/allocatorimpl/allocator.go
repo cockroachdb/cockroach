@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
@@ -1872,10 +1873,56 @@ func (a Allocator) RebalanceTarget(
 	// would, we don't want to actually rebalance to that target.
 	var target, existingCandidate *candidate
 	var removeReplica roachpb.ReplicationTarget
+
+	// When bestRebalanceTarget selects an option (bestIdx) for the first time, it
+	// builds and caches the corresponding MMA advisor in advisors[bestIdx]. The
+	// advisor stores the means and other information MMA needs to determine if a
+	// candidate conflicts with its goals for this option.  After this,
+	// bestRebalanceTarget is free to mutate the cands set of the 	// option
+	// incrementally. If bestRebalanceTarget selects the same option again, it
+	// will reuse the cached advisor to call into IsInConflictWithMMA.
+	//
+	// For example, the option may start with {s1, s2, s3} as its candidate set,
+	// if bestRebalanceTarget selects s1, it will remove s1 and continue with {s2,
+	// s3}, then say it continues to select s2 and remove s2 and continue with
+	// {s3}, and finally {s3} → {}. Each call to MMA should use the original set
+	// {s1, s2, s3} ∪ {existing} to compute the means. The design here allows MMA
+	// to compute the means for the original set {s1, s2, s3} ∪ {existing} once
+	// and then use it for all calls to MMA, and bestRebalanceTarget does not need
+	// to copy the candidate set.
+	advisors := make(map[int]mmaprototype.MMARebalanceAdvisor, len(results))
+	var bestIdx int
+
 	for {
-		target, existingCandidate = bestRebalanceTarget(a.randGen, results)
+		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as, advisors)
 		if target == nil {
 			return zero, zero, "", false
+		}
+		if bestIdx == -1 {
+			log.KvDistribution.Fatalf(ctx, "programmer error: bestIdx is -1 when target is not nil")
+		}
+
+		// Skip mma conflict checks for critical rebalances, which repairs a bad
+		// state such as constraint violation, disk-fullness, and diversity
+		// improvements.
+		if !existingCandidate.isCriticalRebalance(target) {
+			// If the rebalance is not critical, we check if it conflicts with mma's
+			// goal. advisor for the target should always be registered in
+			// bestRebalanceTarget and present in the map. If mma rejects the
+			// rebalance, we will continue to the next target. Note that this target
+			// would have been deleted from the candidates set in bestRebalanceTarget,
+			// so we will not select it again.
+			if advisor, ok := advisors[bestIdx]; ok {
+				if a.as.IsInConflictWithMMA(target.store.StoreID, advisor, false) {
+					continue
+				}
+			} else {
+				if buildutil.CrdbTestBuild {
+					log.KvDistribution.Fatalf(ctx, "expected to find MMA handle for idx %d", bestIdx)
+				} else {
+					log.KvDistribution.Errorf(ctx, "expected to find MMA handle for idx %d", bestIdx)
+				}
+			}
 		}
 
 		// Add a fake new replica to our copy of the replica descriptor so that we can
@@ -2754,6 +2801,16 @@ func (t TransferLeaseDecision) String() string {
 // count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
 func (a *Allocator) CountBasedRebalancingDisabled() bool {
 	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
+}
+
+// CountBasedRebalancingOnlyEnabledByMMA returns true if count-based rebalancing
+// should be enabled only when mma (multi-metric store rebalancer) allows the
+// change. This is used to prevent thrashing when both multi-metric and
+// count-based rebalancing are enabled and have conflicting goals.
+// TODO(wenyihu6): since we sometimes see even worse thrashing behaviour with
+// this change, should we introduce another mode for this
+func (a *Allocator) CountBasedRebalancingOnlyEnabledByMMA() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricAndCount
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms
