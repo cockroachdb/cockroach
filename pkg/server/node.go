@@ -1374,10 +1374,12 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
 			diskStats = s
 		}
+		diskUnhealthy := eng.GetDiskUnhealthy()
 		metrics = append(metrics, admission.StoreMetrics{
 			StoreID:                   store.StoreID(),
 			Metrics:                   m.Metrics,
 			WriteStallCount:           m.WriteStallCount,
+			DiskUnhealthy:             diskUnhealthy,
 			DiskStats:                 diskStats,
 			MemTableSizeForStopWrites: memTableSizeForStopWrites,
 		})
