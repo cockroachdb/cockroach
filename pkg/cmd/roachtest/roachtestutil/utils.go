@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -335,4 +336,62 @@ func SimulateMultiRegionCluster(
 	}
 
 	return cleanupFunc, nil
+}
+
+// ExecWithRetry executes the given SQL statement with the specified retry logic.
+func ExecWithRetry(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	retryOpts retry.Options,
+	query string,
+	args ...any,
+) (gosql.Result, error) {
+	var result gosql.Result
+	err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = db.ExecContext(ctx, query, args...)
+		if err != nil {
+			l.Printf("%s failed (retrying): %v", query, err)
+			return err
+		}
+		return nil
+	})
+
+	return result, err
+}
+
+// QueryWithRetry queries the given SQL statement with the specified retry logic.
+func QueryWithRetry(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	retryOpts retry.Options,
+	query string,
+	args ...any,
+) (*gosql.Rows, error) {
+	var rows *gosql.Rows
+	err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		var err error
+		rows, err = db.QueryContext(ctx, query, args...)
+		if err != nil {
+			l.Printf("%s failed (retrying): %v", query, err)
+			return err
+		}
+		return nil
+	})
+
+	return rows, err
+}
+
+// ClusterSettingRetryOpts are retry options intended for cluster setting operations.
+//
+// We use relatively high backoff parameters with the assumption that:
+//  1. If we fail, it's likely due to cluster overload, and we want to give
+//     the cluster adequate time to recover.
+//  2. Setting a cluster setting in roachtest is not latency sensitive.
+var ClusterSettingRetryOpts = retry.Options{
+	InitialBackoff: 3 * time.Second,
+	MaxBackoff:     5 * time.Second,
+	MaxRetries:     5,
 }
