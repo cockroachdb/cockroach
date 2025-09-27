@@ -98,3 +98,15 @@ var PolicySwitchWhenLatencyExceedsBucketFraction = settings.RegisterFloatSetting
 		"exceeded before the closed timestamp policy will be changed",
 	0.2,
 )
+
+// SideTransportPacingRefreshInterval controls the task pacer refresh interval
+// for pacing broadcast updates in the side transport. This determines how long
+// the pacer takes to complete signaling all waiting connections.
+var SideTransportPacingRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.side_transport_pacing_refresh_interval",
+	"the refresh interval for the task pacer that controls pacing of broadcast "+
+		"updates to avoid overloading the system when many connections are waiting",
+	10*time.Millisecond,
+	settings.WithPublic,
+)
