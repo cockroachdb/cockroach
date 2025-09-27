@@ -96,9 +96,9 @@ type JSON interface {
 	// specified, using `dir`, and is appended to `buf` and returned.
 	EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error)
 
-	// encodeInvertedIndexKeys takes in a key prefix and returns a slice of
+	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of
 	// inverted index keys, one per path through the receiver.
-	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
+	EncodeInvertedIndexKeys(b []byte) ([][]byte, error)
 
 	// encodeContainingInvertedIndexSpans takes in a key prefix and returns the
 	// spans that must be scanned in the inverted index to evaluate a contains (@>)
@@ -1059,7 +1059,7 @@ func init() {
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 // one per unique path through the receiver.
 func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
-	return json.encodeInvertedIndexKeys(encoding.EncodeJSONAscending(b))
+	return json.EncodeInvertedIndexKeys(encoding.EncodeJSONAscending(b))
 }
 
 // EncodeContainingInvertedIndexSpans takes in a key prefix and returns the
@@ -1130,11 +1130,11 @@ func EncodeExistsInvertedIndexSpans(
 	// string and objects with keys that are the input string.
 	builder := NewArrayBuilder(1)
 	builder.Add(js)
-	arrayKeys, err := builder.Build().encodeInvertedIndexKeys(b)
+	arrayKeys, err := builder.Build().EncodeInvertedIndexKeys(b)
 	if err != nil {
 		return nil, err
 	}
-	scalarKeys, err := js.encodeInvertedIndexKeys(b[:len(b):len(b)])
+	scalarKeys, err := js.EncodeInvertedIndexKeys(b[:len(b):len(b)])
 	if err != nil {
 		return nil, err
 	}
@@ -1164,7 +1164,7 @@ func EncodeExistsInvertedIndexSpans(
 	), nil
 }
 
-func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonNull) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeNullAscending(b)}, nil
 }
@@ -1182,7 +1182,7 @@ func (j jsonNull) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (jsonTrue) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (jsonTrue) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeTrueAscending(b)}, nil
 }
@@ -1200,7 +1200,7 @@ func (j jsonTrue) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (jsonFalse) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (jsonFalse) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeFalseAscending(b)}, nil
 }
@@ -1218,9 +1218,10 @@ func (j jsonFalse) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (j jsonString) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonString) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
-	return [][]byte{encoding.EncodeStringAscending(b, string(j))}, nil
+	res := [][]byte{encoding.EncodeStringAscending(b, string(j))}
+	return res, nil
 }
 
 func (j jsonString) encodeContainingInvertedIndexSpans(
@@ -1236,7 +1237,7 @@ func (j jsonString) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (j jsonNumber) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	var dec = apd.Decimal(j)
 	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}, nil
@@ -1255,7 +1256,7 @@ func (j jsonNumber) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// Checking for an empty array.
 	if len(j) == 0 {
 		return [][]byte{encoding.EncodeJSONEmptyArray(b)}, nil
@@ -1264,7 +1265,7 @@ func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	prefix := encoding.EncodeArrayAscending(b)
 	var outKeys [][]byte
 	for i := range j {
-		children, err := j[i].encodeInvertedIndexKeys(prefix[:len(prefix):len(prefix)])
+		children, err := j[i].EncodeInvertedIndexKeys(prefix[:len(prefix):len(prefix)])
 		if err != nil {
 			return nil, err
 		}
@@ -1381,7 +1382,7 @@ func (j jsonArray) encodeContainedInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
-func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// Checking for an empty object.
 	if len(j) == 0 {
 		return [][]byte{encoding.EncodeJSONEmptyObject(b)}, nil
@@ -1389,7 +1390,7 @@ func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 	var outKeys [][]byte
 	for i := range j {
-		children, err := j[i].v.encodeInvertedIndexKeys(nil)
+		children, err := j[i].v.EncodeInvertedIndexKeys(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1399,8 +1400,9 @@ func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		end := isEnd(j[i].v)
 
 		for _, childBytes := range children {
+			mid := encoding.EncodeJSONKeyStringAscending(nil, string(j[i].k), end)
 			encodedKey := bytes.Join([][]byte{b,
-				encoding.EncodeJSONKeyStringAscending(nil, string(j[i].k), end),
+				mid,
 				childBytes}, nil)
 
 			outKeys = append(outKeys, encodedKey)
@@ -1568,7 +1570,7 @@ func emptyJSONForType(json JSON) JSON {
 func encodeContainingInvertedIndexSpansFromLeaf(
 	j JSON, b []byte, isRoot, isObjectValue bool,
 ) (invertedExpr inverted.Expression, err error) {
-	keys, err := j.encodeInvertedIndexKeys(b)
+	keys, err := j.EncodeInvertedIndexKeys(b)
 	if err != nil {
 		return nil, err
 	}
@@ -1657,7 +1659,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 			arr := NewArrayBuilder(1)
 			arr.Add(j)
 			jArr := arr.Build()
-			arrKeys, err := jArr.encodeInvertedIndexKeys(prefix)
+			arrKeys, err := jArr.EncodeInvertedIndexKeys(prefix)
 			if err != nil {
 				return nil, err
 			}
@@ -1701,7 +1703,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 func encodeContainedInvertedIndexSpansFromLeaf(
 	j JSON, b []byte, isRoot bool,
 ) (invertedExpr inverted.Expression, err error) {
-	keys, err := j.encodeInvertedIndexKeys(b)
+	keys, err := j.EncodeInvertedIndexKeys(b)
 	if err != nil {
 		return nil, err
 	}
@@ -1767,7 +1769,7 @@ func (j jsonArray) numInvertedIndexEntries() (int, error) {
 	if len(j) == 0 {
 		return 1, nil
 	}
-	keys, err := j.encodeInvertedIndexKeys(nil)
+	keys, err := j.EncodeInvertedIndexKeys(nil)
 	if err != nil {
 		return 0, err
 	}

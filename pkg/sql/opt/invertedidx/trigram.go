@@ -30,7 +30,7 @@ var _ invertedFilterPlanner = &trigramFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
 // interface.
 func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	_ context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, forceInvertedIndex bool, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,

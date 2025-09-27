@@ -756,13 +756,13 @@ func (j *jsonEncoded) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]
 }
 
 // EncodeInvertedIndexKeys implements the JSON interface.
-func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j *jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// TODO(justin): this could possibly be optimized.
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
 	}
-	return decoded.encodeInvertedIndexKeys(b)
+	return decoded.EncodeInvertedIndexKeys(b)
 }
 
 func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
