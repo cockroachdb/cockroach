@@ -706,15 +706,14 @@ func createChangefeedJobRecord(
 		if targetDatabaseDesc.GetID() == keys.SystemDatabaseID {
 			return nil, changefeedbase.Targets{}, errors.Errorf("changefeed cannot target the system database")
 		}
-		if changefeedStmt.FilterOption != nil {
-			fqTableNames, err := getFullyQualifiedTableNames(
-				targetDatabaseDesc.GetName(), changefeedStmt.FilterOption.Tables,
-			)
-			if err != nil {
-				return nil, changefeedbase.Targets{}, err
-			}
-			changefeedStmt.FilterOption.Tables = fqTableNames
+		fqTableNames, err := getFullyQualifiedTableNames(
+			targetDatabaseDesc.GetName(), changefeedStmt.FilterOption.Tables,
+		)
+		if err != nil {
+			return nil, changefeedbase.Targets{}, err
 		}
+		changefeedStmt.FilterOption.Tables = fqTableNames
+
 		targetSpec := getDatabaseTargetSpec(targetDatabaseDesc, changefeedStmt.FilterOption)
 		details = jobspb.ChangefeedDetails{
 			TargetSpecifications: []jobspb.ChangefeedTargetSpecification{targetSpec},
@@ -1227,22 +1226,20 @@ func getTargetsAndTables(
 }
 
 func getDatabaseTargetSpec(
-	targetDatabaseDesc catalog.DatabaseDescriptor, filterOpt *tree.ChangefeedFilterOption,
+	targetDatabaseDesc catalog.DatabaseDescriptor, filterOpt tree.ChangefeedFilterOption,
 ) jobspb.ChangefeedTargetSpecification {
 	target := jobspb.ChangefeedTargetSpecification{
 		DescID:            targetDatabaseDesc.GetID(),
 		Type:              jobspb.ChangefeedTargetSpecification_DATABASE,
 		StatementTimeName: targetDatabaseDesc.GetName(),
 	}
-	if filterOpt != nil {
-		filterTables := make(map[string]pbtypes.Empty)
-		for _, table := range filterOpt.Tables {
-			filterTables[table.FQString()] = pbtypes.Empty{}
-		}
-		target.FilterList = &jobspb.FilterList{
-			FilterType: jobspb.FilterList_FilterType(filterOpt.FilterType),
-			Tables:     filterTables,
-		}
+	filterTables := make(map[string]pbtypes.Empty)
+	for _, table := range filterOpt.Tables {
+		filterTables[table.FQString()] = pbtypes.Empty{}
+	}
+	target.FilterList = &jobspb.FilterList{
+		FilterType: filterOpt.FilterType,
+		Tables:     filterTables,
 	}
 	return target
 }
