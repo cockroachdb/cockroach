@@ -2130,7 +2130,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		}
 	}
 	var apiInternalServer http.Handler
-	if rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
 		// Pass our own node ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(
 			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings)
