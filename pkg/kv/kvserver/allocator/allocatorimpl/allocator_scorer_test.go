@@ -1705,6 +1705,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		)
 		targets := rankedCandidateListForRebalancing(
 			context.Background(),
+			allocator.RangeUsageInfo{},
 			filteredSL,
 			removalConstraintsChecker,
 			rebalanceConstraintsChecker,

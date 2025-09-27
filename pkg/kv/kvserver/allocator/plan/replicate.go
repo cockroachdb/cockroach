@@ -171,6 +171,9 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 		if rp.allocator.CountBasedRebalancingDisabled() {
 			scorerOptions = rp.allocator.BaseScorerOptionsWithNoConvergence()
 		}
+		if rp.allocator.CountBasedRebalancingOnlyEnabledByMMA() {
+			scorerOptions = rp.allocator.LoadAwareRangeCountScorerOptions()
+		}
 		rangeUsageInfo := repl.RangeUsageInfo()
 		_, _, _, ok := rp.allocator.RebalanceVoter(
 			ctx,
@@ -795,6 +798,9 @@ func (rp ReplicaPlanner) considerRebalance(
 	}
 	if rp.allocator.CountBasedRebalancingDisabled() {
 		scorerOpts = rp.allocator.BaseScorerOptionsWithNoConvergence()
+	}
+	if rp.allocator.CountBasedRebalancingOnlyEnabledByMMA() {
+		scorerOpts = rp.allocator.LoadAwareRangeCountScorerOptions()
 	}
 	rangeUsageInfo := repl.RangeUsageInfo()
 	addTarget, removeTarget, details, ok := rp.allocator.RebalanceVoter(

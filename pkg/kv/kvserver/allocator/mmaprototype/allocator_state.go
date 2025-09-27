@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -887,6 +888,54 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 		changeIDs[i] = pendingChange.ChangeID
 	}
 	return changeIDs
+}
+
+// IsInConflictWithMMA returns true if the change from existing to cand is in
+// conflict with MMA's goal. cpuOnly is true if only CPU dimension should be
+// considered (when this is for lease transfers). It is considered in conflict
+// if the clusterState.canShedAndAddLoad returns false.
+//
+// NB: cands may or may not include the existing store.
+func (a *allocatorState) IsInConflictWithMMA(
+	rangeUsageInfo allocator.RangeUsageInfo,
+	existing roachpb.StoreID,
+	cand roachpb.StoreID,
+	cands []roachpb.StoreID,
+	cpuOnly bool,
+) bool {
+	srcSS, sOK := a.cs.stores[existing]
+	targetSS, tOK := a.cs.stores[cand]
+	if !sOK || tOK {
+		return false
+	}
+	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call. We
+	// should reuse the scratchNodes instead.
+	var means meansForStoreSet
+	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
+	storeIDs := makeStoreIDPostingList(cands)
+	storeIDs.insert(existing)
+	means.stores = storeIDs
+	computeMeansForStoreSet(a.cs, &means, scratchNodes)
+	if len(storeIDs) <= 1 {
+		return false
+	}
+	var addedLoad LoadVector
+	// If CPU only, we are doing a lease transfer. The only added load is from the
+	// request CPU.
+	if cpuOnly {
+		addedLoad[CPURate] = LoadValue(int64(rangeUsageInfo.RequestCPUNanosPerSecond))
+		return !a.cs.canShedAndAddLoad(context.Background(), srcSS, targetSS, addedLoad, &means, true, CPURate)
+	}
+	// If not CPU only, we are doing a replica rebalancing. For simplicity, we
+	// assume the worst case - the source replica is a leaseholder. The added load
+	// for CPU is the sum of the request CPU and raft CPU.
+	addedLoad = LoadVector{
+		CPURate:        LoadValue(int64(rangeUsageInfo.RequestCPUNanosPerSecond + rangeUsageInfo.RaftCPUNanosPerSecond)),
+		WriteBandwidth: LoadValue(rangeUsageInfo.WriteBytesPerSecond),
+		ByteSize:       LoadValue(rangeUsageInfo.LogicalBytes),
+	}
+	existingSLS := a.cs.computeLoadSummary(context.Background(), existing, &means.storeLoad, &means.nodeLoad)
+	return !a.cs.canShedAndAddLoad(context.Background(), srcSS, targetSS, addedLoad, &means, false, existingSLS.worstDim)
 }
 
 // ComputeChanges implements the Allocator interface.

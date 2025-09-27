@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -619,6 +620,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
+	as            *mmaintegration.AllocatorSync
 	deterministic bool
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -658,6 +660,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 // close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
+	as *mmaintegration.AllocatorSync,
 	deterministic bool,
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -670,6 +673,7 @@ func MakeAllocator(
 	}
 	allocator := Allocator{
 		st:            st,
+		as:            as,
 		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
@@ -1848,6 +1852,7 @@ func (a Allocator) RebalanceTarget(
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	results := rankedCandidateListForRebalancing(
 		ctx,
+		rangeUsageInfo,
 		sl,
 		removalConstraintsChecker,
 		rebalanceConstraintsChecker,
@@ -2448,7 +2453,7 @@ func (a *Allocator) TransferLeaseTarget(
 				}
 				fallthrough
 			case decideWithoutStats:
-				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, validTargets) {
+				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, usageInfo, storePool, sl, source, validTargets) {
 					return roachpb.ReplicaDescriptor{}
 				}
 			case shouldTransfer:
@@ -2480,8 +2485,16 @@ func (a *Allocator) TransferLeaseTarget(
 		var bestOption roachpb.ReplicaDescriptor
 		candidates := make([]roachpb.ReplicaDescriptor, 0, len(validTargets))
 		bestOptionLeaseCount := int32(math.MaxInt32)
+		validTargetsStoreIDs := make([]roachpb.StoreID, 0, len(validTargets))
+		for _, repl := range validTargets {
+			validTargetsStoreIDs = append(validTargetsStoreIDs, repl.StoreID)
+		}
 		for _, repl := range validTargets {
 			if leaseRepl.StoreID() == repl.StoreID {
+				continue
+			}
+			if a.CountBasedRebalancingOnlyEnabledByMMA() &&
+				a.as.IsInConflictWithMMA(usageInfo, source.StoreID, repl.StoreID, validTargetsStoreIDs, true /* cpuOnly */) {
 				continue
 			}
 			storeDesc, ok := storePool.GetStoreDescriptor(repl.StoreID)
@@ -2752,6 +2765,14 @@ func (a *Allocator) CountBasedRebalancingDisabled() bool {
 	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
 }
 
+// CountBasedRebalancingOnlyEnabledByMMA returns true if count-based rebalancing
+// should be enabled only when mma (multi-metric store rebalancer) allows the
+// change. This is used to prevent thrashing when both multi-metric and
+// count-based rebalancing are enabled and have conflicting goals.
+func (a *Allocator) CountBasedRebalancingOnlyEnabledByMMA() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricAndCount
+}
+
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
@@ -2819,7 +2840,7 @@ func (a *Allocator) ShouldTransferLease(
 	case shouldTransfer:
 		result = TransferLeaseForAccessLocality
 	case decideWithoutStats:
-		if a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, existing) {
+		if a.shouldTransferLeaseForLeaseCountConvergence(ctx, usageInfo, storePool, sl, source, existing) {
 			result = TransferLeaseForCountBalance
 		} else {
 			result = DontTransferLeaseBalanced
@@ -3046,6 +3067,7 @@ func loadBasedLeaseRebalanceScore(
 
 func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	ctx context.Context,
+	rangeUsageInfo allocator.RangeUsageInfo,
 	storePool storepool.AllocatorStorePool,
 	sl storepool.StoreList,
 	source roachpb.StoreDescriptor,
@@ -3054,6 +3076,26 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	// Return false early if count based rebalancing is disabled.
 	if a.CountBasedRebalancingDisabled() {
 		return false
+	}
+
+	// If count based rebalancing is only enabled by MMA, return true only if
+	// there is at least one good candidate that is not in conflict with MMA's
+	// goal.
+	if a.CountBasedRebalancingOnlyEnabledByMMA() {
+		atLeastOneGoodCandidate := false
+		targetsStoreIDs := make([]roachpb.StoreID, 0, len(existing))
+		for _, repl := range existing {
+			targetsStoreIDs = append(targetsStoreIDs, repl.StoreID)
+		}
+		for _, replDesc := range existing {
+			if !a.as.IsInConflictWithMMA(rangeUsageInfo, source.StoreID, replDesc.StoreID, targetsStoreIDs, true /*cpuOnly*/) {
+				atLeastOneGoodCandidate = true
+				break
+			}
+		}
+		if !atLeastOneGoodCandidate {
+			return false
+		}
 	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease
 	// rebalancing is enabled? In happy cases it's nice to keep this working
