@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 )
@@ -60,6 +62,7 @@ type OperationConfig struct {
 	ChangeLease    ChangeLeaseConfig
 	ChangeSetting  ChangeSettingConfig
 	ChangeZone     ChangeZoneConfig
+	Fault          FaultConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -392,6 +395,20 @@ type SavepointConfig struct {
 	SavepointRollback int
 }
 
+// FaultConfig configures the relative probabilities of generating different
+// types of faults. Network partitions can be symmetric or asymmetric, partial
+// or full, but they may need multiple operations to set up; e.g. a symmetric
+// partition between node A and node B requires to partitions: from A to B, and
+// from B to A.
+type FaultConfig struct {
+	// AddNetworkPartition is an operation that simulates a network partition.
+	AddNetworkPartition int
+	// RemoveNetworkPartition is an operation that simulates healing a network
+	// partition.
+	RemoveNetworkPartition int
+	// Disk stalls and node crashes belong here.
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
@@ -511,6 +528,10 @@ func newAllOperationsConfig() GeneratorConfig {
 		ChangeZone: ChangeZoneConfig{
 			ToggleGlobalReads: 1,
 		},
+		Fault: FaultConfig{
+			AddNetworkPartition:    1,
+			RemoveNetworkPartition: 1,
+		},
 	}}
 }
 
@@ -603,6 +624,11 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
+
+	// Network partitions can result in unavailability and need to be enabled with
+	// care by specific test variants.
+	config.Ops.Fault.AddNetworkPartition = 0
+	config.Ops.Fault.RemoveNetworkPartition = 0
 	return config
 }
 
@@ -621,7 +647,7 @@ func GeneratorDataSpan() roachpb.Span {
 
 // GetReplicasFn is a function that returns the current voting and non-voting
 // replicas, respectively, for the range containing a key.
-type GetReplicasFn func(roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget)
+type GetReplicasFn func(context.Context, roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget)
 
 // Generator incrementally constructs KV traffic designed to maximally test edge
 // cases.
@@ -652,7 +678,9 @@ type Generator struct {
 }
 
 // MakeGenerator constructs a Generator.
-func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator, error) {
+func MakeGenerator(
+	config GeneratorConfig, replicasFn GetReplicasFn, mode TestMode,
+) (*Generator, error) {
 	if config.NumNodes <= 0 {
 		return nil, errors.Errorf(`NumNodes must be positive got: %d`, config.NumNodes)
 	}
@@ -663,6 +691,23 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 		return nil, errors.Errorf(`NumReplicas (%d) must <= NumNodes (%d)`,
 			config.NumReplicas, config.NumNodes)
 	}
+	p := partitions{
+		healthy:     make(map[connection]struct{}),
+		partitioned: make(map[connection]struct{}),
+	}
+	for i := 1; i <= config.NumNodes; i++ {
+		for j := 1; j <= config.NumNodes; j++ {
+			// In liveness mode, we don't allow adding partitions between the two
+			// protected nodes (node 1 and node 2), so we don't include those
+			// connections in the set of healthy connections at all.
+			protectedConn := (i == 1 && j == 2) || (i == 2 && j == 1)
+			if i == j || (mode == Liveness && protectedConn) {
+				continue
+			}
+			conn := connection{from: i, to: j}
+			p.healthy[conn] = struct{}{}
+		}
+	}
 	g := &Generator{}
 	g.mu.generator = generator{
 		Config:           config,
@@ -670,6 +715,8 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 		keys:             make(map[string]string),
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
+		partitions:       p,
+		mode:             mode,
 	}
 	return g, nil
 }
@@ -703,6 +750,24 @@ type generator struct {
 	// emitted, regardless of whether the split has since been applied or been
 	// merged away again.
 	historicalSplits map[string]struct{}
+
+	// partitions contains the sets of healthy and partitioned connections
+	// between nodes.
+	partitions
+
+	// mode is the test mode (e.g. Liveness or Safety). The generator needs it in
+	// order to set a timeout for range lookups under safety mode.
+	mode TestMode
+}
+
+type connection struct {
+	from int // node ID
+	to   int // node ID
+}
+
+type partitions struct {
+	healthy     map[connection]struct{}
+	partitioned map[connection]struct{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -725,26 +790,45 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 
 	key := randKey(rng)
-	voters, nonVoters := g.replicasFn(roachpb.Key(key))
+	var voters, nonVoters []roachpb.ReplicationTarget
+	if g.mode == Safety {
+		if err := timeutil.RunWithTimeout(context.Background(), "getting replicas", 3*time.Second,
+			func(ctx context.Context) error {
+				voters, nonVoters = g.replicasFn(ctx, roachpb.Key(key))
+				return nil
+			}); err != nil {
+			voters, nonVoters = []roachpb.ReplicationTarget{}, []roachpb.ReplicationTarget{}
+		}
+	} else {
+		voters, nonVoters = g.replicasFn(context.Background(), roachpb.Key(key))
+	}
 	numVoters, numNonVoters := len(voters), len(nonVoters)
 	numReplicas := numVoters + numNonVoters
 	if numReplicas < g.Config.NumNodes {
-		addVoterFn := makeAddReplicaFn(key, voters, false /* atomicSwap */, true /* voter */)
-		addOpGen(&allowed, addVoterFn, g.Config.Ops.ChangeReplicas.AddVotingReplica)
-		addNonVoterFn := makeAddReplicaFn(key, nonVoters, false /* atomicSwap */, false /* voter */)
-		addOpGen(&allowed, addNonVoterFn, g.Config.Ops.ChangeReplicas.AddNonVotingReplica)
+		if len(voters) > 0 {
+			addVoterFn := makeAddReplicaFn(key, voters, false /* atomicSwap */, true /* voter */)
+			addOpGen(&allowed, addVoterFn, g.Config.Ops.ChangeReplicas.AddVotingReplica)
+		}
+		if len(nonVoters) > 0 {
+			addNonVoterFn := makeAddReplicaFn(key, nonVoters, false /* atomicSwap */, false /* voter */)
+			addOpGen(&allowed, addNonVoterFn, g.Config.Ops.ChangeReplicas.AddNonVotingReplica)
+		}
 	}
 	if numReplicas == g.Config.NumReplicas && numReplicas < g.Config.NumNodes {
-		atomicSwapVoterFn := makeAddReplicaFn(key, voters, true /* atomicSwap */, true /* voter */)
-		addOpGen(&allowed, atomicSwapVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapVotingReplica)
+		if len(voters) > 0 {
+			atomicSwapVoterFn := makeAddReplicaFn(key, voters, true /* atomicSwap */, true /* voter */)
+			addOpGen(&allowed, atomicSwapVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapVotingReplica)
+		}
 		if numNonVoters > 0 {
 			atomicSwapNonVoterFn := makeAddReplicaFn(key, nonVoters, true /* atomicSwap */, false /* voter */)
 			addOpGen(&allowed, atomicSwapNonVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapNonVotingReplica)
 		}
 	}
 	if numReplicas > g.Config.NumReplicas {
-		removeVoterFn := makeRemoveReplicaFn(key, voters, true /* voter */)
-		addOpGen(&allowed, removeVoterFn, g.Config.Ops.ChangeReplicas.RemoveVotingReplica)
+		if len(voters) > 0 {
+			removeVoterFn := makeRemoveReplicaFn(key, voters, true /* voter */)
+			addOpGen(&allowed, removeVoterFn, g.Config.Ops.ChangeReplicas.RemoveVotingReplica)
+		}
 		if numNonVoters > 0 {
 			removeNonVoterFn := makeRemoveReplicaFn(key, nonVoters, false /* voter */)
 			addOpGen(&allowed, removeNonVoterFn, g.Config.Ops.ChangeReplicas.RemoveNonVotingReplica)
@@ -758,11 +842,15 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 		promoteNonVoterFn := makePromoteReplicaFn(key, nonVoters)
 		addOpGen(&allowed, promoteNonVoterFn, g.Config.Ops.ChangeReplicas.PromoteReplica)
 	}
-	transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
-	addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+	if numVoters > 0 {
+		transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
+		addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+	}
 
 	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
+	addOpGen(&allowed, addRandNetworkPartition, g.Config.Ops.Fault.AddNetworkPartition)
+	addOpGen(&allowed, removeRandNetworkPartition, g.Config.Ops.Fault.RemoveNetworkPartition)
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -1643,6 +1731,34 @@ func toggleGlobalReads(_ *generator, _ *rand.Rand) Operation {
 	return changeZone(ChangeZoneType_ToggleGlobalReads)
 }
 
+func addRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
+	if len(g.partitions.healthy) == 0 {
+		return addNetworkPartition(0, 0)
+	}
+	all := make([]connection, 0, len(g.partitions.healthy))
+	for conn := range g.partitions.healthy {
+		all = append(all, conn)
+	}
+	randConn := all[rng.Intn(len(all))]
+	delete(g.partitions.healthy, randConn)
+	g.partitions.partitioned[randConn] = struct{}{}
+	return addNetworkPartition(randConn.from, randConn.to)
+}
+
+func removeRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
+	if len(g.partitions.partitioned) == 0 {
+		return removeNetworkPartition(0, 0)
+	}
+	all := make([]connection, 0, len(g.partitions.partitioned))
+	for conn := range g.partitions.partitioned {
+		all = append(all, conn)
+	}
+	randConn := all[rng.Intn(len(all))]
+	delete(g.partitions.partitioned, randConn)
+	g.partitions.healthy[randConn] = struct{}{}
+	return removeNetworkPartition(randConn.from, randConn.to)
+}
+
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
@@ -2250,6 +2366,18 @@ func releaseSavepoint(id int) Operation {
 
 func rollbackSavepoint(id int) Operation {
 	return Operation{SavepointRollback: &SavepointRollbackOperation{ID: int32(id)}}
+}
+
+func addNetworkPartition(from int, to int) Operation {
+	return Operation{
+		AddNetworkPartition: &AddNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
+	}
+}
+
+func removeNetworkPartition(from int, to int) Operation {
+	return Operation{
+		RemoveNetworkPartition: &RemoveNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
+	}
 }
 
 type countingRandSource struct {

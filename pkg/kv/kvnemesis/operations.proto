@@ -177,7 +177,18 @@ message SavepointRollbackOperation {
 message MutateBatchHeaderOperation {
   int64 max_span_request_keys = 1;
   int64 target_bytes = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
 
+message AddNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message RemoveNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
@@ -213,6 +224,8 @@ message Operation {
   FlushLockTableOperation flush_lock_table = 24;
   MutateBatchHeaderOperation mutate_batch_header = 25;
   CPutOperation cput = 26 [(gogoproto.customname) = "CPut"];
+  AddNetworkPartitionOperation addNetworkPartition = 27;
+  RemoveNetworkPartitionOperation removeNetworkPartition = 28;
 }
 
 enum ResultType {
