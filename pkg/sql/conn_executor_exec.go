@@ -2422,6 +2422,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		}
 	}
 
+	if err := ex.extraTxnState.descCollection.EmitDescriptorUpdatesKey(ctx, ex.state.mu.txn); err != nil {
+		return err
+	}
+
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return err
 	}

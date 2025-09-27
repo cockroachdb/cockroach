@@ -185,7 +185,7 @@ func getAllDescChanges(
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[descpb.ID]descpb.ID,
 ) ([]backuppb.BackupManifest_DescriptorRevision, error) {
-	startKey := codec.TablePrefix(keys.DescriptorTableID)
+	startKey := codec.IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
 	endKey := startKey.PrefixEnd()
 
 	g := ctxgroup.WithContext(ctx)

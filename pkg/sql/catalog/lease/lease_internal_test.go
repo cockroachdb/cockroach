@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1745,6 +1746,8 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 
 	var blockUpdates atomic.Bool
 	var blockCheckPoint atomic.Bool
+	var targetTS atomic.Value
+	targetTS.Store(hlc.Timestamp{})
 	updateCh := make(chan struct{})
 	rangeFeedCh := make(chan struct{})
 
@@ -1763,17 +1766,22 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 							return
 						}
 						<-updateCh
+						//nolint:descriptormarshal
+						targetTS.Store(descriptor.GetTable().GetModificationTime())
 						blockCheckPoint.Store(true)
 					},
-					TestingOnRangeFeedCheckPoint: func() {
+					TestingOnUpdateReadTimestamp: func(timestamp hlc.Timestamp) {
 						if !blockCheckPoint.Load() {
 							return
 						}
-						blockCheckPoint.Store(false)
+						ts := targetTS.Load().(hlc.Timestamp)
+						if ts.IsEmpty() || timestamp.Less(ts) {
+							return
+						}
 						<-rangeFeedCh
+						targetTS.Store(hlc.Timestamp{})
 					},
 				},
-				// FIXME: Add checkpoint function.
 			},
 			Settings: st,
 		})
@@ -1785,36 +1793,62 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	r.Exec(t, "INSERT INTO t1 VALUES (1)")
 
 	grp := ctxgroup.WithContext(context.Background())
+	blockUpdates.Store(true)
 	grp.GoCtx(func(ctx context.Context) error {
 		_, err := db.Exec("ALTER TABLE t1 ADD COLUMN n2 int")
 		return err
 	})
 	go func() {
 	}()
+	var id int
+	r.QueryRow(t, "SELECT 't1'::REGCLASS::OID;").Scan(&id)
+	lm := srv.LeaseManager().(*Manager)
 
-	//	var id int
-	//	r.QueryRow(t, "SELECT 'd1.public.t1'::REGCLASS::OID;").Scan(&id)
+	// Note: We only need to hold old leases because the logic for doing this
+	// automatically is not merged yet. Once it is merged, the release of them
+	// will be delayed until the timestamp is updated.
+	var heldDescriptors []LeasedDescriptor
+	releaseHeldDescriptors := func() {
+		for _, ld := range heldDescriptors {
+			ld.Release(ctx)
+		}
+		heldDescriptors = nil
+	}
+	defer releaseHeldDescriptors()
 
-	// FIXME: Add
-	// 1) SELECT , confirm version, allow check point, confirm version...3
+	getDescriptorVersion := func() descpb.DescriptorVersion {
+		ts := lm.GetReadTimestamp(srv.Clock().Now())
+		state := lm.findDescriptorState(descpb.ID(id), false)
+		require.NotNilf(t, state, "the descriptor was not leased yet")
+		ld, _, err := state.findForTimestamp(ctx, ts)
+		require.NoError(t, err)
+		heldDescriptors = append(heldDescriptors, ld)
+		return ld.GetVersion()
+	}
 
-	//lm := srv.LeaseManager().(*Manager)
-	blockUpdates.Store(true)
+	waitForTimestampChange := func() {
+		initial := lm.GetSafeReplicationTS()
+		rangeFeedCh <- struct{}{}
+		testutils.SucceedsSoon(t, func() error {
+			if lm.GetSafeReplicationTS() == initial {
+				return errors.New("timestamp did not change")
+			}
+			return nil
+		})
+	}
 	// Allow one descriptor version to be published and a range feed check point.
 	updateCh <- struct{}{}
-	rangeFeedCh <- struct{}{}
-	// Note: The schema_changes internal table does not use leased descriptors,
-	// but we can force it by intentionally caching t1 as a leased descriptor.
-	schemaChangeDesc := r.QueryStr(t, "SELECT name, type, state FROM t1, crdb_internal.schema_changes")
-	require.Equal(t, schemaChangeDesc, [][]string{{`t1`, `COLUMN`, `WRITE_ONLY`}})
+	waitForTimestampChange()
+	initialVersion := getDescriptorVersion()
 	// A new version is published, but it won't be visible to our transaction yet.
 	updateCh <- struct{}{}
-	schemaChangeDesc = r.QueryStr(t, "SELECT name, type, state FROM t1, crdb_internal.schema_changes")
-	require.Equal(t, schemaChangeDesc, [][]string{{`t1`, `COLUMN`, `WRITE_ONLY`}})
-	rangeFeedCh <- struct{}{}
+	nextVersion := getDescriptorVersion()
+	require.Equalf(t, initialVersion, nextVersion, "new version should not be leased yet")
+	waitForTimestampChange()
 	// A new version should show up after the range feed check point.
-	schemaChangeDesc = r.QueryStr(t, "SELECT name, type, state FROM t1, crdb_internal.schema_changes")
-	require.Len(t, schemaChangeDesc, 0)
+	nextVersion = getDescriptorVersion()
+	require.Equalf(t, initialVersion+1, nextVersion, "new version should be leasable now")
+	releaseHeldDescriptors()
 	close(updateCh)
 	close(rangeFeedCh)
 	require.NoError(t, grp.Wait())
