@@ -238,6 +238,11 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, err error) {
 
 	plan.Root = d.popChild()
 
+	// Null check
+	if plan.Root == nil {
+		return nil, errors.Errorf("invalid plan gist: no root node found")
+	}
+
 	for _, n := range d.nodeStack {
 		subquery := exec.Subquery{
 			Root: n,

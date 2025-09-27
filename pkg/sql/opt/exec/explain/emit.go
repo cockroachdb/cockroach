@@ -106,6 +106,9 @@ func emitInternal(
 
 	if len(plan.Subqueries) == 0 && len(plan.Cascades) == 0 &&
 		len(plan.Checks) == 0 && len(plan.Triggers) == 0 {
+		if plan.Root == nil {
+			return errors.Errorf("cannot emit plan with nil root")
+		}
 		return walk(plan.Root)
 	}
 	ob.EnterNode("root", plan.Root.Columns(), plan.Root.Ordering())
