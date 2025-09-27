@@ -25,6 +25,7 @@ import (
 func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
 	numUpgrades := 3
 	mvt := newBasicUpgradeTest(NumUpgrades(numUpgrades))
+
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 

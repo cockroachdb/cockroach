@@ -2918,6 +2918,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// migrations enough time to finish considering all the data
 				// that might exist in the cluster by the time the upgrade is
 				// attempted.
+				mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 				mixedversion.UpgradeTimeout(30*time.Minute),
 				mixedversion.AlwaysUseLatestPredecessors,
 				mixedversion.EnabledDeploymentModes(enabledDeploymentModes...),
@@ -2969,13 +2970,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   the cluster relatively busy while the backup and restores
 			//   take place. Its schema is also more complex, and the
 			//   operations more closely resemble a customer workload.
-
-			// Use the same versioned workload binary as the cluster. The bank workload
-			// is no longer backwards compatible after #149374, so we need to use the same
-			// version as the cockroach cluster.
-			// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
-			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, true /* overrideBinary */)
-			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
+			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun)
+			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)
@@ -3030,7 +3026,6 @@ func bankWorkloadCmd(
 		bankPayload = 9
 		bankRows = 10
 	}
-
 	init = roachtestutil.NewCommand("./cockroach workload init bank").
 		Flag("rows", bankRows).
 		MaybeFlag(bankPayload != 0, "payload-bytes", bankPayload).

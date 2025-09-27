@@ -15,7 +15,6 @@ go_library(
         "//pkg/cmd/roachprod-microbench/util",
         # Required for generated mocks
         "//pkg/cmd/roachprod/grafana",  #keep
-        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/test",
         # Required for generated mocks
@@ -36,6 +35,7 @@ go_library(
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
         "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/cluster",
     ],
 )
 
@@ -45,15 +45,15 @@ go_test(
         "exporter_test.go",
         "streamer_test.go",
         ":mock_client",  # keep
-        ":mock_cluster",  # keep
         ":mock_test",  # keep
     ],
     embed = [":clusterstats"],
     embedsrcs = ["openmetrics_expected.txt"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/cluster/mock:mockcluster",  #keep
         "//pkg/cmd/roachtest/registry",
-        # Required for generated mocks
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/task",  #keep
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
@@ -64,7 +64,6 @@ go_test(
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
-        "//pkg/cmd/roachtest/roachtestutil",
     ],
 )
 
@@ -85,18 +84,6 @@ gomock(
     out = "mock_test_generated_test.go",
     interfaces = ["Test"],
     library = "//pkg/cmd/roachtest/test",
-    package = "clusterstats",
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
-    ],
-)
-
-gomock(
-    name = "mock_cluster",
-    out = "mock_cluster_generated_test.go",
-    interfaces = ["Cluster"],
-    library = "//pkg/cmd/roachtest/cluster",
     package = "clusterstats",
     visibility = [
         ":__pkg__",

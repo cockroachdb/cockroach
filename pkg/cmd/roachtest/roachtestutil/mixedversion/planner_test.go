@@ -127,7 +127,7 @@ func TestTestPlanner(t *testing.T) {
 			case "workload":
 				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
 				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
-				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd, false /* overrideBinary */)
+				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd)
 			case "background-command":
 				cmd := roachtestutil.NewCommand("./cockroach some-command")
 				mvt.BackgroundCommand(d.CmdArgs[0].Vals[0], nodes, cmd)
@@ -574,6 +574,15 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 		case "deployment_mode":
 			opts = append(opts, EnabledDeploymentModes(DeploymentMode(arg.Vals[0])))
 
+		case "workload_node":
+			workloadNodes := option.NodeListOption{}
+			for _, nodeStr := range arg.Vals {
+				n, err := strconv.Atoi(nodeStr)
+				require.NoError(t, err)
+				workloadNodes = append(workloadNodes, n)
+			}
+			opts = append(opts, WithWorkloadNodes(workloadNodes))
+
 		default:
 			t.Errorf("unknown mixed-version-test option: %s", arg.Key)
 		}
@@ -669,11 +678,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mvt := newBasicUpgradeTest(
-				NumUpgrades(3),
-				DisableSkipVersionUpgrades,
-				EnabledDeploymentModes(SystemOnlyDeployment),
-			)
+			mvt := newBasicUpgradeTest(NumUpgrades(3), DisableSkipVersionUpgrades, EnabledDeploymentModes(SystemOnlyDeployment))
 			plan, err := mvt.plan()
 			require.NoError(t, err)
 
@@ -825,11 +830,7 @@ func Test_stepSelectorMutations(t *testing.T) {
 			// stable as we add / remove / change mutators.
 			defer resetMutators()()
 
-			mvt := newBasicUpgradeTest(
-				NumUpgrades(tc.numUpgrades),
-				DisableSkipVersionUpgrades,
-				EnabledDeploymentModes(SystemOnlyDeployment),
-			)
+			mvt := newBasicUpgradeTest(NumUpgrades(tc.numUpgrades), DisableSkipVersionUpgrades, EnabledDeploymentModes(SystemOnlyDeployment))
 			plan, err := mvt.plan()
 			require.NoError(t, err)
 
