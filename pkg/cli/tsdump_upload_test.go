@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"encoding/csv"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -750,4 +751,82 @@ func TestDeltaCalculationWithUnsortedTimestamps(t *testing.T) {
 	require.Equal(t, 100.0, *series.Points[0].Value) // first point: keep original value
 	require.Equal(t, 50.0, *series.Points[1].Value)  // delta: 150 - 100
 	require.Equal(t, 150.0, *series.Points[2].Value) // delta: 300 - 150
+}
+
+func TestDatadogInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := time.Date(2025, 9, 23, 0, 0, 0, 0, time.UTC)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return now
+	})()
+
+	var (
+		reqCount         int
+		expectedInterval = 30
+	)
+
+	// checkign "all" metrics will make this test flaky as new metrics are added.
+	// So, we can instead check for one representative metric from each namespace.
+	expectedMetrics := map[string]struct{}{
+		"cockroachdb.sql.txns.open":                               {},
+		"cockroachdb.storage.disk-slow":                           {},
+		"cockroachdb.storeliveness.callbacks.processing_duration": {},
+		"cockroachdb.sys.cgo.allocbytes":                          {},
+		"cockroachdb.timeseries.write.bytes":                      {},
+		"cockroachdb.totalbytes":                                  {},
+		"cockroachdb.txn.durations":                               {},
+		"cockroachdb.valbytes":                                    {},
+	}
+
+	receivedMetrics := make(map[string]struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+
+		reader, err := gzip.NewReader(r.Body)
+		require.NoError(t, err)
+		defer reader.Close()
+
+		body, err := io.ReadAll(reader)
+		require.NoError(t, err)
+
+		var request struct {
+			Series []datadogV2.MetricSeries `json:"series"`
+		}
+
+		require.NoError(t, json.Unmarshal(body, &request))
+		if len(request.Series) > 0 {
+			for _, series := range request.Series {
+				receivedMetrics[series.Metric] = struct{}{}
+				require.NotNil(t, series.Interval, "interval should be set for datadoginit format")
+				require.EqualValues(t, expectedInterval, *series.Interval, "interval should match dd-metric-interval flag")
+
+				require.Contains(t, series.Tags, "cluster_label:\"test-cluster\"", "should include cluster_label tag")
+				require.Contains(t, series.Tags, "cluster_type:SELF_HOSTED", "should include cluster_type tag")
+
+				require.Len(t, series.Points, 1, "should have exactly one point for init")
+				require.EqualValues(t, now.Unix(), *series.Points[0].Timestamp, "timestamp should match mocked current time")
+				require.EqualValues(t, float64(0), *series.Points[0].Value, "value should be 0 for datadoginit")
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		reqCount++
+	}))
+	defer server.Close()
+	defer testutils.TestingHook(&hostNameOverride, server.Listener.Addr().String())()
+
+	cmd := `debug tsdump --format=datadoginit --dd-api-key="test-api-key" --cluster-label="test-cluster" --dd-metric-interval=30`
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	_, err := c.RunWithCapture(cmd)
+	require.NoError(t, err)
+	require.NotZero(t, reqCount, "should have made at least one request to the server")
+
+	// verify that our expected metrics are present in the received metrics
+	for expectedMetric := range expectedMetrics {
+		require.Contains(t, receivedMetrics, expectedMetric, "expected metric %s should be present", expectedMetric)
+	}
 }

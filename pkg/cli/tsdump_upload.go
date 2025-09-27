@@ -933,3 +933,67 @@ func loadMetricTypesMap(ctx context.Context) (map[string]string, error) {
 
 	return metricTypeMap, nil
 }
+
+// uploadInitMetrics uploads all available metrics with zero values and current timestamp
+// This eliminates the need for a tsdump file in init mode
+func (d *datadogWriter) uploadInitMetrics() error {
+	if debugTimeSeriesDumpOpts.dryRun {
+		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
+	}
+
+	// get list of all metrics
+	metricLayers, err := generateMetricList(context.Background(), true /* skipFiltering */)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate metric list for init upload")
+	}
+
+	currentTimestamp := getCurrentTime().Unix()
+	var successfulUploads, skippedMetrics int
+
+	// batch metrics based on threshold
+	currentBatch := make([]datadogV2.MetricSeries, 0, d.threshold)
+	for _, layer := range metricLayers {
+		for _, category := range layer.Categories {
+			for _, metric := range category.Metrics {
+				series := datadogV2.MetricSeries{
+					Metric: metric.Name,
+					Tags:   []string{},
+					Type:   d.resolveMetricType(metric.Name),
+					Points: []datadogV2.MetricPoint{{
+						Value:     datadog.PtrFloat64(0),
+						Timestamp: datadog.PtrInt64(currentTimestamp),
+					}},
+					Interval: datadog.PtrInt64(debugTimeSeriesDumpOpts.ddMetricInterval),
+				}
+
+				currentBatch = append(currentBatch, series)
+
+				// flush batch when threshold is reached
+				if len(currentBatch) >= d.threshold {
+					_, err := d.emitDataDogMetrics(currentBatch)
+					if err != nil {
+						fmt.Printf("Warning: Failed to upload batch of %d metrics: %v\n", len(currentBatch), err)
+						skippedMetrics += len(currentBatch)
+					} else {
+						successfulUploads += len(currentBatch)
+					}
+					currentBatch = make([]datadogV2.MetricSeries, 0, d.threshold)
+				}
+			}
+		}
+	}
+
+	// flush remaining metrics in the last batch
+	if len(currentBatch) > 0 {
+		_, err := d.emitDataDogMetrics(currentBatch)
+		if err != nil {
+			fmt.Printf("Warning: Failed to upload final batch of %d metrics: %v\n", len(currentBatch), err)
+			skippedMetrics += len(currentBatch)
+		} else {
+			successfulUploads += len(currentBatch)
+		}
+	}
+
+	fmt.Printf("Init upload completed: successfully uploaded %d metrics, skipped %d metrics\n", successfulUploads, skippedMetrics)
+	return nil
+}
