@@ -203,28 +203,6 @@ WHERE id = $1
 		return nil
 	}
 
-	// Build a statement of the following form, depending on which properties
-	// need updating:
-	//
-	//   UPDATE system.jobs
-	//   SET
-	//     [status = $2,]
-	//     [payload = $y,]
-	//     [progress = $z]
-	//   WHERE
-	//     id = $1
-
-	var setters []string
-	params := []interface{}{j.ID()} // $1 is always the job ID.
-	addSetter := func(column string, value interface{}) {
-		params = append(params, value)
-		setters = append(setters, fmt.Sprintf("%s = $%d", column, len(params)))
-	}
-
-	if ju.md.State != "" {
-		addSetter("status", ju.md.State)
-	}
-
 	var payloadBytes []byte
 	if ju.md.Payload != nil {
 		payload = ju.md.Payload
@@ -243,26 +221,6 @@ WHERE id = $1
 		progressBytes, err = protoutil.Marshal(progress)
 		if err != nil {
 			return err
-		}
-	}
-
-	if len(setters) != 0 {
-		updateStmt := fmt.Sprintf(
-			"UPDATE system.jobs SET %s WHERE id = $1",
-			strings.Join(setters, ", "),
-		)
-		n, err := u.txn.ExecEx(
-			ctx, "job-update", u.txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			updateStmt, params...,
-		)
-		if err != nil {
-			return err
-		}
-		if n != 1 {
-			return errors.Errorf(
-				"expected exactly one row affected, but %d rows affected by job update", n,
-			)
 		}
 	}
 
@@ -293,7 +251,10 @@ WHERE id = $1
 		}
 	}
 
-	if progress != nil {
+	// NB: if ju.md.Progress was non-nil then progress has been set to the value
+	// from the updater. If it isn't set, progress has the value from the original
+	// scan.
+	if ju.md.Progress != nil {
 		var ts hlc.Timestamp
 		if hwm := progress.GetHighWater(); hwm != nil {
 			ts = *hwm
@@ -316,55 +277,65 @@ WHERE id = $1
 		}
 	}
 
-	vals := []interface{}{j.ID()}
+	// Build a statement of the following form, depending on which properties
+	// need updating:
+	//
+	//   UPDATE system.jobs
+	//   SET
+	//     [status = $2,]
+	//     [owner = $y,]
+	//     [error_msg = $z]
+	//   WHERE
+	//     id = $1
+	var setters []string
+	params := []interface{}{j.ID()} // $1 is always the job ID.
+	addSetter := func(column string, value interface{}) {
+		params = append(params, value)
+		setters = append(setters, fmt.Sprintf("%s = $%d", column, len(params)))
+	}
 
-	var update strings.Builder
-
+	if ju.md.State != "" {
+		addSetter("status", ju.md.State)
+	}
 	if payloadBytes != nil {
 		if beforePayload.Description != payload.Description {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, payload.Description)
-			fmt.Fprintf(&update, "description = $%d", len(vals))
+			addSetter("description", payload.Description)
 		}
 
-		if beforePayload.UsernameProto.Decode() != payload.UsernameProto.Decode() {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, payload.UsernameProto.Decode().Normalized())
-			fmt.Fprintf(&update, "owner = $%d", len(vals))
+		beforeUser := beforePayload.UsernameProto.Decode()
+		afterUser := payload.UsernameProto.Decode()
+		if afterUser != beforeUser {
+			addSetter("owner", afterUser.Normalized())
 		}
 
 		if beforePayload.Error != payload.Error {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, payload.Error)
-			fmt.Fprintf(&update, "error_msg = $%d", len(vals))
+			addSetter("error_msg", payload.Error)
 		}
 
 		if beforePayload.FinishedMicros != payload.FinishedMicros {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, time.UnixMicro(payload.FinishedMicros))
-			fmt.Fprintf(&update, "finished = $%d", len(vals))
+			addSetter("finished", time.UnixMicro(payload.FinishedMicros))
 		}
-
 	}
-	if len(vals) > 1 {
-		stmt := fmt.Sprintf("UPDATE system.jobs SET %s WHERE id = $1", update.String())
-		if _, err := u.txn.ExecEx(
-			ctx, "job-update-row", u.txn.KV(),
+
+	if len(setters) != 0 {
+		updateStmt := fmt.Sprintf(
+			"UPDATE system.jobs SET %s WHERE id = $1",
+			strings.Join(setters, ", "),
+		)
+		n, err := u.txn.ExecEx(
+			ctx, "job-update-job", u.txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
-			stmt, vals...,
-		); err != nil {
+			updateStmt, params...,
+		)
+		if err != nil {
 			return err
 		}
+		if n != 1 {
+			return errors.Errorf(
+				"expected exactly one row affected, but %d rows affected by job update", n,
+			)
+		}
 	}
-
 	return nil
 }
 
