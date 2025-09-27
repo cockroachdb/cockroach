@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -361,7 +361,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			log.Eventf(ctx, "starting rangefeed from %v on %v", ts, f.spansDebugStr)
 		}
 
-		start := timeutil.Now()
+		start := crtime.NowMono()
 
 		rangeFeedTask := func(ctx context.Context) error {
 			if f.invoker == nil {
@@ -410,7 +410,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			return
 		}
 
-		ranFor := timeutil.Since(start)
+		ranFor := start.Elapsed()
 		log.VEventf(ctx, 1, "restarting rangefeed for %v after %v",
 			f.spansDebugStr, ranFor)
 		if f.knobs != nil && f.knobs.OnRangefeedRestart != nil {
