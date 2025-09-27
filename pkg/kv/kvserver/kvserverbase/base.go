@@ -383,3 +383,16 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 	MaxCommandSizeDefault,
 	settings.ByteSizeWithMinimum(MaxCommandSizeFloor),
 )
+
+// DefaultRangefeedEventCap is the channel capacity of the rangefeed processor
+// and each registration. It is also used to calculate the default capacity
+// limit for the buffered sender.
+//
+// The size of an event is 72 bytes, so this will result in an allocation on the
+// order of ~300KB per RangeFeed. That's probably ok given the number of ranges
+// on a node that we'd like to support with active rangefeeds, but it's
+// certainly on the upper end of the range.
+//
+// Note that processors also must reserve memory from one of two memory monitors
+// for each event.
+const DefaultRangefeedEventCap = 4096

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -175,12 +176,13 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
 		smMetrics := NewStreamManagerMetrics()
+		st := cluster.MakeTestingClusterSettings()
 		var s sender
 		switch rt {
 		case scheduledProcessorWithUnbufferedSender:
 			s = NewUnbufferedSender(testServerStream)
 		case scheduledProcessorWithBufferedSender:
-			s = NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+			s = NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 		default:
 			t.Fatalf("unknown rangefeed test type %v", rt)
 		}

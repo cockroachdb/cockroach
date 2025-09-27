@@ -186,4 +186,6 @@ func (ubs *UnbufferedSender) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
+// The following methods are no-op implementations to satisfy the sender
+// interface.
 func (ubs *UnbufferedSender) cleanup(context.Context) {}

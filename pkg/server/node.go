@@ -2224,10 +2224,13 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 
 	sm := &rangefeed.StreamManager{}
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
-		sm = rangefeed.NewStreamManager(rangefeed.NewBufferedSender(lockedMuxStream, n.metrics.BufferedSenderMetrics),
+		sm = rangefeed.NewStreamManager(
+			rangefeed.NewBufferedSender(lockedMuxStream, n.storeCfg.Settings, n.metrics.BufferedSenderMetrics),
 			n.metrics.StreamManagerMetrics)
 	} else {
-		sm = rangefeed.NewStreamManager(rangefeed.NewUnbufferedSender(lockedMuxStream), n.metrics.StreamManagerMetrics)
+		sm = rangefeed.NewStreamManager(
+			rangefeed.NewUnbufferedSender(lockedMuxStream),
+			n.metrics.StreamManagerMetrics)
 	}
 
 	if err := sm.Start(ctx, n.stopper); err != nil {
