@@ -43,7 +43,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],

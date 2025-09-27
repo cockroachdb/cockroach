@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/sync/errgroup"
@@ -426,7 +427,7 @@ func (w *Watcher) popDiffsUpTo(ctx context.Context, upTo hlc.Timestamp) ([]Table
 // equal to the given timestamp. If the resolved timestamp is already greater
 // than or equal to the given timestamp, it returns immediately.
 func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) error {
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	if log.V(2) {
 		log.Changefeed.Infof(ctx, "maybeWaitForResolved(%s) start", ts)
 	}
@@ -451,7 +452,7 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 	select {
 	case <-maybeWaiter:
 		if log.V(2) {
-			log.Changefeed.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, timeutil.Since(start))
+			log.Changefeed.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, start.Elapsed())
 		}
 		return nil
 	case <-ctx.Done():

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 type sinkTelemetryData struct {
@@ -87,13 +87,13 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 		return
 	}
 
-	currentTime := timeutil.Now().UnixNano()
+	currentTime := time.Duration(crtime.NowMono()).Nanoseconds()
 	// This is a barrier to ensure that only one goroutine writes logs in
 	// case multiple goroutines call this function at the same time.
 	// This prevents a burst of telemetry events from being needlessly
 	// logging the same data.
 	lastEmit := ptl.lastEmitTime.Load()
-	if currentTime < lastEmit+loggingInterval {
+	if lastEmit > 0 && currentTime < lastEmit+loggingInterval {
 		return
 	}
 	if !ptl.lastEmitTime.CompareAndSwap(lastEmit, currentTime) {
@@ -173,7 +173,7 @@ func (r *telemetryMetricsRecorder) recordOneMessage() recordOneMessageCallback {
 }
 
 func (r *telemetryMetricsRecorder) recordEmittedBatch(
-	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	r.metricsRecorder.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
 	r.telemetryLogger.incEmittedCounters(numMessages, bytes)

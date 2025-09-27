@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -295,7 +296,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 
 	// Acquire the quota first.
 	n := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
-	e.bufferAddTimestamp = timeutil.Now()
+	e.bufferAddTimestamp = crtime.NowMono()
 	alloc, err := b.AcquireMemory(ctx, n)
 	if err != nil {
 		return err
