@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -631,10 +632,9 @@ type parallelEventConsumer struct {
 var _ eventConsumer = (*parallelEventConsumer)(nil)
 
 func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
-	startTime := timeutil.Now().UnixNano()
+	start := crtime.NowMono()
 	defer func() {
-		time := timeutil.Now().UnixNano()
-		c.metrics.ParallelConsumerConsumeNanos.RecordValue(time - startTime)
+		c.metrics.ParallelConsumerConsumeNanos.RecordValue(start.Elapsed().Nanoseconds())
 	}()
 
 	bucket := c.getBucketForEvent(ev)
@@ -760,10 +760,9 @@ func (c *parallelEventConsumer) setWorkerError(err error) error {
 // Flush flushes the consumer by blocking until all events are consumed,
 // or until there is an error.
 func (c *parallelEventConsumer) Flush(ctx context.Context) error {
-	startTime := timeutil.Now().UnixNano()
+	start := crtime.NowMono()
 	defer func() {
-		time := timeutil.Now().UnixNano()
-		c.metrics.ParallelConsumerFlushNanos.RecordValue(time - startTime)
+		c.metrics.ParallelConsumerFlushNanos.RecordValue(start.Elapsed().Nanoseconds())
 	}()
 
 	needFlush := func() bool {

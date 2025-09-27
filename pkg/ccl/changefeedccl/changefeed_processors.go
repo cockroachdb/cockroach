@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -856,7 +857,7 @@ func (ca *changeAggregator) tick() error {
 		return err
 	}
 
-	queuedNanos := timeutil.Since(event.BufferAddTimestamp()).Nanoseconds()
+	queuedNanos := event.BufferAddTimestamp().Elapsed().Nanoseconds()
 	ca.metrics.QueueTimeNanos.Inc(queuedNanos)
 
 	switch event.Type() {
@@ -935,11 +936,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	checkpointFrontier := (advanced && forceFlush) || ca.frontierFlushLimiter.canSave(ctx)
 
 	if checkpointFrontier {
-		now := timeutil.Now()
+		now := crtime.NowMono()
 		if err := ca.flushFrontier(ctx); err != nil {
 			return err
 		}
-		ca.frontierFlushLimiter.doneSave(timeutil.Since(now))
+		ca.frontierFlushLimiter.doneSave(now.Elapsed())
 	}
 
 	return nil

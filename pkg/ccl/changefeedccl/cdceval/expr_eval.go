@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -256,10 +256,10 @@ func sameVersion(currentVersion, newVersion *cdcevent.EventDescriptor) bool {
 // planAndRun plans CDC expression and starts execution pipeline.
 func (e *familyEvaluator) planAndRun(ctx context.Context) (err error) {
 	if log.V(1) {
-		start := timeutil.Now()
+		start := crtime.NowMono()
 		defer func() {
 			log.Changefeed.Infof(ctx, "Planning for CDC expression %s (v=%d) took %s (err=%v)",
-				tree.AsString(e.norm), e.norm.desc.Version, timeutil.Since(start), err)
+				tree.AsString(e.norm), e.norm.desc.Version, start.Elapsed(), err)
 		}()
 	}
 

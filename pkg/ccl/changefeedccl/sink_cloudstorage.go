@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
@@ -89,7 +89,7 @@ func (b *byteBufferWithTrackedLength) Len() int {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created       time.Time
+	created       crtime.Mono
 	codec         io.WriteCloser
 	rawSize       int
 	numMessages   int
@@ -545,7 +545,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		return f, nil
 	}
 	f := &cloudStorageSinkFile{
-		created:             timeutil.Now(),
+		created:             crtime.NowMono(),
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
 		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),

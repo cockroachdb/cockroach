@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -414,9 +415,9 @@ func (r *Replica) updateRangefeedFilterLocked() bool {
 // to believe that is blocks the raftMu in practice.
 func logSlowRangefeedRegistration(ctx context.Context) func() {
 	const slowRaftMuWarnThreshold = 20 * time.Millisecond
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() {
-		elapsed := timeutil.Since(start)
+		elapsed := start.Elapsed()
 		if elapsed >= slowRaftMuWarnThreshold {
 			log.KvDistribution.Warningf(ctx, "rangefeed registration took %s", elapsed)
 		}

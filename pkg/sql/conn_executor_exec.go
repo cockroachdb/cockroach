@@ -4201,13 +4201,12 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnStart crtime.Mono,
 	txnErr error,
 ) error {
-	recordingStart := timeutil.Now()
+	recordingStart := crtime.NowMono()
 	defer func() {
-		recordingOverhead := timeutil.Since(recordingStart)
 		ex.server.
 			ServerMetrics.
 			StatsMetrics.
-			SQLTxnStatsCollectionOverhead.RecordValue(recordingOverhead.Nanoseconds())
+			SQLTxnStatsCollectionOverhead.RecordValue(recordingStart.Elapsed().Nanoseconds())
 	}()
 
 	txnEnd := timeutil.Now()

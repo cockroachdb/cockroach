@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
-        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_prometheus_client_golang//prometheus",
     ],
 )

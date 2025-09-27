@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -108,9 +108,9 @@ func (t *timer) Start() (end func() time.Duration) {
 		return func() time.Duration { return 0 }
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() time.Duration {
-		elapsed := timeutil.Since(start)
+		elapsed := start.Elapsed()
 		t.hist.RecordValue(elapsed.Nanoseconds())
 		return elapsed
 	}

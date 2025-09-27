@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -265,7 +266,7 @@ type sinkBatch struct {
 	numMessages int
 	numKVBytes  int          // the total amount of uncompressed kv data in the batch
 	keys        intsets.Fast // the set of keys within the batch to provide to parallelIO
-	bufferTime  time.Time    // the earliest time a message was inserted into the batch
+	bufferTime  crtime.Mono  // the earliest time a message was inserted into the batch
 	mvcc        hlc.Timestamp
 
 	alloc  kvevent.Alloc
@@ -306,7 +307,7 @@ func hashToInt(h hash.Hash32, buf []byte) int {
 // Append adds the contents of a kvEvent to the batch, merging its alloc pool.
 func (sb *sinkBatch) Append(ctx context.Context, e *rowEvent) {
 	if sb.isEmpty() {
-		sb.bufferTime = timeutil.Now()
+		sb.bufferTime = crtime.NowMono()
 	}
 
 	sb.buffer.Append(ctx, e.key, e.val, attributes{
@@ -409,7 +410,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 		req, send, err := ioEmitter.AdmitRequest(ctx, batchBuffer)
 		if errors.Is(err, ErrNotEnoughQuota) {
-			waitStart := timeutil.Now()
+			waitStart := crtime.NowMono()
 
 			// Quota can only be freed by consuming a result.
 			select {
@@ -431,7 +432,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 				return err
 			}
 
-			s.metrics.recordSinkBackpressure(timeutil.Since(waitStart))
+			s.metrics.recordSinkBackpressure(waitStart.Elapsed())
 		} else if err != nil {
 			return err
 		} else {

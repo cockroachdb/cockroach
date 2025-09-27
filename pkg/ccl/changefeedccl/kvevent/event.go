@@ -10,7 +10,6 @@ package kvevent
 import (
 	"context"
 	"fmt"
-	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -18,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,7 +103,7 @@ type Event struct {
 	ev                 *kvpb.RangeFeedEvent
 	et                 Type
 	backfillTimestamp  hlc.Timestamp
-	bufferAddTimestamp time.Time
+	bufferAddTimestamp crtime.Mono
 	alloc              Alloc
 }
 
@@ -197,8 +197,8 @@ func (e *Event) BackfillTimestamp() hlc.Timestamp {
 	return e.backfillTimestamp
 }
 
-// BufferAddTimestamp is the time this event came into  the buffer.
-func (e *Event) BufferAddTimestamp() time.Time {
+// BufferAddTimestamp is the time this event came into the buffer.
+func (e *Event) BufferAddTimestamp() crtime.Mono {
 	return e.bufferAddTimestamp
 }
 
