@@ -67,6 +67,8 @@ func TestValidCIDR(t *testing.T) {
 		{"basic", `[ { "Name": "Name", "Ipnet": "192.168.0.0/24" } ]`},
 		{"unicode", `[ { "Name": "ABC€", "Ipnet": "192.168.0.0/24" } ]`},
 		{"extra", `[ { "Name": "Name", "Ipnet": "192.168.0.0/24", "Other": "Foo" } ]`},
+		{"with_empty_dns", `[ { "Name": "Name", "Ipnet": "192.168.0.0/24", "DNSNames": "" } ]`},
+		{"with_dns_field", `[ { "Name": "Name", "Ipnet": "192.168.0.0/24", "DNSNames": "localhost" } ]`},
 	}
 	c := Lookup{}
 	for _, tc := range testCases {
@@ -242,4 +244,63 @@ func TestWrapDialer(t *testing.T) {
 	defer m.mu.Unlock()
 	require.Greater(t, m.mu.childMetrics["foo/test"].WriteBytes.Value(), int64(1))
 	require.Greater(t, m.mu.childMetrics["foo/test"].ReadBytes.Value(), int64(1))
+}
+
+// TestDNSResolution tests that DNS names are resolved and added to the CIDR lookup.
+func TestDNSResolution(t *testing.T) {
+	c := Lookup{}
+
+	// Test with localhost, which should resolve to 127.0.0.1
+	destinations := `[
+		{ "Name": "localhost-test", "Ipnet": "10.0.0.0/8", "DNSNames": "localhost" }
+	]`
+	require.NoError(t, c.setDestinations(context.Background(), []byte(destinations)))
+
+	// Both the original CIDR range and the resolved localhost IP should match
+	require.Equal(t, "localhost-test", c.LookupIP(net.ParseIP("10.0.0.1")))
+	require.Equal(t, "localhost-test", c.LookupIP(net.ParseIP("127.0.0.1")))
+}
+
+// TestDNSResolutionMultiple tests multiple DNS names in a single entry.
+func TestDNSResolutionMultiple(t *testing.T) {
+	c := Lookup{}
+
+	// Test with multiple DNS names
+	destinations := `[
+		{ "Name": "multi-dns", "Ipnet": "192.168.1.0/24", "DNSNames": "localhost, localhost " }
+	]`
+	require.NoError(t, c.setDestinations(context.Background(), []byte(destinations)))
+
+	// The original CIDR range should match
+	require.Equal(t, "multi-dns", c.LookupIP(net.ParseIP("192.168.1.100")))
+	// The resolved localhost IP should also match
+	require.Equal(t, "multi-dns", c.LookupIP(net.ParseIP("127.0.0.1")))
+}
+
+// TestDNSResolutionError tests handling of DNS resolution errors.
+func TestDNSResolutionError(t *testing.T) {
+	c := Lookup{}
+
+	// Test with an invalid DNS name that won't resolve
+	destinations := `[
+		{ "Name": "invalid-dns", "Ipnet": "172.16.0.0/16", "DNSNames": "non-existent-domain-12345.invalid" }
+	]`
+	// This should not fail even if DNS resolution fails
+	require.NoError(t, c.setDestinations(context.Background(), []byte(destinations)))
+
+	// The original CIDR range should still work
+	require.Equal(t, "invalid-dns", c.LookupIP(net.ParseIP("172.16.1.1")))
+}
+
+// TestBackwardCompatibility tests that entries without DNSNames still work.
+func TestBackwardCompatibility(t *testing.T) {
+	c := Lookup{}
+
+	// Test original format without DNSNames field
+	destinations := `[
+		{ "Name": "original", "Ipnet": "203.0.113.0/24" }
+	]`
+	require.NoError(t, c.setDestinations(context.Background(), []byte(destinations)))
+
+	require.Equal(t, "original", c.LookupIP(net.ParseIP("203.0.113.1")))
 }

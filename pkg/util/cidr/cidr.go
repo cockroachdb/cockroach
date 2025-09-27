@@ -268,6 +268,53 @@ type cidr struct {
 	Name string
 	// CIDR block that can be processed by net.ParseCIDR
 	Ipnet string
+	// DNSNames is a comma-separated list of DNS names to resolve to IP addresses.
+	// The resolved IPs will be added as /32 CIDR entries with the same Name.
+	DNSNames string `json:",omitempty"`
+}
+
+// resolveDNSNames resolves a comma-separated list of DNS names and returns
+// additional cidr entries for the resolved IP addresses.
+func resolveDNSNames(ctx context.Context, name, dnsNames string) []cidr {
+	var resolved []cidr
+	if dnsNames == "" {
+		return resolved
+	}
+
+	names := strings.Split(dnsNames, ",")
+	for _, dnsName := range names {
+		dnsName = strings.TrimSpace(dnsName)
+		if dnsName == "" {
+			continue
+		}
+
+		ips, err := net.LookupHost(dnsName)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to resolve DNS name '%s': %v", dnsName, err)
+			continue
+		}
+
+		for _, ipStr := range ips {
+			ip := net.ParseIP(ipStr)
+			if ip == nil {
+				log.Dev.Warningf(ctx, "invalid IP address '%s' resolved from DNS name '%s'", ipStr, dnsName)
+				continue
+			}
+			// Only handle IPv4 addresses for now (consistent with existing IPv4-only logic)
+			if ip.To4() == nil {
+				log.Dev.Infof(ctx, "skipping IPv6 address '%s' resolved from DNS name '%s'", ipStr, dnsName)
+				continue
+			}
+
+			// Create a /32 CIDR entry for the resolved IP
+			resolved = append(resolved, cidr{
+				Name:  name,
+				Ipnet: ipStr + "/32",
+			})
+		}
+	}
+
+	return resolved
 }
 
 // setDestinations sets the destinations for the CIDR lookup. Note that it
@@ -277,13 +324,27 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 	if err := json.Unmarshal(contents, &destinations); err != nil {
 		return err
 	}
+
+	// Expand destinations to include DNS-resolved entries
+	var allDestinations []cidr
+	for _, d := range destinations {
+		// Add the original destination
+		allDestinations = append(allDestinations, d)
+
+		// Resolve DNS names if present and add additional entries
+		if d.DNSNames != "" {
+			resolved := resolveDNSNames(ctx, d.Name, d.DNSNames)
+			allDestinations = append(allDestinations, resolved...)
+		}
+	}
+
 	// TODO(#130814): This only handles IPv4. We could change to 128 if we want
 	// to handle IPv6.
 	byLength := make([]map[string]string, 33)
 	for i := range 33 {
 		byLength[i] = make(map[string]string)
 	}
-	for _, d := range destinations {
+	for _, d := range allDestinations {
 		_, cidr, err := net.ParseCIDR(d.Ipnet)
 		if err != nil {
 			return err
@@ -296,7 +357,8 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 		val := hexString(cidr.IP.Mask(mask))
 		byLength[lenBits][val] = d.Name
 	}
-	log.Dev.Infof(ctx, "CIDR lookup updated with %d destinations", len(destinations))
+	log.Dev.Infof(ctx, "CIDR lookup updated with %d destinations (%d original, %d total after DNS resolution)",
+		len(destinations), len(destinations), len(allDestinations))
 	c.byLength.Store(&byLength)
 	c.onChange(ctx)
 	return nil
