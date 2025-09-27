@@ -16,7 +16,6 @@ go_library(
         "sysutil.go",
         "sysutil_unix.go",
         "sysutil_windows.go",
-        "tcpinfo.go",
         "tcpinfo_linux.go",
         "tcpinfo_stub.go",
     ],
