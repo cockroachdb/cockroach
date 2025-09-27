@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "timers",
@@ -9,6 +9,17 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_prometheus_client_golang//prometheus",
+    ],
+)
+
+go_test(
+    name = "timers_test",
+    srcs = ["timers_bench_test.go"],
+    embed = [":timers"],
+    deps = [
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "@com_github_prometheus_client_golang//prometheus",
     ],
 )
