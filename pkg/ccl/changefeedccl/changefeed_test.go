@@ -2296,7 +2296,7 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 	}
 
 	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
-		cdcTest(t, testFn)
+		cdcTest(t, testFn, feedTestForceSink("webhook"))
 	})
 }
 
@@ -3777,7 +3777,7 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, withAllowChangefeedErr("expects terminal error"))
+	cdcTest(t, testFn, feedTestForceSink("webhook"), withAllowChangefeedErr("expects terminal error"))
 }
 
 func TestChangefeedSingleColumnFamily(t *testing.T) {
