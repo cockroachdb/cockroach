@@ -8,6 +8,7 @@ package concurrency
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // LatchMetrics holds information about the state of a latchManager.
@@ -125,5 +126,35 @@ func addToTopK(topK []LockMetrics, lm LockMetrics, cmp func(LockMetrics) int64) 
 			lm = cur
 			cpy = true
 		}
+	}
+}
+
+var MetaConcurrencyLocksShedDueToMemoryLimit = metric.Metadata{
+	Name:        "kv.concurrency.locks_shed_due_to_memory_limit",
+	Help:        "The number of locks that were shed because the lock table ran into memory limits",
+	Measurement: "Locks",
+	Unit:        metric.Unit_COUNT,
+}
+
+var MetaConcurrencyNumLockShedDueToMemoryLimitEvents = metric.Metadata{
+	Name:        "kv.concurrency.num_lock_shed_due_to_memory_limit_events",
+	Help:        "The number of times locks that were shed by the lock table because it ran into memory limits",
+	Measurement: "Lock Shed Events",
+	Unit:        metric.Unit_COUNT,
+}
+
+// TestingLockTableMetricsCfg is a subset of store metrics that are required to
+// construct a new lock table to be used for testing purposes.
+type TestingLockTableMetricsCfg struct {
+	LocksShedDueToMemoryLimit         *metric.Counter
+	NumLockShedDueToMemoryLimitEvents *metric.Counter
+}
+
+// TestingMakeLockTableMetricsCfg returns a new TestingLockTableMetricsCfg for
+// testing.
+func TestingMakeLockTableMetricsCfg() TestingLockTableMetricsCfg {
+	return TestingLockTableMetricsCfg{
+		LocksShedDueToMemoryLimit:         metric.NewCounter(MetaConcurrencyLocksShedDueToMemoryLimit),
+		NumLockShedDueToMemoryLimitEvents: metric.NewCounter(MetaConcurrencyNumLockShedDueToMemoryLimitEvents),
 	}
 }

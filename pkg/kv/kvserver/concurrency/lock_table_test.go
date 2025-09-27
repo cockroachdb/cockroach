@@ -196,8 +196,10 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
+				m := TestingMakeLockTableMetricsCfg()
 				ltImpl := newLockTable(
 					int64(maxLocks), roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
+					m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
 				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
@@ -888,8 +890,10 @@ func newLock(txn *enginepb.TxnMeta, key roachpb.Key, str lock.Strength) *roachpb
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
+	m := TestingMakeLockTableMetricsCfg()
 	lt := newLockTable(
 		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
 	)
 	lt.minKeysLocked = 0
 	lt.enabled = true
@@ -926,6 +930,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 		ID:             uuid.MakeV4(),
 		WriteTimestamp: hlc.Timestamp{WallTime: 10},
 	}
+	// Sanity check counters at the start before we start adding locks.
+	require.Equal(t, int64(0), m.NumLockShedDueToMemoryLimitEvents.Count())
+	require.Equal(t, int64(0), m.LocksShedDueToMemoryLimit.Count())
 	for i := range guards {
 		for j := 0; j < 10; j++ {
 			k := i*20 + j
@@ -938,11 +945,16 @@ func TestLockTableMaxLocks(t *testing.T) {
 	}
 	// Only the notRemovable locks survive after addition.
 	require.Equal(t, int64(10), lt.lockCountForTesting())
-	// Two guards are dequeued.
+	// The other 90 locks should be shed.
+	require.Equal(t, int64(90), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(66), m.NumLockShedDueToMemoryLimitEvents.Count())
+	// Two guards are dequeued. This marks 2 notRemovable locks as removable.
+	// We're at 8 notRemovable locks now.
 	lt.Dequeue(guards[0])
 	lt.Dequeue(guards[1])
 	require.Equal(t, int64(10), lt.lockCountForTesting())
-	// Two guards do ScanAndEnqueue.
+	// Two guards do ScanAndEnqueue. This marks 2 notRemovable locks as
+	// removable. We're at 6 notRemovable locks now.
 	for i := 2; i < 4; i++ {
 		var err *Error
 		guards[i], err = lt.ScanAndEnqueue(reqs[i], guards[i])
@@ -958,6 +970,10 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// The 6 notRemovable locks remain.
 	require.Equal(t, int64(6), lt.lockCountForTesting())
+	// NB: 4 locks that became removable are cleared + the lock that was added by
+	// AddDiscoveredLock, taking the total number of locks removed to 5.
+	require.Equal(t, int64(95), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(67), m.NumLockShedDueToMemoryLimitEvents.Count())
 	require.Equal(t, int64(101), int64(lt.locks.lockIDSeqNum))
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
@@ -967,7 +983,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// Still the 6 notRemovable locks remain.
 	require.Equal(t, int64(6), lt.lockCountForTesting())
-	require.Equal(t, int64(102), int64(lt.locks.lockIDSeqNum))
+	// NB: We cleared the lock added by AddDiscoveredLock above.
+	require.Equal(t, int64(96), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(68), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Two more guards are dequeued, so we are down to 4 notRemovable locks.
 	lt.Dequeue(guards[4])
 	lt.Dequeue(guards[5])
@@ -981,6 +999,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// This notRemovable=false lock is also added, since enforcement not done.
 	require.Equal(t, int64(7), lt.lockCountForTesting())
+	// Metrics shouldn't change as enforcement wasn't done.
+	require.Equal(t, int64(96), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(68), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
 		newLock(&txnMeta, keys[9*20+13], lock.Intent),
@@ -989,10 +1010,14 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// Now enforcement is done, so only 4 remain.
 	require.Equal(t, int64(4), lt.lockCountForTesting())
+	// We made 2 locks removable above + added to locks by calling
+	// AddDiscoveredLocks, resulting in 4 locks being cleared in total.
+	require.Equal(t, int64(100), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(69), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Bump down the enforcement interval manually, and bump up minKeysLocked.
 	lt.locks.lockAddMaxLocksCheckInterval = 1
 	lt.minKeysLocked = 2
-	// Three more guards dequeued.
+	// Three more guards dequeued. Now only 1 lock is notRemovable.
 	lt.Dequeue(guards[6])
 	lt.Dequeue(guards[7])
 	lt.Dequeue(guards[8])
@@ -1003,6 +1028,10 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.True(t, added)
 	require.NoError(t, err)
 	require.Equal(t, int64(5), lt.lockCountForTesting())
+	// NB: We're allowed 5 locks. We won't trigger tryClearLocks and the metrics
+	// should reflect this.
+	require.Equal(t, int64(100), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(69), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Add another discovered lock, to trigger tryClearLocks, and push us over 5
 	// locks.
 	added, err = lt.AddDiscoveredLock(
@@ -1013,6 +1042,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Enforcement keeps the 1 notRemovable lock, and another, since
 	// minKeysLocked=2.
 	require.Equal(t, int64(2), lt.lockCountForTesting())
+	// Which means that in total, 4 more locks are cleared.
+	require.Equal(t, int64(104), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(70), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Restore minKeysLocked to 0.
 	lt.minKeysLocked = 0
 	// Add locks to push us over 5 locks.
@@ -1025,13 +1057,19 @@ func TestLockTableMaxLocks(t *testing.T) {
 	}
 	// Only the 1 notRemovable lock remains.
 	require.Equal(t, int64(1), lt.lockCountForTesting())
+	// Locks were cleared when we got to 6 locks (and 5 of them were cleared) as
+	// one of them is notRemovable.
+	require.Equal(t, int64(109), m.LocksShedDueToMemoryLimit.Count())
+	require.Equal(t, int64(71), m.NumLockShedDueToMemoryLimitEvents.Count())
 }
 
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
+	m := TestingMakeLockTableMetricsCfg()
 	lt := newLockTable(
 		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
 	)
 	lt.minKeysLocked = 0
 	lt.enabled = true
@@ -1316,7 +1354,9 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 		nil, /* latchWaitDurations */
 		clock,
 	)
-	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings)
+	m := TestingMakeLockTableMetricsCfg()
+	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings,
+		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents)
 	ltImpl.enabled = true
 	lt := maybeWrapInVerifyingLockTable(ltImpl)
 	ex := &workloadExecutor{
@@ -2018,7 +2058,10 @@ func BenchmarkLockTable(b *testing.B) {
 						lm := spanlatch.Make(
 							nil /* stopper */, nil /* slowReqs */, settings, nil /* latchWaitDurations */, clock,
 						)
-						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings)
+						m := TestingMakeLockTableMetricsCfg()
+						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings,
+							m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
+						)
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &lm,
@@ -2058,11 +2101,14 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
 		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
 			const maxLocks = 100000
+			m := TestingMakeLockTableMetricsCfg()
 			lt := newLockTable(
 				maxLocks,
 				roachpb.RangeID(3),
 				hlc.NewClockForTesting(nil),
 				cluster.MakeTestingClusterSettings(),
+				m.LocksShedDueToMemoryLimit,
+				m.NumLockShedDueToMemoryLimitEvents,
 			)
 			lt.enabled = true
 
