@@ -8,7 +8,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
@@ -35,6 +37,7 @@ type GithubPoster interface {
 // githubIssues struct implements GithubPoster
 type githubIssues struct {
 	disable     bool
+	dryRun      bool
 	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
 		*issues.Options) (*issues.TestFailureIssue, error)
 	teamLoader func() (team.Map, error)
@@ -327,6 +330,10 @@ func (g *githubIssues) MaybePost(
 	message string,
 	params map[string]string,
 ) (*issues.TestFailureIssue, error) {
+	if g.dryRun {
+		return nil, g.dryRunPost(t, issueInfo, l, message, params)
+	}
+
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
@@ -351,4 +358,76 @@ func (g *githubIssues) MaybePost(
 		postRequest,
 		opts,
 	)
+}
+
+// dryRunPost simulates posting an issue to GitHub by rendering
+// the issue and logging a clickable link.
+func (g *githubIssues) dryRunPost(
+	t *testImpl,
+	issueInfo *githubIssueInfo,
+	l *logger.Logger,
+	message string,
+	params map[string]string,
+) error {
+	postRequest, err := g.createPostRequest(
+		t.Name(), t.start, t.end, t.spec, t.failures(),
+		message,
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
+	)
+	if err != nil {
+		return err
+	}
+	_, url, err := formatPostRequest(postRequest)
+	if err != nil {
+		return err
+	}
+	l.Printf("GitHub issue posting in dry-run mode:\n%s", url)
+	return nil
+}
+
+// formatPostRequest returns a string representation of the rendered PostRequest
+// as well as a link that can be followed to open the issue in Github. The rendered
+// PostRequest also includes the labels that would be applied to the issue as part
+// of the body.
+func formatPostRequest(req issues.PostRequest) (string, string, error) {
+	data := issues.TemplateData{
+		PostRequest:      req,
+		Parameters:       req.ExtraParams,
+		CondensedMessage: issues.CondensedMessage(req.Message),
+		Branch:           "test_branch",
+		Commit:           "test_SHA",
+		PackageNameShort: strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
+	}
+
+	formatter := issues.UnitTestFormatter
+	r := &issues.Renderer{}
+	if err := formatter.Body(r, data); err != nil {
+		return "", "", err
+	}
+
+	var post strings.Builder
+	post.WriteString(r.String())
+
+	// Github labels are normally not part of the rendered issue body, but we want to
+	// still test that they are correctly set so append them here.
+	post.WriteString("\n------\nLabels:\n")
+	for _, label := range req.Labels {
+		post.WriteString(fmt.Sprintf("- <code>%s</code>\n", label))
+	}
+
+	u, err := url.Parse("https://github.com/cockroachdb/cockroach/issues/new")
+	if err != nil {
+		return "", "", err
+	}
+	q := u.Query()
+	q.Add("title", formatter.Title(data))
+	q.Add("body", post.String())
+	// Adding a template parameter is required to be able to view the rendered
+	// template on GitHub, otherwise it just takes you to the template selection
+	// page.
+	q.Add("template", "none")
+	u.RawQuery = q.Encode()
+	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
+
+	return post.String(), u.String(), nil
 }
