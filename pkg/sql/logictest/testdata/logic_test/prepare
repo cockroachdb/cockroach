@@ -1741,3 +1741,24 @@ statement ok
 EXECUTE p(120)
 
 subtest end
+
+# Regression test for #152664. Correctly type placeholders with UNKNOWN type
+# hints.
+statement ok
+PREPARE p152664 (BOOL, UNKNOWN, DECIMAL) AS SELECT IF($1, $2, $3) IS NOT NAN
+
+query B
+EXECUTE p152664(false, NULL, 4)
+----
+true
+
+statement ok
+DEALLOCATE p152664
+
+statement ok
+PREPARE p152664 (BOOL, DECIMAL, UNKNOWN) AS SELECT IF($1, $2, $3) IS NOT NAN
+
+query B
+EXECUTE p152664(true, 4, NULL)
+----
+true
