@@ -200,26 +200,29 @@ func (ds *ServerImpl) setupFlow(
 	var sp *tracing.Span                       // will be Finish()ed by Flow.Cleanup()
 	var monitor, diskMonitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
 	var onFlowCleanupEnd func(context.Context) // will be called at the very end of Flow.Cleanup()
+	var cleanupPerformed bool
 	// Make sure that we clean up all resources (which in the happy case are
 	// cleaned up in Flow.Cleanup()) if an error is encountered.
 	defer func() {
 		if retErr != nil {
-			if monitor != nil {
-				monitor.Stop(ctx)
-			}
-			if diskMonitor != nil {
-				diskMonitor.Stop(ctx)
-			}
-			if onFlowCleanupEnd != nil {
-				onFlowCleanupEnd(ctx)
-			} else {
-				reserved.Close(ctx)
-				onFlowCleanup.Do()
-			}
-			// We finish the span after performing other cleanup in case that
-			// cleanup accesses the context with the span.
-			if sp != nil {
-				sp.Finish()
+			if !cleanupPerformed {
+				if monitor != nil {
+					monitor.Stop(ctx)
+				}
+				if diskMonitor != nil {
+					diskMonitor.Stop(ctx)
+				}
+				if onFlowCleanupEnd != nil {
+					onFlowCleanupEnd(ctx)
+				} else {
+					reserved.Close(ctx)
+					onFlowCleanup.Do()
+				}
+				// We finish the span after performing other cleanup in case that
+				// cleanup accesses the context with the span.
+				if sp != nil {
+					sp.Finish()
+				}
 			}
 			retCtx = tracing.ContextWithSpan(ctx, nil)
 		}
@@ -267,6 +270,9 @@ func (ds *ServerImpl) setupFlow(
 	makeLeaf := func(ctx context.Context) (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
 		if tis == nil {
+			if localState.Txn != nil {
+				return nil, errors.AssertionFailedf("nil LeafTxnInputState when trying to create the LeafTxn")
+			}
 			// This must be a flow running for some bulk-io operation that doesn't use
 			// a txn.
 			return nil, nil
@@ -447,6 +453,12 @@ func (ds *ServerImpl) setupFlow(
 		if leafTxn == nil {
 			leafTxn, err = makeLeaf(ctx)
 			if err != nil {
+				// Given that we've already fully set up the flow, we must do
+				// the full cleanup. This supersedes the cleanup done in the
+				// defer at the beginning of the method, so we mark
+				// cleanupPerformed accordingly.
+				f.Cleanup(ctx)
+				cleanupPerformed = true
 				return nil, nil, nil, err
 			}
 		}
