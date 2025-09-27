@@ -1478,3 +1478,125 @@ vectorized: true
   spans: [/10 - /10]
 
 subtest end
+
+# Ensure that constrained partial statistics are merged into full statistics
+# and used by the optimizer.
+
+statement ok
+CREATE TABLE m (b INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE m INJECT STATISTICS '[
+  {
+    "id": 1,
+    "avg_size": 1,
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 4,
+    "histo_buckets": [
+      {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "10"},
+      {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "20"},
+      {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "30"},
+      {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "40"}
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "full",
+    "null_count": 0,
+    "row_count": 4
+  },
+  {
+    "id": 2,
+    "avg_size": 1,
+    "columns": ["b"],
+    "created_at": "2000-01-02 00:00:00.000000",
+    "distinct_count": 4,
+    "histo_buckets": [
+      {"distinct_range": 0, "num_eq": 3, "num_range": 0, "upper_bound": "20"},
+      {"distinct_range": 2, "num_eq": 2, "num_range": 3, "upper_bound": "30"}
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "partial_predicate": "((b > 15:::INT8) AND (b < 35:::INT8))",
+    "row_count": 8,
+    "full_statistic_id": 1
+  }
+]'
+
+query TTTIIII colnames
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE m WITH MERGE]
+ORDER BY created
+----
+statistics_name  column_names  created                        row_count  distinct_count  null_count  avg_size
+full             {b}           2000-01-01 00:00:00 +0000 UTC  4          4               0           1
+partial          {b}           2000-01-02 00:00:00 +0000 UTC  8          4               0           1
+__merged__       {b}           2000-01-02 00:00:00 +0000 UTC  10         6               0           1
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+SELECT jsonb_array_elements(statistics) AS stat FROM [SHOW STATISTICS USING JSON FOR TABLE m WITH MERGE]
+)
+WHERE stat->>'name' = '__merged__';
+----
+{
+    "avg_size": 1,
+    "columns": [
+        "b"
+    ],
+    "created_at": "2000-01-02 00:00:00",
+    "distinct_count": 6,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "10"
+        },
+        {
+            "distinct_range": 0,
+            "num_eq": 3,
+            "num_range": 0,
+            "upper_bound": "20"
+        },
+        {
+            "distinct_range": 2,
+            "num_eq": 2,
+            "num_range": 3,
+            "upper_bound": "30"
+        },
+        {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "40"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 3,
+    "name": "__merged__",
+    "null_count": 0,
+    "row_count": 10
+}
+
+# Now clear the stats cache so that the query below is guaranteed to pick up the
+# new stats (partial and merged).
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM m WHERE b < 35
+----
+scan m
+ ├── columns: b:1
+ ├── constraint: /1: [ - /34]
+ ├── stats: [rows=9, distinct(1)=5, null(1)=0]
+ │   histogram(1)=  0  1   0  3   3  2   0  0
+ │                <--- 10 --- 20 --- 30 --- 34
+ ├── cost: 27.11
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── distribution: test

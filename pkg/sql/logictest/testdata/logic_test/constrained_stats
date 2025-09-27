@@ -65,31 +65,6 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 55.00        0           0                    1
 
 statement ok
-CREATE STATISTICS stat_price_ranges ON price FROM products WHERE price <= 20.00 OR price > 40.00
-
-query TTIIIT colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
-FROM [SHOW STATISTICS FOR TABLE products]
-WHERE statistics_name = 'stat_price_ranges'
-----
-statistics_name    column_names  row_count  distinct_count  null_count  partial_predicate
-stat_price_ranges  {price}       6          6               0           (price <= 20.00) OR (price > 40.00)
-
-let $hist_stat_price_ranges
-SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE products] WHERE statistics_name = 'stat_price_ranges';
-
-query TIRI colnames,nosort
-SHOW HISTOGRAM $hist_stat_price_ranges
-----
-upper_bound  range_rows  distinct_range_rows  equal_rows
-10.00        0           0                    1
-15.00        0           0                    1
-20.00        0           0                    1
-45.00        0           0                    1
-50.00        0           0                    1
-55.00        0           0                    1
-
-statement ok
 CREATE STATISTICS stat_active_products ON status FROM products WHERE status = 'active'
 
 query TTIIIT colnames
@@ -110,17 +85,6 @@ WHERE statistics_name = 'stat_mid_range_products'
 ----
 statistics_name          column_names   row_count  distinct_count  null_count  partial_predicate
 stat_mid_range_products  {category_id}  8          2               0           category_id BETWEEN 1 AND 2
-
-statement ok
-CREATE STATISTICS stat_specific_categories ON category_id FROM products WHERE category_id IN (1, 3)
-
-query TTIIIT colnames
-SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
-FROM [SHOW STATISTICS FOR TABLE products]
-WHERE statistics_name = 'stat_specific_categories'
-----
-statistics_name           column_names   row_count  distinct_count  null_count  partial_predicate
-stat_specific_categories  {category_id}  6          2               0           category_id IN (1, 3)
 
 # Verify error cases
 statement error pq: partial statistics with WHERE must be on a single column
@@ -146,6 +110,12 @@ CREATE STATISTICS stat_subquery ON category_id FROM products WHERE category_id I
 
 statement error pq: predicate could not become a constrained scan of an index
 CREATE STATISTICS stat_func ON status FROM products WHERE length(status) > 6
+
+statement error pq: unimplemented: CREATE STATISTICS with a WHERE clause that produces multiple spans is not yet supported
+CREATE STATISTICS stat_func ON price FROM products WHERE price < 20.00 OR price > 30.00
+
+statement error pq: unimplemented: CREATE STATISTICS with a WHERE clause that produces multiple spans is not yet supported
+CREATE STATISTICS stat_specific_categories ON category_id FROM products WHERE category_id IN (1, 3)
 
 statement error syntax error
 CREATE STATISTICS stat_error2 ON price FROM products WHERE price >
