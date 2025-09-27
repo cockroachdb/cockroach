@@ -51,6 +51,7 @@ go_test(
     ],
     embed = [":colexecutils"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
@@ -65,6 +66,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/types",
         "//pkg/testutils/colcontainerutils",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/cancelchecker",
         "//pkg/util/humanizeutil",

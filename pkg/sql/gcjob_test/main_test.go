@@ -26,5 +26,6 @@ func TestMain(m *testing.M) {
 		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
 	)()
 
+	defer serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabled)()
 	os.Exit(m.Run())
 }

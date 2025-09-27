@@ -10,10 +10,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -31,6 +33,7 @@ var (
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	os.Exit(func() int {
+		defer serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabled)()
 		ctx := context.Background()
 		testMemMonitor = execinfra.NewTestMemMonitor(ctx, cluster.MakeTestingClusterSettings())
 		defer testMemMonitor.Stop(ctx)
