@@ -93,12 +93,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	rel.NotNullCols = makeTableNotNullCols(md, scan.Table).Copy()
 	// Union not-NULL columns with not-NULL columns in the constraint.
 	if scan.Constraint != nil {
-		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.sb.ctx, b.evalCtx))
+		scan.Constraint.ExtractNotNullCols(b.sb.ctx, b.evalCtx, &rel.NotNullCols)
 	}
 	// Union not-NULL columns with not-NULL columns in the partial index
 	// predicate.
 	if pred != nil {
-		rel.NotNullCols.UnionWith(b.rejectNullCols(pred))
+		b.extractNotNullCols(pred, &rel.NotNullCols)
 	}
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
@@ -267,7 +267,8 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 	//   SELECT y FROM xy WHERE y=5
 	//
 	// "y" cannot be null because the SQL equality operator rejects nulls.
-	rel.NotNullCols = b.rejectNullCols(sel.Filters)
+	rel.NotNullCols = opt.ColSet{}
+	b.extractNotNullCols(sel.Filters, &rel.NotNullCols)
 	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
@@ -2215,26 +2216,24 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 	return card
 }
 
-// NullColsRejectedByFilter returns a set of columns that are "null rejected"
-// by the filters. An input row with a NULL value on any of these columns will
-// not pass the filter.
-func NullColsRejectedByFilter(
-	ctx context.Context, evalCtx *eval.Context, filters FiltersExpr,
-) opt.ColSet {
-	var notNullCols opt.ColSet
+// ExtractNullColsRejectedByFilter finds the set of columns that are "null
+// rejected" by the filters and adds them to the given column set. An input row
+// with a NULL value on any of these columns will not pass the filter.
+func ExtractNullColsRejectedByFilter(
+	ctx context.Context, evalCtx *eval.Context, filters FiltersExpr, cols *opt.ColSet,
+) {
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
 		if filterProps.Constraints != nil {
-			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(ctx, evalCtx))
+			filterProps.Constraints.ExtractNotNullCols(ctx, evalCtx, cols)
 		}
 	}
-	return notNullCols
 }
 
-// rejectNullCols returns the set of all columns that are inferred to be not-
-// null, based on the filter conditions.
-func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
-	return NullColsRejectedByFilter(b.sb.ctx, b.evalCtx, filters)
+// extractNotNullCols finds the set of columns that are "null rejected" by the
+// filters and adds them to the given column set.
+func (b *logicalPropsBuilder) extractNotNullCols(filters FiltersExpr, cols *opt.ColSet) {
+	ExtractNullColsRejectedByFilter(b.sb.ctx, b.evalCtx, filters, cols)
 }
 
 // addFiltersToFuncDep returns the union of all functional dependencies from
@@ -2548,7 +2547,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = &join.lookupProps
 		h.filters = append(join.On, join.AllLookupFilters...)
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		h.filterNotNullCols = b.rejectNullCols(h.filters)
+		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
 
 		// Apply the lookup join equalities.
 		index := md.Table(join.Table).Index(join.Index)
@@ -2574,7 +2573,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = &join.lookupProps
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		h.filterNotNullCols = b.rejectNullCols(h.filters)
+		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
 
 		// Apply the prefix column equalities.
 		index := md.Table(join.Table).Index(join.Index)
@@ -2599,7 +2598,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = join.Right.Relational()
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		h.filterNotNullCols = b.rejectNullCols(h.filters)
+		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
 
 		// Apply the merge join equalities.
 		for i := range join.LeftEq {
@@ -2621,7 +2620,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = &join.rightProps
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		h.filterNotNullCols = b.rejectNullCols(h.filters)
+		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
 
 		// Apply the zigzag join equalities.
 		for i := range join.LeftEqCols {
@@ -2640,7 +2639,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 
 		h.filters = *join.Child(2).(*FiltersExpr)
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		h.filterNotNullCols = b.rejectNullCols(h.filters)
+		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
 		h.filterIsTrue = h.filters.IsTrue()
 		h.filterIsFalse = h.filters.IsFalse()
 	}
