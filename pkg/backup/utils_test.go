@@ -79,6 +79,20 @@ func backupRestoreTestSetupWithParams(
 		backuptestutils.WithBank(numAccounts))
 }
 
+func backupRestoreTestSetupWithParamsNotSlim(
+	t testing.TB,
+	clusterSize int,
+	numAccounts int,
+	init func(tc *testcluster.TestCluster),
+	params base.TestClusterArgs,
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
+	return backuptestutils.StartBackupRestoreTestCluster(t, clusterSize,
+		backuptestutils.WithInitFunc(init),
+		backuptestutils.WithParams(params),
+		backuptestutils.WithBank(numAccounts),
+		backuptestutils.WithNonSlimServers())
+}
+
 func backupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
@@ -96,6 +110,21 @@ func backupRestoreTestSetupEmpty(
 		backuptestutils.WithTempDir(tempDir),
 		backuptestutils.WithInitFunc(init),
 		backuptestutils.WithParams(params))
+	return tc, sqlDB, cleanup
+}
+
+func backupRestoreTestSetupEmptyNotSlim(
+	t testing.TB,
+	clusterSize int,
+	tempDir string,
+	init func(*testcluster.TestCluster),
+	params base.TestClusterArgs,
+) (*testcluster.TestCluster, *sqlutils.SQLRunner, func()) {
+	tc, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(t, clusterSize,
+		backuptestutils.WithTempDir(tempDir),
+		backuptestutils.WithInitFunc(init),
+		backuptestutils.WithParams(params),
+		backuptestutils.WithNonSlimServers())
 	return tc, sqlDB, cleanup
 }
 
