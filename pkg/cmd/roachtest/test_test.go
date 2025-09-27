@@ -634,6 +634,23 @@ func TestExitCode(t *testing.T) {
 	require.True(t, errors.Is(err, errTestsFailed))
 }
 
+func TestNewClusterSpec(t *testing.T) {
+	ctx := context.Background()
+	factory := &clusterFactory{sem: make(chan struct{}, 1)}
+	cfg := clusterConfig{spec: spec.MakeClusterSpec(1)}
+	setStatus := func(string) {}
+
+	defer func() {
+		create = roachprod.Create
+	}()
+
+	create = func(ctx context.Context, l *logger.Logger, username string, opts ...*cloud.ClusterCreateOpts) (retErr error) {
+		return &roachprod.ClusterAlreadyExistsError{}
+	}
+	_, _, err := factory.newCluster(ctx, cfg, setStatus, true)
+	require.Error(t, err)
+}
+
 func TestNewCluster(t *testing.T) {
 	ctx := context.Background()
 	factory := &clusterFactory{sem: make(chan struct{}, 1)}

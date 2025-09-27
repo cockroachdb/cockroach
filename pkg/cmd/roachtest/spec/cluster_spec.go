@@ -247,6 +247,16 @@ func getAWSOpts(
 	return opts
 }
 
+func getAWSWorkloadOpts(machineType string, useSpotVMs bool) vm.ProviderOpts {
+	opts := aws.DefaultProviderOpts()
+	opts.MachineType = machineType
+	// Setting the default volume type to empty will ensure the VM only has a boot disk.
+	opts.DefaultEBSVolume.Disk.VolumeType = ""
+	opts.UseSpot = useSpotVMs
+	opts.BootDiskOnly = true
+	return opts
+}
+
 func getGCEOpts(
 	machineType string,
 	volumeSize, localSSDCount int,
@@ -286,7 +296,29 @@ func getGCEOpts(
 	if volumeType != "" {
 		opts.PDVolumeType = volumeType
 	}
+	return opts
+}
 
+func getGCEWorkloadOpts(
+	machineType string,
+	terminateOnMigration bool,
+	minCPUPlatform string,
+	arch vm.CPUArch,
+	useSpot bool,
+) vm.ProviderOpts {
+	opts := gce.DefaultProviderOpts()
+	opts.MachineType = machineType
+	if arch == vm.ArchARM64 {
+		// ARM64 machines don't support minCPUPlatform.
+		opts.MinCPUPlatform = ""
+	} else if minCPUPlatform != "" {
+		opts.MinCPUPlatform = minCPUPlatform
+	}
+	opts.SSDCount = 0
+	opts.PDVolumeCount = 0
+	opts.BootDiskOnly = true
+	opts.TerminateOnMigration = terminateOnMigration
+	opts.UseSpot = useSpot
 	return opts
 }
 
@@ -296,6 +328,13 @@ func getAzureOpts(machineType string, volumeSize int) vm.ProviderOpts {
 	if volumeSize != 0 {
 		opts.NetworkDiskSize = int32(volumeSize)
 	}
+	return opts
+}
+
+func getAzureWorkloadOpts(machineType string) vm.ProviderOpts {
+	opts := azure.DefaultProviderOpts()
+	opts.MachineType = machineType
+	opts.BootDiskOnly = true
 	return opts
 }
 
@@ -338,6 +377,14 @@ func getIBMOpts(
 	return opts
 }
 
+func getIBMWorkloadOpts(machineType string, terminateOnMigration bool) vm.ProviderOpts {
+	opts := ibm.DefaultProviderOpts()
+	opts.MachineType = machineType
+	opts.TerminateOnMigration = terminateOnMigration
+	opts.BootDiskOnly = true
+	return opts
+}
+
 // RoachprodClusterConfig contains general roachprod cluster configuration that
 // does not depend on the test. It is used in conjunction with ClusterSpec to
 // determine the final configuration.
@@ -377,7 +424,7 @@ type RoachprodClusterConfig struct {
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
 	params RoachprodClusterConfig,
-) (vm.CreateOpts, vm.ProviderOpts, vm.ProviderOpts, vm.CPUArch, error) {
+) (vm.CreateOpts, vm.CreateOpts, vm.ProviderOpts, vm.ProviderOpts, vm.CPUArch, error) {
 	useIOBarrier := params.UseIOBarrierOnLocalSSD
 	requestedArch := params.PreferredArch
 
@@ -408,17 +455,17 @@ func (s *ClusterSpec) RoachprodOpts(
 	case Local:
 		createVMOpts.VMProviders = []string{cloud.String()}
 		// remaining opts are not applicable to local clusters
-		return createVMOpts, nil, nil, requestedArch, nil
+		return createVMOpts, createVMOpts, nil, nil, requestedArch, nil
 	case AWS, GCE, Azure, IBM:
 		createVMOpts.VMProviders = []string{cloud.String()}
 	default:
-		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unsupported cloud %v", cloud)
+		return vm.CreateOpts{}, vm.CreateOpts{}, nil, nil, "", errors.Errorf("unsupported cloud %v", cloud)
 	}
 	if cloud != GCE {
 		// TODO(DarrylWong): support specifying SSD count on other providers, see: #123777.
 		// Once done, revisit all tests that set SSD count to see if they can run on non GCE.
 		if s.SSDs != 0 {
-			return vm.CreateOpts{}, nil, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
+			return vm.CreateOpts{}, vm.CreateOpts{}, nil, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
 		}
 	}
 
@@ -464,7 +511,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			}
 
 			if err != nil {
-				return vm.CreateOpts{}, nil, nil, "", err
+				return vm.CreateOpts{}, vm.CreateOpts{}, nil, nil, "", err
 			}
 			if requestedArch != "" && selectedArch != requestedArch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
@@ -494,7 +541,7 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	if s.FileSystem == Zfs {
 		if cloud != GCE && cloud != IBM {
-			return vm.CreateOpts{}, nil, nil, "", errors.Errorf(
+			return vm.CreateOpts{}, vm.CreateOpts{}, nil, nil, "", errors.Errorf(
 				"node creation with zfs file system not yet supported on %s", cloud,
 			)
 		}
@@ -510,7 +557,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	var err error
 	switch cloud {
 	case AWS:
-		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, selectedArch)
+		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, false, selectedArch)
 	case GCE:
 		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	case Azure:
@@ -519,11 +566,11 @@ func (s *ClusterSpec) RoachprodOpts(
 		workloadMachineType, _, err = SelectIBMMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	}
 	if err != nil {
-		return vm.CreateOpts{}, nil, nil, "", err
+		return vm.CreateOpts{}, vm.CreateOpts{}, nil, nil, "", err
 	}
 
 	if createVMOpts.Arch == string(vm.ArchFIPS) && !(cloud == GCE || cloud == AWS) {
-		return vm.CreateOpts{}, nil, nil, "", errors.Errorf(
+		return vm.CreateOpts{}, vm.CreateOpts{}, nil, nil, "", errors.Errorf(
 			"FIPS not yet supported on %s", cloud,
 		)
 	}
@@ -533,30 +580,32 @@ func (s *ClusterSpec) RoachprodOpts(
 	case AWS:
 		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
 			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
-		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput,
-			s.AWS.VolumeIOPS, createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
+		workloadProviderOpts = getAWSWorkloadOpts(workloadMachineType, s.UseSpotVMs)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
 		)
-		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
-			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
+		workloadProviderOpts = getGCEWorkloadOpts(workloadMachineType, s.TerminateOnMigration,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.UseSpotVMs,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, s.VolumeSize)
-		workloadProviderOpts = getAzureOpts(workloadMachineType, s.VolumeSize)
+		workloadProviderOpts = getAzureOpts(machineType, s.VolumeSize)
 	case IBM:
 		providerOpts = getIBMOpts(machineType, s.TerminateOnMigration, s.VolumeSize,
 			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
 		)
-		workloadProviderOpts = getIBMOpts(workloadMachineType, s.TerminateOnMigration, s.VolumeSize,
-			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
-		)
+		workloadProviderOpts = getIBMWorkloadOpts(workloadMachineType, s.TerminateOnMigration)
 	}
 
-	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
+	createWorkloadVMOpts := createVMOpts
+	// The only difference for workload creation options is that we do not enable
+	// the use of local SSDs; otherwise, attached disks may still be provisioned
+	// based on the machine type and minimum SSD requirements.
+	// TODO _RESTORE_ createWorkloadVMOpts.SSDOpts.UseLocalSSD = false
+
+	return createVMOpts, createWorkloadVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
 }
 
 // SetRoachprodOptsZones updates the providerOpts with the VM zones as specified in the params/spec.
