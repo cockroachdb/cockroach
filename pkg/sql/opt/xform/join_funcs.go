@@ -28,7 +28,6 @@ import (
 // GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
 func (c *CustomFuncs) GenerateMergeJoins(
 	grp memo.RelExpr,
-	required *physical.Required,
 	originalOp opt.Operator,
 	left, right memo.RelExpr,
 	on memo.FiltersExpr,
@@ -249,7 +248,6 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //	                                 Input
 func (c *CustomFuncs) GenerateLookupJoins(
 	grp memo.RelExpr,
-	required *physical.Required,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
@@ -295,7 +293,6 @@ func (c *CustomFuncs) GenerateLookupJoins(
 // produces the non-covered virtual columns.
 func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
 	grp memo.RelExpr,
-	required *physical.Required,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	rightCols opt.ColSet,
@@ -786,7 +783,6 @@ func (c *CustomFuncs) mapLookupJoin(
 // GenerateLookupJoins for details.
 func (c *CustomFuncs) GenerateInvertedJoins(
 	grp memo.RelExpr,
-	required *physical.Required,
 	joinType opt.Operator,
 	input memo.RelExpr,
 	scanPrivate *memo.ScanPrivate,
@@ -1144,7 +1140,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 // ReorderJoins adds alternate orderings of the given join tree to the memo. The
 // first expression of the memo group is used for construction of the join
 // graph. For more information, see the comment in join_order_builder.go.
-func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr, required *physical.Required) memo.RelExpr {
+func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr) memo.RelExpr {
 	c.e.o.JoinOrderBuilder().Init(c.e.ctx, c.e.f, c.e.evalCtx)
 	c.e.o.JoinOrderBuilder().Reorder(grp.FirstExpr())
 	return grp
@@ -1874,11 +1870,9 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 
 // LookupsAreLocal returns true if the lookups done by the given lookup join
 // are done in the local region.
-func (c *CustomFuncs) LookupsAreLocal(
-	lookupJoinExpr *memo.LookupJoinExpr, required *physical.Required,
-) bool {
+func (c *CustomFuncs) LookupsAreLocal(lookupJoinExpr *memo.LookupJoinExpr) bool {
 	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
-		c.e.ctx, c.e.f.EvalContext(), c.e.mem, lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation,
+		c.e.ctx, c.e.f.EvalContext(), c.e.mem, lookupJoinExpr, c.e.o.MaybeGetBestCostRelation,
 	)
 	if provided.Any() || len(provided.Regions) != 1 {
 		return false
@@ -1897,7 +1891,6 @@ func (c *CustomFuncs) LookupsAreLocal(
 // converted into a locality-optimized `LookupJoinPrivate` by the caller.
 func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
 	grp memo.RelExpr,
-	required *physical.Required,
 	lookupJoinExpr *memo.LookupJoinExpr,
 	inputScan *memo.ScanExpr,
 	inputFilters memo.FiltersExpr,
@@ -1913,9 +1906,9 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
 	// We should only generate a locality-optimized search if there is a limit
 	// hint coming from an ancestor expression with a LIMIT, meaning that the
 	// query could be answered solely from rows returned by the local branch.
-	if required.LimitHint == 0 {
-		return
-	}
+	// if required.LimitHint == 0 {
+	// 	return
+	// }
 	tabMeta := c.e.mem.Metadata().TableMeta(inputScan.Table)
 	table := c.e.mem.Metadata().Table(inputScan.Table)
 	lookupTable := c.e.mem.Metadata().Table(lookupJoinExpr.Table)
@@ -2100,15 +2093,14 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
 // REGIONAL BY ROW table.
 func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(
 	grp memo.RelExpr,
-	required *physical.Required,
 	lookupJoinExpr *memo.LookupJoinExpr,
 	inputScan *memo.ScanExpr,
 	inputFilters memo.FiltersExpr,
 ) {
-	if !c.LookupsAreLocal(lookupJoinExpr, required) {
+	if !c.LookupsAreLocal(lookupJoinExpr) {
 		return
 	}
-	c.GenerateLocalityOptimizedSearchOfLookupJoins(grp, required, lookupJoinExpr, inputScan, inputFilters, nil)
+	c.GenerateLocalityOptimizedSearchOfLookupJoins(grp, lookupJoinExpr, inputScan, inputFilters, nil)
 }
 
 // mapInputSideOfLookupJoin copies a lookupJoinExpr having a `ScanExpr` as input
