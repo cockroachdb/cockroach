@@ -446,7 +446,7 @@ func changefeedPlanHook(
 				}
 				return err
 			}
-			recordPTSMetricsTime()
+			recordPTSMetricsTime.End()
 		}
 
 		// Start the job.

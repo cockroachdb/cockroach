@@ -359,7 +359,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		batch, _ := req.(*sinkBatch)
 		defer s.metrics.recordSinkIOInflightChange(int64(-batch.numMessages))
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
-		defer s.metrics.timers().DownstreamClientSend.Start()()
+		defer s.metrics.timers().DownstreamClientSend.Start().End()
 
 		return s.client.Flush(ctx, batch.payload)
 	}

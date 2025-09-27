@@ -1843,7 +1843,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
-	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
+	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start().End()
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
@@ -1924,7 +1924,7 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	persistDuration := timer()
+	persistDuration := timer.End()
 	cf.frontierPersistenceLimiter.doneSave(persistDuration)
 	return nil
 }
@@ -1950,11 +1950,11 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	recordPTSMetricsErrorTime := cf.sliMetrics.Timers.PTSManageError.Start()
 	defer func() {
 		if err != nil {
-			recordPTSMetricsErrorTime()
+			recordPTSMetricsErrorTime.End()
 			return
 		}
 		if updated {
-			recordPTSMetricsTime()
+			recordPTSMetricsTime.End()
 		}
 	}()
 

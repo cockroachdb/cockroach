@@ -382,10 +382,10 @@ func (s *kafkaSink) EmitRow(
 	// inside sarama, set the DownstreamClientSend timer to the same value as
 	// BatchHistNanos.
 	recordOneMessageCb := s.metrics.recordOneMessage()
-	downstreamClientSendCb := s.metrics.timers().DownstreamClientSend.Start()
+	downstreamClientSend := s.metrics.timers().DownstreamClientSend.Start()
 	updateMetrics := func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
 		recordOneMessageCb(mvcc, bytes, compressedBytes)
-		downstreamClientSendCb()
+		downstreamClientSend.End()
 	}
 
 	recordHeaders := make([]sarama.RecordHeader, 0, len(headers))

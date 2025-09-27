@@ -103,20 +103,29 @@ type timer struct {
 	hist *aggmetric.Histogram
 }
 
-func (t *timer) Start() (end func() time.Duration) {
+func (t *timer) Start() TimerHandle {
 	if t == nil {
-		return func() time.Duration { return 0 }
+		return TimerHandle{}
 	}
+	return TimerHandle{start: crtime.NowMono(), hist: t.hist}
+}
 
-	start := crtime.NowMono()
-	return func() time.Duration {
-		elapsed := start.Elapsed()
-		t.hist.RecordValue(elapsed.Nanoseconds())
-		return elapsed
+type TimerHandle struct {
+	start crtime.Mono
+	hist  *aggmetric.Histogram
+}
+
+// End records the elapsed time and returns the duration.
+func (th TimerHandle) End() time.Duration {
+	if th.hist == nil {
+		return 0
 	}
+	elapsed := th.start.Elapsed()
+	th.hist.RecordValue(elapsed.Nanoseconds())
+	return elapsed
 }
 
 func (t *timer) Time(cb func()) {
-	defer t.Start()()
+	defer t.Start().End()
 	cb()
 }
