@@ -5,24 +5,20 @@
 
 package spec
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-)
+import "time"
 
 // Option for MakeClusterSpec.
 type Option func(spec *ClusterSpec)
 
-// Arch requests a specific CPU architecture.
+// Arch requests specific CPU architecture(s).
 //
 // Note that it is not guaranteed that this architecture will be used (e.g. if
 // the requested machine size isn't available in this architecture).
 //
 // TODO(radu): add a flag to indicate whether it's a preference or a requirement.
-func Arch(arch vm.CPUArch) Option {
+func Arch(as ArchSet) Option {
 	return func(spec *ClusterSpec) {
-		spec.Arch = arch
+		spec.CompatibleArchs = as
 	}
 }
 

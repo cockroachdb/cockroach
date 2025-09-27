@@ -42,8 +42,9 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 		Monitor:          true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8),
-			spec.WorkloadNode(), spec.ReuseNone()),
+			spec.WorkloadNode(), spec.ReuseNone(), spec.Arch(spec.AllExceptFIPS)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			require.Equal(t, 4, c.Spec().NodeCount)
 

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -531,7 +530,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 			panic("cannot set stores per node and not use local SSD")
 		}
 		clusterOpts = append(clusterOpts, spec.SSD(hw.storesPerNode))
-		clusterOpts = append(clusterOpts, spec.Arch(vm.ArchAMD64))
+		clusterOpts = append(clusterOpts, spec.Arch(spec.OnlyAMD64))
 	}
 
 	if hw.mem != spec.Auto {

@@ -909,3 +909,119 @@ func TestVerifyLibraries(t *testing.T) {
 		})
 	}
 }
+
+func TestRandomArchProbabilities(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		validArchs           spec.ArchSet
+		arm64Probability     float64
+		fipsProbability      float64
+		expectedDistribution map[vm.CPUArch]float64
+	}{
+		{
+			validArchs:       spec.AllArchs,
+			arm64Probability: 0.3,
+			fipsProbability:  0.2,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 0.56,
+				vm.ArchARM64: 0.3,
+				vm.ArchFIPS:  0.14,
+			},
+		},
+		{
+			validArchs:       spec.AllExceptFIPS,
+			arm64Probability: 0.4,
+			fipsProbability:  0.1,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 0.57447,
+				vm.ArchARM64: 0.42553,
+			},
+		},
+		{
+			validArchs:       spec.OnlyAMD64,
+			arm64Probability: 0.5,
+			fipsProbability:  0.3,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 1.0, // Only valid architecture
+			},
+		},
+		{
+			validArchs:       spec.OnlyARM64,
+			arm64Probability: 0.5,
+			fipsProbability:  0.3,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchARM64: 1.0, // Only valid architecture
+			},
+		},
+		{
+			validArchs:       spec.OnlyFIPS,
+			arm64Probability: 0.2,
+			fipsProbability:  0.0,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 1.0, // Should fall back to AMD64
+			},
+		},
+		{
+			validArchs:       spec.AllExceptFIPS,
+			arm64Probability: 0.0,
+			fipsProbability:  1.0,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 1.0, // Should fall back to AMD64
+			},
+		},
+		{
+			validArchs:       spec.AllExceptFIPS,
+			arm64Probability: 0.5,
+			fipsProbability:  1.0,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchARM64: 1.0,
+			},
+		},
+		{
+			validArchs:       spec.Archs(spec.ArchAMD64, spec.ArchFIPS),
+			arm64Probability: 0.3,
+			fipsProbability:  0.4,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 0.6,
+				vm.ArchFIPS:  0.4,
+			},
+		},
+		{
+			validArchs:       spec.Archs(spec.ArchARM64, spec.ArchFIPS),
+			arm64Probability: 0.6,
+			fipsProbability:  0.2,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchARM64: 0.88235,
+				vm.ArchFIPS:  0.11765,
+			},
+		},
+	}
+
+	// Since this is a statistical test, we want to use a fixed seed to avoid flakes,
+	// i.e. a 99% confidence interval would be expected to fail when stressed 100 times.
+	//
+	// We can run this manually with a random seed for more confidence in our distribution:
+	// prng, _ := randutil.NewTestRand()
+	prng := rand.New(rand.NewSource(12345))
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s/arm=%d%%/fips=%d%%", test.validArchs, int(test.arm64Probability*100), int(test.fipsProbability*100)), func(t *testing.T) {
+			const numSamples = 10000
+			counts := make(map[vm.CPUArch]int)
+
+			// Generate samples
+			for i := 0; i < numSamples; i++ {
+				arch := randomArch(ctx, nilLogger(), test.validArchs, prng, test.arm64Probability, test.fipsProbability)
+				counts[arch]++
+			}
+
+			for expectedArch, expectedProb := range test.expectedDistribution {
+				actualCount := float64(counts[expectedArch])
+				actualProb := actualCount / float64(numSamples)
+
+				tolerance := 0.02
+				require.InDelta(t, expectedProb, actualProb, tolerance)
+			}
+		})
+	}
+}
