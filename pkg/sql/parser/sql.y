@@ -7872,8 +7872,8 @@ inspect_stmt:
 // %Category: Misc
 // %Text:
 // INSPECT TABLE <tablename>
-//             [AS OF SYSTEM TIME <expr>]
-//             [WITH OPTIONS <option> [, ...]]
+//   [AS OF SYSTEM TIME <expr>]
+//   [WITH OPTIONS <option> [, ...]]
 //
 // Options:
 //   INSPECT TABLE ... WITH OPTIONS INDEX ALL
@@ -7895,8 +7895,8 @@ inspect_table_stmt:
 // %Category: Misc
 // %Text:
 // INSPECT DATABASE <database>
-//                             [AS OF SYSTEM TIME <expr>]
-//                             [WITH OPTIONS <option> [, ...]]
+//   [AS OF SYSTEM TIME <expr>]
+//   [WITH OPTIONS <option> [, ...]]
 // Options:
 //   INSPECT DATABASE ... WITH OPTIONS INDEX ALL
 //   INSPECT DATABASE ... WITH OPTIONS INDEX (<index>...)
@@ -7946,7 +7946,13 @@ inspect_option:
 // %Help: SHOW INSPECT ERRORS - list errors recorded by one INSPECT run
 // %Category: Misc
 // %Text:
-// SHOW INSPECT ERRORS [FOR TABLE table_name] [FOR JOB job_id] [WITH DETAILS]
+// SHOW INSPECT ERRORS
+//   [FOR TABLE table_name]
+//   [FOR JOB job_id]
+//   [WITH DETAILS]
+//
+// When table is specified errors will be filtered to that table. When job is
+// not set results from the most recent, completed job with errors is reported on. 
 // %SeeAlso: INSPECT
 show_inspect_errors_stmt:
   SHOW INSPECT ERRORS opt_for_table_clause opt_for_job_clause opt_with_details
