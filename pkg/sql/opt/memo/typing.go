@@ -112,7 +112,7 @@ var GetBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Ove
 // AggregateOverloadExists returns whether or not the given operator has a
 // unary overload which takes the given type as input.
 func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
-	name := opt.AggregateOpReverseMap[agg]
+	name := opt.AggregateOpReverseMap(agg)
 	_, overloads := GetBuiltinProperties(name)
 	for _, o := range overloads {
 		if o.Types.MatchAt(typ, 0) {
@@ -152,7 +152,7 @@ func FindFunction(
 // FindWindowOverload finds a window function overload that matches the
 // given window function expression. It panics if no match can be found.
 func FindWindowOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
-	name = opt.WindowOpReverseMap[e.Op()]
+	name = opt.WindowOpReverseMap(e.Op())
 	_, overload, ok := FindFunction(e, name)
 	if ok {
 		return name, overload
@@ -164,7 +164,7 @@ func FindWindowOverload(e opt.ScalarExpr) (name string, overload *tree.Overload)
 // FindAggregateOverload finds an aggregate function overload that matches the
 // given aggregate function expression. It panics if no match can be found.
 func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
-	name = opt.AggregateOpReverseMap[e.Op()]
+	name = opt.AggregateOpReverseMap(e.Op())
 	_, overload, ok := FindFunction(e, name)
 	if ok {
 		return name, overload
