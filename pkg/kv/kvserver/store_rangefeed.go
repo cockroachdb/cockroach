@@ -15,7 +15,7 @@ import (
 
 // rangeFeedUpdaterConf provides configuration for the rangefeed updater job,
 // and allows watching for when it is updated.
-// rangeFeedUpdaterConf Implements the taskPacerConfig interface.
+// rangeFeedUpdaterConf Implements the taskpacer.Config interface.
 type rangeFeedUpdaterConf struct {
 	settings *cluster.Settings
 	changed  <-chan struct{}
@@ -41,8 +41,8 @@ func newRangeFeedUpdaterConf(st *cluster.Settings) rangeFeedUpdaterConf {
 // configuration, and returns it.
 func (r rangeFeedUpdaterConf) wait(ctx context.Context) error {
 	for {
-		refresh := r.getRefresh()
-		smear := r.getSmear()
+		refresh := r.GetRefresh()
+		smear := r.GetSmear()
 		if refresh != 0 && smear != 0 {
 			return nil
 		}
@@ -55,8 +55,8 @@ func (r rangeFeedUpdaterConf) wait(ctx context.Context) error {
 	}
 }
 
-// getRefresh returns the refresh interval for the rangefeed updater.
-func (r rangeFeedUpdaterConf) getRefresh() time.Duration {
+// GetRefresh returns the refresh interval for the rangefeed updater.
+func (r rangeFeedUpdaterConf) GetRefresh() time.Duration {
 	refresh := RangeFeedRefreshInterval.Get(&r.settings.SV)
 	if refresh <= 0 {
 		refresh = closedts.SideTransportCloseInterval.Get(&r.settings.SV)
@@ -64,9 +64,9 @@ func (r rangeFeedUpdaterConf) getRefresh() time.Duration {
 	return refresh
 }
 
-// getSmear returns the smear interval for the rangefeed updater.
-func (r rangeFeedUpdaterConf) getSmear() time.Duration {
-	refresh := r.getRefresh()
+// GetSmear returns the smear interval for the rangefeed updater.
+func (r rangeFeedUpdaterConf) GetSmear() time.Duration {
+	refresh := r.GetRefresh()
 	smear := RangeFeedSmearInterval.Get(&r.settings.SV)
 	if smear <= 0 || smear > refresh {
 		smear = refresh
