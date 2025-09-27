@@ -2315,6 +2315,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	if err != nil {
 		return err // err could be io.EOF
 	}
+	fmt.Println(cmd)
 
 	// Special handling for COMMIT/ROLLBACK in PL/pgSQL stored procedures. See the
 	// makeCmdForStoredProcResume comment for details.
