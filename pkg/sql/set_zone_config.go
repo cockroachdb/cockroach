@@ -233,6 +233,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
 type setZoneConfigRun struct {
 	numAffected int
+	done        bool
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -792,11 +793,18 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	return nil
 }
 
-func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
-func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
-func (*setZoneConfigNode) Close(context.Context)          {}
+// Next implements the planNode interface.
+func (n *setZoneConfigNode) Next(_ runParams) (bool, error) {
+	return !n.run.done, nil
+}
 
-func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
+// Values implements the planNode interface.
+func (n *setZoneConfigNode) Values() tree.Datums {
+	n.run.done = true
+	return tree.Datums{tree.NewDInt(tree.DInt(n.run.numAffected))}
+}
+
+func (*setZoneConfigNode) Close(context.Context) {}
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
 type regionsGetter func(context.Context) (*serverpb.RegionsResponse, error)

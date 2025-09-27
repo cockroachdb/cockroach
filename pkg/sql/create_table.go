@@ -570,7 +570,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			ti := tableInserterPool.Get().(*tableInserter)
 			*ti = tableInserter{ri: ri}
 			defer func() {
-				ti.close(params.ctx)
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
