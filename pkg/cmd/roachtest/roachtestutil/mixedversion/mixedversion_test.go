@@ -41,7 +41,8 @@ var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"24.1": clusterupgrade.MustParseVersion("v23.2.4"),
 	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
 	"24.3": clusterupgrade.MustParseVersion("v24.2.2"),
-	"25.2": clusterupgrade.MustParseVersion("v24.3.0"),
+	"25.1": clusterupgrade.MustParseVersion("v24.3.0"),
+	"25.2": clusterupgrade.MustParseVersion("v25.1.3"),
 }
 
 //go:embed testdata/test_releases.yaml
@@ -134,15 +135,20 @@ func Test_assertValidTest(t *testing.T) {
 	}
 
 	// Validating number of upgrades specified by the test.
-	mvt := newTest(MinUpgrades(10))
-	assertValidTest(mvt, fatalFunc())
-	require.Error(t, fatalErr)
-	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (4) must be greater than minUpgrades (10)")
+	func() {
+		// We need to bump test build version to allow for 5 upgrades wrt MinBootstrapSupportedVersion
+		defer withTestBuildVersion("v25.1.0")()
 
-	mvt = newTest(MaxUpgrades(0))
+		mvt := newTest(MinUpgrades(5))
+		assertValidTest(mvt, fatalFunc())
+		require.Error(t, fatalErr)
+		require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (4) must be >= minUpgrades (5)")
+	}()
+
+	mvt := newTest(MaxUpgrades(0))
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
-	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (0) must be greater than minUpgrades (1)")
+	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (0) must be >= minUpgrades (1)")
 
 	// Validating minimum supported version.
 	defer withTestBuildVersion("v23.1.2")()
@@ -222,7 +228,7 @@ func Test_assertValidTest(t *testing.T) {
 	assertValidTest(mvt, fatalFunc())
 	require.Error(t, fatalErr)
 	require.Equal(t,
-		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v21.2.0) does not allow for min 10 upgrades`,
+		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v21.2.0) does not allow for min 10 upgrades to v23.1.2, max is 3`,
 		fatalErr.Error(),
 	)
 
@@ -268,7 +274,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 		{
 			name:             "predecessor history is filtered for ARM architectures",
 			arch:             vm.ArchARM64,
-			numUpgrades:      6,
+			numUpgrades:      5,
 			expectedReleases: []string{"22.2.14", "23.1.17", "23.2.4", "24.1.1", "24.2.2"},
 		},
 		{
@@ -290,12 +296,13 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 
 			mvt := newTest(opts...)
-			mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 				return testPredecessorMapping[v.Series()], tc.predecessorErr
 			}
 			mvt._arch = &tc.arch
 
-			releases, err := mvt.chooseUpgradePath()
+			assertValidTest(mvt, t.Fatal)
+			releases, err := mvt.chooseUpgradePath(mvt.numUpgrades(), mvt.prng.Float64() < mvt.options.skipVersionProbability)
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 				var expectedVersions []*clusterupgrade.Version
@@ -313,13 +320,13 @@ func Test_choosePreviousReleases(t *testing.T) {
 }
 
 func TestTest_plan(t *testing.T) {
-	// Assert that planning failures are owned by test-eng. At the time
-	// of writing, planning can only return an error if we fail to find
-	// a required predecessor of a certain release.
-	mvt := newTest(NumUpgrades(100))
+	// Assert that planning failures are owned by test-eng.
+	mvt := newTest(MaxNumPlanSteps(2))
+	assertValidTest(mvt, t.Fatal)
 	_, err := mvt.plan()
+	// There is no feasible plan with a maximum number of 2 steps
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no known predecessor for")
+	require.Contains(t, err.Error(), "unable to generate a test plan")
 
 	var errWithOwnership registry.ErrorWithOwnership
 	require.True(t,
@@ -334,6 +341,7 @@ func Test_randomPredecessor(t *testing.T) {
 		name                string
 		v                   string
 		minSupported        string
+		minBootstrap        string
 		expectedPredecessor string
 		expectedError       string
 	}{
@@ -341,6 +349,13 @@ func Test_randomPredecessor(t *testing.T) {
 			name:                "minSupported is from a different release series as predecessor",
 			v:                   "v23.2.0",
 			minSupported:        "v24.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported and minBootstrap are from a different release series as predecessor",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			minBootstrap:        "v23.2.0",
 			expectedPredecessor: "v23.1.15",
 		},
 		{
@@ -353,7 +368,21 @@ func Test_randomPredecessor(t *testing.T) {
 			name:                "minSupported is same release series as predecessor and patch is not 0",
 			v:                   "v23.2.0",
 			minSupported:        "v23.1.8",
-			expectedPredecessor: "v23.1.23",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported is same release series as predecessor, but patch is 0 and minBootstrap is older release series",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.0",
+			minBootstrap:        "v22.1.1",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minSupported is same release series as predecessor and patch is not 0 and minBootstrap is older release series",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.8",
+			minBootstrap:        "v22.1.1",
+			expectedPredecessor: "v23.1.15",
 		},
 		{
 			name:                "latest predecessor is pre-release, but minimum supported is also the same version",
@@ -367,6 +396,27 @@ func Test_randomPredecessor(t *testing.T) {
 			minSupported:  "v24.2.0",
 			expectedError: "latest release for 24.2 (v24.2.0-beta.1) is not sufficient for minimum supported version (v24.2.0)",
 		},
+		{
+			name:                "minBootstrap is same release series as predecessor, but patch is 0",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			minBootstrap:        "v23.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minBootstrap is same release series as predecessor and patch is not 0",
+			v:                   "v23.2.0",
+			minSupported:        "v24.1.0",
+			minBootstrap:        "v23.1.8",
+			expectedPredecessor: "v23.1.15",
+		},
+		{
+			name:                "minBootstrap and minSupported are same release series as predecessor and patch is not 0",
+			v:                   "v23.2.0",
+			minSupported:        "v23.1.15",
+			minBootstrap:        "v23.1.0",
+			expectedPredecessor: "v23.1.15",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -374,11 +424,19 @@ func Test_randomPredecessor(t *testing.T) {
 			var pred *clusterupgrade.Version
 			var err error
 			_ = release.WithReleaseData(testReleaseData, func() error {
-				pred, err = randomPredecessor(
-					newRand(),
-					clusterupgrade.MustParseVersion(tc.v),
-					clusterupgrade.MustParseVersion(tc.minSupported),
-				)
+				var minBootstrap *clusterupgrade.Version
+				if tc.minBootstrap != "" {
+					minBootstrap = clusterupgrade.MustParseVersion(tc.minBootstrap)
+				}
+				v := clusterupgrade.MustParseVersion(tc.v)
+				// N.B. `expectedPredecessor` is dependent on the seed, hence we must reuse rng in `maybeClampMsbMsv`.
+				// Otherwise, the patch versions may differ from the expected.
+				rng := newRand()
+				pred, err = randomPredecessor(rng, v)
+				if err != nil {
+					return err
+				}
+				pred, err = maybeClampMsbMsv(rng, pred, minBootstrap, clusterupgrade.MustParseVersion(tc.minSupported))
 
 				return err
 			})
@@ -404,6 +462,9 @@ func withTestBuildVersion(v string) func() {
 }
 
 func TestSupportsSkipUpgradeTo(t *testing.T) {
+	mvt := newTest()
+	prev := clusterupgrade.MustParseVersion("24.2.1")
+
 	expect := func(verStr string, expected bool) {
 		t.Helper()
 		v := clusterupgrade.MustParseVersion(verStr)
@@ -414,7 +475,7 @@ func TestSupportsSkipUpgradeTo(t *testing.T) {
 			// min supported version separately from the current version.
 			expected = len(clusterversion.SupportedPreviousReleases()) > 1
 		}
-		require.Equal(t, expected, supportsSkipUpgradeTo(v))
+		require.Equal(t, expected, mvt.supportsSkipUpgradeTo(prev, v))
 	}
 	for _, v := range []string{"v24.3.0", "v24.3.0-beta.1", "v25.2.1", "v25.2.0-rc.1"} {
 		expect(v, true)
