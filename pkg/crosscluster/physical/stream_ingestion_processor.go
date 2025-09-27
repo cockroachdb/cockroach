@@ -396,8 +396,10 @@ func newStreamIngestionDataProcessor(
 //
 // Start implements the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
-	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
-	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
+	tags := logtags.BuildBuffer()
+	tags.Add("job", sip.spec.JobID)
+	tags.Add("proc", sip.ProcessorID)
+	ctx = logtags.AddTags(ctx, tags.Finish())
 	log.Dev.Infof(ctx, "starting ingest proc")
 	sip.agg = tracing.TracingAggregatorForContext(ctx)
 

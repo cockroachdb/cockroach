@@ -100,9 +100,11 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error
 	// if this method is called again.
-	ctx = logtags.AddTag(ctx, "id", s.streamID)
-	ctx = logtags.AddTag(ctx, "dst-node", s.spec.ConsumerNode)
-	ctx = logtags.AddTag(ctx, "dst-proc", s.spec.ConsumerProc)
+	tags := logtags.BuildBuffer()
+	tags.Add("id", s.streamID)
+	tags.Add("dst-node", s.spec.ConsumerNode)
+	tags.Add("dst-proc", s.spec.ConsumerProc)
+	ctx = logtags.AddTags(ctx, tags.Finish())
 	if s.errCh != nil {
 		return errors.AssertionFailedf("expected to be started once")
 	}

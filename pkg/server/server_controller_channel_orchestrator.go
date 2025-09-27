@@ -223,8 +223,10 @@ func (o *channelOrchestrator) startControlledServer(
 	// stopper will have its own tracer which is incompatible with the
 	// tracer attached to the incoming context.
 	tenantCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
-	tenantCtx = logtags.AddTag(tenantCtx, "tenant-orchestration", nil)
-	tenantCtx = logtags.AddTag(tenantCtx, "tenant", tenantName)
+	tags := logtags.BuildBuffer()
+	tags.Add("tenant-orchestration", nil)
+	tags.Add("tenant", tenantName)
+	tenantCtx = logtags.AddTags(tenantCtx, tags.Finish())
 
 	// ctlStopper is a stopper uniquely responsible for the control
 	// loop. It is separate from the tenantStopper defined below so

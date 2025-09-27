@@ -393,11 +393,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if len(stmt.QueryTags) > 0 {
-		tags := &logtags.Buffer{}
+		tags := logtags.BuildBuffer()
 		for _, tag := range stmt.QueryTags {
-			tags = tags.Add("querytag-"+tag.Key, tag.Value)
+			tags.Add("querytag-"+tag.Key, tag.Value)
 		}
-		ctx = logtags.AddTags(ctx, tags)
+		ctx = logtags.AddTags(ctx, tags.Finish())
 	}
 
 	var queryTimeoutTicker *time.Timer
