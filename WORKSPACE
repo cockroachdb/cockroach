@@ -641,8 +641,8 @@ load("//build:pgo.bzl", "pgo_profile")
 
 pgo_profile(
     name = "pgo_profile",
-    sha256 = "57414977040f9ed887a4e2b0434ca97f0047229928d8456a25acb3e08b4a71f2",
-    url = "https://storage.googleapis.com/cockroach-profiles/20250616172238-909ceb6ada01354d34416f1087fc256a066daa17.pb.gz",
+    sha256 = "7500eeeecba8edc9d25fd65b178568e7c543b50b3ef3ffc5e6e13af186ae2023",
+    url = "https://storage.googleapis.com/cockroach-profiles/20250926213937-4c6b4ce4dd320a7aa835757ed60f295f6e7c692c.pb.gz",
 )
 
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
@@ -659,7 +659,6 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-
         "linux_amd64": ("go1.23.12fips.linux-amd64.tar.gz", "9c58fd7137b4c9d387a5c37fd2e728bc5d39357c7f8ba3358bcae513704c2983"),
     },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250818-202337/{}"],
