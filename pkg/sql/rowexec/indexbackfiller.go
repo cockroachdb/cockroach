@@ -342,6 +342,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 		var vectorInputEntry rowenc.IndexEntry
 		for indexBatch := range indexEntryCh {
+			addedToVectorIndex := false
 			for _, indexEntry := range indexBatch.indexEntries {
 				// Pace the admission control before processing each index entry.
 				if err := pacer.Pace(ctx); err != nil {
@@ -359,6 +360,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 					if err != nil {
 						return ib.wrapDupError(ctx, err)
 					} else if isVectorIndex {
+						addedToVectorIndex = true
 						continue
 					}
 				}
@@ -374,6 +376,12 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			mu.Lock()
 			mu.addedSpans = append(mu.addedSpans, indexBatch.completedSpan)
 			mu.Unlock()
+			// Vector indexes don't add to the bulk adder and take a long time to add
+			// entries, so flush progress manually after every indexBatch is processed
+			// that contained vector index entries.
+			if addedToVectorIndex {
+				flushAddedSpans(kvpb.BulkOpSummary{})
+			}
 
 			// After the index KVs have been copied to the underlying BulkAdder, we can
 			// free the memory which was accounted when building the index entries of the
@@ -403,14 +411,6 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 	if err := g.Wait(); err != nil {
 		return err
-	}
-
-	// If there are only vector indexes, we push the completed spans manually so that
-	// progress reporting works.
-	// TODO(mw5h): this is a hack to get progress reporting to work for vector only
-	// backfills. We should remove this once we have a more permanent solution.
-	if ib.VectorOnly {
-		flushAddedSpans(kvpb.BulkOpSummary{})
 	}
 	if err := adder.Flush(ctx); err != nil {
 		return ib.wrapDupError(ctx, err)
