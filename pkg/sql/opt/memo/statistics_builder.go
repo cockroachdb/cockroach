@@ -3749,7 +3749,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 	//  "unapplied conjuncts" and account for their selectivity in
 	//  selectivityFromUnappliedConjuncts.
 	prefix := c.Prefix(sb.ctx, sb.evalCtx)
-	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n && i <= prefix; i++ {
+	for i, n := 0, c.ConstrainedColumnCount(); i < n && i <= prefix; i++ {
 		col := c.Columns.Get(i).ID()
 		constrainedCols.Add(col)
 		if i < applied {
