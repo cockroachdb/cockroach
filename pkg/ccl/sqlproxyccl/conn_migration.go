@@ -127,7 +127,7 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // error).
 //
 // TransferConnection implements the balancer.ConnectionHandle interface.
-func (f *forwarder) TransferConnection() (retErr error) {
+func (f *forwarder) TransferConnection(transferCtx context.Context) (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
 	// return right away.
 	if f.ctx.Err() != nil {
@@ -146,7 +146,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 	// whenever the context expires. We have to close the forwarder because
 	// the transfer may be blocked on I/O, and the only way for now is to close
 	// the connections. This then allow TransferConnection to return and cleanup.
-	ctx, cancel := newTransferContext(f.ctx)
+	ctx, cancel := newTransferContext(transferCtx)
 	defer cancel()
 
 	// Use a separate handler for timeouts. This is the only way to handle

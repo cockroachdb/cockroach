@@ -2023,7 +2023,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		var nonRetriableErrSeen bool
 		err := testutils.SucceedsSoonError(func() error {
-			err := f.TransferConnection()
+			err := f.TransferConnection(ctx)
 			if err == nil {
 				return nil
 			}
@@ -2120,7 +2120,7 @@ func TestConnectionMigration(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for subCtx.Err() == nil {
-					_ = f.TransferConnection()
+					_ = f.TransferConnection(ctx)
 					time.Sleep(100 * time.Millisecond)
 				}
 			}()
@@ -2167,7 +2167,7 @@ func TestConnectionMigration(t *testing.T) {
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 				// Run multiple times to ensure that connection isn't closed.
 				for i := 0; i < 5; {
-					err := f.TransferConnection()
+					err := f.TransferConnection(ctx)
 					if err == nil {
 						return errors.New("no error")
 					}
@@ -2223,7 +2223,7 @@ func TestConnectionMigration(t *testing.T) {
 			lookupAddrDelayDuration = 10 * time.Second
 			defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
 
-			err := f.TransferConnection()
+			err := f.TransferConnection(ctx)
 			require.Error(t, err)
 			require.Regexp(t, "injected delays", err.Error())
 			require.Equal(t, initAddr, queryAddr(tCtx, t, db))
@@ -2319,7 +2319,7 @@ func TestConnectionMigration(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		// This should be an error because the transfer timed out. Connection
 		// should automatically be closed.
-		require.Error(t, f.TransferConnection())
+		require.Error(t, f.TransferConnection(ctx))
 
 		select {
 		case <-time.After(10 * time.Second):
