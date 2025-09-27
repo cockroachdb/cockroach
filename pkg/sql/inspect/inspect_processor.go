@@ -190,10 +190,24 @@ func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) inspectLog
 func (p *inspectProcessor) processSpan(
 	ctx context.Context, span roachpb.Span, workerIndex int,
 ) (err error) {
-	checks := make([]inspectCheck, len(p.checkFactories))
-	for i, factory := range p.checkFactories {
-		checks[i] = factory()
+	// Only create checks that apply to this span
+	var checks []inspectCheck
+	for _, factory := range p.checkFactories {
+		check := factory()
+		applies, err := check.AppliesTo(p.cfg.Codec, span)
+		if err != nil {
+			return err
+		}
+		if applies {
+			checks = append(checks, check)
+		}
 	}
+
+	// If no checks apply to this span, there's nothing to do
+	if len(checks) == 0 {
+		return nil
+	}
+
 	runner := inspectRunner{
 		checks: checks,
 		logger: p.logger,
@@ -263,8 +277,10 @@ func buildInspectCheckFactories(
 		case jobspb.InspectCheckIndexConsistency:
 			checkFactories = append(checkFactories, func() inspectCheck {
 				return &indexConsistencyCheck{
+					indexConsistencyCheckApplicability: indexConsistencyCheckApplicability{
+						tableID: tableID,
+					},
 					flowCtx: flowCtx,
-					tableID: tableID,
 					indexID: indexID,
 					asOf:    spec.InspectDetails.AsOf,
 				}
