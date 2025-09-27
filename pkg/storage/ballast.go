@@ -83,20 +83,18 @@ func IsDiskFull(fs vfs.FS, spec base.StoreSpec) (bool, error) {
 // BallastSizeBytes returns 1GiB or 1% of total capacity, whichever is
 // smaller.
 func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
-	if spec.BallastSize != nil {
-		v := spec.BallastSize.Bytes
-		if spec.BallastSize.Percent != 0 {
-			v = int64(float64(diskUsage.TotalBytes) * spec.BallastSize.Percent / 100)
+	if spec.BallastSize.IsSet() {
+		if spec.BallastSize.IsBytes() {
+			return spec.BallastSize.Bytes()
 		}
-		return v
+		return int64(float64(diskUsage.TotalBytes) * spec.BallastSize.Percent() * 0.01)
 	}
 
 	// Default to a 1% or 1GiB ballast, whichever is smaller.
-	var v int64 = 1 << 30 // 1 GiB
-	if p := int64(float64(diskUsage.TotalBytes) * 0.01); v > p {
-		v = p
-	}
-	return v
+	return min(
+		1<<30, // 1 GiB
+		int64(diskUsage.TotalBytes/100),
+	)
 }
 
 // SecondaryCacheBytes returns the desired size of the secondary cache, calculated
@@ -105,11 +103,13 @@ func BallastSizeBytes(spec base.StoreSpec, diskUsage vfs.DiskUsage) int64 {
 // capacity), that size is used. A zero value for cacheSize results in no
 // secondary cache.
 func SecondaryCacheBytes(cacheSize storageconfig.Size, diskUsage vfs.DiskUsage) int64 {
-	v := cacheSize.Bytes
-	if cacheSize.Percent != 0 {
-		v = int64(float64(diskUsage.TotalBytes) * cacheSize.Percent / 100)
+	if !cacheSize.IsSet() {
+		return 0
 	}
-	return v
+	if cacheSize.IsBytes() {
+		return cacheSize.Bytes()
+	}
+	return int64(float64(diskUsage.TotalBytes) * cacheSize.Percent() * 0.01)
 }
 
 func maybeEstablishBallast(

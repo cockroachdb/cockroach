@@ -252,7 +252,7 @@ func TestPebbleEncryption(t *testing.T) {
 			ctx,
 			base.StoreSpec{
 				InMemory:          true,
-				Size:              storageconfig.Size{Bytes: 512 << 20},
+				Size:              storageconfig.BytesSize(512 << 20),
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -304,7 +304,7 @@ func TestPebbleEncryption(t *testing.T) {
 			ctx,
 			base.StoreSpec{
 				InMemory:          true,
-				Size:              storageconfig.Size{Bytes: 512 << 20},
+				Size:              storageconfig.BytesSize(512 << 20),
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},
@@ -395,7 +395,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			ctx,
 			base.StoreSpec{
 				InMemory:          true,
-				Size:              storageconfig.Size{Bytes: 512 << 20},
+				Size:              storageconfig.BytesSize(512 << 20),
 				EncryptionOptions: encOptions,
 				StickyVFSID:       stickyVFSID,
 			},

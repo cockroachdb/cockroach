@@ -92,53 +92,53 @@ target_file_size=2097152`
 		{"path=/mnt/hda1,attrs=hdd,attrs=ssd", "attrs field was used twice in store definition", StoreSpec{}},
 
 		// size
-		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 671088640}}},
-		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 20000000000}}},
-		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 21474836480}}},
-		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 109951162777}}},
-		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 109951162777}}},
-		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 123000000000000}}},
-		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Bytes: 135239930216448}}},
+		{"path=/mnt/hda1,size=671088640", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(671088640)}},
+		{"path=/mnt/hda1,size=20GB", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(20000000000)}},
+		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(21474836480)}},
+		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(109951162778)}},
+		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(109951162778)}},
+		{"path=/mnt/hda1,size=123TB", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(123000000000000)}},
+		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.BytesSize(135239930216448)}},
 		// %
-		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50.5}}},
-		{"path=/mnt/hda1,size=100%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 100}}},
-		{"path=/mnt/hda1,size=1%", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,size=0.999999%", "size (0.999999%) must be between 1% and 100%", StoreSpec{}},
-		{"path=/mnt/hda1,size=100.0001%", "size (100.0001%) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(50.5)}},
+		{"path=/mnt/hda1,size=100%", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(100)}},
+		{"path=/mnt/hda1,size=1%", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(1)}},
+		{"path=/mnt/hda1,size=0.999999%", "store size (0.999999%) must be at least 1%", StoreSpec{}},
+		{"path=/mnt/hda1,size=100.0001%", "size (100.0001%) must be between 0% and 100%", StoreSpec{}},
 		// 0.xxx
-		{"path=/mnt/hda1,size=0.99", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 99}}},
-		{"path=/mnt/hda1,size=0.5000000", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50}}},
-		{"path=/mnt/hda1,size=0.01", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,size=0.009999", "size (0.009999) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=0.99", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(99)}},
+		{"path=/mnt/hda1,size=0.5000000", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(50)}},
+		{"path=/mnt/hda1,size=0.01", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(1)}},
+		{"path=/mnt/hda1,size=0.009999", "store size (0.9999%) must be at least 1%", StoreSpec{}},
 		// .xxx
-		{"path=/mnt/hda1,size=.999", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 99.9}}},
-		{"path=/mnt/hda1,size=.5000000", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 50}}},
-		{"path=/mnt/hda1,size=.01", "", StoreSpec{Path: "/mnt/hda1", Size: SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,size=.009999", "size (.009999) must be between 1% and 100%", StoreSpec{}},
+		{"path=/mnt/hda1,size=.999", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(99.9)}},
+		{"path=/mnt/hda1,size=.5000000", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(50)}},
+		{"path=/mnt/hda1,size=.01", "", StoreSpec{Path: "/mnt/hda1", Size: storageconfig.PercentSize(1)}},
+		{"path=/mnt/hda1,size=.009999", "store size (0.9999%) must be at least 1%", StoreSpec{}},
 		// errors
-		{"path=/mnt/hda1,size=0", "size (0) must be at least 640 MiB", StoreSpec{}},
-		{"path=/mnt/hda1,size=abc", "could not parse size (abc): strconv.ParseFloat: parsing \"\": invalid syntax", StoreSpec{}},
+		{"path=/mnt/hda1,size=0", "store size (0 B) must be at least 640 MiB", StoreSpec{}},
+		{"path=/mnt/hda1,size=abc", "could not parse size (abc): cannot parse number from \"abc\"", StoreSpec{}},
 		{"path=/mnt/hda1,size=", "no value specified for size", StoreSpec{}},
 		{"size=20GiB,path=/mnt/hda1,size=20GiB", "size field was used twice in store definition", StoreSpec{}},
 		{"size=123TB", "no path specified", StoreSpec{}},
 
 		// ballast size
-		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Bytes: 671088640}}},
-		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Bytes: 20000000000}}},
-		{"path=/mnt/hda1,ballast-size=1%", "", StoreSpec{Path: "/mnt/hda1", BallastSize: &SizeSpec{Percent: 1}}},
-		{"path=/mnt/hda1,ballast-size=100.000%", "ballast: size (100.000%) must be between 0% and 50%", StoreSpec{}},
+		{"path=/mnt/hda1,ballast-size=671088640", "", StoreSpec{Path: "/mnt/hda1", BallastSize: storageconfig.BytesSize(671088640)}},
+		{"path=/mnt/hda1,ballast-size=20GB", "", StoreSpec{Path: "/mnt/hda1", BallastSize: storageconfig.BytesSize(20000000000)}},
+		{"path=/mnt/hda1,ballast-size=1%", "", StoreSpec{Path: "/mnt/hda1", BallastSize: storageconfig.PercentSize(1)}},
+		{"path=/mnt/hda1,ballast-size=100.000%", "ballast size (100%) must be at most 50%", StoreSpec{}},
 		{"ballast-size=20GiB,path=/mnt/hda1,ballast-size=20GiB", "ballast-size field was used twice in store definition", StoreSpec{}},
 
 		// type
-		{"type=mem,size=20GiB", "", StoreSpec{Size: SizeSpec{Bytes: 21474836480}, InMemory: true}},
-		{"size=20GiB,type=mem", "", StoreSpec{Size: SizeSpec{Bytes: 21474836480}, InMemory: true}},
-		{"size=20.5GiB,type=mem", "", StoreSpec{Size: SizeSpec{Bytes: 22011707392}, InMemory: true}},
+		{"type=mem,size=20GiB", "", StoreSpec{Size: storageconfig.BytesSize(21474836480), InMemory: true}},
+		{"size=20GiB,type=mem", "", StoreSpec{Size: storageconfig.BytesSize(21474836480), InMemory: true}},
+		{"size=20.5GiB,type=mem", "", StoreSpec{Size: storageconfig.BytesSize(22011707392), InMemory: true}},
 		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{
-			Size:       SizeSpec{Bytes: 21474836480},
+			Size:       storageconfig.BytesSize(21474836480),
 			InMemory:   true,
 			Attributes: []string{"mem"},
 		}},
-		{"type=mem,size=20", "size (20) must be at least 640 MiB", StoreSpec{}},
+		{"type=mem,size=20", "store size (20 B) must be at least 640 MiB", StoreSpec{}},
 		{"type=mem,size=", "no value specified for size", StoreSpec{}},
 		{"type=mem,attrs=ssd", "size must be specified for an in memory store", StoreSpec{}},
 		{"path=/mnt/hda1,type=mem", "path specified for in memory store", StoreSpec{}},
@@ -148,9 +148,9 @@ target_file_size=2097152`
 		// provisioned rate
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB/s", "",
 			StoreSpec{Path: "/mnt/hda1", ProvisionedRate: storageconfig.ProvisionedRate{ProvisionedBandwidth: 200 << 20}}},
-		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB", "provisioned-rate field does not have bandwidth sub-field 200MiB ending in /s", StoreSpec{}},
-		{"path=/mnt/hda1,provisioned-rate=200MiB/s", "provisioned-rate field has invalid value 200MiB/s", StoreSpec{}},
-		{"path=/mnt/hda1,provisioned-rate=bandwidth=0B/s", "provisioned-rate field is trying to set bandwidth to 0", StoreSpec{}},
+		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB", "provisioned-rate has invalid bandwidth value \"200MiB\"", StoreSpec{}},
+		{"path=/mnt/hda1,provisioned-rate=200MiB/s", "provisioned-rate has invalid value \"200MiB/s\"", StoreSpec{}},
+		{"path=/mnt/hda1,provisioned-rate=bandwidth=0B/s", "provisioned-rate has invalid bandwidth value \"0B/s\"", StoreSpec{}},
 
 		// Pebble
 		{"path=/,pebble=[Options] l0_compaction_threshold=2 l0_stop_writes_threshold=10", "", StoreSpec{Path: "/",
@@ -161,11 +161,11 @@ target_file_size=2097152`
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
 			Path:       "/mnt/hda1",
-			Size:       SizeSpec{Bytes: 21474836480},
+			Size:       storageconfig.BytesSize(21474836480),
 			Attributes: []string{"hdd", "ssd"},
 		}},
 		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{
-			Size:       SizeSpec{Bytes: 21474836480},
+			Size:       storageconfig.BytesSize(21474836480),
 			InMemory:   true,
 			Attributes: []string{"hdd", "ssd"},
 		}},
@@ -204,7 +204,7 @@ target_file_size=2097152`
 		storeSpecString := base.StoreSpecCmdLineString(storeSpec)
 		storeSpec2, err := base.NewStoreSpec(storeSpecString)
 		if err != nil {
-			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
+			t.Errorf("%d(%s): error parsing String() result: %s\n%s", i, testCase.value, err, storeSpecString)
 			continue
 		}
 		// Compare strings to deal with floats not matching exactly.
@@ -217,9 +217,6 @@ target_file_size=2097152`
 
 // StoreSpec aliases base.StoreSpec for convenience.
 type StoreSpec = base.StoreSpec
-
-// Size aliases storageconfig.Size for convenience.
-type SizeSpec = storageconfig.Size
 
 func TestStoreSpecListPreventedStartupMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -9,21 +9,127 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/crlib/crhumanize"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
+	"gopkg.in/yaml.v3"
 )
 
-// Size is used to specify an on-disk size in bytes, either as an absolute
-// value or as a percentage of the total disk capacity.
+// Size is used to specify an on-disk size in bytes, either as an absolute value
+// or as a percentage of the total disk capacity. The zero value indicates an
+// unset size (different from a size of 0 bytes).
 type Size struct {
-	// Bytes is an absolute value in bytes.
-	// At most one of Bytes and Percent can be non-zero.
-	Bytes int64
-	// Percent is a relative value as a percentage of the total disk capacity.
-	// At most one of Bytes and Percent can be non-zero.
-	Percent float64
+	kind sizeKind
+	// bytes is an absolute value in bytes. Can only be set with kind ==
+	// bytesSize. At most one of Bytes and Percent can be non-zero.
+	bytes int64
+	// percent is a relative value as a percentage of the total disk capacity. Can
+	// only be set with kind == percentSize.
+	percent float64
+}
+
+type sizeKind int8
+
+const (
+	bytesSize sizeKind = 1 + iota
+	percentSize
+)
+
+// BytesSize returns a Size that is set to an absolute value in bytes.
+func BytesSize(bytes int64) Size {
+	return Size{kind: bytesSize, bytes: bytes}
+}
+
+// PercentSize returns a Size that is set to a percentage value.
+func PercentSize(percent float64) Size {
+	return Size{kind: percentSize, percent: percent}
+}
+
+// IsSet returns true if the size is set.
+func (s Size) IsSet() bool {
+	return s.kind != 0
+}
+
+// IsBytes returns true if the size is set to an absolute bytes value.
+func (s Size) IsBytes() bool {
+	return s.kind == bytesSize
+}
+
+// Bytes returns the absolute bytes value; can only be used if IsBytes() is
+// true.
+func (s Size) Bytes() int64 {
+	if !s.IsBytes() {
+		panic("size is not absolute")
+	}
+	return s.bytes
+}
+
+// IsPercent returns true if the size is set to a percentage value.
+func (s Size) IsPercent() bool {
+	return s.kind == percentSize
+}
+
+// Percent returns the percentage value; can only be used if IsPercent() is
+// true.
+func (s Size) Percent() float64 {
+	if !s.IsPercent() {
+		panic("size is not a percent")
+	}
+	return s.percent
+}
+
+// Calculate returns the size in bytes. The total value is used if the size is
+// set as a percentage. If the size is not set, 0 is returned.
+func (s Size) Calculate(total int64) int64 {
+	switch {
+	case s.IsBytes():
+		return s.Bytes()
+	case s.IsPercent():
+		return int64(float64(total) * s.Percent() * 0.01)
+	default:
+		return 0
+	}
+}
+
+func (s Size) SafeFormat(p redact.SafePrinter, verb rune) {
+	switch {
+	case s.IsBytes():
+		p.SafeString(redact.SafeString(crhumanize.Bytes(s.Bytes(), crhumanize.Exact)))
+	case s.IsPercent():
+		p.SafeString(redact.SafeString(humanize.Ftoa(s.Percent()) + "%"))
+	default:
+		p.SafeString("n/a")
+	}
+}
+
+func (s Size) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+var _ yaml.IsZeroer = Size{}
+var _ yaml.Marshaler = Size{}
+var _ yaml.Unmarshaler = (*Size)(nil)
+
+// IsZero implements yaml.IsZeroer. It returns true if s is the zero value, i.e.
+// the size is not set. This should not be used directly, as it is confusing (in
+// that it returns false for sizes set to 0B or 0%).
+func (s Size) IsZero() bool {
+	return !s.IsSet()
+}
+
+func (s Size) MarshalYAML() (interface{}, error) {
+	return s.String(), nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (s *Size) UnmarshalYAML(value *yaml.Node) error {
+	parsed, err := ParseSizeSpec(value.Value)
+	if err != nil {
+		return err
+	}
+	*s = parsed
+	return nil
 }
 
 // fractionRegex is the regular expression that recognizes whether
@@ -40,27 +146,13 @@ type Size struct {
 // a separate check.
 var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\.[0-9]*)?%))$`)
 
-// SizeSpecConstraints describes acceptable values when parsing a Size
-// value. The zero struct value is valid and means that there are no
-// constraints.
-type SizeSpecConstraints struct {
-	// MinBytes is the minimum acceptable size in bytes when an absolute bytes
-	// value is used.
-	MinBytes int64
-	// MinPercent is the minimum acceptable relative size when a percentage value
-	// is used.
-	MinPercent float64
-	// MaxPercent is the maximum acceptable relative size when a percentage value
-	// is used. If 0, there is no limit (up to 100%).
-	MaxPercent float64
-}
-
 // ParseSizeSpec parses a string into a Size. The string contains one of:
 //   - an absolute bytes value, possibly humanized; e.g. "10000", "100MiB".
 //   - a percentage value (relative to the total disk capacity); e.g. "10%".
 //   - a fractional value which is converted to a percentage; e.g. "0.1" is
 //     equivalent to "10%".
-func ParseSizeSpec(value string, constraints SizeSpecConstraints) (Size, error) {
+//   - if the string is "n/a", the returned Size is unset.
+func ParseSizeSpec(value string) (Size, error) {
 	if fractionRegex.MatchString(value) {
 		percentFactor := 100.0
 		factorValue := value
@@ -73,27 +165,15 @@ func ParseSizeSpec(value string, constraints SizeSpecConstraints) (Size, error) 
 		if err != nil {
 			return Size{}, errors.Wrapf(err, "could not parse size (%s)", redact.Safe(value))
 		}
-		minPercent := constraints.MinPercent
-		maxPercent := constraints.MaxPercent
-		if maxPercent == 0 {
-			maxPercent = 100.0
+		if percent < 0 || percent > 100 {
+			return Size{}, errors.Newf("size (%s) must be between 0%% and 100%%", redact.Safe(value))
 		}
-		if percent < minPercent || percent > maxPercent {
-			return Size{}, errors.Newf(
-				"size (%s) must be between %s%% and %s%%",
-				redact.Safe(value), humanize.Ftoa(minPercent), humanize.Ftoa(maxPercent),
-			)
-		}
-		return Size{Percent: percent}, nil
+		return PercentSize(percent), nil
 	}
 
-	bytes, err := humanizeutil.ParseBytes(value)
+	bytes, err := crhumanize.ParseBytes[int64](value)
 	if err != nil {
 		return Size{}, errors.Wrapf(err, "could not parse size (%s)", redact.Safe(value))
 	}
-	if bytes < constraints.MinBytes {
-		return Size{}, errors.Newf("size (%s) must be at least %s",
-			redact.Safe(value), humanizeutil.IBytes(constraints.MinBytes))
-	}
-	return Size{Bytes: bytes}, nil
+	return BytesSize(bytes), nil
 }
