@@ -460,6 +460,8 @@ func GetRoleHasAllPrivilegesOnTargetObject(
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas
 	case privilege.Routines:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions
+	case privilege.Databases:
+		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnDatabases
 	default:
 		panic(fmt.Sprintf("unknown target object %s", targetObject))
 	}
@@ -568,6 +570,8 @@ func setRoleHasAllOnTargetObject(
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas = roleHasAll
 	case privilege.Routines:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnFunctions = roleHasAll
+	case privilege.Databases:
+		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnDatabases = roleHasAll
 	default:
 		panic(fmt.Sprintf("unknown target object %s", targetObject))
 	}
