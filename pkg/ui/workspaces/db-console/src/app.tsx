@@ -66,6 +66,7 @@ import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 import Certificates from "src/views/reports/containers/certificates";
 import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
+import DiagnosticsHistoryPage from "src/views/reports/containers/diagnosticsHistoryPage";
 import EnqueueRange from "src/views/reports/containers/enqueueRange";
 import HotRanges from "src/views/reports/containers/hotranges";
 import Localities from "src/views/reports/containers/localities";
@@ -75,7 +76,6 @@ import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
-import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import Stores from "src/views/reports/containers/stores";
 import ScheduleDetails from "src/views/schedules/scheduleDetails";
 import SchedulesPage from "src/views/schedules/schedulesPage";
@@ -467,8 +467,14 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         />
                         <Route
                           exact
-                          path={`/reports/statements/diagnosticshistory`}
-                          component={StatementsDiagnosticsHistoryView}
+                          path={`/reports/diagnosticshistory`}
+                          component={DiagnosticsHistoryPage}
+                        />
+                        {/* Redirect old statement diagnostics route to new tabbed page */}
+                        <Redirect
+                          exact
+                          from={`/reports/statements/diagnosticshistory`}
+                          to={`/reports/diagnosticshistory?tab=Statements`}
                         />
                         {/* hot ranges */}
                         <Route

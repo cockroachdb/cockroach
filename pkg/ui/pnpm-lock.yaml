@@ -699,6 +699,9 @@ importers:
       reselect:
         specifier: ^4.0.0
         version: 4.0.0
+      swr:
+        specifier: 2.2.5
+        version: 2.2.5(react@16.12.0)
       uplot:
         specifier: ^1.6.19
         version: 1.6.19
