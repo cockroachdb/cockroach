@@ -660,11 +660,35 @@ For example:
 			if decodeKeyOptions.userKey {
 				fmt.Println(roachpb.Key(b))
 			} else {
-				k, err := storage.DecodeMVCCKey(b)
-				if err != nil {
-					return err
+				// Try to decode as an EngineKey first to determine the key type.
+				engineKey, ok := storage.DecodeEngineKey(b)
+				if ok {
+					if engineKey.IsLockTableKey() {
+						// Decode as a lock table key.
+						lockKey, err := engineKey.ToLockTableKey()
+						if err != nil {
+							return err
+						}
+						fmt.Println(lockKey)
+					} else if engineKey.IsMVCCKey() {
+						// Decode as an MVCC key.
+						mvccKey, err := engineKey.ToMVCCKey()
+						if err != nil {
+							return err
+						}
+						fmt.Println(mvccKey)
+					} else {
+						// Print the engine key as-is.
+						fmt.Println(engineKey)
+					}
+				} else {
+					// Fall back to trying MVCC key decoding for backwards compatibility.
+					k, err := storage.DecodeMVCCKey(b)
+					if err != nil {
+						return err
+					}
+					fmt.Println(k)
 				}
-				fmt.Println(k)
 			}
 		}
 		return nil
