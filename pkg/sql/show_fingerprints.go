@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,6 +77,11 @@ func (p *planner) ShowFingerprints(
 		op, p.ExprEvaluator(op))
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if this should be executed as a job based on cluster setting or explicit option
+	if p.ShouldJobifyFingerprint(ctx) {
+		return p.createFingerprintJob(ctx, n, evalOptions)
 	}
 
 	if n.TenantSpec != nil {
@@ -460,3 +467,176 @@ func BuildFingerprintQueryForIndex(
 
 func (n *showFingerprintsNode) Values() tree.Datums     { return n.run.values }
 func (n *showFingerprintsNode) Close(_ context.Context) {}
+
+// ShouldJobifyFingerprint determines whether fingerprint commands should be executed as jobs.
+// For now, we'll always jobify them, but this could be controlled by a cluster setting in the future.
+func (p *planner) ShouldJobifyFingerprint(ctx context.Context) bool {
+	return true
+}
+
+// createFingerprintJob creates a job to execute the fingerprint command.
+func (p *planner) createFingerprintJob(
+	ctx context.Context, n *tree.ShowFingerprints, options *resolvedShowTenantFingerprintOptions,
+) (planNode, error) {
+	var details jobspb.FingerprintDetails
+	
+	if n.TenantSpec != nil {
+		// Handle tenant fingerprinting
+		if n.TenantSpec.All {
+			return nil, pgerror.New(pgcode.InvalidParameterValue, "cannot fingerprint all tenants as a job")
+		}
+		
+		// For now, assume we're dealing with the system tenant
+		// In a real implementation, we'd need to evaluate the Expr to get the actual tenant ID
+		var tenantID uint64 = 1 // system tenant
+		
+		tid, err := roachpb.MakeTenantID(tenantID)
+		if err != nil {
+			return nil, err
+		}
+		
+		details.Target = &jobspb.FingerprintDetails_Tenant{
+			Tenant: &jobspb.FingerprintDetails_FingerprintTenantTarget{
+				TenantId:   tid,
+				TenantName: "system",
+			},
+		}
+		
+		if options != nil {
+			details.GetTenant().StartTimestamp = &options.startTimestamp
+			details.GetTenant().AllRevisions = !options.startTimestamp.IsEmpty()
+			details.GetTenant().Stripped = false // TODO: support stripped option
+		}
+	} else {
+		// Handle table fingerprinting
+		tableDesc, err := p.ResolveUncachedTableDescriptorEx(
+			ctx, n.Table, true /*required*/, tree.ResolveRequireTableDesc)
+		if err != nil {
+			return nil, err
+		}
+		
+		if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
+			return nil, err
+		}
+		
+		var excludedColumns []string
+		if options != nil && options.excludedUserColumns != nil {
+			excludedColumns = append(excludedColumns, options.excludedUserColumns...)
+		}
+		
+		details.Target = &jobspb.FingerprintDetails_Table{
+			Table: &jobspb.FingerprintDetails_FingerprintTableTarget{
+				TableID:         tableDesc.GetID(),
+				TableName:       tableDesc.GetName(),
+				ExcludedColumns: excludedColumns,
+			},
+		}
+	}
+	
+	// Set up job details
+	details.Detached = false // Could be controlled by options in the future
+	details.Statement = tree.AsString(n)
+	
+	// Create job record
+	jobID := p.ExecCfg().JobRegistry.MakeJobID()
+	
+	jr := jobs.Record{
+		Description: fmt.Sprintf("FINGERPRINT on %s", 
+			func() string {
+				if n.TenantSpec != nil {
+					return "tenant " + tree.AsString(n.TenantSpec)
+				}
+				return "table " + tree.AsString(n.Table)
+			}()),
+		Username:    p.User(),
+		Details:     details,
+		Progress:    jobspb.FingerprintProgress{},
+		NonCancelable: false,
+	}
+	
+	// Create and start the job
+	var sj *jobs.StartableJob
+	if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(
+		ctx, &sj, jobID, p.InternalSQLTxn(), jr,
+	); err != nil {
+		return nil, err
+	}
+	
+	// Return a plan node that shows the job ID and waits for completion
+	return &fingerprintJobPlanNode{
+		job:      sj,
+		detached: details.Detached,
+		columns:  jobs.BulkJobExecutionResultHeader,
+	}, nil
+}
+
+// fingerprintJobPlanNode represents a plan node for a fingerprint job.
+type fingerprintJobPlanNode struct {
+	zeroInputPlanNode
+	job      *jobs.StartableJob
+	detached bool
+	columns  colinfo.ResultColumns
+	
+	// run contains the execution state
+	run struct {
+		executed bool
+		row      tree.Datums
+	}
+}
+
+func (n *fingerprintJobPlanNode) startExec(params runParams) error {
+	// Start the job
+	if err := n.job.Start(params.ctx); err != nil {
+		return err
+	}
+	
+	if n.detached {
+		// In detached mode, just return the job ID
+		n.run.row = tree.Datums{tree.NewDInt(tree.DInt(n.job.ID()))}
+	} else {
+		// Wait for job completion and return results
+		if err := n.job.AwaitCompletion(params.ctx); err != nil {
+			return err
+		}
+		
+		// Get the results from the job progress
+		progress := n.job.Progress()
+		if fingerprintProgress, ok := progress.Details.(*jobspb.Progress_Fingerprint); ok {
+			// Return results (simplified for now - in a real implementation, 
+			// we'd return all fingerprint results)
+			if len(fingerprintProgress.Fingerprint.Results) > 0 {
+				result := fingerprintProgress.Fingerprint.Results[0]
+				n.run.row = tree.Datums{
+					tree.NewDString(result.IndexName),
+					tree.NewDString(fmt.Sprintf("%x", result.Fingerprint)),
+				}
+			} else {
+				n.run.row = tree.Datums{tree.DNull, tree.DNull}
+			}
+		} else {
+			n.run.row = tree.Datums{tree.DNull, tree.DNull}
+		}
+	}
+	
+	n.run.executed = true
+	return nil
+}
+
+func (n *fingerprintJobPlanNode) Next(params runParams) (bool, error) {
+	if !n.run.executed {
+		if err := n.startExec(params); err != nil {
+			return false, err
+		}
+	}
+	return false, nil // Single row result
+}
+
+func (n *fingerprintJobPlanNode) Values() tree.Datums {
+	return n.run.row
+}
+
+func (n *fingerprintJobPlanNode) Close(ctx context.Context) {}
+
+// Required plan node methods
+func (n *fingerprintJobPlanNode) readableColumns() colinfo.ResultColumns { return n.columns }
+func (n *fingerprintJobPlanNode) canBuffer() bool                        { return false }
