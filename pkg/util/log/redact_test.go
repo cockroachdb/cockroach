@@ -43,7 +43,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	sysIDPayload := testIDPayload{tenantID: "1"}
 	ctx = serverident.ContextWithServerIdentification(ctx, sysIDPayload)
 
-	Errorf(ctx, "test1 %v end", "hello")
+	Dev.Errorf(ctx, "test1 %v end", "hello")
 	if contains(redactableIndicator, t) {
 		t.Errorf("expected no marker indicator, got %q", contents())
 	}
@@ -54,14 +54,14 @@ func TestRedactedLogOutput(t *testing.T) {
 	// markers are disabled.
 	resetCaptured()
 
-	Errorf(ctx, "test2 %v end", startRedactable+"hello"+endRedactable)
+	Dev.Errorf(ctx, "test2 %v end", startRedactable+"hello"+endRedactable)
 	if !contains("test2 ?hello? end", t) {
 		t.Errorf("expected escaped markers, got %q", contents())
 	}
 
 	resetCaptured()
 	_ = TestingSetRedactable(true)
-	Errorf(ctx, "test3 %v end", "hello")
+	Dev.Errorf(ctx, "test3 %v end", "hello")
 	if !contains(redactableIndicator+" [T1] 3  test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
@@ -71,7 +71,7 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	// Verify that safe parts of errors don't get enclosed in redaction markers
 	resetCaptured()
-	Errorf(ctx, "test3e %v end",
+	Dev.Errorf(ctx, "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world"))) // nolint:errwrap
 	if !contains(redactableIndicator+" [T1] 4  test3e", t) {
@@ -85,7 +85,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
-	Errorf(ctx, "test4 %v end", specialString)
+	Dev.Errorf(ctx, "test4 %v end", specialString)
 	if contains(specialString, t) {
 		t.Errorf("expected markers to be removed, got %q", contents())
 	}
@@ -170,7 +170,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			s.Rotate(t)
 
 			// Emit the message of interest for this test.
-			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
+			Dev.Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
 			debugSink := debugLog.getFileSink()
@@ -223,7 +223,7 @@ func TestDefaultRedactable(t *testing.T) {
 
 	// Check redaction markers in the output.
 	defer capture()()
-	Infof(context.Background(), "safe %s", "unsafe")
+	Dev.Infof(context.Background(), "safe %s", "unsafe")
 
 	if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
 		t.Errorf("expected marked data, got %q", contents())
@@ -235,7 +235,7 @@ func TestDefaultRedactable(t *testing.T) {
 
 		// when "default safe" redaction is enabled, we need to explicitly
 		// mark the unsafe arg as unsafe.
-		Infof(context.Background(), "safe %s", encoding.Unsafe("unsafe"))
+		Dev.Infof(context.Background(), "safe %s", encoding.Unsafe("unsafe"))
 		if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
 			t.Errorf("expected marked data, got %q", contents())
 		}
@@ -328,7 +328,7 @@ func TestDefaultSafeRedaction(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			defer capture()()
-			Infof(context.Background(), "%v", tc.args)
+			Dev.Infof(context.Background(), "%v", tc.args)
 
 			messages := []string{} // there might be more than one log line. Collect all the messages
 			for _, line := range strings.Split(strings.TrimSpace(contents()), "\n") {
@@ -358,10 +358,10 @@ func BenchmarkDefaultSafeRedaction(b *testing.B) {
 	defer capture()()
 
 	printLogLines := func() {
-		Info(context.Background(), "safe")
-		Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
-		Infof(context.Background(), "%s", sampleSafe{a: "safe"})
-		Infof(
+		Dev.Info(context.Background(), "safe")
+		Dev.Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
+		Dev.Infof(context.Background(), "%s", sampleSafe{a: "safe"})
+		Dev.Infof(
 			context.Background(), "%s %s",
 			sampleWithUnsafe{a: "safe", b: "unsafe"}, sampleSafe{a: "safe"},
 		)

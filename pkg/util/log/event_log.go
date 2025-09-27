@@ -53,7 +53,7 @@ func RegisterEventLogWriter(
 		if buildutil.CrdbTestBuild {
 			panic("Structured event writer registry not set, cannot register writer")
 		}
-		Errorf(ctx, "Structured event writer registry not set, cannot register writer for serverId: %v", serverId.GetServerIdentificationPayload())
+		Dev.Errorf(ctx, "Structured event writer registry not set, cannot register writer for serverId: %v", serverId.GetServerIdentificationPayload())
 		return
 	}
 
@@ -67,7 +67,7 @@ func RemoveEventLogWriter(serverId serverident.ServerIdentifier) {
 		if buildutil.CrdbTestBuild {
 			panic("Structured event writer registry not set, cannot remove writer")
 		}
-		Errorf(context.Background(), "Structured event writer registry not set, cannot remove writer for serverId: %v", serverId.GetServerIdentificationPayload())
+		Dev.Errorf(context.Background(), "Structured event writer registry not set, cannot remove writer for serverId: %v", serverId.GetServerIdentificationPayload())
 		return
 	}
 
@@ -116,7 +116,7 @@ func EventLog(
 		if buildutil.CrdbTestBuild {
 			panic(fmt.Sprintf("couldn't find a registered writer for serverId: %+v", id.GetServerIdentificationPayload()))
 		}
-		VWarningf(context.Background(), 2, "couldn't find a registered writer for serverId: %+v", id.GetServerIdentificationPayload())
+		Dev.VWarningf(context.Background(), 2, "couldn't find a registered writer for serverId: %+v", id.GetServerIdentificationPayload())
 	}
 	options := defaultSEventOptions
 	for _, opt := range o {

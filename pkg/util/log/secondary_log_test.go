@@ -60,10 +60,10 @@ func TestSecondaryLog(t *testing.T) {
 	ctx := context.Background()
 
 	// Interleave some messages.
-	Infof(context.Background(), "test1")
+	Dev.Infof(context.Background(), "test1")
 	ctx = logtags.AddTag(ctx, "hello", "world")
 	Sessions.Infof(ctx, "story time")
-	Infof(context.Background(), "test2")
+	Dev.Infof(context.Background(), "test2")
 
 	// Make sure the content made it to disk.
 	FlushFiles()
