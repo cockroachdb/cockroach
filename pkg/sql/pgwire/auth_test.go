@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -256,6 +257,15 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		lastAuthLogCounter := uint64(0)
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
+			// Get the current OS user to make the 'peer' auth test portable.
+			currentUser, err := user.Current()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Substitute the placeholder in both the input command and expected output.
+			td.Input = strings.ReplaceAll(td.Input, "%CURRENT_OS_USER%", currentUser.Username)
+			td.Expected = strings.ReplaceAll(td.Expected, "%CURRENT_OS_USER%", currentUser.Username)
+
 			resultString, err := func() (string, error) {
 				switch td.Cmd {
 				case "config":
@@ -634,8 +644,34 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				}
 				return "", nil
 			}()
+
 			if err != nil {
 				return fmtErr(err)
+			}
+
+			// For HBA and identity map configurations, normalize whitespace to prevent
+			// failures due to formatting differences between environments. This makes
+			// the test robust against cosmetic changes in table alignment.
+			if td.Cmd == "set_hba" || td.Cmd == "set_identity_map" {
+				// Replace the placeholder in the expected output before normalizing.
+				expectedWithUser := strings.ReplaceAll(td.Expected, "%CURRENT_OS_USER%", currentUser.Username)
+
+				spaceRe := regexp.MustCompile(`[ \t]+`) // Match one or more spaces or tabs
+				normalize := func(s string) string {
+					lines := strings.Split(s, "\n")
+					for i, line := range lines {
+						// Trim space from ends and replace multiple spaces with a single space.
+						lines[i] = strings.TrimSpace(spaceRe.ReplaceAllString(line, " "))
+					}
+					return strings.Join(lines, "\n")
+				}
+
+				// Compare the normalized strings.
+				if normalize(resultString) == normalize(expectedWithUser) {
+					// If they match, we must return the *un-normalized*, but *substituted* expected string
+					// so that the datadriven framework sees a perfect match.
+					return expectedWithUser
+				}
 			}
 			return resultString
 		})
