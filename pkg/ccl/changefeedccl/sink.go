@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/url"
 	"runtime"
@@ -384,6 +385,7 @@ func (s errorWrapperSink) EmitRow(
 	alloc kvevent.Alloc,
 	headers rowHeaders,
 ) error {
+	fmt.Printf("EmitRow key: %s, value: %s\n", key, value)
 	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}

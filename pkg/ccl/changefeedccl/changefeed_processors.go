@@ -205,6 +205,8 @@ func newChangeAggregatorProcessor(
 ) (_ execinfra.Processor, retErr error) {
 	// Setup monitoring for this node drain.
 	drainWatcher, drainDone := makeDrainWatcher(flowCtx)
+	fmt.Printf("newChangeAggregatorProcessor\n")
+
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changeagg-mem"))
 	ca := &changeAggregator{
 		spec:              spec,
