@@ -336,3 +336,37 @@ func SimulateMultiRegionCluster(
 
 	return cleanupFunc, nil
 }
+
+// ToMarkdownTable renders a 2D list of strings as a Markdown table. Assumes
+// header is the first entry.
+//
+// Example:
+//
+//	| Name    | Age | City          |
+//	| ---     | --- | ---           |
+//	| Alice   | 30  | New York      |
+//	| Bob     | 25  | San Francisco |
+//	| Charlie | 35  | Chicago       |
+func ToMarkdownTable(data [][]string) (string, error) {
+	if len(data) == 0 || len(data[0]) == 0 {
+		return "", errors.New("empty table data")
+	}
+	var sb strings.Builder
+	// Write header row
+	sb.WriteString("| " + strings.Join(data[0], " | ") + " |\n")
+	// Write separator row (--- under each header)
+	separators := make([]string, len(data[0]))
+	for i := range separators {
+		separators[i] = "---"
+	}
+	sb.WriteString("| " + strings.Join(separators, " | ") + " |\n")
+	// Write remaining rows
+	for _, row := range data[1:] {
+		if len(data[0]) != len(row) {
+			return "", errors.Errorf("row %d has %d columns, expected %d",
+				len(data)-1, len(row), len(data[0]))
+		}
+		sb.WriteString("| " + strings.Join(row, " | ") + " |\n")
+	}
+	return sb.String(), nil
+}
