@@ -7,7 +7,7 @@ Cluster Set Up
 	n6(AU_EAST,AU_EAST_1,8vcpu): {s6:(256GiB)}
 	n7(AU_EAST,AU_EAST_1,8vcpu): {s7:(256GiB)}
 Key Space
-	[0,10000): 7(rf=3), 0MiB, [s1:(10,3*),s2:(5,1*),s3:(2,0*),s4:(1,0*),s5:(0,0*),s6:(0,0*),s7:(0,0*)]
+	[0,10000): 7(rf=3), 0MiB, [s1:(7,4*),s2:(6,2*),s3:(3,0*),s4:(2,0*),s5:(1,0*),s6:(1,1*),s7:(1,0*)]
 Event
 	set LBRebalancingMode to 2
 Workload Set Up
