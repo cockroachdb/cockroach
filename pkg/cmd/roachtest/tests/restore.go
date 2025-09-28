@@ -825,6 +825,11 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 
 // getAOST gets the AOST to use in the restore cmd.
 func (rd *restoreDriver) getAOST(ctx context.Context) {
+	if rd.fixtureMetadata.FingerprintTime != "" {
+		rd.aost = rd.fixtureMetadata.FingerprintTime
+		rd.t.L().Printf("using AOST from fixture metadata: %s", rd.aost)
+		return
+	}
 	if !rd.sp.fullBackupOnly {
 		rd.aost = ""
 		return
