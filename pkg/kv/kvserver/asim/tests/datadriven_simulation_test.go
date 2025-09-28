@@ -190,6 +190,10 @@ func TestDataDriven(t *testing.T) {
 	testutils.RunValues(t, "mode", []string{"sma", "mma"}, func(t *testing.T, mode string) {
 		dir := datapathutils.TestDataPath(t, "non_rand", mode)
 		datadriven.Walk(t, dir, func(t *testing.T, path string) {
+			if mode == "mma" && !runAsimTests {
+				t.Logf("skipping %s: mode=mma and COCKROACH_RUN_ASIM_TESTS is not set", path)
+				t.SkipNow()
+			}
 			// The inline comment below is required for TestLint/TestTParallel.
 			// We use t.Cleanup to work around the issue this lint is trying to prevent.
 			t.Parallel() // SAFE FOR TESTING

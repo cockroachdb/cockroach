@@ -1,6 +1,3 @@
-skip_under_ci
-----
-
 gen_cluster nodes=10 node_cpu_rate_capacity=8000000000
 ----
 

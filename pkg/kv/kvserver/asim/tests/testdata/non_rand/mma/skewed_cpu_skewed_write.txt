@@ -1,6 +1,3 @@
-skip_under_ci
-----
-
 # This test can now roughly equalize both cpu and write bandwidth. It didn't
 # use to be able to do this, because the highest cpu node had the lowest write
 # bandwidth and vice versa, so neither was able to shed to the other. The

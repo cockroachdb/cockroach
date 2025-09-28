@@ -1,8 +1,4 @@
-skip_under_ci
-----
-
 # replication factor one, the first store gets all the reads (CPU usage), the second one gets writes.
-
 gen_cluster nodes=2 node_cpu_rate_capacity=1000000000
 ----
 
