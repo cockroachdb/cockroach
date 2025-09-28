@@ -1,4 +1,4 @@
-gen_cluster nodes=5 store_byte_capacity=10737418240
+gen_cluster nodes=5 store_byte_capacity_gib=10
 ----
 
 # Each range will be 500 MiB in size and the placement will be skewed, s.t.

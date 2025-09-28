@@ -4,7 +4,6 @@
 # ignoreLevel logic in rebalanceStores with the grace duration to start
 # shedding more aggressively and other related changes have made this much
 # better.
-
 gen_cluster nodes=6 node_cpu_rate_capacity=5000000000
 ----
 
