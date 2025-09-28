@@ -1,7 +1,7 @@
-# This test simulates identical parameters as the rebalance_load multi-store
-# test. The number of leases per store should be equal to 1. We assert on this
-# with a balance threshold of 1 (i.e. identical number of leases) and a steady
-# state threshold of 0 (i.e. doesn't change).
+# This test sets up a multi-store cluster.  We assert on this with a balance
+# threshold of 1 (i.e. identical number of leases) and a steady state threshold
+# of 0 (i.e. doesn't change). mma-only fails because it doesn't balance based on
+# lease.
 gen_cluster nodes=7 stores_per_node=2
 ----
 
@@ -19,6 +19,7 @@ assertion stat=leases type=steady ticks=6 exact_bound=0
 ----
 asserting: |leases(t)/mean_{T}(leases) - 1| = 0.00 ∀ t∈T and each store (T=last 6 ticks)
 
+# Assertion failed here since we don't balance based on lease.
 eval duration=5m seed=42 metrics=(leases) cfgs=(sma-count,mma-only)
 ----
 leases#1: first: [s1=8, s2=3, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=1, s10=0, s11=1, s12=0, s13=1, s14=0] (stddev=2.10, mean=1.00, sum=14)
