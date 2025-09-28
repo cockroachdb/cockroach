@@ -169,8 +169,9 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 // To run all tests and rewrite the testdata files as well as generate the
 // artifacts in `testdata/generated`, you can use:
-// ./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env
-// COCKROACH_ALWAYS_KEEP_TEST_LOGS=true */
+// ./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f
+// TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env
+// COCKROACH_ALWAYS_KEEP_TEST_LOGS=true
 func TestDataDriven(t *testing.T) {
 	skip.UnderDuressWithIssue(t, 149875)
 	leakTestAfter := leaktest.AfterTest(t)
@@ -184,6 +185,8 @@ func TestDataDriven(t *testing.T) {
 		scope.Close(t)
 		leakTestAfter()
 	})
+	defer setAllocatorDebugVModule(t)()
+
 	testutils.RunValues(t, "mode", []string{"sma", "mma"}, func(t *testing.T, mode string) {
 		dir := datapathutils.TestDataPath(t, "non_rand", mode)
 		datadriven.Walk(t, dir, func(t *testing.T, path string) {
@@ -734,4 +737,13 @@ func writeStateStrToFile(t *testing.T, topFile string, stateStr string, rewrite 
 	if rewrite {
 		require.NoError(t, os.WriteFile(topFile, []byte(stateStr), 0644))
 	}
+}
+
+func setAllocatorDebugVModule(t *testing.T) (reset func()) {
+	t.Helper()
+	old := log.GetVModule()
+	require.NoError(t, log.SetVModule(
+		"replicate_queue=5,store_rebalancer=5,lease_queue=5,split_queue=5,load=5,allocator=5,allocator_scorer=5,"+
+			"replica_command=5,allocator_state=5,cluster_state=5,allocator_sync=5"))
+	return func() { require.NoError(t, log.SetVModule(old)) }
 }
