@@ -226,7 +226,7 @@ func TestDataDriven(t *testing.T) {
 				case "gen_load":
 					var rwRatio, rate = 0.0, 0.0
 					var minBlock, maxBlock = 1, 1
-					var minKey, maxKey = int64(1), int64(defaultKeyspace)
+					var minKey, maxKey = int64(0), int64(defaultKeyspace)
 					var accessSkew, replace bool
 					var requestCPUPerAccess, raftCPUPerAccess int64
 

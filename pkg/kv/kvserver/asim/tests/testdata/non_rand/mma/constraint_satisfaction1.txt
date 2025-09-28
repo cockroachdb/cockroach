@@ -27,27 +27,27 @@ setting split_queue_enabled=false
 
 eval duration=40m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,leases,replicas)
 ----
-cpu#1: last:  [s1=1796346149, s2=1601160605, s3=1602033353, s4=499258, s5=499258, s6=499258, s7=0, s8=0, s9=0] (stddev=787270621.50, mean=555670875.67, sum=5001037881)
-cpu#1: thrash_pct: [s1=8%, s2=31%, s3=31%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=70%)
+cpu#1: last:  [s1=1796086264, s2=1600744281, s3=1601662625, s4=500698, s5=500698, s6=500698, s7=0, s8=0, s9=0] (stddev=787108599.15, mean=555555029.33, sum=4999995264)
+cpu#1: thrash_pct: [s1=8%, s2=31%, s3=30%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=69%)
 cpu_util#1: last:  [s1=0.36, s2=0.32, s3=0.32, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.16, mean=0.11, sum=1)
-cpu_util#1: thrash_pct: [s1=8%, s2=31%, s3=31%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=70%)
+cpu_util#1: thrash_pct: [s1=8%, s2=31%, s3=30%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=69%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
 leases#1: last:  [s1=36, s2=32, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.75, mean=11.11, sum=100)
 leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
 replicas#1: last:  [s1=68, s2=100, s3=32, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=44.56, mean=55.56, sum=500)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=0%)
-artifacts[mma-only]: 29c929f977fd070d
+artifacts[mma-only]: 32c4d0e86ebbff62
 ==========================
-cpu#1: last:  [s1=1802606817, s2=1648915941, s3=1549393753, s4=499874, s5=499874, s6=499874, s7=0, s8=0, s9=0] (stddev=787998438.38, mean=555824014.78, sum=5002416133)
-cpu#1: thrash_pct: [s1=16%, s2=25%, s3=36%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=77%)
-cpu_util#1: last:  [s1=0.36, s2=0.33, s3=0.31, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.16, mean=0.11, sum=1)
-cpu_util#1: thrash_pct: [s1=16%, s2=25%, s3=36%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=77%)
+cpu#1: last:  [s1=1797772834, s2=1603057018, s3=1601036239, s4=500329, s5=500329, s6=500329, s7=0, s8=0, s9=0] (stddev=787653090.58, mean=555929675.33, sum=5003367078)
+cpu#1: thrash_pct: [s1=12%, s2=20%, s3=37%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=70%)
+cpu_util#1: last:  [s1=0.36, s2=0.32, s3=0.32, s4=0.00, s5=0.00, s6=0.00, s7=0.00, s8=0.00, s9=0.00] (stddev=0.16, mean=0.11, sum=1)
+cpu_util#1: thrash_pct: [s1=12%, s2=20%, s3=37%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=70%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
-leases#1: last:  [s1=36, s2=33, s3=31, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.76, mean=11.11, sum=100)
-leases#1: thrash_pct: [s1=3%, s2=3%, s3=19%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=25%)
+leases#1: last:  [s1=36, s2=32, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.75, mean=11.11, sum=100)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=17%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=17%)
 replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
-replicas#1: last:  [s1=68, s2=68, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
-replicas#1: thrash_pct: [s1=10%, s2=10%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=21%)
-artifacts[mma-count]: 2da38cec42665e4e
+replicas#1: last:  [s1=67, s2=69, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
+replicas#1: thrash_pct: [s1=6%, s2=6%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%]  (sum=11%)
+artifacts[mma-count]: ddc8995dd1ef51f4
 ==========================

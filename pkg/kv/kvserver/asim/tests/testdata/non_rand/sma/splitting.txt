@@ -31,20 +31,20 @@ asserting: |replicas(t)/mean_{T}(replicas) - 1| = 0.00 ∀ t∈T and each store 
 eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
 ----
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
-replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#1: last:  [s1=7] (stddev=0.00, mean=7.00, sum=7)
 replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[sma-count]: 62ac1b2595570a64
+artifacts[sma-count]: 7852a87f3c8d2092
 ==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
-replicas#1: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
+replicas#1: last:  [s1=7] (stddev=0.00, mean=7.00, sum=7)
 replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[mma-only]: 62ac1b2595570a64
+artifacts[mma-only]: 7852a87f3c8d2092
 ==========================
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
@@ -63,7 +63,7 @@ replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[sma-count]: fcc6171fb20aaf96
+artifacts[sma-count]: 8073dfd29bf0465c
 ==========================
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
@@ -71,5 +71,5 @@ replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[mma-only]: fcc6171fb20aaf96
+artifacts[mma-only]: 8073dfd29bf0465c
 ==========================
