@@ -445,17 +445,19 @@ func (bd *backupDriver) queryJobStates(
 // fingerprintFixture computes fingerprints for the fixture as of the time of
 // its last incremental backup. It maps the fully qualified name of each table
 // to its fingerprint.
-func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]string {
+func (bd *backupDriver) fingerprintFixture(ctx context.Context, asOfTime string) map[string]string {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	return fingerprintDatabase(
-		bd.t, conn, bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
-	)
+		bd.t, conn, bd.sp.fixture.DatabaseName(), asOfTime)
 }
 
 // getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
 // backup in the fixture.
-func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
+func (bd *backupDriver) getLatestAOST(ctx context.Context) string {
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	sql := sqlutils.MakeSQLRunner(conn)
 	uri := bd.registry.URI(bd.fixture.DataPath)
 	query := fmt.Sprintf(
 		`SELECT end_time FROM
@@ -675,8 +677,9 @@ func registerBackupFixtures(r registry.Registry) {
 				stopWorkload()
 
 				if !bf.skipFingerprint {
-					fingerprint := bd.fingerprintFixture(ctx)
-					require.NoError(t, handle.SetFingerprint(ctx, fingerprint))
+					fingerprintTime := bd.getLatestAOST(ctx)
+					fingerprint := bd.fingerprintFixture(ctx, fingerprintTime)
+					require.NoError(t, handle.SetFingerprint(ctx, fingerprint, fingerprintTime))
 				}
 
 				require.NoError(t, handle.SetReadyAt(ctx))
