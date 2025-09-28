@@ -1,3 +1,8 @@
+# This test verifies that the allocator correctly handles disk fullness by
+#  shedding replicas from stores that exceed the storage capacity threshold. It
+# sets up a cluster where one store (s5) has significantly less capacity (100 GiB)
+# than others (512 GiB), causing it to hit the disk fullness threshold and
+# continuously shed replicas to maintain disk usage less than 95%.
 skip_under_ci
 ----
 
@@ -20,29 +25,29 @@ set_capacity store=5 capacity=107374182400
 # We will repeatedly hit the disk fullness threshold which causes shedding
 # replicas on store 5. We should see s5 hovering right around 92.5-95%
 # (the storage capacity threshold value).
-eval duration=30m seed=42 metrics=(replicas,disk_fraction_used) cfgs=(sma-count,mma-only,mma-count)
+eval duration=20m seed=42 metrics=(replicas,disk_fraction_used) cfgs=(sma-count,mma-only,mma-count)
 ----
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
-disk_fraction_used#1: last:  [s1=0.30, s2=0.30, s3=0.30, s4=0.31, s5=0.95] (stddev=0.26, mean=0.43, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=30%, s2=31%, s3=32%, s4=30%, s5=124%]  (sum=246%)
+disk_fraction_used#1: last:  [s1=0.27, s2=0.27, s3=0.27, s4=0.27, s5=0.92] (stddev=0.26, mean=0.40, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=19%, s2=20%, s3=20%, s4=19%, s5=74%]  (sum=153%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-replicas#1: last:  [s1=325, s2=324, s3=322, s4=329, s5=200] (stddev=50.05, mean=300.00, sum=1500)
-replicas#1: thrash_pct: [s1=227%, s2=237%, s3=240%, s4=228%, s5=91%]  (sum=1023%)
-artifacts[sma-count]: e501ccc056a9e929
+replicas#1: last:  [s1=324, s2=322, s3=323, s4=319, s5=212] (stddev=44.03, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=179%, s2=195%, s3=190%, s4=185%, s5=56%]  (sum=805%)
+artifacts[sma-count]: 6a137567c06e77bf
 ==========================
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
-disk_fraction_used#1: last:  [s1=0.31, s2=0.31, s3=0.31, s4=0.29, s5=0.91] (stddev=0.24, mean=0.43, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=2%, s2=1%, s3=1%, s4=0%, s5=67%]  (sum=71%)
+disk_fraction_used#1: last:  [s1=0.28, s2=0.28, s3=0.28, s4=0.26, s5=0.90] (stddev=0.25, mean=0.40, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=1%, s2=0%, s3=1%, s4=0%, s5=47%]  (sum=48%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-replicas#1: last:  [s1=331, s2=330, s3=331, s4=315, s5=193] (stddev=53.84, mean=300.00, sum=1500)
-replicas#1: thrash_pct: [s1=14%, s2=4%, s3=9%, s4=0%, s5=0%]  (sum=26%)
-artifacts[mma-only]: 2f2f9597d62f93d7
+replicas#1: last:  [s1=329, s2=330, s3=329, s4=305, s5=207] (stddev=47.45, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=4%, s2=0%, s3=6%, s4=0%, s5=0%]  (sum=11%)
+artifacts[mma-only]: 1487ef171680ff9f
 ==========================
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
-disk_fraction_used#1: last:  [s1=0.30, s2=0.30, s3=0.31, s4=0.30, s5=0.90] (stddev=0.24, mean=0.42, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=37%, s2=35%, s3=36%, s4=35%, s5=175%]  (sum=318%)
+disk_fraction_used#1: last:  [s1=0.27, s2=0.27, s3=0.27, s4=0.27, s5=0.92] (stddev=0.26, mean=0.40, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=23%, s2=23%, s3=24%, s4=24%, s5=129%]  (sum=223%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-replicas#1: last:  [s1=326, s2=328, s3=329, s4=326, s5=191] (stddev=54.51, mean=300.00, sum=1500)
-replicas#1: thrash_pct: [s1=277%, s2=263%, s3=272%, s4=260%, s5=176%]  (sum=1247%)
-artifacts[mma-count]: 3118ca7a9543fdd3
+replicas#1: last:  [s1=323, s2=323, s3=324, s4=317, s5=213] (stddev=43.57, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=220%, s2=220%, s3=236%, s4=231%, s5=171%]  (sum=1077%)
+artifacts[mma-count]: 4d36e982fd0dff3e
 ==========================

@@ -1,3 +1,8 @@
+# This test verifies load-based splitting behavior in a single-store cluster.
+# It tests both uniform and zipfian access patterns to ensure the split
+# algorithm works correctly under different load distributions. With a 10k QPS
+# load and 2.5k QPS split threshold, we expect approximately 4 splits for
+# uniform access and more splits for zipfian due to hotspotting.
 skip_under_ci
 ----
 

@@ -1,3 +1,5 @@
+# This test verifies that the allocator can rebalance qps load across a 7-node
+# cluster. mma-only fails here since it doesn't balance based on leases.
 skip_under_ci
 ----
 
@@ -16,18 +18,11 @@ gen_ranges ranges=7 placement_type=skewed
 gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 ----
 
-# Add two assertions, the first is a balance assertion. The balance assertion
-# requires that when simulation is evaluated that during last 6 ticks (60
-# seconds) the max/mean QPS of the cluster does not exceed 1.15.
+# Add two assertions (balanced, stable steady state) on QPS of the cluster.
 assertion stat=qps type=balance ticks=6 upper_bound=1.15
 ----
 asserting: max_{stores}(qps)/mean_{stores}(qps) ≤ 1.15 at each of last 6 ticks
 
-# The second is a steady state assertion. The steady state assertion requires
-# that during the last 6 ticks (60 seconds), the value of QPS per-store doesn't
-# increase or decrease by more than 5% of the mean. This type of assertion is
-# useful when a stat is balanced but not necessarily stable.
-#
 # TODO(tbg): at this point, six ticks is 3s, not 60s. Update assertion API
 # to take a duration, not ticks.
 assertion stat=qps type=steady ticks=6 upper_bound=0.05
@@ -39,7 +34,7 @@ asserting: |qps(t)/mean_{T}(qps) - 1| ≤ 0.05 ∀ t∈T and each store (T=last 
 # Following the evaluation, the samples are checked individually against the
 # existing assertions, added above. If any assertion fails, the reason is
 # printed. If no assertions fail, then OK is printed.
-eval duration=3m samples=2 seed=42 metrics=(qps,replica_moves) cfgs=(sma-count,mma-only)
+eval duration=3m samples=2 seed=42 metrics=(qps,replica_moves) cfgs=(sma-count,mma-only) full=true
 ----
 qps#1: last:  [s1=996, s2=1001, s3=999, s4=994, s5=1001, s6=1002, s7=1007] (stddev=3.93, mean=1000.00, sum=7000)
 qps#1: thrash_pct: [s1=12%, s2=9%, s3=4%, s4=8%, s5=5%, s6=6%, s7=4%]  (sum=48%)
@@ -73,10 +68,26 @@ failed assertion sample 2
 	max/mean=4.00 tick=4
 	max/mean=4.00 tick=5
 ==========================
+Cluster Set Up
+	n1(AU_EAST,AU_EAST_1,8vcpu): {s1:(256GiB)}
+	n2(AU_EAST,AU_EAST_1,8vcpu): {s2:(256GiB)}
+	n3(AU_EAST,AU_EAST_1,8vcpu): {s3:(256GiB)}
+	n4(AU_EAST,AU_EAST_1,8vcpu): {s4:(256GiB)}
+	n5(AU_EAST,AU_EAST_1,8vcpu): {s5:(256GiB)}
+	n6(AU_EAST,AU_EAST_1,8vcpu): {s6:(256GiB)}
+	n7(AU_EAST,AU_EAST_1,8vcpu): {s7:(256GiB)}
+Key Space
+	[0,10000): 7(rf=3), 0MiB, [s1:(7,4*),s2:(6,2*),s3:(3,0*),s4:(2,0*),s5:(1,0*),s6:(1,1*),s7:(1,0*)]
+Event
+	set LBRebalancingMode to 2
+Workload Set Up
+	[0,10000): 95%r large-block [128-256B/op, 7000ops/s]
+Changed Settings
+	empty
+==========================
 
-# The cluster settings and simulation variables can be modified to examine how
-# allocation behaves during uncommon scenarios. Update the gossip delay to be
-# unreasonably long (default 500ms).
+# Update the gossip delay to be unreasonably long (default 500ms) to assess
+# uncommon scenarios.
 setting gossip_delay=20s
 ----
 

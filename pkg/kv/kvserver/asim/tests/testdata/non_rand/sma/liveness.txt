@@ -1,3 +1,6 @@
+# This test verifies node liveness handling in a 7-node cluster with 700 ranges (RF=3).
+# Node 7 is dead initially, node 6 becomes decommissioning after 3 minutes.
+# Expected: Dead/decommissioning nodes lose all replicas and leases.
 skip_under_ci
 ----
 
