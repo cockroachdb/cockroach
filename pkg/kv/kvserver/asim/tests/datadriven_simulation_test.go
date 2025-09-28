@@ -608,7 +608,7 @@ func TestDataDriven(t *testing.T) {
 							_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
 							for sample, failString := range sampleAssertFailures {
 								if failString != "" {
-									_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
+									_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s\n",
 										sample+1, failString)
 								}
 							}
