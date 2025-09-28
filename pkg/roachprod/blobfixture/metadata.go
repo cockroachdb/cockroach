@@ -27,6 +27,9 @@ type FixtureMetadata struct {
 	// MetadataPath is the path to the metadata for this fixture in object storage.
 	MetadataPath string `json:"metadata_path"`
 
+	// AsOfTime is the aost used by the fingerprint command
+	AsOfTime string `json:"as_of_time"`
+
 	// CreatedAt is the time the fixture was created.
 	CreatedAt time.Time `json:"created_at"`
 
