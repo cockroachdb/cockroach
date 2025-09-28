@@ -702,6 +702,11 @@ func TestDataDriven(t *testing.T) {
 					dns = scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay) || dns
 					dns = scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold) || dns
 					dns = scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective) || dns
+					var snapshotRateMiB int
+					dns = scanIfExists(t, d, "rebalancing_snapshot_rate_mib", &snapshotRateMiB) || dns
+					if snapshotRateMiB != 0 {
+						settingsGen.Settings.RebalancingSnapshotRate = int64(snapshotRateMiB) << 20
+					}
 
 					var delay time.Duration
 					if scanIfExists(t, d, "delay", &delay) {
