@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -114,6 +115,30 @@ type streamState struct {
 type connTestingKnobs struct {
 	beforeSend         func(destNodeID roachpb.NodeID, msg *ctpb.Update)
 	sleepOnErrOverride time.Duration
+}
+
+// broadcastPacerConfig implements taskpacer.Config for pacing broadcast updates.
+type broadcastPacerConfig struct{}
+
+func (c broadcastPacerConfig) GetRefresh() time.Duration {
+	return 10 * time.Millisecond
+}
+
+func (c broadcastPacerConfig) GetSmear() time.Duration {
+	return 1 * time.Millisecond
+}
+
+// dynamicBroadcastPacerConfig implements taskpacer.Config using cluster settings.
+type dynamicBroadcastPacerConfig struct {
+	st *cluster.Settings
+}
+
+func (c *dynamicBroadcastPacerConfig) GetRefresh() time.Duration {
+	return closedts.SideTransportPacingRefreshInterval.Get(&c.st.SV)
+}
+
+func (c *dynamicBroadcastPacerConfig) GetSmear() time.Duration {
+	return 1 * time.Millisecond
 }
 
 // trackedRange contains the information that the side-transport last published
@@ -212,7 +237,7 @@ func newSenderWithConnFactory(
 		st:          st,
 		clock:       clock,
 		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		buf:         newUpdatesBuf(st),
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
@@ -236,6 +261,12 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 		}
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
+	// Set up callback for pacing refresh interval changes.
+	pacingConfChanged := func(ctx context.Context) {
+		s.buf.updatePacer(s.st)
+	}
+	closedts.SideTransportPacingRefreshInterval.SetOnChange(&s.st.SV, pacingConfChanged)
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
@@ -539,8 +570,34 @@ func (s *Sender) GetSnapshot() *ctpb.Update {
 type updatesBuf struct {
 	mu struct {
 		syncutil.Mutex
+
+		// pacer controls the timing of broadcast updates to avoid overloading the system.
+		pacer *taskpacer.Pacer
+
+		// We maintain two conditional variables to acheive this effect:
+		// Multiple goroutines can be waiting on one of the conditional variables,
+		// and when a new item is inserted, we signal the conditional variable that
+		// the goroutine were waiting on. And we can signal the conditional variable
+		// up to the number of waiters that we know are waiting on it.
+		// Iif we don't have another conditional variable, we could signal to a goroutine
+		// and it could wake up, send the message, and queue up again waiting on the same conditional variable.
+		// In that case, even if we signal the conditional variable N times, where N is the number of waiters when
+		// we published a new message, we might miss signaling some waiters.
+		// However, by having two conditional variables that are swapped atomically when we publish a new message, we know
+		// that no new goroutines will queue up on the old conditional variable while we are signaling it, because new
+		// goroutines will wait on the other conditional variable, which we will signal on the next interval.
+		//
 		// updated is signaled when a new item is inserted.
-		updated sync.Cond
+		updated1    sync.Cond
+		numWaiters1 uint64
+
+		// updated2 is signaled when a new item is inserted.
+		updated2    sync.Cond
+		numWaiters2 uint64
+
+		// firstWaiter controls which conditional variable to wait on.
+		firstWaiter bool
+
 		// data contains pointers to the Updates.
 		data []*ctpb.Update
 		// head points to the earliest update in the buffer. If the buffer is empty,
@@ -559,17 +616,52 @@ type updatesBuf struct {
 // little while and not have to send a snapshot when it resumes.
 const updatesBufSize = 50
 
-func newUpdatesBuf() *updatesBuf {
+func newUpdatesBuf(st *cluster.Settings) *updatesBuf {
 	buf := &updatesBuf{}
-	buf.mu.updated.L = &buf.mu
+	buf.mu.updated1.L = &buf.mu
+	buf.mu.updated2.L = &buf.mu
 	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
+	buf.mu.pacer = taskpacer.New(&dynamicBroadcastPacerConfig{st: st})
 	return buf
+}
+
+func (b *updatesBuf) TestingGetTotalNumWaiters() uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.mu.numWaiters1 + b.mu.numWaiters2
+}
+
+// updatePacer atomically replaces the task pacer with a new one using the current cluster settings.
+func (b *updatesBuf) updatePacer(st *cluster.Settings) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.pacer = taskpacer.New(&dynamicBroadcastPacerConfig{st: st})
 }
 
 // Push adds a new update to the back of the buffer.
 func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+
+	// The goal here is that we want to signal to all goroutines who were waiting
+	// for the next update. We know that the goroutine that we will signal to will
+	// wakeup, and then perform some work and wait again for the next update. We
+	// want to avoid the race condition where we can't differentiate between the
+	// goroutine that is waiting for the next update and the goroutine that was
+	// waiting, got woken up, performed some work, and then is waiting for the next
+	// update.
+	originalFirstWaiter := b.mu.firstWaiter
+	var condVar *sync.Cond
+	var numWaiters *uint64
+	if originalFirstWaiter {
+		condVar = &b.mu.updated1
+		numWaiters = &b.mu.numWaiters1
+	} else {
+		condVar = &b.mu.updated2
+		numWaiters = &b.mu.numWaiters2
+	}
+
+	// At this point, we know that any goroutine that we wake up will wait on the next conditional variable.
+	b.mu.firstWaiter = !b.mu.firstWaiter
 
 	// If the buffer is not empty, sanity check the seq num.
 	if b.sizeLocked() != 0 {
@@ -589,7 +681,42 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
-	b.mu.updated.Broadcast()
+	b.mu.Unlock()
+	b.PaceBroadcastUpdate(ctx, condVar, numWaiters)
+}
+
+// PaceBroadcastUpdate paces the conditional variable signaling to avoid overloading the system.
+func (b *updatesBuf) PaceBroadcastUpdate(
+	ctx context.Context, condVar *sync.Cond, numWaiters *uint64,
+) {
+	originalNumWaiters := int(*numWaiters)
+	if originalNumWaiters <= 0 {
+		return
+	}
+
+	// Get the current pacer (which uses the cluster setting).
+	b.mu.Lock()
+	pacer := b.mu.pacer
+	b.mu.Unlock()
+
+	pacer.StartTask(timeutil.Now())
+
+	workLeft := originalNumWaiters
+	for workLeft > 0 {
+		todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
+		b.mu.Lock()
+		for i := 0; i < todo && workLeft > 0; i++ {
+			log.KvExec.Infof(ctx, "signalling to a condvar")
+			condVar.Signal()
+			workLeft--
+		}
+		b.mu.Unlock()
+
+		if workLeft > 0 && timeutil.Now().Before(by) {
+			time.Sleep(by.Sub(timeutil.Now()))
+		}
+	}
 }
 
 func (b *updatesBuf) lastIdxLocked() int {
@@ -612,6 +739,24 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	originalFirstWaiter := b.mu.firstWaiter
+	var condVar *sync.Cond
+	var numWaiters *uint64
+
+	if originalFirstWaiter {
+		condVar = &b.mu.updated1
+		numWaiters = &b.mu.numWaiters1
+	} else {
+		condVar = &b.mu.updated2
+		numWaiters = &b.mu.numWaiters2
+	}
+
+	*numWaiters++
+	defer func() {
+		*numWaiters--
+		log.KvExec.Infof(ctx, "Done waiting for seqNum: %d", seqNum)
+	}()
+
 	// Loop until the requested seqNum is added to the buffer.
 	for {
 		if b.mu.closed {
@@ -630,7 +775,8 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 		}
 		// If the requested msg has not been produced yet, block.
 		if seqNum == lastSeq+1 {
-			b.mu.updated.Wait()
+			log.KvExec.Infof(ctx, "Waiting for seqNum: %d", seqNum)
+			condVar.Wait()
 			continue
 		}
 		if seqNum > lastSeq+1 {
@@ -666,7 +812,8 @@ func (b *updatesBuf) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.mu.closed = true
-	b.mu.updated.Broadcast()
+	b.mu.updated1.Broadcast()
+	b.mu.updated2.Broadcast()
 }
 
 // connFactory is capable of creating new connections to specific nodes.
