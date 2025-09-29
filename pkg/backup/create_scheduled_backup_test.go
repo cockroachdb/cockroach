@@ -148,24 +148,29 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 	h.sqlDB.Exec(t, "DELETE FROM system.scheduled_jobs WHERE true")
 }
 
-func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID jobspb.ScheduleID) {
-	t.Helper()
+func (h *testHelper) waitForScheduledJobState(
+	t *testing.T, scheduleID jobspb.ScheduleID, state jobs.State,
+) {
 	query := "SELECT status FROM " + h.env.SystemJobsTableName() +
 		" WHERE created_by_type=$1 AND created_by_id=$2 ORDER BY created DESC LIMIT 1"
 
 	testutils.SucceedsSoon(t, func() error {
-		// Force newly created job to be adopted and verify it succeeds.
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 		var status string
 		err := h.sqlDB.DB.QueryRowContext(context.Background(),
 			query, jobs.CreatedByScheduledJobs, scheduleID).Scan(&status)
 		if err != nil {
 			return err
-		} else if status != string(jobs.StateSucceeded) {
-			return errors.Newf("expected job to succeed; found %s", status)
+		} else if status != string(state) {
+			return errors.Newf("expected job in %s; found %s", state, status)
 		}
 		return nil
 	})
+}
+
+func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID jobspb.ScheduleID) {
+	t.Helper()
+	h.waitForScheduledJobState(t, scheduleID, jobs.StateSucceeded)
 }
 
 func (h *testHelper) waitForSuccessfulScheduledJobCount(
