@@ -1,5 +1,7 @@
 # LogicTest: cockroach-go-testserver-25.2
 
+subtest regression_152629
+
 # This test verifies that the "char" type is handled correctly in a mixed
 # version cluster. The reason it's being tested is because during 25.4
 # development we began removing the legacy code for serializing types in the
@@ -25,3 +27,48 @@ user root nodeidx=2
 
 statement ok
 insert into t values (ARRAY['abc'::STRING, ''::STRING], 'cat'::STRING);
+
+subtest end
+
+subtest regression_153322
+
+# This is a repro scenario for 153322. It involves the NAME data type, which is
+# a string type column type.
+
+# 1 is already upgraded but adding a redundant one here incase this subtest is
+# run in isolation.
+upgrade 1
+
+user root nodeidx=1
+
+# Create the function using the NAME data type in the upgraded version.
+statement ok
+CREATE FUNCTION test_name_func(p NAME) RETURNS TEXT LANGUAGE SQL AS 'SELECT p::TEXT'
+
+query T
+SELECT test_name_func('test_value')
+----
+test_value
+
+user root nodeidx=2
+
+# Attempt to access the function on the old non-upgraded versions. These had
+# previously failed to resolve the function.
+
+query T
+SELECT test_name_func('test_value')
+----
+test_value
+
+statement ok
+ALTER FUNCTION test_name_func(NAME) RENAME TO test_name_func_renamed
+
+query T
+SELECT test_name_func_renamed('renamed_test')
+----
+renamed_test
+
+statement ok
+DROP FUNCTION test_name_func_renamed(NAME);
+
+subtest end
