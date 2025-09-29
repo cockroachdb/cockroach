@@ -45,6 +45,14 @@ var (
 		10*time.Second,
 		settings.DurationWithMinimum(1*time.Millisecond),
 	)
+
+	checkpointInterval = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		"sql.inspect.checkpoint_interval",
+		"the amount of time between INSPECT job checkpoint updates",
+		30*time.Second,
+		settings.DurationWithMinimum(1*time.Millisecond),
+	)
 )
 
 type inspectCheckFactory func(asOf hlc.Timestamp) inspectCheck
@@ -224,11 +232,6 @@ func (p *inspectProcessor) processSpan(
 		}
 	}
 
-	// If no checks apply to this span, there's nothing to do
-	if len(checks) == 0 {
-		return nil
-	}
-
 	runner := inspectRunner{
 		checks: checks,
 		logger: p.logger,
@@ -262,6 +265,11 @@ func (p *inspectProcessor) processSpan(
 				return err
 			}
 		}
+	}
+
+	// Report span completion for checkpointing
+	if err := p.sendSpanCompletionProgress(ctx, output, span, false /* finished */); err != nil {
+		return err
 	}
 
 	return nil
@@ -303,6 +311,36 @@ func (p *inspectProcessor) getTimestampForSpan() hlc.Timestamp {
 		return p.clock.Now()
 	}
 	return p.spec.InspectDetails.AsOf
+}
+
+// sendSpanCompletionProgress sends progress indicating a span has been completed.
+// This is used for checkpointing to track which spans are done.
+func (p *inspectProcessor) sendSpanCompletionProgress(
+	ctx context.Context, output execinfra.RowReceiver, completedSpan roachpb.Span, finished bool,
+) error {
+	progressMsg := &jobspb.InspectProcessorProgress{
+		ChecksCompleted: 0, // No additional checks completed, just marking span done
+		Finished:        finished,
+	}
+
+	progressAny, err := pbtypes.MarshalAny(progressMsg)
+	if err != nil {
+		return errors.Wrapf(err, "unable to marshal inspect processor progress")
+	}
+
+	meta := &execinfrapb.ProducerMetadata{
+		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+			CompletedSpans:  []roachpb.Span{completedSpan}, // Mark this span as completed
+			ProgressDetails: *progressAny,
+			NodeID:          p.flowCtx.NodeID.SQLInstanceID(),
+			FlowID:          p.flowCtx.ID,
+			ProcessorID:     p.processorID,
+			Drained:         finished,
+		},
+	}
+
+	output.Push(nil, meta)
+	return nil
 }
 
 // newInspectProcessor constructs a new inspectProcessor from the given InspectSpec.

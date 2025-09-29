@@ -60,17 +60,23 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return err
 	}
 
-	// TODO(149460): add a goroutine that will replan the job on topology changes
-	plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, pkSpans)
-	if err != nil {
-		return err
-	}
-
-	progressTracker, cleanupProgress, err := c.setupProgressTracking(ctx, execCfg, pkSpans)
+	progressTracker, cleanupProgress, filteredSpans, err := c.setupProgressTrackingAndFilter(ctx, execCfg, pkSpans)
 	if err != nil {
 		return err
 	}
 	defer cleanupProgress()
+
+	// If all spans are completed, job is done
+	if len(filteredSpans) == 0 {
+		log.Dev.Infof(ctx, "All spans already completed, INSPECT job finished")
+		return nil
+	}
+
+	// TODO(149460): add a goroutine that will replan the job on topology changes
+	plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, filteredSpans)
+	if err != nil {
+		return err
+	}
 
 	if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
 		return err
@@ -202,7 +208,7 @@ func (c *inspectResumer) runInspectPlan(
 	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
 		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 			if meta.BulkProcessorProgress != nil {
-				return progressTracker.handleProcessorProgress(ctx, meta)
+				return progressTracker.handleProgressUpdate(ctx, meta)
 			}
 			return nil
 		})
@@ -228,43 +234,71 @@ func (c *inspectResumer) runInspectPlan(
 	return metadataCallbackWriter.Err()
 }
 
-// setupProgressTracking initializes and starts progress tracking for the INSPECT job.
-// It calculates the total number of applicable checks, initializes progress to 0%, and starts
-// the background update goroutine. Returns the progress tracker and cleanup function.
-func (c *inspectResumer) setupProgressTracking(
+// setupProgressTrackingAndFilter initializes progress tracking and returns
+// it, along with a cleanup function and the completed spans to filter.
+func (c *inspectResumer) setupProgressTrackingAndFilter(
 	ctx context.Context, execCfg *sql.ExecutorConfig, pkSpans []roachpb.Span,
-) (*inspectProgressTracker, func(), error) {
-	fractionInterval := fractionUpdateInterval.Get(&execCfg.Settings.SV)
-	details := c.job.Details().(jobspb.InspectDetails)
-
-	// Build applicability checkers for progress tracking
-	applicabilityCheckers, err := buildApplicabilityCheckers(details)
+) (*inspectProgressTracker, func(), []roachpb.Span, error) {
+	// Create and initialize the tracker. We use the completed spans from the job
+	// (if any) to filter out the spans we need to process in this run of the job.
+	progressTracker := newInspectProgressTracker(
+		c.job,
+		&execCfg.Settings.SV,
+		execCfg.InternalDB,
+	)
+	completedSpans, err := progressTracker.initTracker(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	filteredSpans := c.filterCompletedSpans(pkSpans, completedSpans)
+
+	applicabilityCheckers, err := buildApplicabilityCheckers(c.job.Details().(jobspb.InspectDetails))
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
-	// Calculate total applicable checks: only count checks that will actually run
+	// Calculate total applicable checks on ALL spans (not just remaining ones)
+	// This ensures consistent progress calculation across job restarts.
 	totalCheckCount, err := countApplicableChecks(pkSpans, applicabilityCheckers, execCfg.Codec)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	completedCheckCount, err := countApplicableChecks(completedSpans, applicabilityCheckers, execCfg.Codec)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
-	// Create and initialize progress tracker
-	progressTracker := newInspectProgressTracker(c.job, fractionInterval)
-	if err := progressTracker.initJobProgress(ctx, totalCheckCount); err != nil {
-		progressTracker.terminateTracker(ctx)
-		return nil, nil, err
+	if err := progressTracker.initJobProgress(ctx, totalCheckCount, completedCheckCount); err != nil {
+		return nil, nil, nil, err
 	}
-
-	// Start background progress updates
-	progressTracker.startBackgroundUpdates(ctx)
-
-	// Return cleanup function
 	cleanup := func() {
-		progressTracker.terminateTracker(ctx)
+		progressTracker.terminateTracker()
 	}
 
-	return progressTracker, cleanup, nil
+	return progressTracker, cleanup, filteredSpans, nil
+}
+
+// filterCompletedSpans removes spans that are already completed from the list to process
+func (c *inspectResumer) filterCompletedSpans(
+	allSpans []roachpb.Span, completedSpans []roachpb.Span,
+) []roachpb.Span {
+	if len(completedSpans) == 0 {
+		return allSpans
+	}
+
+	completedGroup := roachpb.SpanGroup{}
+	completedGroup.Add(completedSpans...)
+
+	var remainingSpans []roachpb.Span
+	for _, span := range allSpans {
+		// Check if this span is fully contained in completed spans
+		// We need to check if the entire span is covered by completed spans
+		if !completedGroup.Encloses(span) {
+			remainingSpans = append(remainingSpans, span)
+		}
+	}
+
+	return remainingSpans
 }
 
 // buildApplicabilityCheckers creates lightweight applicability checkers from InspectDetails.
