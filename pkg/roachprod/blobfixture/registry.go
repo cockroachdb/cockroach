@@ -333,11 +333,14 @@ func (s *ScratchHandle) SetReadyAt(ctx context.Context) error {
 }
 
 // SetFingerprint sets the fingerprint for the fixture.
-func (s *ScratchHandle) SetFingerprint(ctx context.Context, fingerprint map[string]string) error {
+func (s *ScratchHandle) SetFingerprint(
+	ctx context.Context, fingerprint map[string]string, asOf string,
+) error {
 	s.metadata.Fingerprint = fingerprint
+	s.metadata.FingerprintTime = asOf
 	if err := s.registry.upsertMetadata(s.metadata); err != nil {
 		return err
 	}
-	s.logger.Printf("fixture '%s' fingerprint set to '%s'", s.metadata.DataPath, s.metadata.Fingerprint)
+	s.logger.Printf("fixture '%s' fingerprint set to '%s' with asOf time %s ", s.metadata.DataPath, s.metadata.Fingerprint, s.metadata.FingerprintTime)
 	return nil
 }
