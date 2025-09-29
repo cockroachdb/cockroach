@@ -2526,7 +2526,14 @@ func (t *T) IsPseudoType() bool {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) Size() (n int) {
-	return t.InternalType.Size()
+	// Need to first downgrade the type before delegating to InternalType,
+	// because Marshal will downgrade.
+	temp := *t
+	err := temp.downgradeType()
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error during Size call"))
+	}
+	return temp.InternalType.Size()
 }
 
 // Identical is the internal implementation for T.Identical. See that comment
@@ -2832,12 +2839,63 @@ func (t *T) upgradeType() error {
 	return nil
 }
 
+// downgradeType downgrades fields of the type according to the requirements
+// of the previous CRDB version. It updates the fields so that they will be
+// marshaled into a format that is compatible with the previous version of
+// CRDB. This is necessary to preserve backwards-compatibility in mixed-version
+// scenarios, such as during upgrade.
+//
+// This is primarily needed for the NAME type compatibility with v25.3 and earlier.
+// In those old releases, if NAME had been serialized with StringFamily, the old
+// upgradeType code would have unconditionally set the OID to oid.T_text when
+// mapping VisibleType to OID, losing the NAME semantics. That has since been
+// corrected in v25.4, which means it will be safe to serialize NAME with the
+// correct StringFamily in the future since all versions will know how to handle
+// that type properly in upgradeType.
+//
+// The locale mapping is also included here to prevent NAME types with empty
+// locales from being incorrectly interpreted as CollatedStringFamily during
+// the upgrade process.
+//
+// TODO(sql-foundations): Remove this function entirely once v25.4 is the minimum
+// supported version and we no longer need to support mixed-version clusters with
+// v25.3 nodes.
+func (t *T) downgradeType() error {
+	// Set Family for NAME type for backwards-compatibility.
+	switch t.Family() {
+	case StringFamily, CollatedStringFamily:
+		switch t.Oid() {
+		case oid.T_name:
+			t.InternalType.Family = name
+		}
+	}
+
+	// Map empty locale to nil so empty string does not appear in the JSON result.
+	// TODO(rafi): When we upgrade to go1.24, we can modify the proto definition
+	//  of the locale field to use `[(gogoproto.jsontag) = ",omitzero"]` instead of
+	//  this workaround.
+	if t.InternalType.Locale != nil && len(*t.InternalType.Locale) == 0 {
+		t.InternalType.Locale = nil
+	}
+
+	return nil
+}
+
 // Marshal serializes a type into a byte representation using gogo protobuf
-// serialization rules. It returns the resulting bytes as a slice.
+// serialization rules. It returns the resulting bytes as a slice. The bytes
+// are serialized in a format that is backwards-compatible with the previous
+// version of CRDB so that clusters can run in mixed version mode during
+// upgrade.
 //
 //	bytes, err := protoutil.Marshal(&typ)
 func (t *T) Marshal() (data []byte, err error) {
-	return protoutil.Marshal(&t.InternalType)
+	// First downgrade to a struct that will be serialized in a backwards-
+	// compatible bytes format.
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return nil, err
+	}
+	return protoutil.Marshal(&temp.InternalType)
 }
 
 // MarshalToSizedBuffer is like Mashal, except that it deserializes to
@@ -2846,7 +2904,11 @@ func (t *T) Marshal() (data []byte, err error) {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
-	return t.InternalType.MarshalToSizedBuffer(data)
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalToSizedBuffer(data)
 }
 
 // MarshalTo behaves like Marshal, except that it deserializes to an existing
@@ -2856,7 +2918,11 @@ func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) MarshalTo(data []byte) (int, error) {
-	return t.InternalType.MarshalTo(data)
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalTo(data)
 }
 
 // String returns the name of the type, similar to the Name method. However, it
