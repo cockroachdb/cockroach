@@ -518,10 +518,12 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 
 			// Validate job status matches expected outcome
 			var jobStatus string
-			r.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobStatus)
+			var fractionCompleted float64
+			r.QueryRow(t, `SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobStatus, &fractionCompleted)
 
 			if tc.expectedErrRegex == "" {
 				require.Equal(t, "succeeded", jobStatus, "expected job to succeed when no issues found")
+				require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
 			} else {
 				require.Equal(t, "failed", jobStatus, "expected job to fail when inconsistencies found")
 			}
@@ -575,8 +577,10 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 	require.NoError(t, err, "should succeed on table with reserved word column names")
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 
-	// Verify job succeeded
+	// Verify job succeeded and progress reached 100%
 	var jobStatus string
-	r.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobStatus)
+	var fractionCompleted float64
+	r.QueryRow(t, `SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobStatus, &fractionCompleted)
 	require.Equal(t, "succeeded", jobStatus, "INSPECT job should succeed")
+	require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
 }
