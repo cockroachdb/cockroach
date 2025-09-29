@@ -3349,10 +3349,7 @@ type kafkaManager struct {
 }
 
 func (k kafkaManager) basePath() string {
-	if k.c.IsLocal() {
-		return `/tmp/confluent`
-	}
-	return `/mnt/data1/confluent`
+	return `/tmp/confluent`
 }
 
 func (k kafkaManager) confluentInstallBase() string {
