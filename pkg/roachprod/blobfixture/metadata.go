@@ -40,6 +40,9 @@ type FixtureMetadata struct {
 	// Note: this may not be present if the fixture was too large to be
 	// fingerprinted.
 	Fingerprint map[string]string `json:"fingerprint,omitempty"`
+
+	// FingerprintTime is the aost used by the fingerprint command.
+	FingerprintTime string `json:"fingerprint_time,omitempty"`
 }
 
 func (f *FixtureMetadata) MarshalJson() ([]byte, error) {
