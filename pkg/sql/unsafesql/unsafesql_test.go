@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -67,12 +68,12 @@ func TestAccessCheckServer(t *testing.T) {
 	pool := s.SQLConn(t)
 	defer pool.Close()
 
+	runner := sqlutils.MakeSQLRunner(pool)
 	// override the log limiter so that the tests can run without pauses.
 	defer unsafesql.TestRemoveLimiters()()
 
 	// create a user table to test user table access.
-	_, err := pool.Exec("CREATE TABLE foo (id INT PRIMARY KEY)")
-	require.NoError(t, err)
+	runner.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY)")
 
 	// create and register a log accessedSpy to see the unsafe access logs
 	accessedSpy := logtestutils.NewStructuredLogSpy[eventpb.UnsafeInternalsAccessed](
@@ -119,6 +120,7 @@ func TestAccessCheckServer(t *testing.T) {
 
 	for _, test := range []struct {
 		Query                string
+		AppName              string
 		Internal             bool
 		AllowUnsafeInternals bool
 		Passes               bool
@@ -156,6 +158,14 @@ func TestAccessCheckServer(t *testing.T) {
 			AllowUnsafeInternals: true,
 			Passes:               true,
 			LogsAccessed:         true,
+		},
+		{
+			Query:                "SELECT * FROM system.namespace",
+			AppName:              "$ internal app",
+			Internal:             false,
+			AllowUnsafeInternals: false,
+			Passes:               true,
+			LogsAccessed:         false,
 		},
 		// Tests on unsupported crdb_internal objects.
 		{
@@ -223,6 +233,7 @@ func TestAccessCheckServer(t *testing.T) {
 		t.Run(fmt.Sprintf("query=%s,internal=%t,allowUnsafe=%t", test.Query, test.Internal, test.AllowUnsafeInternals), func(t *testing.T) {
 			accessedSpy.Reset()
 			deniedSpy.Reset()
+			runner.Exec(t, "SET application_name = $1", test.AppName)
 			err := sendQuery(test.AllowUnsafeInternals, test.Internal, test.Query)
 			if test.Passes {
 				require.NoError(t, err)

@@ -9,9 +9,11 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -152,6 +154,10 @@ func (s *SessionData) SessionUser() username.SQLUsername {
 		return s.User()
 	}
 	return s.SessionUserProto.Decode()
+}
+
+func (s *SessionData) IsInternalAppName() bool {
+	return strings.HasPrefix(s.ApplicationName, catconstants.InternalAppNamePrefix)
 }
 
 // LocalUnmigratableSessionData contains session parameters that cannot
