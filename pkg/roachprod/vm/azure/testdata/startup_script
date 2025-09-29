@@ -6,7 +6,9 @@ echo
 # Script for setting up a Azure machine for roachprod use.
 
 function setup_disks() {
-	mount_opts="defaults"
+
+
+mount_opts="defaults"
 
 	devices=()
 

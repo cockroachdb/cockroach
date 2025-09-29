@@ -279,6 +279,9 @@ type ProviderOpts struct {
 	// use spot vms, spot vms are significantly cheaper, but can be preempted AWS.
 	// see https://aws.amazon.com/ec2/spot/ for more details.
 	UseSpot bool
+	// BootDiskOnly ensures that no additional disks will be attached, other than
+	// the boot disk.
+	BootDiskOnly bool
 }
 
 // Provider implements the vm.Provider interface for AWS.
@@ -1348,6 +1351,7 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
+
 	filename, err := writeStartupScript(
 		name,
 		extraMountOpts,
@@ -1355,6 +1359,7 @@ func (p *Provider) runInstance(
 		providerOpts.UseMultipleDisks,
 		opts.Arch == string(vm.ArchFIPS),
 		providerOpts.RemoteUserName,
+		providerOpts.BootDiskOnly,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not write AWS startup script to temp file")
@@ -1605,7 +1610,7 @@ func assignEBSVolumes(opts *vm.CreateOpts, providerOpts *ProviderOpts) ebsVolume
 	// Make a local copy of providerOpts.EBSVolumes to prevent data races
 	ebsVolumes := providerOpts.EBSVolumes
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
-	if !opts.SSDOpts.UseLocalSSD {
+	if !opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly {
 		if len(ebsVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
 			providerOpts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
 			providerOpts.DefaultEBSVolume.Disk.DeleteOnTermination = true

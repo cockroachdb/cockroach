@@ -247,6 +247,15 @@ func getAWSOpts(
 	return opts
 }
 
+func getAWSWorkloadOpts(machineType string, useSpotVMs bool) vm.ProviderOpts {
+	opts := aws.DefaultProviderOpts()
+	opts.MachineType = machineType
+	opts.DefaultEBSVolume.Disk.VolumeType = ""
+	opts.UseSpot = useSpotVMs
+	opts.BootDiskOnly = true
+	return opts
+}
+
 func getGCEOpts(
 	machineType string,
 	volumeSize, localSSDCount int,
@@ -286,7 +295,29 @@ func getGCEOpts(
 	if volumeType != "" {
 		opts.PDVolumeType = volumeType
 	}
+	return opts
+}
 
+func getGCEWorkloadOpts(
+	machineType string,
+	terminateOnMigration bool,
+	minCPUPlatform string,
+	arch vm.CPUArch,
+	useSpot bool,
+) vm.ProviderOpts {
+	opts := gce.DefaultProviderOpts()
+	opts.MachineType = machineType
+	if arch == vm.ArchARM64 {
+		// ARM64 machines don't support minCPUPlatform.
+		opts.MinCPUPlatform = ""
+	} else if minCPUPlatform != "" {
+		opts.MinCPUPlatform = minCPUPlatform
+	}
+	opts.SSDCount = 0
+	opts.PDVolumeCount = 0
+	opts.BootDiskOnly = true
+	opts.TerminateOnMigration = terminateOnMigration
+	opts.UseSpot = useSpot
 	return opts
 }
 
@@ -296,6 +327,13 @@ func getAzureOpts(machineType string, volumeSize int) vm.ProviderOpts {
 	if volumeSize != 0 {
 		opts.NetworkDiskSize = int32(volumeSize)
 	}
+	return opts
+}
+
+func getAzureWorkloadOpts(machineType string) vm.ProviderOpts {
+	opts := azure.DefaultProviderOpts()
+	opts.MachineType = machineType
+	opts.BootDiskOnly = true
 	return opts
 }
 
@@ -335,6 +373,14 @@ func getIBMOpts(
 		opts.UseMultipleDisks = !RAID0
 	}
 
+	return opts
+}
+
+func getIBMWorkloadOpts(machineType string, terminateOnMigration bool) vm.ProviderOpts {
+	opts := ibm.DefaultProviderOpts()
+	opts.MachineType = machineType
+	opts.TerminateOnMigration = terminateOnMigration
+	opts.BootDiskOnly = true
 	return opts
 }
 
@@ -510,7 +556,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	var err error
 	switch cloud {
 	case AWS:
-		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, selectedArch)
+		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, false, selectedArch)
 	case GCE:
 		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	case Azure:
@@ -533,27 +579,23 @@ func (s *ClusterSpec) RoachprodOpts(
 	case AWS:
 		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
 			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
-		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput,
-			s.AWS.VolumeIOPS, createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
+		workloadProviderOpts = getAWSWorkloadOpts(workloadMachineType, s.UseSpotVMs)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
 		)
-		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
-			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
+		workloadProviderOpts = getGCEWorkloadOpts(workloadMachineType, s.TerminateOnMigration,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.UseSpotVMs,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, s.VolumeSize)
-		workloadProviderOpts = getAzureOpts(workloadMachineType, s.VolumeSize)
+		workloadProviderOpts = getAzureWorkloadOpts(machineType)
 	case IBM:
 		providerOpts = getIBMOpts(machineType, s.TerminateOnMigration, s.VolumeSize,
 			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
 		)
-		workloadProviderOpts = getIBMOpts(workloadMachineType, s.TerminateOnMigration, s.VolumeSize,
-			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
-		)
+		workloadProviderOpts = getIBMWorkloadOpts(workloadMachineType, s.TerminateOnMigration)
 	}
 
 	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
