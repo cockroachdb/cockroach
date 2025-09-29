@@ -90,7 +90,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 			time.Duration(tree.MustBeDInt(nanos)),
 		))
 	}
-	n.rows = make(chan tree.Datums, int64(len(sqlInstanceIDs))*n.params.Concurrency)
+	n.rows = make(chan tree.Datums, len(sqlInstanceIDs)*getCloudCheckConcurrency(n.params))
 	rowWriter := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		// collapse the two pairs of bytes+time to a single string rate each.
 		res := make(tree.Datums, len(row)-1)
@@ -103,13 +103,15 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return nil
 	})
 
-	grp := ctxgroup.WithContext(params.ctx)
-	n.execGrp = grp
-	grp.GoCtx(func(ctx context.Context) error {
+	workerStarted := make(chan struct{})
+	n.execGrp = ctxgroup.WithContext(params.ctx)
+	n.execGrp.GoCtx(func(ctx context.Context) error {
 		// Derive a separate tracing span since the planning one will be
 		// finished when the main goroutine exits from startExec.
 		ctx, span := tracing.ChildSpan(ctx, "CheckExternalConnection-execution")
 		defer span.Finish()
+		// Unblock the main goroutine after having created the tracing span.
+		close(workerStarted)
 
 		recv := MakeDistSQLReceiver(
 			ctx,
@@ -129,6 +131,14 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return nil
 	})
 
+	// Block until the worker goroutine has started. This allows us to guarantee
+	// that params.ctx contains a tracing span that hasn't been finished.
+	// TODO(yuzefovich): this is a bit hacky. The issue is that
+	// planNodeToRowSource has already created a new tracing span for this
+	// checkExternalConnectionNode and has updated params.ctx accordingly; then,
+	// if the query is canceled before the worker goroutine starts, the tracing
+	// span is finished, yet it will have already been captured by the ctxgroup.
+	<-workerStarted
 	return nil
 }
 
