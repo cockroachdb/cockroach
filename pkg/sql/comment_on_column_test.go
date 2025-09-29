@@ -26,7 +26,7 @@ func TestCommentOnColumn(t *testing.T) {
 		if _, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (c1 INT, c2 INT, c3 INT);
+		CREATE TABLE t (c1 INT, c2 INT, c3 INT) WITH (schema_locked=false);
 	`); err != nil {
 			t.Fatal(err)
 		}

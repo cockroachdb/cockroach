@@ -81,7 +81,7 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 		"cApiTaLByTEs" BYTES,
 		INDEX capital_int_idx ("cApiTaLInT"),
 		INDEX capital_bytes_idx ("cApiTaLByTEs")
-	)`)
+	) WITH (schema_locked=false)`)
 
 	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2, 'a')`)
 	fprint1 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)

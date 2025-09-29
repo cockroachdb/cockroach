@@ -397,7 +397,13 @@ INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 3 RETURNING x, v
 # Check that INSERT supports LIMIT (MySQL extension)
 
 statement ok
+ALTER TABLE insert_t SET (schema_locked=false)
+
+statement ok
 TRUNCATE TABLE insert_t
+
+statement ok
+ALTER TABLE insert_t RESET (schema_locked)
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -408,7 +414,13 @@ SELECT * FROM insert_t
 1  9
 
 statement ok
+ALTER TABLE insert_t SET (schema_locked=false)
+
+statement ok
 TRUNCATE TABLE insert_t
+
+statement ok
+ALTER TABLE insert_t RESET (schema_locked)
 
 statement ok
 INSERT INTO insert_t (SELECT * FROM select_t LIMIT 1)

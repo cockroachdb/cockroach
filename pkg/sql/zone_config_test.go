@@ -191,7 +191,7 @@ func TestGetZoneConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT) WITH (schema_locked=false)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -430,7 +430,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT) WITH (schema_locked=false)`); err != nil {
 		t.Fatal(err)
 	}
 
