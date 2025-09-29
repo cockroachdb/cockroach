@@ -169,7 +169,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/conversion.out --
    return;
  end;
  $$;
-+ERROR:  at or near "error": syntax error
++ERROR:  lexical error: error
 +DETAIL:  source SQL:
 +declare
 +  validlen int;

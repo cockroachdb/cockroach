@@ -201,7 +201,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  SELECT nextval('sequence_test'::text);
   nextval 
  ---------
-@@ -235,48 +220,35 @@
+@@ -235,7 +220,7 @@
  
  DISCARD SEQUENCES;
  SELECT currval('sequence_test'::regclass);
@@ -210,40 +210,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  DROP SEQUENCE sequence_test;
  -- renaming sequences
  CREATE SEQUENCE foo_seq;
- ALTER TABLE foo_seq RENAME TO foo_seq_new;
-+ERROR:  "foo_seq" is not a table or view
+@@ -243,7 +228,7 @@
  SELECT * FROM foo_seq_new;
-- last_value | log_cnt | is_called 
--------------+---------+-----------
+  last_value | log_cnt | is_called 
+ ------------+---------+-----------
 -          1 |       0 | f
--(1 row)
--
-+ERROR:  relation "foo_seq_new" does not exist
++          0 |       0 | t
+ (1 row)
+ 
  SELECT nextval('foo_seq_new');
-- nextval 
-----------
--       1
--(1 row)
--
-+ERROR:  relation "foo_seq_new" does not exist
- SELECT nextval('foo_seq_new');
-- nextval 
-----------
--       2
--(1 row)
--
-+ERROR:  relation "foo_seq_new" does not exist
- -- log_cnt can be higher if there is a checkpoint just at the right
- -- time, so just test for the expected range
+@@ -263,20 +248,21 @@
  SELECT last_value, log_cnt IN (31, 32) AS log_cnt_ok, is_called FROM foo_seq_new;
-- last_value | log_cnt_ok | is_called 
--------------+------------+-----------
+  last_value | log_cnt_ok | is_called 
+ ------------+------------+-----------
 -          2 | t          | t
--(1 row)
--
-+ERROR:  relation "foo_seq_new" does not exist
++          2 | f          | t
+ (1 row)
+ 
  DROP SEQUENCE foo_seq_new;
-+ERROR:  relation "foo_seq_new" does not exist
  -- renaming serial sequences
  ALTER TABLE serialtest1_f2_seq RENAME TO serialtest1_f2_foo;
 +ERROR:  relation "serialtest1_f2_seq" does not exist
@@ -265,7 +249,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  (4 rows)
  
  --
-@@ -291,19 +263,16 @@
+@@ -291,19 +277,16 @@
  );
  -- Both drops should fail, but with different error messages:
  DROP SEQUENCE t1_f1_seq;
@@ -288,7 +272,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  -- Now OK:
  DROP SEQUENCE myseq2;
  --
-@@ -311,7 +280,6 @@
+@@ -311,7 +294,6 @@
  --
  ALTER SEQUENCE IF EXISTS sequence_test2 RESTART WITH 24
    INCREMENT BY 4 MAXVALUE 36 MINVALUE 5 CYCLE;
@@ -296,7 +280,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  ALTER SEQUENCE serialTest1 CYCLE;  -- error, not a sequence
  ERROR:  "serialtest1" is not a sequence
  CREATE SEQUENCE sequence_test2 START WITH 32;
-@@ -342,22 +310,25 @@
+@@ -342,22 +324,25 @@
  -- test CYCLE and NO CYCLE
  ALTER SEQUENCE sequence_test2 RESTART WITH 24
    INCREMENT BY 4 MAXVALUE 36 MINVALUE 5 CYCLE;
@@ -325,7 +309,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  (1 row)
  
  SELECT nextval('sequence_test2');
-@@ -369,7 +340,7 @@
+@@ -369,7 +354,7 @@
  SELECT nextval('sequence_test2');  -- cycled
   nextval 
  ---------
@@ -334,7 +318,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  (1 row)
  
  ALTER SEQUENCE sequence_test2 RESTART WITH 24
-@@ -383,90 +354,109 @@
+@@ -383,90 +368,109 @@
  SELECT nextval('sequence_test2');
   nextval 
  ---------
@@ -460,7 +444,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  SELECT setval('sequence_test2', 5);
   setval 
  --------
-@@ -478,80 +468,55 @@
+@@ -478,80 +482,55 @@
  SELECT * FROM information_schema.sequences
    WHERE sequence_name ~ ANY(ARRAY['sequence_test', 'serialtest'])
    ORDER BY sequence_name ASC;
@@ -578,7 +562,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  -- Test lastval()
  CREATE SEQUENCE seq;
  SELECT nextval('seq');
-@@ -597,212 +562,263 @@
+@@ -597,212 +576,263 @@
  DROP SEQUENCE seq2;
  -- should fail
  SELECT lastval();
@@ -940,7 +924,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --la
  ROLLBACK;
  -- Sequences should get wiped out as well:
  DROP TABLE serialTest1, serialTest2;
-@@ -811,9 +827,9 @@
+@@ -811,9 +841,9 @@
    ('sequence_test2', 'serialtest2_f2_seq', 'serialtest2_f3_seq',
     'serialtest2_f4_seq', 'serialtest2_f5_seq', 'serialtest2_f6_seq')
    ORDER BY sequence_name ASC;
