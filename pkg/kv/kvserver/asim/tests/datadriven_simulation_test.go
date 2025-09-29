@@ -474,7 +474,7 @@ func TestDataDriven(t *testing.T) {
 					seed := int64(42)
 					duration := 30 * time.Minute
 					name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-					plotDir := datapathutils.TestDataPath(t, "generated", name)
+					plotDir := datapathutils.TestDataPath(t, "generated", mode, name)
 					var rewrite bool
 					require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
 					var cfgs []string    // configurations to run the simulation with
