@@ -135,6 +135,8 @@ func (ex *connExecutor) execStmt(
 	if _, ok := ast.(tree.ObserverStatement); ok {
 		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
+		ex.extraTxnState.idleLatency += ex.phaseTimes.GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
 		return nil, nil, err
@@ -178,6 +180,7 @@ func (ex *connExecutor) execStmt(
 		case eventNonRetryableErrPayload:
 			ex.recordFailure(p)
 		}
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
 
 	case stateAborted:
 		ev, payload = ex.execStmtInAbortedState(ctx, ast, res)

@@ -7,7 +7,6 @@ package sslocal_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -1249,241 +1248,6 @@ func TestEnhancedFingerprintCreation(t *testing.T) {
 	}
 }
 
-func TestSQLStatsIdleLatencies(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
-
-	// Max limit safety check on the expected idle latency in seconds. Mostly a
-	// paranoia check.
-	const idleLatCap float64 = 30
-
-	testCases := []struct {
-		name     string
-		stmtLats map[string]float64
-		txnLat   float64
-		ops      func(*testing.T, *gosql.DB)
-	}{
-		{
-			name:     "no latency",
-			stmtLats: map[string]float64{"SELECT _": 0},
-			txnLat:   0,
-			ops: func(t *testing.T, db *gosql.DB) {
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				_, err = tx.Exec("SELECT 1")
-				require.NoError(t, err)
-				err = tx.Commit()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "no latency (implicit txn)",
-			stmtLats: map[string]float64{"SELECT _": 0},
-			txnLat:   0,
-			ops: func(t *testing.T, db *gosql.DB) {
-				// These 100ms don't count because we're not in an explicit
-				// transaction.
-				time.Sleep(100 * time.Millisecond)
-				_, err := db.Exec("SELECT 1")
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "no latency - prepared statement (implicit txn)",
-			stmtLats: map[string]float64{"SELECT _::INT8": 0},
-			txnLat:   0,
-			ops: func(t *testing.T, db *gosql.DB) {
-				stmt, err := db.Prepare("SELECT $1::INT")
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				_, err = stmt.Exec(1)
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "simple statement",
-			stmtLats: map[string]float64{"SELECT _": 0.1},
-			txnLat:   0.2,
-			ops: func(t *testing.T, db *gosql.DB) {
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				_, err = tx.Exec("SELECT 1")
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				err = tx.Commit()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "simple statement with rollback",
-			stmtLats: map[string]float64{"SELECT _": 0.1},
-			txnLat:   0.2,
-			ops: func(t *testing.T, db *gosql.DB) {
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				_, err = tx.Exec("SELECT 1")
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				err = tx.Rollback()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "compound statement",
-			stmtLats: map[string]float64{"SELECT _": 0.1, "SELECT count(*) FROM crdb_internal.statement_statistics": 0},
-			txnLat:   0.2,
-			ops: func(t *testing.T, db *gosql.DB) {
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				_, err = tx.Exec("SELECT 1; SELECT count(*) FROM crdb_internal.statement_statistics")
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				err = tx.Commit()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "multiple statements - slow generation",
-			stmtLats: map[string]float64{"SELECT pg_sleep(_)": 0, "SELECT _": 0},
-			txnLat:   0,
-			ops: func(t *testing.T, db *gosql.DB) {
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				_, err = tx.Exec("SELECT pg_sleep(1)")
-				require.NoError(t, err)
-				_, err = tx.Exec("SELECT 1")
-				require.NoError(t, err)
-				err = tx.Commit()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "prepared statement",
-			stmtLats: map[string]float64{"SELECT _::INT8": 0.1},
-			txnLat:   0.2,
-			ops: func(t *testing.T, db *gosql.DB) {
-				stmt, err := db.Prepare("SELECT $1::INT")
-				require.NoError(t, err)
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				_, err = tx.Stmt(stmt).Exec(1)
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				err = tx.Commit()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "prepared statement inside transaction",
-			stmtLats: map[string]float64{"SELECT _::INT8": 0.1},
-			txnLat:   0.2,
-			ops: func(t *testing.T, db *gosql.DB) {
-				tx, err := db.Begin()
-				require.NoError(t, err)
-				stmt, err := tx.Prepare("SELECT $1::INT")
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				_, err = stmt.Exec(1)
-				require.NoError(t, err)
-				time.Sleep(100 * time.Millisecond)
-				err = tx.Commit()
-				require.NoError(t, err)
-			},
-		},
-		{
-			name:     "multiple transactions",
-			stmtLats: map[string]float64{"SELECT _": 0.1},
-			txnLat:   0.2,
-			ops: func(t *testing.T, db *gosql.DB) {
-				for i := 0; i < 3; i++ {
-					tx, err := db.Begin()
-					require.NoError(t, err)
-					time.Sleep(100 * time.Millisecond)
-					_, err = tx.Exec("SELECT 1")
-					require.NoError(t, err)
-					time.Sleep(100 * time.Millisecond)
-					err = tx.Commit()
-					require.NoError(t, err)
-				}
-			},
-		},
-	}
-
-	// Observer connection.
-	obsConn := sqlutils.MakeSQLRunner(s.SQLConn(t))
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Make a separate connection to the database, to isolate the stats
-			// we'll observe.
-			// Note that we're not using pgx here because it *always* prepares
-			// statement, and we want to test our client latency measurements
-			// both with and without prepared statements.
-			opsDB := s.SQLConn(t)
-
-			// Set a unique application name for our session, so we can find our
-			// stats easily.
-			appName := redact.RedactableString(t.Name())
-			_, err := opsDB.Exec("SET application_name = $1", appName)
-			require.NoError(t, err)
-
-			// Run the test operations.
-			tc.ops(t, opsDB)
-
-			appFilter := sqlstatstestutil.StatementFilter{App: string(appName)}
-			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, len(tc.stmtLats), appFilter)
-
-			// Look for the latencies we expect.
-			t.Run("stmt", func(t *testing.T) {
-				actual := make(map[string]float64)
-				rows, err := db.Query(`
-					SELECT metadata->>'query', statistics->'statistics'->'idleLat'->'mean'
-					  FROM crdb_internal.statement_statistics
-					 WHERE app_name = $1`, appName)
-				require.NoError(t, err)
-				for rows.Next() {
-					var query string
-					var latency float64
-					err = rows.Scan(&query, &latency)
-					require.NoError(t, err)
-					actual[query] = latency
-				}
-				require.NoError(t, rows.Err())
-				// Ensure that all test case statements have at least the
-				// minimum expected idle latency and do not exceed the safety
-				// check cap.
-				for tc_stmt, tc_latency := range tc.stmtLats {
-					require.GreaterOrEqual(t, actual[tc_stmt], tc_latency)
-					require.Less(t, actual[tc_stmt], idleLatCap)
-				}
-			})
-
-			t.Run("txn", func(t *testing.T) {
-				var actual float64
-				row := db.QueryRow(`
-					SELECT statistics->'statistics'->'idleLat'->'mean'
-					  FROM crdb_internal.transaction_statistics
-					 WHERE app_name = $1`, appName)
-				err := row.Scan(&actual)
-				require.NoError(t, err)
-				// Ensure the test case transaction has at least the minimum
-				// expected idle latency and do not exceed the safety check cap.
-				require.GreaterOrEqual(t, actual, tc.txnLat)
-				require.Less(t, actual, idleLatCap)
-			})
-		})
-	}
-}
-
 type indexInfo struct {
 	name  string
 	table string
@@ -2054,6 +1818,117 @@ func BenchmarkSqlStatsDrain(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestTransactionLatencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	type capturedStats struct {
+		syncutil.Mutex
+		txnStats  []*sqlstats.RecordedTxnStats
+		stmtCount int
+	}
+	stats := &capturedStats{}
+	var params base.TestServerArgs
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
+			if isInternal {
+				return
+			}
+			stats.Lock()
+			defer stats.Unlock()
+			stats.stmtCount++
+		},
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, txnStats *sqlstats.RecordedTxnStats) {
+			if isInternal {
+				return
+			}
+			stats.Lock()
+			defer stats.Unlock()
+			stats.txnStats = append(stats.txnStats, txnStats)
+		},
+	}
+
+	s := serverutils.StartServerOnly(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	verifyTxnStats := func(t *testing.T, lastTxnStats *sqlstats.RecordedTxnStats, expectedIdleLatency time.Duration, totalTxnTime time.Duration) {
+		// txn idle latency should be >= expectedIdleLatency.
+		require.GreaterOrEqual(t, lastTxnStats.IdleLatency, expectedIdleLatency)
+		// txn service latency should be >= txn idle latency.
+		require.GreaterOrEqual(t, lastTxnStats.ServiceLatency, lastTxnStats.IdleLatency)
+		// txn service latency should be <= txn time.
+		require.LessOrEqual(t, lastTxnStats.ServiceLatency, time.Duration(lastTxnStats.TransactionTimeSec*float64(time.Second)))
+		// txn time should be roughly equal to the time we tracked (within 2%).
+		// Note(alyshan): Most test runs the difference is < 1%, but under stress it can be > 1%.
+		require.InDelta(t, totalTxnTime.Seconds(), lastTxnStats.TransactionTimeSec, totalTxnTime.Seconds()*0.05)
+	}
+
+	db := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	// Create a test table
+	db.Exec(t, "CREATE TABLE test_idle (id INT)")
+	t.Run("simple statements", func(t *testing.T) {
+		startTime := time.Now()
+		db.Exec(t, "BEGIN")
+		for i := 0; i < 10; i++ {
+			db.Exec(t, "INSERT INTO test_idle VALUES (1)")
+			time.Sleep(100 * time.Millisecond)
+		}
+		db.Exec(t, "COMMIT")
+		endTime := time.Now()
+		totalTxnTime := endTime.Sub(startTime)
+
+		stats.Lock()
+		defer stats.Unlock()
+		lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
+		verifyTxnStats(t, lastTxnStats, time.Second, totalTxnTime)
+	})
+
+	t.Run("with intermediate observer statements", func(t *testing.T) {
+		startTime := time.Now()
+		db.Exec(t, "BEGIN")
+		// This mimics the behaviour of the cockroach sql cli.
+		for i := 0; i < 10; i++ {
+			db.Exec(t, "SHOW SYNTAX 'INSERT INTO test_idle VALUES (1)'")
+			db.Exec(t, "INSERT INTO test_idle VALUES (1)")
+			db.Exec(t, "SHOW LAST QUERY STATISTICS")
+			db.Exec(t, "SHOW TRANSACTION STATUS")
+			// SHOW DATABASE is not an observer statement, but we include it here since it mimics
+			// the behaviour of the cockroach sql cli.
+			// TODO(alyshan): Investigate why SHOW DATABASE is not an observer statement.
+			db.Exec(t, "SHOW DATABASE")
+			time.Sleep(100 * time.Millisecond)
+		}
+		db.Exec(t, "COMMIT")
+		endTime := time.Now()
+		totalTxnTime := endTime.Sub(startTime)
+
+		stats.Lock()
+		defer stats.Unlock()
+		lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
+		verifyTxnStats(t, lastTxnStats, time.Second, totalTxnTime)
+	})
+
+	t.Run("prepare/bind statements", func(t *testing.T) {
+		startTime := time.Now()
+		db.Exec(t, "BEGIN")
+		for i := 0; i < 10; i++ {
+			// Placeholders invoke prepare/bind.
+			db.Exec(t, "INSERT INTO test_idle VALUES ($1)", i)
+			time.Sleep(100 * time.Millisecond)
+		}
+		db.Exec(t, "COMMIT")
+		endTime := time.Now()
+		totalTxnTime := endTime.Sub(startTime)
+
+		stats.Lock()
+		defer stats.Unlock()
+		lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
+		verifyTxnStats(t, lastTxnStats, time.Second, totalTxnTime)
+	})
+
 }
 
 func createNewSqlStats() *sslocal.SQLStats {
