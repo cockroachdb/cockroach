@@ -251,6 +251,21 @@ const (
 	TestDRPCEnabledRandomly
 )
 
+func (d DefaultTestDRPCOption) String() string {
+	switch d {
+	case TestDRPCUnset:
+		return "unset"
+	case TestDRPCDisabled:
+		return "disabled"
+	case TestDRPCEnabled:
+		return "enabled"
+	case TestDRPCEnabledRandomly:
+		return "enabled-randomly"
+	default:
+		panic("unreachable")
+	}
+}
+
 // TestClusterArgs contains the parameters one can set when creating a test
 // cluster. It contains a TestServerArgs instance which will be copied over to
 // every server.
