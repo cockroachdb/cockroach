@@ -94,7 +94,7 @@ func LoadExternalConnection(
 	// `SELECT` on the system table.
 	row, cols, err := txn.QueryRowExWithCols(ctx, "lookup-schedule", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
+		"SELECT * FROM system.external_connections WHERE connection_name = $1", name)
 
 	if err != nil {
 		return nil, errors.CombineErrors(err, &ExternalConnectionNotFoundError{connectionName: name})
