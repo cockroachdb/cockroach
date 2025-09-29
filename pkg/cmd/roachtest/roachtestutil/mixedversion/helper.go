@@ -174,7 +174,7 @@ func (s *Service) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
 	if s.Finalizing {
 		n, db := s.RandomDB(rng)
 		s.stepLogger.Printf("querying cluster version through node %d", n)
-		cv, err := clusterupgrade.ClusterVersion(s.ctx, db)
+		cv, err := clusterupgrade.ClusterVersion(s.ctx, s.stepLogger, db)
 		if err != nil {
 			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
 		}

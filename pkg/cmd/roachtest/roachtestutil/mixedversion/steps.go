@@ -306,7 +306,7 @@ func (s preserveDowngradeOptionStep) Run(
 	service := serviceByName(h, s.virtualClusterName)
 	node, db := service.RandomDB(rng)
 	l.Printf("checking binary version (via node %d)", node)
-	bv, err := clusterupgrade.BinaryVersion(ctx, db)
+	bv, err := clusterupgrade.BinaryVersion(ctx, l, db)
 	if err != nil {
 		return err
 	}
@@ -558,7 +558,7 @@ func (s setClusterVersionStep) Run(
 		node, db := service.RandomDB(rng)
 		l.Printf("fetching binary version via n%d", node)
 
-		bv, err := clusterupgrade.BinaryVersion(ctx, db)
+		bv, err := clusterupgrade.BinaryVersion(ctx, l, db)
 		if err != nil {
 			return errors.Wrapf(err, "getting binary version on n%d", node)
 		}
