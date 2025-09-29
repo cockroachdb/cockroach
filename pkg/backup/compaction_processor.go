@@ -422,7 +422,7 @@ func compactSpanEntry(
 	scratch = append(scratch, prefix...)
 	iter := sstIter.iter
 	for iter.SeekGE(trimmedStart); ; iter.NextKey() {
-		if err := pacer.Pace(ctx); err != nil {
+		if _, err := pacer.Pace(ctx); err != nil {
 			return err
 		}
 		var key storage.MVCCKey

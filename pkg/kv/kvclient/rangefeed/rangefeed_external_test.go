@@ -839,6 +839,11 @@ func TestWithOnDeleteRange(t *testing.T) {
 		// should be visible, because catchup scans do emit tombstones. The range
 		// tombstone should be ordered after the initial point, but before the foo
 		// catchup point, and the previous values should respect the range tombstones.
+		//
+		// NB: When RaceEnabled=true, the range key will be emitted multiple
+		// times, since CatchUpSnapshot.CatchUpScan recreates the iterator at
+		// every step. These duplications are harmless and are de-duped by
+		// testEvents when printing.
 		require.NoError(t, db.Put(ctx, mkKey("covered"), "covered"))
 		require.NoError(t, db.Put(ctx, mkKey("foo"), "covered"))
 		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
