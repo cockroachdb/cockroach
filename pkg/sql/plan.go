@@ -272,7 +272,6 @@ var _ planNode = &zeroNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
-var _ planNodeFastPath = &setZoneConfigNode{}
 var _ planNodeFastPath = &controlJobsNode{}
 var _ planNodeFastPath = &controlSchedulesNode{}
 

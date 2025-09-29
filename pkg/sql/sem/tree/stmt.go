@@ -1690,7 +1690,7 @@ func (*SetTracing) StatementTag() string { return "SET TRACING" }
 func (*SetTracing) observerStatement() {}
 
 // StatementReturnType implements the Statement interface.
-func (*SetZoneConfig) StatementReturnType() StatementReturnType { return RowsAffected }
+func (*SetZoneConfig) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
 func (*SetZoneConfig) StatementType() StatementType { return TypeDCL }
