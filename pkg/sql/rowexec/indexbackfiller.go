@@ -345,7 +345,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			addedToVectorIndex := false
 			for _, indexEntry := range indexBatch.indexEntries {
 				// Pace the admission control before processing each index entry.
-				if err := pacer.Pace(ctx); err != nil {
+				if _, err := pacer.Pace(ctx); err != nil {
 					return err
 				}
 

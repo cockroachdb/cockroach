@@ -56,11 +56,11 @@ type bufferedRegistration struct {
 		outputLoopCancelFn func()
 		disconnected       bool
 
-		// catchUpIter is created by replica under raftMu lock when registration is
+		// catchUpSnap is created by replica under raftMu lock when registration is
 		// created. It is detached by output loop for processing and closed. If
-		// output loop was not started and catchUpIter is non-nil at the time that
+		// output loop was not started and catchUpSnap is non-nil at the time that
 		// disconnect is called, it is closed by disconnect.
-		catchUpIter *CatchUpIterator
+		catchUpSnap *CatchUpSnapshot
 	}
 
 	// Number of events that have been written to the buffer but
@@ -74,7 +74,7 @@ func newBufferedRegistration(
 	streamCtx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchUpIter *CatchUpIterator,
+	catchUpSnap *CatchUpSnapshot,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
@@ -100,7 +100,7 @@ func newBufferedRegistration(
 		buf:           make(chan *sharedEvent, bufferSz),
 		blockWhenFull: blockWhenFull,
 	}
-	br.mu.catchUpIter = catchUpIter
+	br.mu.catchUpSnap = catchUpSnap
 	return br
 }
 
@@ -172,9 +172,9 @@ func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if !br.mu.disconnected {
-		if br.mu.catchUpIter != nil {
-			br.mu.catchUpIter.Close()
-			br.mu.catchUpIter = nil
+		if br.mu.catchUpSnap != nil {
+			br.mu.catchUpSnap.Close()
+			br.mu.catchUpSnap = nil
 		}
 		if br.mu.outputLoopCancelFn != nil {
 			br.mu.outputLoopCancelFn()
@@ -303,20 +303,19 @@ func (br *bufferedRegistration) drainAllocations(ctx context.Context) {
 // This uses the iterator provided when the registration was originally created;
 // after the scan completes, the iterator will be closed.
 //
-// If the registration does not have a catchUpIteratorConstructor, this method
-// is a no-op.
+// If the registration does not have a catchUpSnap, this method is a no-op.
 func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
-	catchUpIter := br.detachCatchUpIter()
-	if catchUpIter == nil {
+	catchUpSnap := br.detachCatchUpSnap()
+	if catchUpSnap == nil {
 		return nil
 	}
 	start := crtime.NowMono()
 	defer func() {
-		catchUpIter.Close()
+		catchUpSnap.Close()
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(start.Elapsed().Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote, br.bulkDelivery)
+	return catchUpSnap.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote, br.bulkDelivery)
 }
 
 // Wait for this registration to completely process its internal
@@ -341,13 +340,13 @@ func (br *bufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	return errors.Errorf("bufferedRegistration %v failed to empty in time", br.Range())
 }
 
-// detachCatchUpIter detaches the catchUpIter that was previously attached.
-func (br *bufferedRegistration) detachCatchUpIter() *CatchUpIterator {
+// detachCatchUpSnap detaches the catchUpSnap that was previously attached.
+func (br *bufferedRegistration) detachCatchUpSnap() *CatchUpSnapshot {
 	br.mu.Lock()
 	defer br.mu.Unlock()
-	catchUpIter := br.mu.catchUpIter
-	br.mu.catchUpIter = nil
-	return catchUpIter
+	catchUpSnap := br.mu.catchUpSnap
+	br.mu.catchUpSnap = nil
+	return catchUpSnap
 }
 
 var overflowLogEvery = log.Every(5 * time.Second)
