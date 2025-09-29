@@ -4236,8 +4236,9 @@ func (sm *TenantsStorageMetrics) subtractMVCCStats(
 }
 
 func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
-	sm.RdbBlockCacheHits.Update(m.BlockCache.Hits)
-	sm.RdbBlockCacheMisses.Update(m.BlockCache.Misses)
+	hits, misses := m.BlockCache.HitsAndMisses.Aggregate()
+	sm.RdbBlockCacheHits.Update(hits)
+	sm.RdbBlockCacheMisses.Update(misses)
 	sm.RdbBlockCacheUsage.Update(m.BlockCache.Size)
 	sm.RdbBloomFilterPrefixUseful.Update(m.Filter.Hits)
 	sm.RdbBloomFilterPrefixChecked.Update(m.Filter.Hits + m.Filter.Misses)
