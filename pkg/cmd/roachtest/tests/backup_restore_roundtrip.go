@@ -448,6 +448,7 @@ func createDriversForBackupRestore(
 
 func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Cluster) {
 	testRNG, seed := randutil.NewLockedPseudoRand()
+	workloadSeed := testRNG.Int63()
 	t.L().Printf("random seed: %d", seed)
 
 	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(), c.CRDBNodes())
@@ -466,7 +467,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, seed, testUtils, dbs,
+			ctx, t, c, m, testRNG, workloadSeed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
