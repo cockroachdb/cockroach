@@ -104,9 +104,10 @@ type ClusterSpec struct {
 	// treated as workload node. Defaults to a VM with 4 CPUs if not specified
 	// by WorkloadNodeCPUs.
 	// TODO(GouravKumar): remove use of WorkloadNode, use WorkloadNodeCount instead
-	WorkloadNode      bool
-	WorkloadNodeCount int
-	WorkloadNodeCPUs  int
+	WorkloadNode         bool
+	WorkloadNodeCount    int
+	WorkloadNodeCPUs     int
+	WorkloadRequiresDisk bool
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	Mem                  MemPerCPU
@@ -226,7 +227,12 @@ func awsMachineSupportsSSD(machineType string) bool {
 }
 
 func getAWSOpts(
-	machineType string, volumeSize, ebsThroughput int, ebsIOPS int, localSSD bool, useSpotVMs bool,
+	machineType string,
+	volumeSize, ebsThroughput int,
+	ebsIOPS int,
+	localSSD bool,
+	useSpotVMs bool,
+	bootDiskOnly bool,
 ) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
@@ -244,6 +250,7 @@ func getAWSOpts(
 		opts.MachineType = machineType
 	}
 	opts.UseSpot = useSpotVMs
+	opts.BootDiskOnly = bootDiskOnly
 	return opts
 }
 
@@ -258,6 +265,7 @@ func getGCEOpts(
 	volumeType string,
 	volumeCount int,
 	useSpot bool,
+	bootDiskOnly bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -286,16 +294,17 @@ func getGCEOpts(
 	if volumeType != "" {
 		opts.PDVolumeType = volumeType
 	}
-
+	opts.BootDiskOnly = bootDiskOnly
 	return opts
 }
 
-func getAzureOpts(machineType string, volumeSize int) vm.ProviderOpts {
+func getAzureOpts(machineType string, volumeSize int, bootDiskOnly bool) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
 	if volumeSize != 0 {
 		opts.NetworkDiskSize = int32(volumeSize)
 	}
+	opts.BootDiskOnly = bootDiskOnly
 	return opts
 }
 
@@ -307,6 +316,7 @@ func getIBMOpts(
 	volumeIOPS int,
 	extraVolumeCount int,
 	RAID0 bool,
+	bootDiskOnly bool,
 ) vm.ProviderOpts {
 	opts := ibm.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -334,6 +344,7 @@ func getIBMOpts(
 		}
 		opts.UseMultipleDisks = !RAID0
 	}
+	opts.BootDiskOnly = bootDiskOnly
 
 	return opts
 }
@@ -510,7 +521,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	var err error
 	switch cloud {
 	case AWS:
-		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, selectedArch)
+		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, false, selectedArch)
 	case GCE:
 		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, selectedArch)
 	case Azure:
@@ -532,27 +543,29 @@ func (s *ClusterSpec) RoachprodOpts(
 	switch cloud {
 	case AWS:
 		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
-			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
-		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput,
-			s.AWS.VolumeIOPS, createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
+			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs, false)
+		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
+			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs, !s.WorkloadRequiresDisk)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType,
+			s.GCE.VolumeCount, s.UseSpotVMs, false,
 		)
 		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.GCE.VolumeCount, s.UseSpotVMs,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType,
+			s.GCE.VolumeCount, s.UseSpotVMs, !s.WorkloadRequiresDisk,
 		)
 	case Azure:
-		providerOpts = getAzureOpts(machineType, s.VolumeSize)
-		workloadProviderOpts = getAzureOpts(workloadMachineType, s.VolumeSize)
+		providerOpts = getAzureOpts(machineType, s.VolumeSize, false)
+		workloadProviderOpts = getAzureOpts(workloadMachineType, s.VolumeSize, true)
 	case IBM:
 		providerOpts = getIBMOpts(machineType, s.TerminateOnMigration, s.VolumeSize,
-			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
+			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0, false,
 		)
 		workloadProviderOpts = getIBMOpts(workloadMachineType, s.TerminateOnMigration, s.VolumeSize,
-			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0,
+			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0, true,
 		)
 	}
 

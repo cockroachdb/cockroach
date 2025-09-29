@@ -26,6 +26,7 @@ type ProviderOpts struct {
 	NetworkDiskSize int32
 	UltraDiskIOPS   int64
 	DiskCaching     string
+	BootDiskOnly    bool
 }
 
 // These default locations support availability zones. At the time of

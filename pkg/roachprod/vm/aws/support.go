@@ -30,6 +30,11 @@ const awsStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a AWS machine for roachprod use.
 
 function setup_disks() {
+{{ if .BootDiskOnly }}
+	echo "VM has no disk attached other than the boot disk."
+	return 0
+{{ end }}
+
 {{ if not .Zfs }}
 	mount_opts="defaults,nofail"
 	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
@@ -181,11 +186,13 @@ func writeStartupScript(
 	useMultiple bool,
 	enableFips bool,
 	remoteUser string,
+	bootDiskOnly bool,
 ) (string, error) {
 	type tmplParams struct {
 		vm.StartupArgs
 		ExtraMountOpts   string
 		UseMultipleDisks bool
+		BootDiskOnly     bool
 	}
 
 	args := tmplParams{
@@ -198,6 +205,7 @@ func writeStartupScript(
 		),
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,
+		BootDiskOnly:     bootDiskOnly,
 	}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")

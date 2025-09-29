@@ -374,6 +374,9 @@ type ProviderOpts struct {
 	ManagedSpotZones []string
 	// Enable the cron service. It is disabled by default.
 	EnableCron bool
+	// BootDiskOnly ensures that no additional disks will be attached, other than
+	// the boot disk.
+	BootDiskOnly bool
 
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
@@ -1456,51 +1459,54 @@ func (p *Provider) computeInstanceArgs(
 		}
 	}
 
+	// Disk selection args.
 	extraMountOpts := ""
 	// Dynamic args.
-	if opts.SSDOpts.UseLocalSSD {
-		if counts, err := AllowedLocalSSDCount(providerOpts.MachineType); err != nil {
-			return nil, cleanUpFn, err
+	if !providerOpts.BootDiskOnly {
+		if opts.SSDOpts.UseLocalSSD {
+			if counts, err := AllowedLocalSSDCount(providerOpts.MachineType); err != nil {
+				return nil, cleanUpFn, err
+			} else {
+				// Make sure the minimum number of local SSDs is met.
+				minCount := counts[0]
+				if providerOpts.SSDCount < minCount {
+					l.Printf("WARNING: SSD count must be at least %d for %q. Setting --gce-local-ssd-count to %d", minCount, providerOpts.MachineType, minCount)
+					providerOpts.SSDCount = minCount
+				}
+			}
+			for i := 0; i < providerOpts.SSDCount; i++ {
+				args = append(args, "--local-ssd", "interface=NVME")
+			}
+			// Add `discard` for Local SSDs on NVMe, as is advised in:
+			// https://cloud.google.com/compute/docs/disks/add-local-ssd
+			extraMountOpts = "discard"
+			if opts.SSDOpts.NoExt4Barrier {
+				extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
+			}
 		} else {
-			// Make sure the minimum number of local SSDs is met.
-			minCount := counts[0]
-			if providerOpts.SSDCount < minCount {
-				l.Printf("WARNING: SSD count must be at least %d for %q. Setting --gce-local-ssd-count to %d", minCount, providerOpts.MachineType, minCount)
-				providerOpts.SSDCount = minCount
+			// create the "PDVolumeCount" number of persistent disks with the same configuration
+			for i := 0; i < providerOpts.PDVolumeCount; i++ {
+				pdProps := []string{
+					fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
+					fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
+					"auto-delete=yes",
+				}
+				// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
+				// option, such as Hyperdisk Throughput:
+				// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
+				args = append(args, "--create-disk", strings.Join(pdProps, ","))
 			}
+			// Enable DISCARD commands for persistent disks, as is advised in:
+			// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
+			extraMountOpts = "discard"
 		}
-		for i := 0; i < providerOpts.SSDCount; i++ {
-			args = append(args, "--local-ssd", "interface=NVME")
-		}
-		// Add `discard` for Local SSDs on NVMe, as is advised in:
-		// https://cloud.google.com/compute/docs/disks/add-local-ssd
-		extraMountOpts = "discard"
-		if opts.SSDOpts.NoExt4Barrier {
-			extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
-		}
-	} else {
-		// create the "PDVolumeCount" number of persistent disks with the same configuration
-		for i := 0; i < providerOpts.PDVolumeCount; i++ {
-			pdProps := []string{
-				fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
-				fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
-				"auto-delete=yes",
-			}
-			// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
-			// option, such as Hyperdisk Throughput:
-			// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
-			args = append(args, "--create-disk", strings.Join(pdProps, ","))
-		}
-		// Enable DISCARD commands for persistent disks, as is advised in:
-		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
-		extraMountOpts = "discard"
 	}
 
 	// Create GCE startup script file.
 	filename, err := writeStartupScript(
 		extraMountOpts, opts.SSDOpts.FileSystem,
 		providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS),
-		providerOpts.EnableCron,
+		providerOpts.EnableCron, providerOpts.BootDiskOnly,
 	)
 	if err != nil {
 		return nil, cleanUpFn, errors.Wrapf(err, "could not write GCE startup script to temp file")
@@ -1579,10 +1585,14 @@ func createInstanceTemplates(
 
 // createInstanceGroups creates an instance group in each zone, for the cluster
 func createInstanceGroups(
-	l *logger.Logger, project, clusterName string, zones []string, opts vm.CreateOpts,
+	l *logger.Logger,
+	project, clusterName string,
+	zones []string,
+	providerOpts *ProviderOpts,
+	opts vm.CreateOpts,
 ) error {
 	groupName := instanceGroupName(clusterName)
-	// Note that we set the IP addresses to be stateful, so that they remain the
+	// Note that we set the IP addresses to be stateful so that they remain the
 	// same when instances are auto-healed, updated, or recreated.
 	createGroupArgs := []string{"compute", "instance-groups", "managed", "create",
 		"--size", "0",
@@ -1592,12 +1602,11 @@ func createInstanceGroups(
 		groupName}
 
 	// Determine the number of stateful disks the instance group should retain. If
-	// we don't use a local SSD, we use 2 stateful disks, a boot disk and a
-	// persistent disk. If we use a local SSD, we use 1 stateful disk, the boot
-	// disk.
+	// we don't use a local SSD, we have the number of persistent disks plus a
+	// boot disk. If we use a local SSD, we use 1 stateful disk, the boot disk.
 	numStatefulDisks := 1
-	if !opts.SSDOpts.UseLocalSSD {
-		numStatefulDisks = 2
+	if !opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly {
+		numStatefulDisks += providerOpts.PDVolumeCount
 	}
 	statefulDiskArgs := make([]string, 0)
 	for i := 0; i < numStatefulDisks; i++ {
@@ -1740,7 +1749,7 @@ func (p *Provider) Create(
 		if err != nil {
 			return nil, err
 		}
-		err = createInstanceGroups(l, project, opts.ClusterName, usedZones, opts)
+		err = createInstanceGroups(l, project, opts.ClusterName, usedZones, providerOpts, opts)
 		if err != nil {
 			return nil, err
 		}
