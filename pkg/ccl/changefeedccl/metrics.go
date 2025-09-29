@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -119,7 +120,7 @@ type metricsRecorder interface {
 	recordMessageSize(int64)
 	recordInternalRetry(int64, bool)
 	recordOneMessage() recordOneMessageCallback
-	recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
+	recordEmittedBatch(startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
 	recordResolvedCallback() func()
 	recordFlushRequestCallback() func()
 	getBackfillCallback() func() func()
@@ -262,7 +263,7 @@ func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 		return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {}
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
 		m.MessageSize.RecordValue(int64(bytes))
 		m.recordEmittedBatch(start, 1, mvcc, bytes, compressedBytes)
@@ -296,12 +297,12 @@ func (m *sliMetrics) recordInternalRetry(numMessages int64, reducedBatchSize boo
 }
 
 func (m *sliMetrics) recordEmittedBatch(
-	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	if m == nil {
 		return
 	}
-	emitNanos := timeutil.Since(startTime).Nanoseconds()
+	emitNanos := startTime.Elapsed().Nanoseconds()
 	m.EmittedRowMessages.Inc(int64(numMessages))
 	m.EmittedBytes.Inc(int64(bytes))
 	m.EmittedBatchSizes.RecordValue(int64(numMessages))
@@ -320,9 +321,9 @@ func (m *sliMetrics) recordResolvedCallback() func() {
 		return func() {}
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() {
-		emitNanos := timeutil.Since(start).Nanoseconds()
+		emitNanos := start.Elapsed().Nanoseconds()
 		m.EmittedResolvedMessages.Inc(1)
 		m.BatchHistNanos.RecordValue(emitNanos)
 		m.EmittedBatchSizes.RecordValue(int64(1))
@@ -334,9 +335,9 @@ func (m *sliMetrics) recordFlushRequestCallback() func() {
 		return func() {}
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() {
-		flushNanos := timeutil.Since(start).Nanoseconds()
+		flushNanos := start.Elapsed().Nanoseconds()
 		m.Flushes.Inc(1)
 		m.FlushHistNanos.RecordValue(flushNanos)
 	}
@@ -666,7 +667,7 @@ func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
 }
 
 func (w *wrappingCostController) recordEmittedBatch(
-	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	w.recordExternalIO(bytes, compressedBytes)
 	w.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)

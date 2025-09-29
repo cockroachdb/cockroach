@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,7 +27,7 @@ func Make(
 	maxBytes int64,
 	metrics *Metrics,
 ) *jobspb.TimestampSpansMap {
-	start := timeutil.Now()
+	start := crtime.NowMono()
 
 	spanGroupMap := make(map[hlc.Timestamp]*roachpb.SpanGroup)
 	for s, ts := range spans {
@@ -60,7 +60,7 @@ func Make(
 	}
 
 	if metrics != nil {
-		metrics.CreateNanos.RecordValue(int64(timeutil.Since(start)))
+		metrics.CreateNanos.RecordValue(start.Elapsed().Nanoseconds())
 		metrics.TotalBytes.RecordValue(int64(cp.Size()))
 		metrics.TimestampCount.RecordValue(int64(cp.TimestampCount()))
 		metrics.SpanCount.RecordValue(int64(cp.SpanCount()))
