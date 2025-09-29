@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/crlib/crtime"
@@ -295,11 +296,38 @@ func (ubr *unbufferedRegistration) drainAllocations(ctx context.Context) {
 // drainAllocations should never be called concurrently with this function.
 // Caller is responsible for draining it again if error is returned.
 func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) error {
-	publish := func() error {
+	publish := func(underLock bool) error {
+		// When not under lock, we use the unbuffered sender until we have sent a
+		// non-empty checkpoint or until we've sent a full buffer worth of events.
+		// The goal here is to inform the stream of its successful catch-up scan
+		// promptly. The checkpoint is typically the first event in the buffer.
+		//
+		// When under lock we always use the buffered sender to avoid blocking for
+		// too long.
+		shouldSendBuffered := underLock
+		foundCheckpoint := false
+		unbufferedSendCount := 0
+
 		for {
 			select {
 			case e := <-ubr.mu.catchUpBuf:
-				err := ubr.stream.SendBuffered(e.event, e.alloc)
+				var err error
+				if shouldSendBuffered {
+					err = ubr.stream.SendBuffered(e.event, e.alloc)
+				} else {
+					unbufferedSendCount++
+					if e.event.Checkpoint != nil && !e.event.Checkpoint.ResolvedTS.IsEmpty() {
+						foundCheckpoint = true
+						shouldSendBuffered = true
+					}
+					if unbufferedSendCount > cap(ubr.mu.catchUpBuf) {
+						if !foundCheckpoint {
+							log.KvDistribution.Warningf(ctx, "no non-empty checkpoint found before transitioning to buffered sender")
+						}
+						shouldSendBuffered = true
+					}
+					err = ubr.stream.SendUnbuffered(e.event)
+				}
 				e.alloc.Release(ctx)
 				putPooledSharedEvent(e)
 				if err != nil {
@@ -315,7 +343,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 	}
 
 	// Drain without holding locks first to avoid unnecessary blocking on publish().
-	if err := publish(); err != nil {
+	if err := publish(false); err != nil {
 		return err
 	}
 
@@ -324,7 +352,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 
 	// Drain again with lock held to ensure that events added to the buffer while
 	// draining took place are also published.
-	if err := publish(); err != nil {
+	if err := publish(true); err != nil {
 		return err
 	}
 
