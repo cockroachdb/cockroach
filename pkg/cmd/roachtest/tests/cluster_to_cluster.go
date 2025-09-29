@@ -1051,6 +1051,16 @@ func (rd *replicationDriver) maybeRestartReaderTenantService(ctx context.Context
 		return nil
 	})
 
+	// Now wait for the reader tenant to be accepting connections
+	readerTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.setup.dst.gatewayNodes[0],
+		option.VirtualClusterName(readerTenantName),
+		option.DBName("system"),
+		option.User("root"),
+		option.AuthMode(install.AuthRootCert))
+
+	defer readerTenantConn.Close()
+	testutils.SucceedsSoon(rd.t, func() error { return readerTenantConn.Ping() })
+
 	rd.t.Status("restarting reader tenant service")
 
 	// Stop the reader tenant service
