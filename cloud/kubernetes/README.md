@@ -1,7 +1,7 @@
 # CockroachDB on Kubernetes as a StatefulSet
 
 This example deploys CockroachDB on [Kubernetes](https://kubernetes.io) as a
-[StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/).
+[StatefulSet](https://github.com/kubernetes/examples/tree/master/_archived/cockroachdb).
 Kubernetes is an open source system for managing containerized applications
 across multiple hosts, providing basic mechanisms for deployment, maintenance,
 and scaling of applications.

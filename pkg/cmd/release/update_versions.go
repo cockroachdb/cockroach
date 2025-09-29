@@ -541,21 +541,7 @@ func generateRepoList(
 			},
 		})
 	}
-	// 4. Orchestration. Only for latest stable releases
-	if isLatest && !releasedVersion.IsPrerelease() {
-		reposToWorkOn = append(reposToWorkOn, prRepo{
-			owner:          owner,
-			repo:           prefix + "cockroach",
-			branch:         "master",
-			githubUsername: "cockroach-teamcity",
-			prBranch:       fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.String(), randomString(4)),
-			commitMessage:  generateCommitMessage("orchestration", releasedVersion, nextVersion),
-			fn: func(gitDir string) error {
-				return updateOrchestration(gitDir, releasedVersion.String())
-			},
-		})
-	}
-	// 5. Merge baking branch back to the release branch.
+	// 4. Merge baking branch back to the release branch.
 	maybeBakingbranches := []string{
 		releasedVersion.Format("release-%X.%Y.%Z-rc"),
 		releasedVersion.Format("staging-v%X.%Y.%Z"),
@@ -571,7 +557,7 @@ func generateRepoList(
 	if len(bakingBranches) > 1 {
 		return []prRepo{}, fmt.Errorf("too many baking branches: %s", strings.Join(maybeBakingbranches, ", "))
 	}
-	// 6. Merge baking branch to the main release branch (e.g. release-25.1).
+	// 5. Merge baking branch to the main release branch (e.g. release-25.1).
 	// For pre-releases we may have no baking branches, thus we use `for` loop
 	// to simplify the code.
 	for _, mergeBranch := range bakingBranches {
@@ -610,7 +596,7 @@ func generateRepoList(
 		}
 		reposToWorkOn = append(reposToWorkOn, repo)
 	}
-	// 7. Merge staging branch to the next release RC branch if it is present.
+	// 6. Merge staging branch to the next release RC branch if it is present.
 	for _, mergeBranch := range bakingBranches {
 		// When we have extraordinary releases, we may have next release RC
 		// branches created. Make sure we merge this branch to the RC branch

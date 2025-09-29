@@ -9,7 +9,6 @@ go_library(
         "templates.go",
         "update_brew.go",
         "update_helm.go",
-        "update_orchestration.go",
         "update_releases.go",
         "update_versions.go",
     ],
