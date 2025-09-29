@@ -103,6 +103,7 @@ func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
 func defaultGithub(disable bool) GithubPoster {
 	return &githubIssues{
 		disable: disable,
+		dryRun:  false,
 		// issuePoster isn't mocked because an env var check exits MaybePost when
 		// the GitHub API isn't present, so technically setting it here doesn't
 		// matter

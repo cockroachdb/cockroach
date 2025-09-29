@@ -2526,7 +2526,18 @@ func (t *T) IsPseudoType() bool {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) Size() (n int) {
-	return t.InternalType.Size()
+	// non-NAME types don't need any serialization changes to be backwards compatible.
+	if t.InternalType.Oid != oid.T_name {
+		return t.InternalType.Size()
+	}
+	// Need to first downgrade the type before delegating to InternalType,
+	// because Marshal will downgrade.
+	temp := *t
+	err := temp.downgradeType()
+	if err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error during Size call"))
+	}
+	return temp.InternalType.Size()
 }
 
 // Identical is the internal implementation for T.Identical. See that comment
@@ -2832,12 +2843,50 @@ func (t *T) upgradeType() error {
 	return nil
 }
 
+// downgradeType transforms NAME types for backwards-compatibility with v25.3
+// and earlier versions during mixed-version clusters. For non-NAME types, this
+// is a no-op.
+//
+// NAME types are downgraded to use the legacy Family=name encoding so that v25.3
+// nodes can correctly interpret them without losing NAME semantics.
+//
+// TODO(sql-foundations): Remove this function entirely once v25.4 is the minimum
+// supported version and we no longer need to support mixed-version clusters with
+// v25.3 nodes.
+func (t *T) downgradeType() error {
+	// Set Family for NAME type for backwards-compatibility.
+	switch t.Family() {
+	case StringFamily, CollatedStringFamily:
+		t.InternalType.Family = name
+		// If locale is an empty string, we set it to nil to ensure older versions
+		// don’t misclassify the NAME as a collated string.
+		if t.InternalType.Locale != nil && len(*t.InternalType.Locale) == 0 {
+			t.InternalType.Locale = nil
+		}
+	}
+
+	return nil
+}
+
 // Marshal serializes a type into a byte representation using gogo protobuf
-// serialization rules. It returns the resulting bytes as a slice.
+// serialization rules. It returns the resulting bytes as a slice. The bytes
+// are serialized in a format that is backwards-compatible with the previous
+// version of CRDB so that clusters can run in mixed version mode during
+// upgrade.
 //
 //	bytes, err := protoutil.Marshal(&typ)
 func (t *T) Marshal() (data []byte, err error) {
-	return protoutil.Marshal(&t.InternalType)
+	// non-NAME types don't need any serialization changes to be backwards compatible.
+	if t.InternalType.Oid != oid.T_name {
+		return protoutil.Marshal(&t.InternalType)
+	}
+	// First downgrade to a struct that will be serialized in a backwards-
+	// compatible bytes format.
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return nil, err
+	}
+	return protoutil.Marshal(&temp.InternalType)
 }
 
 // MarshalToSizedBuffer is like Mashal, except that it deserializes to
@@ -2846,7 +2895,15 @@ func (t *T) Marshal() (data []byte, err error) {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
-	return t.InternalType.MarshalToSizedBuffer(data)
+	// non-NAME types don't need any serialization changes to be backwards compatible.
+	if t.InternalType.Oid != oid.T_name {
+		return t.InternalType.MarshalToSizedBuffer(data)
+	}
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalToSizedBuffer(data)
 }
 
 // MarshalTo behaves like Marshal, except that it deserializes to an existing
@@ -2856,7 +2913,15 @@ func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
 //
 // Marshal is part of the protoutil.Message interface.
 func (t *T) MarshalTo(data []byte) (int, error) {
-	return t.InternalType.MarshalTo(data)
+	// non-NAME types don't need any serialization changes to be backwards compatible.
+	if t.InternalType.Oid != oid.T_name {
+		return t.InternalType.MarshalTo(data)
+	}
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalTo(data)
 }
 
 // String returns the name of the type, similar to the Name method. However, it

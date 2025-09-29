@@ -445,6 +445,12 @@ var (
 		Usage: `Disable posting GitHub issue for failures`,
 	})
 
+	DryRunIssuePosting bool
+	_                  = registerRunFlag(&DryRunIssuePosting, FlagInfo{
+		Name:  "dry-run-issue-posting",
+		Usage: `Enable dry-run mode for GitHub issue posting (formats issues but doesn't post them)`,
+	})
+
 	PromPort int = 2113
 	_            = registerRunFlag(&PromPort, FlagInfo{
 		Name: "prom-port",

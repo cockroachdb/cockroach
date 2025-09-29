@@ -2018,12 +2018,12 @@ func TestConnectionMigration(t *testing.T) {
 		require.Equal(t, totalAttempts, count)
 	}
 
-	transferConnWithRetries := func(t *testing.T, f *forwarder) error {
+	transferConnWithRetries := func(t *testing.T, ctx context.Context, f *forwarder) error {
 		t.Helper()
 
 		var nonRetriableErrSeen bool
 		err := testutils.SucceedsSoonError(func() error {
-			err := f.TransferConnection()
+			err := f.TransferConnection(ctx)
 			if err == nil {
 				return nil
 			}
@@ -2091,7 +2091,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.NoError(t, err)
 
 			// Show that we get alternating SQL pods when we transfer.
-			require.NoError(t, transferConnWithRetries(t, f))
+			require.NoError(t, transferConnWithRetries(t, tCtx, f))
 			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant2.SQLAddr(), queryAddr(tCtx, t, db))
 
@@ -2102,7 +2102,7 @@ func TestConnectionMigration(t *testing.T) {
 			_, err = db.Exec("SET application_name = 'bar'")
 			require.NoError(t, err)
 
-			require.NoError(t, transferConnWithRetries(t, f))
+			require.NoError(t, transferConnWithRetries(t, tCtx, f))
 			require.Equal(t, int64(2), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant1.SQLAddr(), queryAddr(tCtx, t, db))
 
@@ -2120,14 +2120,14 @@ func TestConnectionMigration(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for subCtx.Err() == nil {
-					_ = f.TransferConnection()
+					_ = f.TransferConnection(tCtx)
 					time.Sleep(100 * time.Millisecond)
 				}
 			}()
 
 			// This loop will run approximately 5 seconds.
 			var tenant1Addr, tenant2Addr int
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				addr := queryAddr(tCtx, t, db)
 				if addr == tenant1.SQLAddr() {
 					tenant1Addr++
@@ -2167,7 +2167,7 @@ func TestConnectionMigration(t *testing.T) {
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
 				// Run multiple times to ensure that connection isn't closed.
 				for i := 0; i < 5; {
-					err := f.TransferConnection()
+					err := f.TransferConnection(tCtx)
 					if err == nil {
 						return errors.New("no error")
 					}
@@ -2201,7 +2201,7 @@ func TestConnectionMigration(t *testing.T) {
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			// Once the transaction is closed, transfers should work.
-			require.NoError(t, transferConnWithRetries(t, f))
+			require.NoError(t, transferConnWithRetries(t, tCtx, f))
 			require.NotEqual(t, initAddr, queryAddr(tCtx, t, db))
 			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())
@@ -2223,7 +2223,7 @@ func TestConnectionMigration(t *testing.T) {
 			lookupAddrDelayDuration = 10 * time.Second
 			defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
 
-			err := f.TransferConnection()
+			err := f.TransferConnection(tCtx)
 			require.Error(t, err)
 			require.Regexp(t, "injected delays", err.Error())
 			require.Equal(t, initAddr, queryAddr(tCtx, t, db))
@@ -2319,7 +2319,7 @@ func TestConnectionMigration(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		// This should be an error because the transfer timed out. Connection
 		// should automatically be closed.
-		require.Error(t, f.TransferConnection())
+		require.Error(t, f.TransferConnection(tCtx))
 
 		select {
 		case <-time.After(10 * time.Second):

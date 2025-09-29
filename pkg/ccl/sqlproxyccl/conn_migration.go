@@ -127,7 +127,7 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // error).
 //
 // TransferConnection implements the balancer.ConnectionHandle interface.
-func (f *forwarder) TransferConnection() (retErr error) {
+func (f *forwarder) TransferConnection(ctx context.Context) (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
 	// return right away.
 	if f.ctx.Err() != nil {
@@ -146,18 +146,18 @@ func (f *forwarder) TransferConnection() (retErr error) {
 	// whenever the context expires. We have to close the forwarder because
 	// the transfer may be blocked on I/O, and the only way for now is to close
 	// the connections. This then allow TransferConnection to return and cleanup.
-	ctx, cancel := newTransferContext(f.ctx)
+	transferCtx, cancel := newTransferContext(ctx)
 	defer cancel()
 
 	// Use a separate handler for timeouts. This is the only way to handle
 	// blocked I/Os as described above.
 	go func() {
-		<-ctx.Done()
+		<-transferCtx.Done()
 		// This Close call here in addition to the one in the defer callback
 		// below is on purpose. This would help unblock situations where we're
 		// blocked on sending/reading messages from connections that couldn't
 		// be handled with context.Context.
-		if !ctx.isRecoverable() {
+		if !transferCtx.isRecoverable() {
 			f.Close()
 		}
 	}()
@@ -179,7 +179,7 @@ func (f *forwarder) TransferConnection() (retErr error) {
 
 		// When TransferConnection returns, it's either the forwarder has been
 		// closed, or the procesors have been resumed.
-		if !ctx.isRecoverable() {
+		if !transferCtx.isRecoverable() {
 			log.Dev.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
 			f.Close()
@@ -201,16 +201,16 @@ func (f *forwarder) TransferConnection() (retErr error) {
 
 	// Suspend both processors before starting the transfer.
 	request, response := f.getProcessors()
-	if err := request.suspend(ctx); err != nil {
+	if err := request.suspend(transferCtx); err != nil {
 		return errors.Wrap(err, "suspending request processor")
 	}
-	if err := response.suspend(ctx); err != nil {
+	if err := response.suspend(transferCtx); err != nil {
 		return errors.Wrap(err, "suspending response processor")
 	}
 
 	// Transfer the connection.
 	clientConn, serverConn := f.getConns()
-	newServerConn, err := transferConnection(ctx, f, f.connector, f.metrics, clientConn, serverConn)
+	newServerConn, err := transferConnection(transferCtx, f, f.connector, f.metrics, clientConn, serverConn)
 	if err != nil {
 		return errors.Wrap(err, "transferring connection")
 	}
