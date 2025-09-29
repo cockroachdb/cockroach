@@ -209,12 +209,26 @@ func (e sqlEncoder) DescMetadataPrefix() roachpb.Key {
 	return e.IndexPrefix(DescriptorTableID, DescriptorTablePrimaryKeyIndexID)
 }
 
+// DescUpdatePrefix returns the key prefix for all descriptors in the
+// system.descriptor table.
+func (e sqlEncoder) DescUpdatePrefix() roachpb.Key {
+	return e.IndexPrefix(DescriptorTableID, DescriptorTableDescriptorUpdateIndexID)
+}
+
 // DescMetadataKey returns the key for the descriptor in the system.descriptor
 // table.
 func (e sqlEncoder) DescMetadataKey(descID uint32) roachpb.Key {
 	k := e.DescMetadataPrefix()
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
 	return MakeFamilyKey(k, DescriptorTableDescriptorColFamID)
+}
+
+// DescMetadataUpdateKey returns the key for the descriptor in the system.descriptor
+// table.
+func (e sqlEncoder) DescMetadataUpdateKey(descID uint32) roachpb.Key {
+	k := e.DescUpdatePrefix()
+	k = encoding.EncodeUvarintAscending(k, uint64(descID))
+	return MakeFamilyKey(k, 0)
 }
 
 // TenantMetadataKey returns the key for the tenant metadata in the
@@ -305,6 +319,19 @@ func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint32, error) {
 		return 0, errors.Errorf("descriptor ID %d exceeds uint32 bounds", id)
 	}
 	return uint32(id), nil
+}
+
+// DecodeDescUpdateKey decodes a descriptor ID from a descriptor metadata key.
+func (d sqlDecoder) DecodeDescUpdateKey(key roachpb.Key) (bool, error) {
+	// Extract table and index ID from key.
+	_, tableID, indexID, err := d.DecodeIndexPrefix(key)
+	if err != nil {
+		return false, err
+	}
+	if tableID != DescriptorTableID {
+		return false, errors.Errorf("key is not a descriptor table entry: %v", key)
+	}
+	return indexID == DescriptorTableDescriptorUpdateIndexID, nil
 }
 
 // DecodeTenantMetadataID decodes a tenant ID from a tenant metadata key.

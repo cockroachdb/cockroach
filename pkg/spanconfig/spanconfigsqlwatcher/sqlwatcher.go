@@ -195,6 +195,15 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			// Event for a tombstone on a tombstone -- nothing for us to do here.
 			return
 		}
+		// Skip over any modifications to the descriptor update tracking key, this
+		// is transaction information for the lease manager only.
+		if isUpdateKey, err := s.codec.DecodeDescUpdateKey(ev.Key); isUpdateKey || err != nil {
+			if err != nil {
+				log.Dev.Warningf(ctx, "failed to decode descriptor update key: %v", err)
+			}
+			return
+		}
+
 		value := ev.Value
 		if !ev.Value.IsPresent() {
 			// The descriptor was deleted.

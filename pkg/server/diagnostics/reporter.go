@@ -449,7 +449,7 @@ func (r *Reporter) populateSQLInfo(uptime int64, sql *diagnosticspb.SQLInstanceI
 // type fields. Check out `schematelemetry` package for a better data source for
 // collecting redacted schema information.
 func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescriptor, error) {
-	startKey := keys.MakeSQLCodec(r.TenantID).TablePrefix(keys.DescriptorTableID)
+	startKey := keys.MakeSQLCodec(r.TenantID).IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
 	endKey := startKey.PrefixEnd()
 	kvs, err := r.DB.Scan(ctx, startKey, endKey, 0)
 	if err != nil {

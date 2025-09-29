@@ -211,9 +211,9 @@ func (s *SystemConfig) GetLargestObjectID(
 	// Search for the descriptor table entries within the SystemConfig. lowIndex
 	// (in s.Values) is the first and highIndex one past the last KV pair in the
 	// descriptor table.
-	lowBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
+	lowBound := keys.SystemSQLCodec.IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
 	lowIndex := s.getIndexBound(lowBound)
-	highBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
+	highBound := keys.SystemSQLCodec.IndexPrefix(keys.DescriptorTableID+1, keys.DescriptorTablePrimaryKeyIndexID)
 	highIndex := s.getIndexBound(highBound)
 	if lowIndex == highIndex {
 		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))

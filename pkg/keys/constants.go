@@ -426,9 +426,14 @@ const (
 	ZonesTableConfigColumnID = 2
 	ZonesTableConfigColFamID = 2
 
-	DescriptorTablePrimaryKeyIndexID         = 1
-	DescriptorTableDescriptorColID           = 2
-	DescriptorTableDescriptorColFamID        = 2
+	DescriptorTablePrimaryKeyIndexID  = 1
+	DescriptorTableDescriptorColID    = 2
+	DescriptorTableDescriptorColFamID = 2
+	// DescriptorTableDescriptorUpdateIndexID is not a real index. It is a special
+	// ID used to construct index entries that inform the lease subsystem of
+	// descriptor updates within a transaction. The value for such an entry is a
+	// descpb.DescriptorUpdates message.
+	DescriptorTableDescriptorUpdateIndexID   = 2
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
 	CommentsTablePrimaryKeyIndexID           = 1

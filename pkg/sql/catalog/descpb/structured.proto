@@ -1937,3 +1937,14 @@ message Descriptor {
     FunctionDescriptor function = 5;
   }
 }
+
+// DescriptorUpdates tracks updates to descriptors within a transaction, which
+// will be written to a special key.
+message DescriptorUpdates {
+  option (gogoproto.equal) = true;
+  // Needed for the descriptorProto interface.
+  option (gogoproto.goproto_getters) = true;
+
+  repeated uint32 descriptor_ids = 1 [(gogoproto.customname) = "DescriptorIDs", (gogoproto.casttype) = "ID"];
+  repeated uint32 descriptor_versions = 2  [(gogoproto.customname) = "DescriptorVersions", (gogoproto.casttype) = "DescriptorVersion"];
+}
