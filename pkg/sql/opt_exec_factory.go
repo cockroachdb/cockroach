@@ -153,6 +153,7 @@ func (ef *execFactory) ConstructScan(
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = params.EstimatedRowCount
+	scan.statsCreatedAt = params.StatsCreatedAt
 	scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	scan.lockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)

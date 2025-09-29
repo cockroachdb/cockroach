@@ -7,6 +7,7 @@ package colfetcher
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -23,8 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -200,6 +204,14 @@ func newColBatchScanBase(
 type ColBatchScan struct {
 	*colBatchScanBase
 	cf *cFetcher
+
+	// These fields are used to log a warning if the actual row count observed by
+	// the scan differs significantly from the optimizer estimate.
+	logMisestimate    bool
+	estimatedRowCount uint64
+	statsCreatedAt    time.Time
+	tableName         string
+	indexName         string
 }
 
 // ScanOperator combines common interfaces between operators that perform KV
@@ -291,6 +303,31 @@ func (s *ColBatchScan) Release() {
 	*s = ColBatchScan{}
 }
 
+// maybeLogMisestimate logs a warning if the actual row count observed by the
+// scan differs significantly from the optimizer estimate.
+func (s *ColBatchScan) maybeLogMisestimate(ctx context.Context) {
+	if s.logMisestimate && execinfra.LogScanRowCountMisestimate.Get(&s.flowCtx.Cfg.Settings.SV) && s.estimatedRowCount != 0 {
+		actualRowCount := uint64(s.GetRowsRead())
+		estimatedRowCount := s.estimatedRowCount
+
+		const inaccurateFactor = 2
+		const inaccurateAdditive = 100
+		inaccurateEstimate := actualRowCount*inaccurateFactor+inaccurateAdditive < estimatedRowCount ||
+			estimatedRowCount*inaccurateFactor+inaccurateAdditive < actualRowCount
+
+		if inaccurateEstimate {
+			var suffix string
+			if !s.statsCreatedAt.IsZero() {
+				timeSinceStats := timeutil.Since(s.statsCreatedAt)
+				duration := humanizeutil.LongDuration(timeSinceStats)
+				suffix = fmt.Sprintf("; table stats collected %s ago", duration)
+			}
+			log.Dev.Infof(ctx, "inaccurate estimate for scan on table %q (index %q): estimated=%d actual=%d%s",
+				s.tableName, s.indexName, estimatedRowCount, actualRowCount, suffix)
+		}
+	}
+}
+
 // Close implements the colexecop.Closer interface.
 func (s *ColBatchScan) Close(context.Context) error {
 	// Note that we're using the context of the ColBatchScan rather than the
@@ -298,6 +335,7 @@ func (s *ColBatchScan) Close(context.Context) error {
 	// span.
 	ctx := s.EnsureCtx()
 	s.cf.Close(ctx)
+	s.maybeLogMisestimate(ctx)
 	return s.colBatchScanBase.close()
 }
 
@@ -315,6 +353,7 @@ func NewColBatchScan(
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
+	statsCreatedAt time.Time,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
@@ -359,7 +398,12 @@ func NewColBatchScan(
 		}
 	}
 	return &ColBatchScan{
-		colBatchScanBase: base,
-		cf:               fetcher,
+		colBatchScanBase:  base,
+		cf:                fetcher,
+		logMisestimate:    shouldCollectStats,
+		estimatedRowCount: estimatedRowCount,
+		statsCreatedAt:    statsCreatedAt,
+		tableName:         spec.FetchSpec.TableName,
+		indexName:         spec.FetchSpec.IndexName,
 	}, tableArgs.typs, nil
 }
