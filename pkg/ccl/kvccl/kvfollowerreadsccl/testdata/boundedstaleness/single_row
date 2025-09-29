@@ -2,7 +2,7 @@
 # -ignore-wait-until-match as well. Check diff output carefully!
 
 # Set a lower closed timestamp target to speed up time to reach follower reads.
-exec
+exec-system-tenant
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 ----
 
@@ -138,7 +138,7 @@ reset-matching-stmt-for-tracing
 
 
 # Set a super high closed bounded staleness target and execute a schema change.
-exec
+exec-system-tenant
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
 ----
 
