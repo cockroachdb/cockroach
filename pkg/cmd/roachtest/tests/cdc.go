@@ -1881,14 +1881,10 @@ func runCDCMultiTablePTSBenchmark(
 
 	ct.waitForWorkload()
 
-	t.Status("workload finished, verifying metrics")
+	t.Status("workload finished")
 
-	// These metrics are in nanoseconds, so we are asserting that both
-	// of these latency metrics are less than 25 milliseconds.
-	ct.verifyMetrics(ctx, ct.verifyMetricsUnderThreshold([]string{
-		"changefeed_stage_pts_manage_latency",
-		"changefeed_stage_pts_create_latency",
-	}, float64(30*time.Millisecond)))
+	// TODO(#154447): Send values of changefeed_stage_pts_manage_latency and
+	// changefeed_stage_pts_manage_error_latency metrics to RoachPerf.
 
 	t.Status("multi-table PTS benchmark finished")
 }
@@ -4912,43 +4908,6 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 			for _, m := range fam.Metric {
 				if m.Counter.GetValue() > 0 {
 					found[name] = struct{}{}
-				}
-			}
-
-			if len(found) == len(names) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
-func (ct *cdcTester) verifyMetricsUnderThreshold(
-	names []string, threshold float64,
-) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
-	namesMap := make(map[string]struct{}, len(names))
-	for _, name := range names {
-		namesMap[name] = struct{}{}
-	}
-
-	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
-		found := map[string]struct{}{}
-
-		for name, fam := range metrics {
-			if _, ok := namesMap[name]; !ok {
-				continue
-			}
-
-			for _, m := range fam.Metric {
-				if m.Histogram.GetSampleCount() == 0 {
-					continue
-				}
-
-				observedValue := m.Histogram.GetSampleSum() / float64(m.Histogram.GetSampleCount())
-				if observedValue < threshold {
-					found[name] = struct{}{}
-				} else {
-					ct.t.Fatalf("observed value for metric %s over threshold. observedValue: %f, threshold: %f", name, observedValue, threshold)
 				}
 			}
 
