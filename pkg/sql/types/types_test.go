@@ -789,6 +789,7 @@ func TestUnmarshalCompat(t *testing.T) {
 		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR, Width: 20}, MakeVarChar(20)},
 		{InternalType{Family: StringFamily, VisibleType: visibleCHAR}, BPChar},
 		{InternalType{Family: StringFamily, VisibleType: visibleQCHAR, Width: 1}, QChar},
+		{InternalType{Family: name}, Name},
 	}
 
 	for _, tc := range testCases {
@@ -979,6 +980,17 @@ func TestUpgradeType(t *testing.T) {
 				VisibleType: visibleVARBIT,
 				Oid:         oid.T_varbit,
 				Locale:      &emptyLocale,
+			}},
+		},
+		{
+			desc: "legacy NAME support",
+			input: &T{InternalType: InternalType{
+				Family: name,
+			}},
+			expected: &T{InternalType: InternalType{
+				Family: StringFamily,
+				Oid:    oid.T_name,
+				Locale: &emptyLocale,
 			}},
 		},
 	}
