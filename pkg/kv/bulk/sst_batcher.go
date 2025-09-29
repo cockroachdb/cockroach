@@ -444,7 +444,7 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
 	// Pace based on admission control before adding the key.
-	if err := b.pacer.Pace(ctx); err != nil {
+	if _, err := b.pacer.Pace(ctx); err != nil {
 		return err
 	}
 

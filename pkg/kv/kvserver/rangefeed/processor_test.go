@@ -66,7 +66,7 @@ func TestProcessorBasic(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -201,7 +201,7 @@ func TestProcessorBasic(t *testing.T) {
 			r2Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			true,  /* withDiff */
 			true,  /* withFiltering */
 			false, /* withOmitRemote */
@@ -314,7 +314,7 @@ func TestProcessorBasic(t *testing.T) {
 			r3Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -336,7 +336,7 @@ func TestProcessorBasic(t *testing.T) {
 			r4Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -362,7 +362,7 @@ func TestProcessorOmitRemote(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -388,7 +388,7 @@ func TestProcessorOmitRemote(t *testing.T) {
 			r2Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			true,  /* withOmitRemote */
@@ -446,7 +446,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				r1Stream.ctx,
 				roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 				hlc.Timestamp{WallTime: 1},
-				nil,   /* catchUpIter */
+				nil,   /* catchUpSnap */
 				false, /* withDiff */
 				false, /* withFiltering */
 				false, /* withOmitRemote */
@@ -458,7 +458,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				r2Stream.ctx,
 				roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 				hlc.Timestamp{WallTime: 1},
-				nil,   /* catchUpIter */
+				nil,   /* catchUpSnap */
 				false, /* withDiff */
 				false, /* withFiltering */
 				false, /* withOmitRemote */
@@ -554,7 +554,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -610,7 +610,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -692,7 +692,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -1004,7 +1004,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				defer wg.Done()
 				runtime.Gosched()
 				s := newTestStream()
-				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
 					noBulkDelivery,
 					h.toBufferedStreamIfNeeded(s))
@@ -1078,7 +1078,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				// operation is should see is firstIdx.
 				s := newTestStream()
 				regs[s] = firstIdx
-				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
 					noBulkDelivery,
 					h.toBufferedStreamIfNeeded(s))
@@ -1137,7 +1137,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			rStream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -1218,7 +1218,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			rStream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -1289,7 +1289,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false, /* withOmitRemote */
@@ -1303,7 +1303,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			r2Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
+			nil,   /* catchUpSnap */
 			false, /* withDiff */
 			false, /* withFiltering */
 			false /* withOmitRemote */, noBulkDelivery,
@@ -1474,7 +1474,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 		// Add a registration.
 		stream := newTestStream()
-		ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
+		ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpSnap */
 			false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
 			noBulkDelivery,
 			h.toBufferedStreamIfNeeded(stream))

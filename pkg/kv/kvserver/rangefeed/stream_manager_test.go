@@ -225,7 +225,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 				defer stopper.Stop(ctx)
 				stream := sm.NewStream(sID, rID)
 				sm.RegisteringStream(sID)
-				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 					stream)
 				require.True(t, registered)
@@ -240,7 +240,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
 			sm.RegisteringStream(sID)
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				stream)
 			require.True(t, registered)
@@ -256,7 +256,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
 			sm.RegisteringStream(sID)
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				stream)
 			require.True(t, registered)
