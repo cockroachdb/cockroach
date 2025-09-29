@@ -258,7 +258,7 @@ func TestBufferedSenderOnStreamShutdown(t *testing.T) {
 	}
 
 	// Add our stream to the stream manager.
-	registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+	registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 		sm.NewStream(streamID, 1 /*rangeID*/))
 	require.True(t, registered)
