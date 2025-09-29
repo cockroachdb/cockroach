@@ -175,6 +175,17 @@ var enableMultiLevelWriteAmpHeuristic = settings.RegisterBoolSetting(
 	true,
 )
 
+const defaultRecreateDuration = int(20 * time.Second)
+
+// SnapshotRecreateIterDuration controls how often a storage iterator over a snapshot
+// should be recreated.
+var SnapshotRecreateIterDuration = settings.RegisterDurationSetting(settings.SystemOnly,
+	"storage.snapshot.recreate_iter_duration",
+	"the interval after which a storage iterator over a snapshot should be recreated, "+
+		"to reduce memory usage caused by zombie memtables",
+	time.Duration(metamorphic.ConstantWithTestRange("storage.snapshot.recreate_iter_duration",
+		defaultRecreateDuration, 1, defaultRecreateDuration)))
+
 // SSTableCompressionProfile is an enumeration of compression algorithms
 // available for compressing SSTables (e.g. for backup or transport).
 type SSTableCompressionProfile int64
