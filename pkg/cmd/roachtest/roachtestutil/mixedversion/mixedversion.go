@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/modular"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
@@ -93,6 +94,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
+)
+
+// Type aliases for mixedversion-specific modular step types.
+// These provide convenient shorthand for working with modular steps
+// that use mixedversion's Context and Helper implementations.
+type (
+	// singleStep is a mixedversion-specific single step using modular framework.
+	singleStep = modular.SingleStep[*Context, *Helper]
+	// singleStepProtocol is the interface that mixedversion step implementations must satisfy.
+	singleStepProtocol = modular.SingleStepProtocol[*Context, *Helper]
+	// sequentialRunStep represents sequential execution of multiple steps.
+	sequentialRunStep = modular.SequentialStep
+	// concurrentRunStep represents concurrent execution of multiple steps.
+	concurrentRunStep = modular.ConcurrentRunStep
+	// delayedStep represents a step with an execution delay.
+	delayedStep = modular.DelayedStep
+
+	testStep = modular.TestStep
+
+	shouldStop = modular.ShouldStop
 )
 
 const (
@@ -160,17 +181,6 @@ const (
 )
 
 var (
-	// possibleDelays lists the possible delays to be added to
-	// concurrent steps.
-	possibleDelays = []time.Duration{
-		0,
-		100 * time.Millisecond,
-		500 * time.Millisecond,
-		5 * time.Second,
-		30 * time.Second,
-		3 * time.Minute,
-	}
-
 	// defaultClusterSettings is the set of cluster settings always
 	// passed to `clusterupgrade.StartWithSettings` when (re)starting
 	// nodes in a cluster.
@@ -272,47 +282,6 @@ type (
 		fn        stepFunc
 	}
 
-	// testStep is an opaque reference to one step of a mixed-version
-	// test. It can be a singleStep (see below), or a "meta-step",
-	// meaning that it combines other steps in some way (for instance, a
-	// series of steps to be run sequentially or concurrently).
-	testStep interface{}
-
-	// singleStepProtocol is the set of functions that single step
-	// implementations need to provide.
-	singleStepProtocol interface {
-		// Description is a string representation of the step, intended
-		// for human-consumption. Displayed when pretty-printing the test
-		// plan.
-		Description() string
-		// Background returns a channel that controls the execution of a
-		// background step: when that channel is closed, the context
-		// associated with the step will be canceled. Returning `nil`
-		// indicates that the step should not be run in the background.
-		// When a step is *not* run in the background, the test will wait
-		// for it to finish before moving on. When a background step
-		// fails, the entire test fails.
-		Background() shouldStop
-		// Run implements the actual functionality of the step. This
-		// signature should remain in sync with `stepFunc`.
-		Run(context.Context, *logger.Logger, *rand.Rand, *Helper) error
-		// ConcurrencyDisabled returns true if the step should not be run
-		// concurrently with other steps. This is the case for any steps
-		// that involve restarting a node, as they may attempt to connect
-		// to an unavailable node.
-		ConcurrencyDisabled() bool
-	}
-
-	// singleStep represents steps that implement the pieces on top of
-	// which a mixed-version test is built. In other words, they are not
-	// composed by other steps and hence can be directly executed.
-	singleStep struct {
-		context Context            // the context the step runs in
-		rng     *rand.Rand         // the RNG to be used when running this step
-		ID      int                // unique ID associated with the step
-		impl    singleStepProtocol // the concrete implementation of the step
-	}
-
 	hooks []versionUpgradeHook
 
 	// testHooks groups hooks associated with a mixed-version test in
@@ -389,8 +358,6 @@ type (
 		_isLocal   *bool
 		_getFailer func(name string) (*failures.Failer, error)
 	}
-
-	shouldStop chan struct{}
 
 	// StopFunc is the signature of the function returned by calls that
 	// create background steps. StopFuncs are meant to be called by test
@@ -1283,63 +1250,17 @@ func (t *Test) tenantDescriptor(deploymentMode DeploymentMode) *ServiceDescripto
 	panic(unreachable)
 }
 
-// sequentialRunStep is a "meta-step" that indicates that a sequence
-// of steps are to be executed sequentially. The default test runner
-// already runs steps sequentially. This meta-step exists primarily as
-// a way to group related steps so that a test plan is easier to
-// understand for a human.
-type sequentialRunStep struct {
-	label string
-	steps []testStep
-}
-
-func (s sequentialRunStep) Description() string {
-	return s.label
-}
-
-// delayedStep is a thin wrapper around a test step that marks steps
-// with a random delay that should be honored before the step starts
-// executing. This is useful in steps that are to be executed
-// concurrently to avoid biases of certain execution orders. While the
-// Go scheduler is non-deterministic, in practice schedules are not
-// uniformly distributed, and the delay is inteded to expose scenarios
-// where a specific ordering of events leads to a failure.
-type delayedStep struct {
-	delay time.Duration
-	step  testStep
-}
-
-// concurrentRunStep is a "meta-step" that groups multiple test steps
-// that are meant to be executed concurrently. A random delay is added
-// before each step starts, see notes on `delayedStep`.
-type concurrentRunStep struct {
-	label        string
-	rng          *rand.Rand
-	delayedSteps []testStep
-}
-
 func newConcurrentRunStep(
 	label string, steps []testStep, rng *rand.Rand, isLocal bool,
 ) concurrentRunStep {
-	delayedSteps := make([]testStep, 0, len(steps))
-	for _, step := range steps {
-		delayedSteps = append(delayedSteps, delayedStep{
-			delay: randomConcurrencyDelay(rng, isLocal), step: step,
-		})
-	}
-
-	return concurrentRunStep{label: label, delayedSteps: delayedSteps, rng: rng}
-}
-
-func (s concurrentRunStep) Description() string {
-	return fmt.Sprintf("%s concurrently", s.label)
+	return modular.NewConcurrentRunStep(label, steps, rng, isLocal)
 }
 
 // newSingleStep creates a `singleStep` struct for the implementation
 // passed, making sure to copy the context so that any modifications
 // made to it do not affect this step's view of the context.
 func newSingleStep(context *Context, impl singleStepProtocol, rng *rand.Rand) *singleStep {
-	return &singleStep{context: context.clone(), impl: impl, rng: rng}
+	return modular.NewSingleStep(context, impl, rng)
 }
 
 // prefixedLogger returns a logger instance off of the given `l`
@@ -1442,22 +1363,6 @@ func (th *testHooks) MixedVersionSteps(testContext *Context, rng *rand.Rand) []t
 
 func (th *testHooks) AfterUpgradeFinalizedSteps(testContext *Context, rng *rand.Rand) []testStep {
 	return th.afterUpgradeFinalized.AsSteps(rng, testContext, nil)
-}
-
-// pickRandomDelay chooses a random duration from the list passed,
-// reducing it in local runs, as some tests run as part of CI and we
-// don't want to spend too much time waiting in that context.
-func pickRandomDelay(rng *rand.Rand, isLocal bool, durations []time.Duration) time.Duration {
-	dur := durations[rng.Intn(len(durations))]
-	if isLocal {
-		dur = dur / 10
-	}
-
-	return dur
-}
-
-func randomConcurrencyDelay(rng *rand.Rand, isLocal bool) time.Duration {
-	return pickRandomDelay(rng, isLocal, possibleDelays)
 }
 
 func rngFromRNG(rng *rand.Rand) *rand.Rand {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/modular"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
@@ -275,6 +276,13 @@ func (c *Context) clone() Context {
 		System: c.System.clone(),
 		Tenant: c.Tenant.clone(),
 	}
+}
+
+// Clone implements modular.StepContext interface.
+// Returns a deep copy of the context to ensure step isolation.
+func (c *Context) Clone() modular.StepContext {
+	cloned := c.clone()
+	return &cloned
 }
 
 func intSetP(ns ...int) *intsets.Fast {

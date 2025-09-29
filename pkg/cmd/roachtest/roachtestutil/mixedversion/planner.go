@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/modular"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -389,8 +390,8 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		)
 
 		upgrade.Add([]testStep{
-			sequentialRunStep{label: upgradeStorageClusterLabel, steps: systemUpgradeSteps},
-			sequentialRunStep{label: upgradeTenantLabel, steps: tenantUpgradeSteps},
+			sequentialRunStep{Label: upgradeStorageClusterLabel, Steps: systemUpgradeSteps},
+			sequentialRunStep{Label: upgradeTenantLabel, Steps: tenantUpgradeSteps},
 		})
 	}
 
@@ -909,12 +910,12 @@ func (p *testPlanner) changeVersionSteps(
 			// operations to run.
 			possibleWaitDurations := []time.Duration{1 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 			steps = append(steps, p.newSingleStep(waitStep{
-				dur: pickRandomDelay(p.prng, p.isLocal, possibleWaitDurations),
+				dur: modular.PickRandomDelay(p.prng, p.isLocal, possibleWaitDurations),
 			}))
 		}
 	}
 
-	return []testStep{sequentialRunStep{label: label, steps: steps}}
+	return []testStep{sequentialRunStep{Label: label, Steps: steps}}
 }
 
 // finalizeUpgradeSteps finalizes the upgrade by resetting the
@@ -1192,13 +1193,13 @@ func newUpgradePlan(from, to *clusterupgrade.Version) *upgradePlan {
 		from: from,
 		to:   to,
 		sequentialStep: sequentialRunStep{
-			label: fmt.Sprintf("upgrade cluster from %q to %q", from.String(), to.String()),
+			Label: fmt.Sprintf("upgrade cluster from %q to %q", from.String(), to.String()),
 		},
 	}
 }
 
 func (up *upgradePlan) Add(steps []testStep) {
-	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
+	up.sequentialStep.Steps = append(up.sequentialStep.Steps, steps...)
 }
 
 // mapSingleSteps iterates over every step in the test plan and calls
@@ -1211,23 +1212,23 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 		switch s := step.(type) {
 		case sequentialRunStep:
 			var newSteps []testStep
-			for _, seqStep := range s.steps {
+			for _, seqStep := range s.Steps {
 				newSteps = append(newSteps, mapStep(seqStep, false)...)
 			}
-			s.steps = newSteps
+			s.Steps = newSteps
 			return []testStep{s}
 		case concurrentRunStep:
 			var newSteps []testStep
-			for _, concurrentStep := range s.delayedSteps {
+			for _, concurrentStep := range s.DelayedSteps {
 				ds := concurrentStep.(delayedStep)
-				for _, ss := range mapStep(ds.step, true) {
+				for _, ss := range mapStep(ds.Step, true) {
 					// If the function returned the original step, don't
 					// generate a new delay for it.
-					if ss == ds.step {
-						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
+					if ss == ds.Step {
+						newSteps = append(newSteps, delayedStep{Delay: ds.Delay, Step: ss})
 					} else {
 						newSteps = append(newSteps, delayedStep{
-							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
+							Delay: modular.RandomConcurrencyDelay(s.RNG, plan.isLocal), Step: ss},
 						)
 					}
 				}
@@ -1238,11 +1239,11 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 			// test execution standpoint, to leave this as-is, it's silly to
 			// have a "concurrent run" of a single step, so this
 			// simplification makes the test plan more understandable.
-			if s.label == genericLabel && len(newSteps) == 1 {
-				return []testStep{newSteps[0].(delayedStep).step}
+			if s.Label == genericLabel && len(newSteps) == 1 {
+				return []testStep{newSteps[0].(delayedStep).Step}
 			}
 
-			s.delayedSteps = newSteps
+			s.DelayedSteps = newSteps
 			return []testStep{s}
 		default:
 			ss := s.(*singleStep)
@@ -1266,8 +1267,8 @@ func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 				from: upgrade.from,
 				to:   upgrade.to,
 				sequentialStep: sequentialRunStep{
-					label: upgrade.sequentialStep.label,
-					steps: mapSteps(upgrade.sequentialStep.steps),
+					Label: upgrade.sequentialStep.Label,
+					Steps: mapSteps(upgrade.sequentialStep.Steps),
 				},
 			})
 		}
@@ -1326,7 +1327,7 @@ func (si stepIndex) ContextForInsertion(step *singleStep, op mutationOp) Context
 			// same context if we are inserting the new step relative to a
 			// step that is part of a concurrent group.
 			if j == 0 || j == len(si)-1 || op == mutationInsertConcurrent {
-				return info.step.context.clone()
+				return info.step.Context.clone()
 			}
 
 			var idx int
@@ -1339,7 +1340,7 @@ func (si stepIndex) ContextForInsertion(step *singleStep, op mutationOp) Context
 				panic(fmt.Errorf("internal error: ContextForInsertion: unexpected operation %d", op))
 			}
 
-			return si[idx].step.context.clone()
+			return si[idx].step.Context.clone()
 		}
 	}
 
@@ -1426,10 +1427,10 @@ func (ss stepSelector) CutBefore(predicate func(*singleStep) bool) (stepSelector
 func (ss stepSelector) MarkNodesUnavailable(systemUnavailable bool, tenantUnavailable bool) {
 	for _, s := range ss {
 		if systemUnavailable {
-			s.context.System.hasUnavailableNodes = true
+			s.Context.System.hasUnavailableNodes = true
 		}
-		if tenantUnavailable && s.context.Tenant != nil {
-			s.context.Tenant.hasUnavailableNodes = true
+		if tenantUnavailable && s.Context.Tenant != nil {
+			s.Context.Tenant.hasUnavailableNodes = true
 		}
 	}
 }
@@ -1542,14 +1543,11 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 			if mut.op == mutationInsertBefore ||
 				mut.op == mutationInsertAfter ||
 				mut.op == mutationInsertConcurrent {
-				newSingleStep = &singleStep{
-					context: index.ContextForInsertion(ss, mut.op),
-					impl:    mut.impl,
-					rng:     rngFromRNG(rng),
-				}
-				newSingleStep.context.System.hasUnavailableNodes = mut.hasUnavailableSystemNodes
-				if newSingleStep.context.Tenant != nil {
-					newSingleStep.context.Tenant.hasUnavailableNodes = mut.hasUnavailableTenantNodes
+				context := index.ContextForInsertion(ss, mut.op)
+				newSingleStep = modular.NewSingleStep(&context, mut.impl, rngFromRNG(rng))
+				newSingleStep.Context.System.hasUnavailableNodes = mut.hasUnavailableSystemNodes
+				if newSingleStep.Context.Tenant != nil {
+					newSingleStep.Context.Tenant.hasUnavailableNodes = mut.hasUnavailableTenantNodes
 				}
 			}
 
@@ -1620,9 +1618,9 @@ func (plan *TestPlan) assignIDs() {
 
 	plan.mapSingleSteps(func(ss *singleStep, _ bool) []testStep {
 		stepID := nextID()
-		_, isStartSystem := ss.impl.(startStep)
-		_, isStartSharedProcess := ss.impl.(startSharedProcessVirtualClusterStep)
-		_, isStartSeparateProcess := ss.impl.(startSeparateProcessVirtualClusterStep)
+		_, isStartSystem := ss.Impl.(startStep)
+		_, isStartSharedProcess := ss.Impl.(startSharedProcessVirtualClusterStep)
+		_, isStartSeparateProcess := ss.Impl.(startSeparateProcessVirtualClusterStep)
 		isStartTenant := isStartSharedProcess || isStartSeparateProcess
 
 		if plan.startSystemID == 0 && isStartSystem {
@@ -1779,30 +1777,30 @@ func (plan *TestPlan) prettyPrintStep(
 		var debugInfo string
 		if debug {
 			var finalizingStr string
-			if ss.context.Finalizing() {
+			if ss.Context.Finalizing() {
 				finalizingStr = ",finalizing"
 			}
 
-			stageStr := ss.context.System.Stage.String()
+			stageStr := ss.Context.System.Stage.String()
 			if plan.deploymentMode != SystemOnlyDeployment {
-				stageStr = fmt.Sprintf("system:%s;tenant:%s", ss.context.System.Stage, ss.context.Tenant.Stage)
+				stageStr = fmt.Sprintf("system:%s;tenant:%s", ss.Context.System.Stage, ss.Context.Tenant.Stage)
 			}
 			debugInfo = fmt.Sprintf(" [stage=%s%s]", stageStr, finalizingStr)
 		}
 
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.ID, debugInfo,
+			"%s %s%s (%d)%s\n", prefix, ss.Impl.Description(), extras, ss.ID, debugInfo,
 		))
 	}
 
 	switch s := step.(type) {
 	case sequentialRunStep:
-		writeNested(s.Description(), s.steps)
+		writeNested(s.Description(), s.Steps)
 	case concurrentRunStep:
-		writeNested(s.Description(), s.delayedSteps)
+		writeNested(s.Description(), s.DelayedSteps)
 	case delayedStep:
-		delayStr := fmt.Sprintf("after %s delay", s.delay)
-		writeSingle(s.step.(*singleStep), delayStr)
+		delayStr := fmt.Sprintf("after %s delay", s.Delay)
+		writeSingle(s.Step.(*singleStep), delayStr)
 	default:
 		writeSingle(s.(*singleStep))
 	}

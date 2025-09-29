@@ -203,7 +203,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 
 	switch s := step.(type) {
 	case sequentialRunStep:
-		for _, ss := range s.steps {
+		for _, ss := range s.Steps {
 			if err := tr.runStep(ctx, ss); err != nil {
 				return err
 			}
@@ -212,7 +212,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 
 	case concurrentRunStep:
 		group := ctxgroup.WithContext(tr.ctx)
-		for _, cs := range s.delayedSteps {
+		for _, cs := range s.DelayedSteps {
 			group.GoCtx(func(concurrentCtx context.Context) error {
 				return tr.runStep(concurrentCtx, cs)
 			})
@@ -220,8 +220,8 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 		return group.Wait()
 
 	case delayedStep:
-		time.Sleep(s.delay)
-		return tr.runStep(ctx, s.step)
+		time.Sleep(s.Delay)
+		return tr.runStep(ctx, s.Step)
 
 	default:
 		ss := s.(*singleStep)
@@ -230,12 +230,12 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			return err
 		}
 
-		if stopChan := ss.impl.Background(); stopChan != nil {
+		if stopChan := ss.Impl.Background(); stopChan != nil {
 			tr.startBackgroundStep(ss, stepLogger, stopChan)
 			return nil
 		}
 
-		if _, isUserHook := ss.impl.(runHookStep); isUserHook {
+		if _, isUserHook := ss.Impl.(runHookStep); isUserHook {
 			tr.ranUserHooks.Store(true)
 		}
 
@@ -250,12 +250,12 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 // background or not.
 func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logger.Logger) error {
 	tr.logStep("STARTING", ss, l)
-	tr.logVersions(l, ss.context)
+	tr.logVersions(l, *ss.Context)
 	start := timeutil.Now()
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
-		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.impl.Description())
+		annotation := fmt.Sprintf("(%d): %s", ss.ID, ss.Impl.Description())
 		err := tr.addGrafanaAnnotation(tr.ctx, tr.logger, grafana.AddAnnotationRequest{
 			Text: annotation, StartTime: start.UnixMilli(), EndTime: timeutil.Now().UnixMilli(),
 		})
@@ -265,7 +265,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	}()
 
 	if err := panicAsError(l, func() error {
-		return ss.impl.Run(ctx, l, ss.rng, tr.newHelper(ctx, l, ss.context))
+		return ss.Impl.Run(ctx, l, ss.RNG, tr.newHelper(ctx, l, *ss.Context))
 	}); err != nil {
 		if task.IsContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
@@ -287,7 +287,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stopChan shouldStop) {
 	stop := tr.background.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		return tr.runSingleStep(ctx, ss, l)
-	}, task.Logger(l), task.Name(ss.impl.Description()))
+	}, task.Logger(l), task.Name(ss.Impl.Description()))
 
 	// We start a goroutine to listen for user-requests to stop the
 	// background function.
@@ -315,10 +315,10 @@ func (tr *testRunner) stepError(
 	stepErr := errors.Wrapf(
 		err,
 		"mixed-version test failure while running step %d (%s)",
-		step.ID, step.impl.Description(),
+		step.ID, step.Impl.Description(),
 	)
 
-	return tr.testFailure(ctx, stepErr, l, &step.context)
+	return tr.testFailure(ctx, stepErr, l, step.Context)
 }
 
 // testFailure generates a `testFailure` for failures that happened
@@ -388,7 +388,7 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 
 func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.impl.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.Impl.Description())
 }
 
 func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
@@ -501,7 +501,7 @@ func versionsTable(
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
 func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
-	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
+	name := invalidChars.ReplaceAllString(strings.ToLower(step.Impl.Description()), "")
 	name = fmt.Sprintf("%d_%s", step.ID, name)
 	prefix := filepath.Join(tr.tag, logPrefix, name)
 
