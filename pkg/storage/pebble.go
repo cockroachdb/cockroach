@@ -214,6 +214,32 @@ var useDeprecatedCompensatedScore = settings.RegisterBoolSetting(
 	false,
 )
 
+const defaultRecreateDuration = int(20 * time.Second)
+
+// SnapshotRecreateIterDuration controls how often a storage iterator over a
+// snapshot should be recreated. An iterator pins the memtables it references,
+// and if those memtables are subsequently flushed, but the iterator is still
+// open, they cannot be discarded and are considered zombie memtables. Memory
+// usage via zombie memtables steals capacity from the block cache, and in
+// extreme cases can cause OOMs (see
+// https://github.com/cockroachdb/cockroach/issues/133851). Closing and
+// creating a new iterator over the snapshot prevents accumulation of zombie
+// memtable memory. There is a small cost to recreating the iterator, which
+// should be amortized over the duration (default 20s).
+//
+// An alternative to using a duration would be to query the zombie memtable
+// bytes pinned by the iterator, and recreate when it exceeds some byte
+// threshold. However, the local knowledge of zombie bytes due to an iterator
+// is insufficient, since there can be 100s of iterators each only pinning
+// disjoint sets of 2 memtables each, but resulting in a high aggregate
+// memory. The simpler duration based approach does not have this limitation.
+var SnapshotRecreateIterDuration = settings.RegisterDurationSetting(settings.SystemOnly,
+	"storage.snapshot.recreate_iter_duration",
+	"the interval after which a storage iterator over a snapshot should be recreated, "+
+		"to reduce memory usage caused by zombie memtables",
+	time.Duration(metamorphic.ConstantWithTestRange("storage.snapshot.recreate_iter_duration",
+		defaultRecreateDuration, 1, defaultRecreateDuration)))
+
 // SSTableCompressionProfile is an enumeration of compression algorithms
 // available for compressing SSTables (e.g. for backup or transport).
 type SSTableCompressionProfile int64

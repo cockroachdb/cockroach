@@ -273,12 +273,12 @@ func (r *Replica) RangeFeed(
 		checkTS = r.Clock().Now()
 	}
 
-	// If we will be using a catch-up iterator, wait for the limiter here before
+	// If we will be using a catch-up snapshot, wait for the limiter here before
 	// locking raftMu.
-	usingCatchUpIter := false
+	usingCatchUpSnap := false
 	iterSemRelease := func() {}
 	if !args.Timestamp.IsEmpty() {
-		usingCatchUpIter = true
+		usingCatchUpSnap = true
 		perConsumerRelease := func() {}
 		if perConsumerCatchupLimiter != nil {
 			perConsumerAlloc, err := perConsumerCatchupLimiter.Begin(streamCtx)
@@ -323,21 +323,15 @@ func (r *Replica) RangeFeed(
 		return nil, err
 	}
 
-	// Register the stream with a catch-up iterator.
-	var catchUpIter *rangefeed.CatchUpIterator
-	if usingCatchUpIter {
-		// Pass context.Background() since the context where the iter will be used
-		// is different.
-		catchUpIter, err = rangefeed.NewCatchUpIterator(
-			context.Background(), r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
-			args.Timestamp, iterSemRelease, pacer)
-		if err != nil {
-			r.raftMu.Unlock()
-			iterSemRelease()
-			return nil, err
-		}
+	// Register the stream with a catch-up snapshot.
+	var catchUpSnap *rangefeed.CatchUpSnapshot
+	if usingCatchUpSnap {
+		catchUpSnap = rangefeed.NewCatchUpSnapshot(
+			r.store.StateEngine(), rSpan.AsRawSpanWithNoLocals(),
+			args.Timestamp, iterSemRelease, pacer,
+			storage.SnapshotRecreateIterDuration.Get(&r.store.ClusterSettings().SV))
 		if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
-			catchUpIter.OnEmit = f
+			catchUpSnap.OnEmit = f
 		}
 	}
 
@@ -346,7 +340,7 @@ func (r *Replica) RangeFeed(
 		bulkDeliverySize = int(rangeFeedBulkDeliverySize.Get(&r.store.ClusterSettings().SV))
 	}
 	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
-		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, bulkDeliverySize, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpSnap, args.WithDiff, args.WithFiltering, omitRemote, bulkDeliverySize, stream,
 	)
 	r.raftMu.Unlock()
 
@@ -442,15 +436,15 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 // already running. Requires raftMu be locked.
 // Returns Future[*roachpb.Error] which will return an error once rangefeed
 // completes.
-// Note that caller delegates lifecycle of catchUpIter to this method in both
-// success and failure cases. So it is important that this method closes
-// iterator in case registration fails. Successful registration takes iterator
+// Note that caller delegates lifecycle of catchUpSnap to this method in both
+// success and failure cases. So it is important that this method closes the
+// snap in case registration fails. Successful registration takes snap
 // ownership and ensures it is closed when catch up is complete or aborted.
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp, // exclusive
-	catchUpIter *rangefeed.CatchUpIterator,
+	catchUpSnap *rangefeed.CatchUpSnapshot,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
@@ -459,12 +453,12 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 ) (rangefeed.Processor, rangefeed.Disconnector, error) {
 	defer logSlowRangefeedRegistration(streamCtx)()
 
-	// Always defer closing iterator to cover old and new failure cases.
-	// On successful path where registration succeeds reset catchUpIter to prevent
+	// Always defer closing snapshot to cover old and new failure cases.
+	// On successful path where registration succeeds reset catchUpSnap to prevent
 	// closing it.
 	defer func() {
-		if catchUpIter != nil {
-			catchUpIter.Close()
+		if catchUpSnap != nil {
+			catchUpSnap.Close()
 		}
 	}()
 
@@ -475,7 +469,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
 			stream)
 		if reg {
 			// Registered successfully with an existing processor.
@@ -483,7 +477,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			// that this new registration might be interested in.
 			r.setRangefeedFilterLocked(filter)
 			r.rangefeedMu.Unlock()
-			catchUpIter = nil
+			catchUpSnap = nil
 			return p, disconnector, nil
 		}
 		// If the registration failed, the processor was already being shut
@@ -556,7 +550,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
+	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpSnap, withDiff,
 		withFiltering, withOmitRemote, bulkDeliverySize, stream)
 	if !reg {
 		select {
@@ -566,7 +560,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			panic("unexpected Stopped processor")
 		}
 	}
-	catchUpIter = nil
+	catchUpSnap = nil
 
 	// Set the rangefeed processor and filter reference.
 	r.setRangefeedProcessor(p)
