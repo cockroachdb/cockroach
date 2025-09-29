@@ -57,6 +57,7 @@ var debugTimeSeriesDumpOpts = struct {
 	noOfUploadWorkers      int
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
+	ddMetricInterval       int64 // interval for datadoginit format only
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -65,6 +66,10 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml:                   "/tmp/tsdump.yaml",
 	retryFailedRequests:    false,
 	disableDeltaProcessing: false, // delta processing enabled by default
+
+	// default to 10 seconds interval for datadoginit.
+	// This is based on the scrape interval that is currently set accross all managed clusters
+	ddMetricInterval: 10,
 }
 
 // hostNameOverride is used to override the hostname for testing purpose.
@@ -125,7 +130,22 @@ will then convert it to the --format requested in the current invocation.
 				10_000_000, /* threshold */
 				doRequest,
 			)
-		case tsDumpDatadogInit, tsDumpDatadog:
+		case tsDumpDatadogInit:
+			datadogWriter, err := makeDatadogWriter(
+				debugTimeSeriesDumpOpts.ddSite,
+				true, /* init */
+				debugTimeSeriesDumpOpts.ddApiKey,
+				datadogSeriesThreshold,
+				hostNameOverride,
+				debugTimeSeriesDumpOpts.noOfUploadWorkers,
+				false, /* retryFailedRequests not applicable for init */
+			)
+			if err != nil {
+				return err
+			}
+
+			return datadogWriter.uploadInitMetrics()
+		case tsDumpDatadog:
 			if len(args) < 1 {
 				return errors.New("no input file provided")
 			}
@@ -136,7 +156,7 @@ will then convert it to the --format requested in the current invocation.
 
 			datadogWriter, err := makeDatadogWriter(
 				debugTimeSeriesDumpOpts.ddSite,
-				cmd == tsDumpDatadogInit,
+				false, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
 				datadogSeriesThreshold,
 				hostNameOverride,
