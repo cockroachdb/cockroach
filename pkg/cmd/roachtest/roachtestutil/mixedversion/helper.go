@@ -153,7 +153,7 @@ func (s *Service) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
 	if s.Finalizing {
 		n, db := s.RandomDB(rng)
 		s.stepLogger.Printf("querying cluster version through node %d", n)
-		cv, err := clusterupgrade.ClusterVersion(s.ctx, db)
+		cv, err := clusterupgrade.ClusterVersion(s.ctx, s.stepLogger, db)
 		if err != nil {
 			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
 		}
@@ -245,9 +245,13 @@ func (h *Helper) ExecWithGateway(
 // ExecWithRetry is like ExecWithGateway, but retries the execution of
 // the statement on errors, using the retry options provided.
 func (h *Helper) ExecWithRetry(
-	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
+	rng *rand.Rand,
+	nodes option.NodeListOption,
+	retryOpts retry.Options,
+	query string,
+	args ...interface{},
 ) error {
-	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
+	return h.DefaultService().ExecWithRetry(rng, nodes, retryOpts, query, args...)
 }
 
 // defaultTaskOptions returns the default options that are passed to all tasks
