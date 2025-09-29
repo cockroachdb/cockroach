@@ -57,24 +57,33 @@ subtest end
 # inspect and scrub are converging so for now tests on INSPECT live here
 subtest inspect
 
+onlyif config local-mixed-25.2 local-mixed-25.3
+statement error pq: SHOW INSPECT ERRORS requires the cluster to be upgraded to v25.4
+SHOW INSPECT ERRORS
+
 statement ok
 CREATE TABLE foo (c1 INT);
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement error INSPECT TABLE requires the enable_inspect_command setting to be enabled
 INSPECT TABLE foo;
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement error INSPECT DATABASE requires the enable_inspect_command setting to be enabled
 INSPECT DATABASE test;
 
 statement ok
 SET enable_inspect_command = true;
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT TABLE foo;
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT TABLE foo WITH OPTIONS INDEX (bar.public.biz);
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (bar,biz);
 
@@ -84,9 +93,11 @@ CREATE USER testuser2;
 
 user testuser2
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT TABLE foo;
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT DATABASE test;
 
@@ -100,9 +111,11 @@ user testuser2
 statement ok
 SET enable_inspect_command = true;
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT TABLE foo;
 
+skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT DATABASE test;
 
