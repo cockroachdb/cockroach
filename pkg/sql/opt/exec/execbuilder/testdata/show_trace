@@ -122,10 +122,9 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 query TT
 $trace_query
 ----
-count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-count      CPut /Table/108/2/2/0 -> /BYTES/0x89
-count      fast path completed
-sql query  rows affected: 1
+insert fast path  CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
+insert fast path  CPut /Table/108/2/2/0 -> /BYTES/0x89
+sql query         rows affected: 1
 
 
 statement error duplicate key value
@@ -135,9 +134,9 @@ query TT
 set tracing=off;
 $trace_query
 ----
-count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-count      CPut /Table/108/2/2/0 -> /BYTES/0x89
-sql query  execution failed after 0 rows: duplicate key value violates unique constraint "kv_pkey"
+insert fast path  CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
+insert fast path  CPut /Table/108/2/2/0 -> /BYTES/0x89
+sql query         execution failed after 0 rows: duplicate key value violates unique constraint "kv_pkey"
 
 statement error duplicate key value
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -146,9 +145,9 @@ query TT
 set tracing=off;
 $trace_query
 ----
-count      CPut /Table/108/1/2/0 -> /TUPLE/2:2:Int/2
-count      CPut /Table/108/2/2/0 -> /BYTES/0x8a
-sql query  execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+insert fast path  CPut /Table/108/1/2/0 -> /TUPLE/2:2:Int/2
+insert fast path  CPut /Table/108/2/2/0 -> /BYTES/0x8a
+sql query         execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv;
@@ -174,8 +173,7 @@ $trace_query
 ----
 colbatchscan  Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
-count         Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
-count         fast path completed
+update        Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
 sql query     rows affected: 1
 
 statement ok
@@ -185,7 +183,6 @@ query TT
 $trace_query
 ----
 delete range  DelRange /Table/109/1 - /Table/109/2
-delete range  fast path completed
 sql query     rows affected: 1
 
 statement ok
@@ -212,9 +209,8 @@ $trace_query
 ----
 colbatchscan  Scan /Table/108/{1-2} lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv/kv_pkey/1/v -> /2
-count         Del /Table/108/1/1/0
-count         Del (locking) /Table/108/2/2/0
-count         fast path completed
+delete        Del /Table/108/1/1/0
+delete        Del (locking) /Table/108/2/2/0
 sql query     rows affected: 1
 
 statement ok

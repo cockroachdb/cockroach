@@ -69,7 +69,12 @@ func newPlanNodeToRowSource(
 		firstNotWrapped: firstNotWrapped,
 		row:             p.row,
 	}
-	if fastPath {
+	// TODO(drewk): unify all rows-affected-returning plan nodes.
+	isRowsAffectedMutation := false
+	if n, ok := source.(mutationPlanNode); ok {
+		isRowsAffectedMutation = n.returnsRowsAffected()
+	}
+	if fastPath || isRowsAffectedMutation {
 		// If our node is a "fast path node", it means that we're set up to
 		// just return a row count meaning we'll output a single row with a
 		// single INT column.
@@ -191,7 +196,11 @@ func init() {
 }
 
 func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if p.State == execinfra.StateRunning && p.fastPath {
+	// Mutation plan nodes output the number of rows written in a single row
+	// via the usual Next() and Values() methods even if fastPath is true.
+	// TODO(drewk): remove this in the next commit.
+	_, isMutation := p.node.(mutationPlanNode)
+	if p.State == execinfra.StateRunning && p.fastPath && !isMutation {
 		var count int
 		// If our node is a "fast path node", it means that we're set up to just
 		// return a row count. So trigger the fast path and return the row count as

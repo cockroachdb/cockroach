@@ -891,7 +891,6 @@ fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
 fetched: /tu/tu_pkey/1:cf=1 -> <undecoded>
 fetched: /tu/tu_pkey/1/c/d:cf=2 -> /3/4
 Put (locking) /Table/115/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
-fast path completed
 rows affected: 1
 
 statement ok
@@ -907,7 +906,6 @@ fetched: /tu/tu_pkey/1/b:cf=1 -> 2
 fetched: /tu/tu_pkey/1/c/d:cf=2 -> /4/4
 Del (locking) /Table/115/1/1/1/1
 Del (locking) /Table/115/1/1/2/1
-fast path completed
 rows affected: 1
 
 # ------------------------------------------------------------------------------

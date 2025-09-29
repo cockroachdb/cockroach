@@ -1118,7 +1118,7 @@ quality of service: regular
         ├── • delete
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
-        │   │ actual row count: 0
+        │   │ actual row count: 1
         │   │ execution time: 0µs
         │   │ from: loop_b
         │   │
@@ -1168,7 +1168,7 @@ quality of service: regular
                 ├── • delete
                 │   │ sql nodes: <hidden>
                 │   │ regions: <hidden>
-                │   │ actual row count: 0
+                │   │ actual row count: 1
                 │   │ execution time: 0µs
                 │   │ from: loop_a
                 │   │

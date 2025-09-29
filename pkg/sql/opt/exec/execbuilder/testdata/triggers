@@ -821,7 +821,7 @@ quality of service: regular
         │   │ columns: ()
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
-        │   │ actual row count: 0
+        │   │ actual row count: 1
         │   │ vectorized batch count: 0
         │   │ execution time: 0µs
         │   │ estimated row count: 0 (missing stats)
@@ -1068,7 +1068,7 @@ quality of service: regular
         │   │ columns: ()
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
-        │   │ actual row count: 0
+        │   │ actual row count: 1
         │   │ vectorized batch count: 0
         │   │ execution time: 0µs
         │   │ estimated row count: 0 (missing stats)
