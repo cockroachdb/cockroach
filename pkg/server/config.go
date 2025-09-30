@@ -806,19 +806,23 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		}
 
 		if spec.InMemory {
-			var sizeInBytes = spec.Size.Bytes
-			if spec.Size.Percent > 0 {
-				sysMem, err := status.GetTotalMemory(ctx)
-				if err != nil {
-					return Engines{}, errors.Errorf("could not retrieve system memory")
+			var sizeInBytes int64
+			if spec.Size.IsSet() {
+				if spec.Size.IsBytes() {
+					sizeInBytes = spec.Size.Bytes()
+				} else {
+					sysMem, err := status.GetTotalMemory(ctx)
+					if err != nil {
+						return Engines{}, errors.Errorf("could not retrieve system memory")
+					}
+					sizeInBytes = spec.Size.Calculate(sysMem)
 				}
-				sizeInBytes = int64(float64(sysMem) * spec.Size.Percent / 100)
+				if !storeKnobs.SkipMinSizeCheck && sizeInBytes < storageconfig.MinimumStoreSize {
+					return Engines{}, errors.Errorf("%s (%s) is below the minimum requirement of %s",
+						spec.Size, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(storageconfig.MinimumStoreSize))
+				}
+				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			}
-			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
-			}
-			addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
 			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 
@@ -831,13 +835,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
-			var sizeInBytes = spec.Size.Bytes
-			if spec.Size.Percent > 0 {
-				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
-			}
-			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
-				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+			var sizeInBytes = spec.Size.Calculate(int64(du.TotalBytes))
+			if spec.Size.IsSet() && !storeKnobs.SkipMinSizeCheck && sizeInBytes < storageconfig.MinimumStoreSize {
+				return Engines{}, errors.Errorf("%s: %s (%s) is below the minimum requirement of %s",
+					spec.Path, spec.Size, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(storageconfig.MinimumStoreSize))
 			}
 			monitor, err := cfg.DiskMonitorManager.Monitor(spec.Path)
 			if err != nil {
@@ -851,9 +852,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.DiskWriteStatsCollector(statsCollector))
 
-			if spec.Size.Percent > 0 {
+			if spec.Size.IsPercent() {
 				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))
-				addCfgOpt(storage.MaxSizePercent(spec.Size.Percent / 100))
+				addCfgOpt(storage.MaxSizePercent(spec.Size.Percent() / 100))
 			} else {
 				detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))

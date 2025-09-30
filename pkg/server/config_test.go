@@ -45,7 +45,10 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
-	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: storageconfig.Size{Bytes: base.MinimumStoreSize * 100}}}}
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{
+		InMemory: true,
+		Size:     storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
+	}}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
@@ -73,9 +76,9 @@ func TestCreateEnginesWithMultipleStores(t *testing.T) {
 	tmpDir2, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{
-		{Size: storageconfig.Size{Bytes: base.MinimumStoreSize}, Path: tmpDir1},
-		{Size: storageconfig.Size{Bytes: base.MinimumStoreSize}, Path: tmpDir2},
-		{InMemory: true, Size: storageconfig.Size{Bytes: base.MinimumStoreSize * 100}},
+		{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir1},
+		{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir2},
+		{InMemory: true, Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100)},
 	}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
@@ -101,7 +104,10 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 
 	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.JoinList = []string{"localhost:12345", "[::1]:23456", "f00f::1234", ":34567", ":0", ":", "", "localhost"}
-	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: storageconfig.Size{Bytes: base.MinimumStoreSize * 100}}}}
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{
+		InMemory: true,
+		Size:     storageconfig.BytesSize(storageconfig.MinimumStoreSize * 100),
+	}}}
 	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
