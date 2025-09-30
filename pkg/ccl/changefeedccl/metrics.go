@@ -554,8 +554,8 @@ func (k *kafkaHistogramAdapter) Variance() (_ float64) {
 }
 
 type parallelIOMetricsRecorder interface {
-	recordPendingQueuePush(numKeys int64)
-	recordPendingQueuePop(numKeys int64, latency time.Duration)
+	recordPendingQueuePush(numMessages int64)
+	recordPendingQueuePop(numMessages int64, latency time.Duration)
 	recordResultQueueLatency(latency time.Duration)
 	setInFlightKeys(n int64)
 }
@@ -976,7 +976,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	metaChangefeedParallelIOPendingRows := metric.Metadata{
 		Name:        "changefeed.parallel_io_pending_rows",
 		Help:        "Number of rows which are blocked from being sent due to conflicting in-flight keys",
-		Measurement: "Keys",
+		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedParallelIOResultQueueNanos := metric.Metadata{
