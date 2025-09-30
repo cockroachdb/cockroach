@@ -366,6 +366,7 @@ func (s *azureStorage) ReadFile(
 			}
 		}
 	}
+	// BUG: we should follow the azure retry setting here.
 	reader := resp.NewRetryReader(ctx, &azblob.RetryReaderOptions{MaxRetries: 3})
 	return ioctx.ReadCloserAdapter(reader), fileSize, nil
 }
