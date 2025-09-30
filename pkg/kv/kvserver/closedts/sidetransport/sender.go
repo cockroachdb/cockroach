@@ -368,6 +368,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
+	sideTransportPacingInterval := closedts.SideTransportPacingRefreshInterval.Get(&s.st.SV)
 	for pol := ctpb.RangeClosedTimestampPolicy(0); pol < ctpb.RangeClosedTimestampPolicy(numPolicies); pol++ {
 		target := closedts.TargetForPolicy(
 			now,
@@ -375,6 +376,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			lagTargetDuration,
 			leadTargetOverride,
 			sideTransportCloseInterval,
+			sideTransportPacingInterval,
 			pol,
 		)
 		s.trackedMu.lastClosed[pol] = target
