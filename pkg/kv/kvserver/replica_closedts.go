@@ -155,6 +155,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
+		closedts.SideTransportPacingRefreshInterval.Get(&r.ClusterSettings().SV),
 		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()),
 	)
 }
