@@ -395,6 +395,15 @@ var errHandling = func(err error) {
 	}
 }
 
+// addSpanToResult combines the new span with the current inverted expression,
+// returning the updated result.
+func addSpanToResult(result inverted.Expression, span inverted.Span) inverted.Expression {
+	if result == nil {
+		return inverted.ExprForSpan(span, true /* tight */)
+	}
+	return inverted.Or(result, inverted.ExprForSpan(span, true /* tight */))
+}
+
 // spanThreshold is a safeguard to avoid generating too many spans. Since
 // the number of spans grows exponentially with the number of Key components
 // in the path, we set a threshold to limit the number of spans generated.
@@ -498,18 +507,13 @@ func buildInvertedIndexSpans(
 	}
 
 	// Terminal case: we've reached the last Key component in the path.
-	// We then could take one step further and eliminate some intermediate allocations.
-	// I think with such structure in place we could avoid building encodedKeys and then spans,
-	// and instead build resultExpression right away.
 	if currentIndex == finalKeyIndex {
-		var resultExpression inverted.Expression
 		switch pathType := pathComponents[currentIndex].(type) {
 		case Key, Current:
+			var resultExpression inverted.Expression
 			for _, prefix := range prefixBytes {
-				var spans []inverted.Span
 				var baseKey []byte
 				key, isKey := pathType.(Key)
-				encodedKeys := make([][]byte, 0)
 				if isKey {
 					// Build the key by appending to the current prefix.
 					baseKey = append(prefix[:len(prefix):len(prefix)], []byte(key)...)
@@ -530,7 +534,7 @@ func buildInvertedIndexSpans(
 						errHandling(errors.AssertionFailedf("expected exactly one encoded key, got %d", len(objectKeys)))
 						return nil
 					}
-					encodedKeys = append(encodedKeys, objectKeys[0])
+					resultExpression = addSpanToResult(resultExpression, inverted.MakeSingleValSpan(objectKeys[0]))
 
 					// Encode for array element: {"key": ["value"]}.
 					arrayKeys, err := scalar.Value.EncodeInvertedIndexKeys(encoding.EncodeArrayAscending(encoding.AddJSONPathSeparator(baseKey[:len(baseKey):len(baseKey)])))
@@ -538,46 +542,27 @@ func buildInvertedIndexSpans(
 						errHandling(err)
 						return nil
 					}
-					if len(objectKeys) != 1 {
-						errHandling(errors.AssertionFailedf("expected exactly one encoded key, got %d", len(objectKeys)))
+					if len(arrayKeys) != 1 {
+						errHandling(errors.AssertionFailedf("expected exactly one encoded key, got %d", len(arrayKeys)))
 						return nil
 					}
-					encodedKeys = append(encodedKeys, arrayKeys[0])
+					resultExpression = addSpanToResult(resultExpression, inverted.MakeSingleValSpan(arrayKeys[0]))
 				} else {
 					// Meaning this is of the keychain mode. (See isSupportedPathPattern).
-					encodedKeys = append(encodedKeys, baseKey)
-				}
-
-				for _, encodedKey := range encodedKeys {
-					if filterValue != nil {
-						// Exact match for filter expressions.
-						spans = append(spans, inverted.MakeSingleValSpan(encodedKey))
-					} else {
-						// Prefix match for general path traversal.
-						spans = append(spans, inverted.Span{
-							Start: encodedKey,
-							End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(encodedKey)),
-						})
-					}
-				}
-
-				// Combine all spans into a single OR expression.
-				for _, span := range spans {
-					if resultExpression == nil {
-						resultExpression = inverted.ExprForSpan(span, true /* tight */)
-					} else {
-						resultExpression = inverted.Or(resultExpression, inverted.ExprForSpan(span, true /* tight */))
-					}
+					resultExpression = addSpanToResult(resultExpression, inverted.Span{
+						Start: baseKey,
+						End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(baseKey)),
+					})
 				}
 			}
+			return resultExpression
+
 		case Filter:
 			operation := pathType.Condition.(Operation)
 			leftPaths := operation.Left.(Paths)
 			// Recursively process the filter's left path with the right-hand value as the filter.
 			return buildInvertedIndexSpans(prefixBytes, leftPaths, 0, lastKeyIndex(leftPaths), operation.Right)
 		}
-
-		return resultExpression
 	}
 
 	// Recursive case: build prefixes for the current path component and continue.
