@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -52,6 +53,21 @@ const (
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), filter *registry.TestFilter) error {
+	// On Darwin, start caffeinate to prevent the system from sleeping.
+	if runtime.GOOS == "darwin" && roachtestflags.Caffeinate {
+		pid := os.Getpid()
+		cmd := exec.Command("caffeinate", "-i", "-w", strconv.Itoa(pid))
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to start caffeinate: %v\n", err)
+		} else {
+			defer func() {
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
+			}()
+		}
+	}
+
 	globalSeed := randutil.NewPseudoSeed()
 	if globalSeedEnv := os.Getenv("ROACHTEST_GLOBAL_SEED"); globalSeedEnv != "" {
 		if parsed, err := strconv.ParseInt(globalSeedEnv, 0, 64); err == nil {

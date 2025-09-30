@@ -497,6 +497,14 @@ var (
 						Always collect artifacts during test teardown, even if the test did not
 						time out or fail.`,
 	})
+
+	Caffeinate bool = true
+	_               = registerRunFlag(&Caffeinate, FlagInfo{
+		Name: "caffeinate",
+		Usage: `
+						On Darwin, prevent the system from sleeping while roachtest is running
+						by invoking caffeinate -i -w <pid>. Default is true.`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
