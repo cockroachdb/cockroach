@@ -110,6 +110,7 @@ func getTargetsFromDatabaseSpec(
 	ctx context.Context, ts jobspb.ChangefeedTargetSpecification, execCfg *sql.ExecutorConfig,
 ) (targets changefeedbase.Targets, err error) {
 	err = sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descs *descs.Collection) error {
+		// TODO: Set fixed timestamp here.
 		databaseDescriptor, err := descs.ByIDWithLeased(txn.KV()).Get().Database(ctx, ts.DescID)
 		if err != nil {
 			return err

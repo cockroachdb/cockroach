@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -516,7 +518,7 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets)
+		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets, hlc.Timestamp{})
 		if err == nil {
 			log.Changefeed.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -1727,6 +1729,16 @@ func (b *changefeedResumer) resumeWithRetries(
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+
+	mm := mon.NewMonitor(mon.Options{
+		Name:      mon.MakeName("test-mm"),
+		Limit:     1024 * 1024,
+		Increment: 128,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
+	mm.Start(ctx, nil, mon.NewStandaloneBudget(1024*2024))
+	defer mm.Stop(ctx)
+
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
@@ -1740,24 +1752,109 @@ func (b *changefeedResumer) resumeWithRetries(
 				knobs.BeforeDistChangefeed()
 			}
 
-			confPoller := make(chan struct{})
+			runningChangefeedChan := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
+
+			// TODO: Get targets at the HWM, if it exists.
 			targets, err := AllTargets(ctx, details, execCfg)
 			if err != nil {
 				return err
 			}
+			var watcher *tableset.Watcher
+			watcherChan := make(chan []tableset.TableDiff)
+			if targets.NumUniqueTables() == 0 {
+				// If db-level changefeed with no watched tables.
+				if len(details.TargetSpecifications) == 0 {
+					return errors.New("no target specifications")
+				}
+
+				// Create watcher dependencies.
+				spec := details.TargetSpecifications[0]
+				if spec.Type != jobspb.ChangefeedTargetSpecification_DATABASE {
+					return errors.New("target specification is not a database, so no tables to watch")
+				}
+				dbID := spec.DescID
+				// TODO: Verify this. When would dbID be 0?
+				if dbID == 0 {
+					return errors.New("database ID is 0, so no tables to watch")
+				}
+				filter := tableset.Filter{
+					DatabaseID: dbID,
+				}
+				var initialWatcherTS hlc.Timestamp
+				if h := localState.progress.GetHighWater(); h != nil && !h.IsEmpty() {
+					initialWatcherTS = *h
+				} else {
+					initialWatcherTS = details.StatementTime
+				}
+
+				// Create a watcher for the database.
+				watcher = tableset.NewWatcher(filter, execCfg, mm, int64(jobID))
+				timestamp := initialWatcherTS
+				g.GoCtx(func(ctx context.Context) error {
+					err := watcher.Start(ctx, timestamp)
+					if err != nil {
+						return err
+					}
+					return nil
+				})
+				// TODO: Verify that the watcher closes when the context is done.
+				// Does that mean the watcher will continue to run even once
+				// the changefeed is planned and running?
+			} else {
+				close(watcherChan)
+			}
+
+			// Start the changefeed.
 			g.GoCtx(func(ctx context.Context) error {
-				defer close(confPoller)
-				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets)
+				defer close(runningChangefeedChan)
+				var schemaTSOverride hlc.Timestamp
+				// for targets.NumUniqueTables() == 0 {
+				if targets.NumUniqueTables() == 0 {
+					fmt.Printf("no target tables, blocking on watcherChan\n")
+					diffs := <-watcherChan
+					fmt.Printf("received diffs: %v\n", diffs)
+					fmt.Printf("watcherChan closed\n")
+					if len(diffs) == 0 {
+						return errors.New("no diffs")
+					} else {
+						// Get the diff with the earliest timestamp.
+						earliestDiff := diffs[0]
+						if earliestDiff.Added.ID == 0 {
+							return errors.New("no added table")
+						}
+						earliestTimestamp := earliestDiff.AsOf
+						schemaTSOverride = earliestTimestamp
+						fmt.Printf("schemaTSOverride: %s\n", schemaTSOverride)
+						for _, diff := range diffs {
+							if diff.AsOf.LessEq(earliestTimestamp) {
+								if diff.Dropped.ID != 0 {
+									return errors.New("dropping table while tableset should be empty")
+								}
+								targets.Add(changefeedbase.Target{
+									DescID:            diff.Added.ID,
+									FamilyName:        "",
+									StatementTimeName: changefeedbase.StatementTimeName(diff.Added.Name),
+								})
+							} else {
+								break
+							}
+						}
+					}
+				}
+				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets, schemaTSOverride)
 			})
+
+			// Poll for updated configuration or new database tables if hibernating.
 			g.GoCtx(func(ctx context.Context) error {
-				t := time.NewTicker(15 * time.Second)
+				// todo: change back to 15 seconds. This just simplifies testing.
+				t := time.NewTicker(3 * time.Second)
 				defer t.Stop()
 				for {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case <-confPoller:
+					case <-runningChangefeedChan:
 						return nil
 					case <-t.C:
 						newDest, err := reloadDest(ctx, jobID, execCfg)
@@ -1767,11 +1864,26 @@ func (b *changefeedResumer) resumeWithRetries(
 							resolvedDest = newDest
 							return replanErr
 						}
+						if watcher == nil {
+							continue
+						}
+						unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, execCfg.Clock.Now())
+						if err != nil {
+							return err
+						}
+						if !unchanged {
+							if len(diffs) == 0 {
+								return errors.New("no diffs")
+							}
+							fmt.Printf("sending diffs to watcherChan: %v\n", diffs)
+							watcherChan <- diffs
+						}
 					}
 				}
 			})
 
 			flowErr = g.Wait()
+			fmt.Printf("flowErr: %v\n", flowErr)
 
 			if flowErr == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
