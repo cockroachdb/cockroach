@@ -75,6 +75,10 @@ type sender interface {
 	// background until a node level error is encountered which would shut down
 	// all streams in StreamManager.
 	run(ctx context.Context, stopper *stop.Stopper, onError func(int64)) error
+
+	// Remove stream is called when an individual stream is being removed.
+	removeStream(streamID int64)
+
 	// cleanup is called when the sender is stopped. It is expected to clean up
 	// any resources used by the sender.
 	cleanup(ctx context.Context)
@@ -108,12 +112,16 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 // streamID to avoid metrics inaccuracy when the error is sent before the stream
 // is added to the StreamManager.
 func (sm *StreamManager) OnError(streamID int64) {
-	sm.streams.Lock()
-	defer sm.streams.Unlock()
-	if _, ok := sm.streams.m[streamID]; ok {
-		delete(sm.streams.m, streamID)
-		sm.metrics.ActiveMuxRangeFeed.Dec(1)
-	}
+	func() {
+		sm.streams.Lock()
+		defer sm.streams.Unlock()
+		if _, ok := sm.streams.m[streamID]; ok {
+			// TODO(ssd): We should be able to assert we are disconnected here.
+			delete(sm.streams.m, streamID)
+			sm.metrics.ActiveMuxRangeFeed.Dec(1)
+		}
+	}()
+	sm.sender.removeStream(streamID)
 }
 
 // DisconnectStream disconnects the stream with the given streamID.

@@ -7,12 +7,14 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -48,38 +50,20 @@ import (
 //               BufferedPerRangeEventSink.Send    BufferedPerRangeEventSink.SendError
 //
 
-// RangefeedSingleBufferedSenderQueueMaxSize is the maximum number of events
-// that the buffered sender will buffer before it starts returning capacity
-// exceeded errors. Updates to this setting are only applied to new
-// MuxRangefeedCalls. Existing streams will use the previous value until
+// RangefeedSingleBufferedSenderQueueMaxPerReg is the maximum number of events
+// that the buffered sender will buffer for a single registration (identified by
+// streamID). Existing MuxRangefeeds will use the previous value until
 // restarted.
-//
-// The default here has been arbitrarily chosen. Ideally,
-//
-//   - We want to avoid capacity exceeded errors that wouldn't have occurred
-//     when the buffered registrations were in use.
-//
-//   - We don't want to drastically increase the amount of queueing allowed for a
-//     single registration.
-//
-// A small buffer may be justified given that:
-//
-//   - One buffered sender is feeding a single gRPC client, so scaling based on
-//     registrations doesn't necessarily make sense. If the consumer is behind, it
-//     is behind.
-//
-//   - Events emitted during catchup scans have their own per-registration buffer
-//     still.
 //
 // TODO(ssd): This is a bit of a stop-gap so that we have a knob to turn if we
 // need to. We probably want each buffered sender (or each consumerID) to be
 // able to hold up to some fraction of the total rangefeed budget. But we are
 // starting here for now.
-var RangefeedSingleBufferedSenderQueueMaxSize = settings.RegisterIntSetting(
+var RangefeedSingleBufferedSenderQueueMaxPerReg = settings.RegisterIntSetting(
 	settings.SystemOnly,
-	"kv.rangefeed.buffered_sender.queue_max_size",
-	"max size of a buffered senders event queue (0 for no max)",
-	kvserverbase.DefaultRangefeedEventCap*8,
+	"kv.rangefeed.buffered_sender.per_registration_max_queue_size",
+	"maximum number of events a single registration can have queued in the event queue (0 for no max)",
+	kvserverbase.DefaultRangefeedEventCap*2,
 )
 
 // BufferedSender is embedded in every rangefeed.BufferedPerRangeEventSink,
@@ -95,9 +79,10 @@ type BufferedSender struct {
 		syncutil.Mutex
 		stopped bool
 		buffer  *eventQueue
-		// capacity is the maximum number of events that can be buffered.
-		capacity   int64
-		overflowed bool
+		// perStreamCapacity is the maximum number buffered events allowed per
+		// stream.
+		perStreamCapacity int64
+		byStream          map[int64]streamStatus
 	}
 
 	// notifyDataC is used to notify the BufferedSender.run goroutine that there
@@ -111,6 +96,25 @@ type BufferedSender struct {
 	metrics *BufferedSenderMetrics
 }
 
+type streamState int64
+
+const (
+	// streamActive is the default state of the stream.
+	streamActive streamState = iota
+	// streamOverflowing is the state we are in when the stream has reached its
+	// limit and is waiting to deliver an error.
+	streamOverflowing streamState = iota
+	// streamOverflowed means the stream has overflowed and the error has been
+	// placed in the queue.
+	streamOverflowed streamState = iota
+)
+
+type streamStatus struct {
+	// queueItems is the number of items for a given stream in the event queue.
+	queueItems int64
+	state      streamState
+}
+
 func NewBufferedSender(
 	sender ServerStreamSender, settings *cluster.Settings, bsMetrics *BufferedSenderMetrics,
 ) *BufferedSender {
@@ -121,7 +125,8 @@ func NewBufferedSender(
 	bs.queueMu.buffer = newEventQueue()
 	bs.notifyDataC = make(chan struct{}, 1)
 	bs.queueMu.buffer = newEventQueue()
-	bs.queueMu.capacity = RangefeedSingleBufferedSenderQueueMaxSize.Get(&settings.SV)
+	bs.queueMu.perStreamCapacity = RangefeedSingleBufferedSenderQueueMaxPerReg.Get(&settings.SV)
+	bs.queueMu.byStream = make(map[int64]streamStatus)
 	return bs
 }
 
@@ -137,13 +142,52 @@ func (bs *BufferedSender) sendBuffered(
 	if bs.queueMu.stopped {
 		return errors.New("stream sender is stopped")
 	}
-	if bs.queueMu.overflowed {
-		return newRetryErrBufferCapacityExceeded()
+
+	// Per-stream capacity limits. If the stream is already overflowed we drop the
+	// request. If the stream has hit its limit, we return an error to the
+	// registration. This error should be the next event that is sent to
+	// stream.
+	//
+	// NB: The zero-value of streamStatus is the valid state of a newly seen
+	// stream.
+	status := bs.queueMu.byStream[ev.StreamID]
+	switch status.state {
+	case streamActive:
+		if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
+			if ev.Error != nil {
+				// If _this_ event is an error, no use sending another error. This stream
+				// is going down. Admit this error and mark the stream as overflowed.
+				status.state = streamOverflowed
+			} else {
+				// This stream is at capacity, return an error to the registration that it
+				// should send back to us after cleaning up.
+				status.state = streamOverflowing
+				return newRetryErrBufferCapacityExceeded()
+			}
+		}
+	case streamOverflowing:
+		// The unbufferedRegistration is the only component that sends non-error
+		// events to our stream. In response to the error we return when moving to
+		// stateOverflowing, it should immediately send us an error and mark itself
+		// as disconnected. As a result, no non-error events are expected.
+		if ev.Error == nil {
+			panic("only error events expected after stream has exceeded capacity")
+		}
+		status.state = streamOverflowed
+	case streamOverflowed:
+		// If we are overflowed, we don't expect any further events because the
+		// registration should have disconnected in response to the error.
+		//
+		// TODO(ssd): Consider adding an assertion here.
+		return nil
+	default:
+		panic(fmt.Sprintf("unhandled stream state: %v", status.state))
 	}
-	if bs.queueMu.capacity > 0 && bs.queueMu.buffer.len() >= bs.queueMu.capacity {
-		bs.queueMu.overflowed = true
-		return newRetryErrBufferCapacityExceeded()
-	}
+
+	// We are admitting this event.
+	status.queueItems++
+	bs.queueMu.byStream[ev.StreamID] = status
+
 	// TODO(wenyihu6): pass an actual context here
 	alloc.Use(context.Background())
 	bs.queueMu.buffer.pushBack(sharedMuxEvent{ev, alloc})
@@ -179,10 +223,11 @@ func (bs *BufferedSender) run(
 			return nil
 		case <-bs.notifyDataC:
 			for {
-				e, success, overflowed, remains := bs.popFront()
+				e, success := bs.popFront()
 				if !success {
 					break
 				}
+
 				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				err := bs.sender.Send(e.ev)
 				e.alloc.Release(ctx)
@@ -192,9 +237,6 @@ func (bs *BufferedSender) run(
 				if err != nil {
 					return err
 				}
-				if overflowed && remains == int64(0) {
-					return newRetryErrBufferCapacityExceeded()
-				}
 			}
 		}
 	}
@@ -202,16 +244,26 @@ func (bs *BufferedSender) run(
 
 // popFront pops the front event from the buffer queue. It returns the event and
 // a boolean indicating if the event was successfully popped.
-func (bs *BufferedSender) popFront() (
-	e sharedMuxEvent,
-	success bool,
-	overflowed bool,
-	remains int64,
-) {
+func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.popFront()
-	return event, ok, bs.queueMu.overflowed, bs.queueMu.buffer.len()
+	if ok {
+		state, streamFound := bs.queueMu.byStream[event.ev.StreamID]
+		if streamFound {
+			state.queueItems -= 1
+			bs.queueMu.byStream[event.ev.StreamID] = state
+		} else {
+			assumedUnreachable("event found in queue with no state in byStream")
+		}
+	}
+	return event, ok
+}
+
+func (bs *BufferedSender) removeStream(streamID int64) {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	delete(bs.queueMu.byStream, streamID)
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
@@ -222,6 +274,7 @@ func (bs *BufferedSender) cleanup(ctx context.Context) {
 	bs.queueMu.stopped = true
 	remaining := bs.queueMu.buffer.len()
 	bs.queueMu.buffer.drain(ctx)
+	bs.queueMu.byStream = nil
 	bs.metrics.BufferedSenderQueueSize.Dec(remaining)
 }
 
@@ -229,12 +282,6 @@ func (bs *BufferedSender) len() int {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	return int(bs.queueMu.buffer.len())
-}
-
-func (bs *BufferedSender) overflowed() bool {
-	bs.queueMu.Lock()
-	defer bs.queueMu.Unlock()
-	return bs.queueMu.overflowed
 }
 
 // Used for testing only.
@@ -257,4 +304,10 @@ func (bs *BufferedSender) waitForEmptyBuffer(ctx context.Context) error {
 		return err
 	}
 	return errors.New("buffered sender failed to send in time")
+}
+
+func assumedUnreachable(msg string) {
+	if buildutil.CrdbTestBuild {
+		panic(fmt.Sprintf("assumed unreachable code reached: %v", msg))
+	}
 }

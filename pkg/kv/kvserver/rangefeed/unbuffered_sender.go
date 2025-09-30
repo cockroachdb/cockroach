@@ -132,6 +132,12 @@ func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 	return ubs.sender.Send(event)
 }
 
+// removeStream implements sender.
+func (ubs *UnbufferedSender) removeStream(int64) {}
+
+// cleanup implements sender.
+func (ubs *UnbufferedSender) cleanup(context.Context) {}
+
 // run forwards rangefeed completion errors back to the client. run is expected
 // to be called in a goroutine and will block until the context is done or the
 // stopper is quiesced. UnbufferedSender will stop forward rangefeed completion
@@ -185,7 +191,3 @@ func (ubs *UnbufferedSender) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	ubs.mu.muxErrors = nil
 	return toSend
 }
-
-// The following methods are no-op implementations to satisfy the sender
-// interface.
-func (ubs *UnbufferedSender) cleanup(context.Context) {}
