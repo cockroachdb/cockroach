@@ -84,6 +84,21 @@ var MultiRegionSystemDatabaseEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+// ApproxMaxSchemaObjectCount is the approximate maximum number of schema
+// objects allowed in the cluster. This is a guardrail to prevent unbounded
+// growth of the descriptor table. The check uses cached table statistics when
+// available, so the actual count may slightly exceed this limit.
+var ApproxMaxSchemaObjectCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.schema.approx_max_object_count",
+	"approximate maximum number of schema objects allowed in the cluster; "+
+		"the check uses cached statistics, so the actual count may slightly exceed this limit; "+
+		"set to 0 to disable",
+	20000,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
+
 // RequireSystemTenantOrClusterSetting returns a setting disabled error if
 // executed from inside a secondary tenant that does not have the specified
 // cluster setting.

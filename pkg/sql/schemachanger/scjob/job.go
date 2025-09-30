@@ -130,6 +130,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 			)
 		},
 		execCfg.StatsRefresher,
+		execCfg.TableStatsCache,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 		execCtx.SessionData(),
