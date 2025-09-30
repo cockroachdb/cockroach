@@ -332,7 +332,10 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 					inflight.UnionWith(req.r.Keys())
 					metricsRec.setInFlightKeys(int64(inflight.Len()))
 					pending = append(pending[:i], pending[i+1:]...)
-					metricsRec.recordPendingQueuePop(int64(req.r.NumMessages()), timeutil.Since(req.pendingQueueAdmitTime))
+					metricsRec.recordPendingQueuePop(
+						int64(req.r.Keys().Len()),
+						timeutil.Since(req.pendingQueueAdmitTime),
+					)
 					if err := submitIO(req); err != nil {
 						return err
 					}
@@ -391,7 +394,7 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 				// to the pending queue to be rechecked for validity later.
 				req.pendingQueueAdmitTime = timeutil.Now()
 				pending = append(pending, req)
-				metricsRec.recordPendingQueuePush(int64(req.r.NumMessages()))
+				metricsRec.recordPendingQueuePush(int64(req.r.Keys().Len()))
 			} else {
 				newInFlightKeys := req.r.Keys()
 				inflight.UnionWith(newInFlightKeys)
