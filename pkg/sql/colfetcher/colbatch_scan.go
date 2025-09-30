@@ -54,6 +54,7 @@ type colBatchScanBase struct {
 		// returned so far.
 		rowsRead int64
 	}
+	misestimateLogger execinfra.ScanMisestimateLogger
 }
 
 func (s *colBatchScanBase) drainMeta() []execinfrapb.ProducerMetadata {
@@ -102,7 +103,10 @@ func (s *colBatchScanBase) Release() {
 	colBatchScanBasePool.Put(s)
 }
 
-func (s *colBatchScanBase) close() error {
+func (s *colBatchScanBase) close(ctx context.Context) error {
+	rowCount := uint64(s.GetRowsRead())
+	s.misestimateLogger.MaybeLogMisestimate(ctx, s.flowCtx, rowCount)
+
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil
@@ -125,6 +129,7 @@ func newColBatchScanBase(
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
+	shouldCollectStats bool,
 ) (*colBatchScanBase, *kvpb.BoundedStalenessHeader, *cFetcherTableArgs, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
@@ -182,6 +187,15 @@ func newColBatchScanBase(
 		}
 	}
 
+	misestimateLogger := execinfra.MakeScanMisestimateLogger(
+		spec.EstimatedRowCount,
+		spec.StatsCreatedAt,
+		spec.FetchSpec.TableName,
+		spec.FetchSpec.IndexName,
+		spec.FetchSpec.TableID,
+		shouldCollectStats,
+	)
+
 	*s = colBatchScanBase{
 		SpansWithCopy:          s.SpansWithCopy,
 		flowCtx:                flowCtx,
@@ -190,6 +204,7 @@ func newColBatchScanBase(
 		batchBytesLimit:        batchBytesLimit,
 		parallelize:            spec.Parallelize,
 		ignoreMisplannedRanges: flowCtx.Local || spec.IgnoreMisplannedRanges,
+		misestimateLogger:      misestimateLogger,
 	}
 	return s, bsHeader, tableArgs, nil
 }
@@ -298,7 +313,7 @@ func (s *ColBatchScan) Close(context.Context) error {
 	// span.
 	ctx := s.EnsureCtx()
 	s.cf.Close(ctx)
-	return s.colBatchScanBase.close()
+	return s.colBatchScanBase.close(ctx)
 }
 
 // NewColBatchScan creates a new ColBatchScan operator.
@@ -317,8 +332,9 @@ func NewColBatchScan(
 	estimatedRowCount uint64,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchScan, []*types.T, error) {
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
-		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver,
+		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver, shouldCollectStats,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -338,7 +354,6 @@ func NewColBatchScan(
 		spec.FetchSpec.External,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
-	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher.cFetcherArgs = cFetcherArgs{
 		execinfra.GetWorkMemLimit(flowCtx),
 		estimatedRowCount,

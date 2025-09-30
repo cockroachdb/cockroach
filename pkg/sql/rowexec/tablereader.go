@@ -54,6 +54,8 @@ type tableReader struct {
 	contentionEventsListener  execstats.ContentionEventsListener
 	scanStatsListener         execstats.ScanStatsListener
 	tenantConsumptionListener execstats.TenantConsumptionListener
+
+	misestimateLogger execinfra.ScanMisestimateLogger
 }
 
 var _ execinfra.Processor = &tableReader{}
@@ -159,7 +161,8 @@ func newTableReader(
 		tr.MakeSpansCopy()
 	}
 
-	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
+	if shouldCollectStats {
 		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
 			tr.contentionEventsListener.Init(flowTxn.ID())
 		}
@@ -168,6 +171,16 @@ func newTableReader(
 	} else {
 		tr.fetcher = &fetcher
 	}
+
+	misestimateLogger := execinfra.MakeScanMisestimateLogger(
+		spec.EstimatedRowCount,
+		spec.StatsCreatedAt,
+		spec.FetchSpec.TableName,
+		spec.FetchSpec.IndexName,
+		spec.FetchSpec.TableID,
+		shouldCollectStats,
+	)
+	tr.misestimateLogger = misestimateLogger
 
 	return tr, nil
 }
@@ -295,6 +308,9 @@ func (tr *tableReader) close() {
 
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
+	rowCount := uint64(tr.rowsRead)
+	tr.misestimateLogger.MaybeLogMisestimate(tr.Ctx(), tr.FlowCtx, rowCount)
+
 	tr.close()
 }
 

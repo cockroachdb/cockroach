@@ -15,6 +15,7 @@ package cockroach.sql.distsqlrun;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/join_type.proto";
@@ -119,6 +120,14 @@ message TableReaderSpec {
   // (in which case we create a single processor that is placed at the
   // leaseholder of the beginning of the key spans to be scanned).
   optional bool ignore_misplanned_ranges = 22 [(gogoproto.nullable) = false];
+
+  // estimated_row_count contains the number of rows that the optimizer expects
+  // will be emitted from this processor, or 0 if the estimate wasn't populated.
+  optional uint64 estimated_row_count = 24 [(gogoproto.nullable) = false];
+
+  // stats_created_at, if set, is the time when the latest table statistics were
+  // collected for the table that this processor is operating on.
+  optional google.protobuf.Timestamp stats_created_at = 25 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
   reserved 1, 2, 4, 6, 7, 8, 13, 14, 15, 16, 17, 19;
 }
