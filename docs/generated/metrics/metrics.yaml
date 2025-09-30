@@ -1245,22 +1245,6 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
-    - name: changefeed.buffer_entries.allocated_mem.aggregator
-      exported_name: changefeed_buffer_entries_allocated_mem_aggregator
-      description: Current quota pool memory allocation - between the kvfeed and the sink
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.buffer_entries.allocated_mem.rangefeed
-      exported_name: changefeed_buffer_entries_allocated_mem_rangefeed
-      description: Current quota pool memory allocation - between the rangefeed and the kvfeed
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
     - name: changefeed.buffer_entries.flush
       exported_name: changefeed_buffer_entries_flush
       description: Number of flush elements added to the buffer
@@ -1413,41 +1397,9 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.acquired.aggregator
-      exported_name: changefeed_buffer_entries_mem_acquired_aggregator
-      description: Total amount of memory acquired for entries as they enter the system - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.acquired.rangefeed
-      exported_name: changefeed_buffer_entries_mem_acquired_rangefeed
-      description: Total amount of memory acquired for entries as they enter the system - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries_mem.released
       exported_name: changefeed_buffer_entries_mem_released
       description: Total amount of memory released by the entries after they have been emitted
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.released.aggregator
-      exported_name: changefeed_buffer_entries_mem_released_aggregator
-      description: Total amount of memory released by the entries after they have been emitted - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.released.rangefeed
-      exported_name: changefeed_buffer_entries_mem_released_rangefeed
-      description: Total amount of memory released by the entries after they have been emitted - between the rangefeed and the kvfeed
       y_axis_label: Entries
       type: COUNTER
       unit: COUNT
