@@ -478,7 +478,9 @@ func makePlan(
 		var progressConfig *execinfrapb.ChangefeedProgressConfig
 		if execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
 			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(sv)
-			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(sv)
+			// TODO(#158779): Re-add per table protected timestamps setting and
+			// fetch this value from that cluster setting.
+			perTableProtectedTimestampsEnabled := false
 			progressConfig = &execinfrapb.ChangefeedProgressConfig{
 				PerTableTracking: perTableTrackingEnabled,
 				// If the per table pts flag was turned on between changefeed creation and now,
