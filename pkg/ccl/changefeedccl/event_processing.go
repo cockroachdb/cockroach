@@ -442,7 +442,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
-	stop := c.metrics.Timers.Encode.Start()
+	timer := c.metrics.Timers.Encode.Start()
 	if c.encodingOpts.Format == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
 			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp,
@@ -466,7 +466,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
-	stop()
+	timer.End()
 
 	headers, err := c.makeRowHeaders(ctx, updatedRow)
 	if err != nil {

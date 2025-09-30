@@ -732,7 +732,7 @@ func copyFromSourceToDestUntilTableEvent(
 		// from rangefeed) and checks if a table event was encountered at or before
 		// said timestamp. If so, it replaces the copy boundary with the table event.
 		checkForTableEvent = func(ts hlc.Timestamp) error {
-			defer st.KVFeedWaitForTableEvent.Start()()
+			defer st.KVFeedWaitForTableEvent.Start().End()
 			// There's no need to check for table events again if we already found one
 			// since that should already be the earliest one.
 			if _, ok := boundary.(*errTableEventReached); ok {
@@ -829,7 +829,7 @@ func copyFromSourceToDestUntilTableEvent(
 
 		// writeToDest writes an event to the dest.
 		writeToDest = func(e kvevent.Event) error {
-			defer st.KVFeedBuffer.Start()()
+			defer st.KVFeedBuffer.Start().End()
 
 			switch e.Type() {
 			case kvevent.TypeKV, kvevent.TypeFlush:
