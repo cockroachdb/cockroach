@@ -875,6 +875,7 @@ func NewColOperator(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID, 2, /* numAccounts */
 			)
 			estimatedRowCount := spec.EstimatedRowCount
+			statsCreatedAt := spec.StatsCreatedAt
 			var scanOp colfetcher.ScanOperator
 			var resultTypes []*types.T
 			if flowCtx.EvalCtx.SessionData().DirectColumnarScansEnabled {
@@ -979,7 +980,8 @@ func NewColOperator(
 			if scanOp == nil {
 				scanOp, resultTypes, err = colfetcher.NewColBatchScan(
 					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-					flowCtx, spec.ProcessorID, core.TableReader, post, estimatedRowCount, args.TypeResolver,
+					flowCtx, spec.ProcessorID, core.TableReader, post, estimatedRowCount,
+					statsCreatedAt, args.TypeResolver,
 				)
 				if err != nil {
 					return r, err

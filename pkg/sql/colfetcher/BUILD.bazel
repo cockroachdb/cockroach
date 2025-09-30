@@ -61,6 +61,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/metamorphic",
