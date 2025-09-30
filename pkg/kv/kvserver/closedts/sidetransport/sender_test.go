@@ -189,6 +189,7 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 			closedts.TargetDuration.Get(&s.st.SV),
 			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
 			closedts.SideTransportCloseInterval.Get(&s.st.SV),
+			closedts.SideTransportPacingRefreshInterval.Get(&s.st.SV),
 			pol,
 		)
 	}
