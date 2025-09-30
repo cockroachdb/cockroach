@@ -190,8 +190,13 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 		parent: granter,
 	}
 	var buf strings.Builder
+	var lastGranterStateStr string
 	flushAndReset := func() string {
-		fmt.Fprintf(&buf, "cpuTimeTokenGranter:\n%s\n", granter.String())
+		granterStateStr := granter.String()
+		if granterStateStr != lastGranterStateStr {
+			fmt.Fprint(&buf, granterStateStr)
+		}
+		lastGranterStateStr = granterStateStr
 		str := buf.String()
 		buf.Reset()
 		return str

@@ -7,6 +7,8 @@ package admission
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -16,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/olekukonko/tablewriter"
 )
 
 // noGrantChain is a sentinel value representing that the grant is not
@@ -370,13 +373,33 @@ type tokenBucket struct {
 func (stg *cpuTimeTokenGranter) String() string {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
-	var str string
-	for tier := 0; tier < int(numResourceTiers); tier++ {
-		for gk := canBurst; gk < numBurstQualifications; gk++ {
-			str += fmt.Sprintf("tier%d %s tokens: %d / ", tier, gk, stg.mu.buckets[tier][gk].tokens)
-		}
+	var buf strings.Builder
+	tw := tablewriter.NewWriter(&buf)
+	hdrs := [numBurstQualifications + 1]string{}
+	hdrs[0] = "cpuTTG"
+	for gk := canBurst; gk < numBurstQualifications; gk++ {
+		hdrs[1+gk] = gk.String()
 	}
-	return str
+	tw.SetAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetAutoFormatHeaders(false)
+	tw.SetBorder(false)
+	tw.SetColumnSeparator("")
+	tw.SetHeader(hdrs[:])
+	tw.SetHeaderLine(false)
+	tw.SetNoWhiteSpace(true)
+	tw.SetTablePadding(" ")
+	tw.SetTrimWhiteSpaceAtEOL(true)
+
+	for tier := 0; tier < int(numResourceTiers); tier++ {
+		row := [1 + numBurstQualifications]string{}
+		row[0] = "tier" + strconv.Itoa(tier)
+		for gk := canBurst; gk < numBurstQualifications; gk++ {
+			row[gk+1] = fmt.Sprint(stg.mu.buckets[tier][gk].tokens)
+		}
+		tw.Append(row[:])
+	}
+	tw.Render()
+	return buf.String()
 }
 
 // tryGet is the helper for implementing granter.tryGet.
