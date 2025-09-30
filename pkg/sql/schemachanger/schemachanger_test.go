@@ -1158,3 +1158,98 @@ CREATE TABLE other_schema.t1(n int REFERENCES complex_drop_schema.t1(n));
 		grp.Wait(),
 		`cannot create "complex_drop_schema.sc1" because the target database or schema does not exist`)
 }
+
+// TestApproxMaxSchemaObjects tests that the approximate max schema objects
+// guardrail works correctly with both the legacy and declarative schema changers.
+func TestApproxMaxSchemaObjects(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Test with both declarative schema changer modes.
+	for _, useDeclarative := range []bool{false, true} {
+		t.Run(fmt.Sprintf("declarative=%t", useDeclarative), func(t *testing.T) {
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+			// Configure the declarative schema changer mode.
+			if useDeclarative {
+				tdb.Exec(t, `SET use_declarative_schema_changer = 'on'`)
+			} else {
+				tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+			}
+
+			// Get the current count of descriptors to set a realistic limit.
+			var currentCount int
+			tdb.QueryRow(t, `SELECT count(*) FROM system.descriptor`).Scan(&currentCount)
+
+			// Set the limit to be slightly more than current count.
+			maxObjects := currentCount + 5
+			tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING sql.schema.approx_max_object_count = %d`, maxObjects))
+
+			// Create a test database and use it.
+			tdb.Exec(t, `CREATE DATABASE testdb`)
+			tdb.Exec(t, `USE testdb`)
+
+			// Test that different object types are subject to the limit.
+			objectTypes := []string{"table", "database", "schema", "type", "function"}
+			for _, objectType := range objectTypes {
+				t.Run(objectType, func(t *testing.T) {
+					// Increase the limit before each subtest to avoid interference.
+					maxObjects += 10
+					tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING sql.schema.approx_max_object_count = %d`, maxObjects))
+
+					// Try to create objects until we hit the limit.
+					// ANALYZE before starting to ensure stats are fresh.
+					tdb.Exec(t, `ANALYZE system.descriptor`)
+
+					objNum := 0
+					for {
+						var createStmt string
+						switch objectType {
+						case "table":
+							createStmt = fmt.Sprintf(`CREATE TABLE t%d (id INT PRIMARY KEY)`, objNum)
+						case "database":
+							createStmt = fmt.Sprintf(`CREATE DATABASE db%d`, objNum)
+						case "schema":
+							createStmt = fmt.Sprintf(`CREATE SCHEMA sc%d`, objNum)
+						case "type":
+							createStmt = fmt.Sprintf(`CREATE TYPE enum%d AS ENUM ('a', 'b', 'c')`, objNum)
+						case "function":
+							createStmt = fmt.Sprintf(`CREATE FUNCTION f%d() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`, objNum)
+						}
+
+						_, err := sqlDB.Exec(createStmt)
+						if err != nil {
+							// Check if we got the expected error.
+							if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+								if string(pqErr.Code) == pgcode.ConfigurationLimitExceeded.String() {
+									// Verify the error message mentions "approximate maximum".
+									testutils.IsError(err, "would exceed approximate maximum")
+									break
+								}
+							}
+							// Some other error occurred.
+							t.Fatal(err)
+						}
+						objNum++
+
+						// Re-analyze periodically to update stats.
+						if objNum%2 == 0 {
+							tdb.Exec(t, `ANALYZE system.descriptor`)
+						}
+
+						// Safety check: if we created way more objects than expected,
+						// something is wrong.
+						if objNum > 30 {
+							t.Fatalf("created %d %ss without hitting limit (max=%d)", objNum, objectType, maxObjects)
+						}
+					}
+				})
+			}
+		})
+	}
+}
