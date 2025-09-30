@@ -854,7 +854,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		nonSensitiveCols: NonSensitiveColumns{
 			"flow_id",
 			"node_id",
-			"stmt",
 			"since",
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
