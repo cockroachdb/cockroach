@@ -745,7 +745,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		io.diskWriteTokens = tokens.writeByteTokens
 		io.diskWriteTokensAllocated = 0
 		io.diskReadTokens = tokens.readByteTokens
-		io.diskWriteTokensAllocated = 0
+		io.diskReadTokensAllocated = 0
 	}
 	io.diskBandwidthLimiter.unlimitedTokensOverride = false
 	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
