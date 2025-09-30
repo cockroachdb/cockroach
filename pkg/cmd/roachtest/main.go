@@ -581,8 +581,4 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 		printErrAndExit(fmt.Errorf("--cockroach and --cockroach-stage are mutually exclusive. Use one or the other"))
 	}
 
-	// Normalize "latest" to empty string for staging system
-	if roachtestflags.CockroachStage == "latest" {
-		roachtestflags.CockroachStage = ""
-	}
 }

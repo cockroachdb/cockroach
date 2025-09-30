@@ -44,6 +44,7 @@ type latencyVerifier struct {
 	catchupScanEveryN roachtestutil.EveryN
 
 	maxSeenSteadyLatency time.Duration
+	tooLargeEveryN       roachtestutil.EveryN
 	maxSeenSteadyEveryN  roachtestutil.EveryN
 	latencyBecameSteady  bool
 
@@ -74,8 +75,9 @@ func makeLatencyVerifier(
 		setTestStatus:            setTestStatus,
 		latencyHist:              hist,
 		tolerateErrors:           tolerateErrors,
-		maxSeenSteadyEveryN:      roachtestutil.Every(10 * time.Second),
-		catchupScanEveryN:        roachtestutil.Every(2 * time.Second),
+		tooLargeEveryN:           roachtestutil.Every(120 * time.Second),
+		maxSeenSteadyEveryN:      roachtestutil.Every(30 * time.Second),
+		catchupScanEveryN:        roachtestutil.Every(10 * time.Second),
 	}
 }
 
@@ -132,7 +134,9 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		return
 	}
 	if err := lv.latencyHist.RecordValue(latency.Nanoseconds()); err != nil {
-		lv.logger.Printf("%s: could not record value %s: %s\n", lv.name, latency, err)
+		if lv.tooLargeEveryN.ShouldLog() {
+			lv.logger.Printf("%s: could not record value %s: %s\n", lv.name, latency, err)
+		}
 	}
 	if latency > lv.maxSeenSteadyLatency {
 		lv.maxSeenSteadyLatency = latency

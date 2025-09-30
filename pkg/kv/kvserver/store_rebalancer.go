@@ -814,7 +814,6 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			candidates,
 			candidateReplica,
 			candidateReplica.RangeUsageInfo(),
-			true, /* forceDecisionWithoutStats */
 			allocator.TransferLeaseOptions{
 				Goal:             allocator.LoadConvergence,
 				ExcludeLeaseRepl: false,

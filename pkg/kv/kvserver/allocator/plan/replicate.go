@@ -900,7 +900,6 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 		desc.Replicas().VoterDescriptors(),
 		repl,
 		usageInfo,
-		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
 			Goal: allocator.LeaseCountConvergence,
 			// NB: This option means that the allocator is asked to not consider the

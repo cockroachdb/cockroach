@@ -2389,7 +2389,6 @@ func (a *Allocator) TransferLeaseTarget(
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
-	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
 	if a.knobs != nil {
@@ -2443,10 +2442,7 @@ func (a *Allocator) TransferLeaseTarget(
 		if !excludeLeaseRepl {
 			switch transferDec {
 			case shouldNotTransfer:
-				if !forceDecisionWithoutStats {
-					return roachpb.ReplicaDescriptor{}
-				}
-				fallthrough
+				return roachpb.ReplicaDescriptor{}
 			case decideWithoutStats:
 				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, validTargets) {
 					return roachpb.ReplicaDescriptor{}

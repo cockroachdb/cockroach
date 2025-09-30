@@ -2052,7 +2052,6 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{}, /* stats */
-				false,                      /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2184,7 +2183,6 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 					storeID:           tc.leaseholder,
 				},
 				allocator.RangeUsageInfo{}, /* stats */
-				false,                      /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					CheckCandidateFullness: true,
 				},
@@ -2297,7 +2295,6 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 				c.existing,
 				repl,
 				allocator.RangeUsageInfo{},
-				false, /* alwaysAllowDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2441,7 +2438,6 @@ func TestAllocatorTransferLeaseToReplicasNeedingCatchup(t *testing.T) {
 				c.existing,
 				repl,
 				allocator.RangeUsageInfo{},
-				false, /* alwaysAllowDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2537,7 +2533,6 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
-				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       false,
 					CheckCandidateFullness: true,
@@ -2650,7 +2645,6 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
-				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -3312,7 +3306,6 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
-				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       false,
 					CheckCandidateFullness: true,
@@ -3332,7 +3325,6 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
-				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       true,
 					CheckCandidateFullness: true,
@@ -3426,7 +3418,6 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
-				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       false,
 					CheckCandidateFullness: true,
@@ -3447,7 +3438,6 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
-				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       true,
 					CheckCandidateFullness: true,
@@ -6084,7 +6074,6 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				usage,
-				false,
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
