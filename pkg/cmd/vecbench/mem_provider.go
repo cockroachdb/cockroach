@@ -110,7 +110,7 @@ func (m *MemProvider) Load(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// New implements the VectorProvider interface
+// New implements the VectorProvider interface.
 func (m *MemProvider) New(ctx context.Context) error {
 	// Clear any existing state.
 	m.Close()
@@ -147,6 +147,18 @@ func (m *MemProvider) InsertVectors(
 		}
 		return nil
 	})
+}
+
+// CreateIndex implements the VectorProvider interface.
+func (m *MemProvider) CreateIndex(ctx context.Context) error {
+	// No-op for in-memory provider as index is built incrementally during insertion.
+	return nil
+}
+
+// CheckIndexCreationStatus implements the VectorProvider interface.
+func (m *MemProvider) CheckIndexCreationStatus(ctx context.Context) (float64, error) {
+	// Always return 100% complete for in-memory provider since index is built incrementally.
+	return 1.0, nil
 }
 
 // SetupSearch implements the VectorProvider interface.
