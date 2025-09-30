@@ -1,9 +1,21 @@
+# This test verifies that the allocator can rebalance replicas when stores
+# have limited disk capacity and some stores become nearly full. The test
+# sets up a 5-node cluster where each store has a 10GB capacity. It creates
+# 15 ranges with 3 replicas each, where each range is 500MiB in size. The
+# initial placement is skewed, causing stores s1, s2, and s3 to have most
+# replicas (with s1 at 92% capacity, s2 at 85%, and s3 at 49%), while s4
+# and s5 are underutilized at 24% capacity each.
+#
+# Expected outcome: The allocator should rebalance replicas to distribute
+# disk usage evenly across all stores, moving replicas from the fuller
+# stores (s1, s2, s3) to the less utilized stores (s4, s5). The final
+# distribution should achieve balanced disk usage (~55% on each store) and
+# more even replica distribution across all nodes.
 gen_cluster nodes=5 store_byte_capacity_gib=10
 ----
 
-# Each range will be 500 MiB in size and the placement will be skewed, s.t.
-# n1/s1, n2/s2 and n3/s3 will have every replicas initially and n1/s1 will have
-# every lease.
+# Each range will be 500 MiB (524288000 B) in size and the placement will be skewed,
+# s.t. n1/s1, n2/s2 and n3/s3 will have most replicas initially.
 gen_ranges ranges=15 bytes=524288000 repl_factor=3 placement_type=skewed
 ----
 

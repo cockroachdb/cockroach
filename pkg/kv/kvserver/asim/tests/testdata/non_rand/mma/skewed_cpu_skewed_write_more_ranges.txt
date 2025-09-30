@@ -1,9 +1,8 @@
-# This test can now roughly equalize both cpu and write bandwidth. It didn't
-# use to be able to do this, because the highest cpu node had the lowest write
-# bandwidth and vice versa, so neither was able to shed to the other. The
-# ignoreLevel logic in rebalanceStores with the grace duration to start
-# shedding more aggressively and other related changes have made this much
-# better.
+# This test is similar to skewed_cpu_skewed_write.txt, but with more ranges 300. 
+# To have the same amount of total load, bytes per range is reduced to 26 MiB.
+# 
+# Expected outcome: The allocator should rebalance both cpu and write load across
+# all stores, with mma achieving better results than sma. 
 gen_cluster nodes=6 node_cpu_rate_capacity=5000000000
 ----
 

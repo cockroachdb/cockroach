@@ -1,4 +1,10 @@
-# replication factor one, the first store gets all the reads (CPU usage), the second one gets writes.
+# This test verifies the allocator's behavior with replication factor 1 and
+# skewed workloads across two stores. The test sets up a 2-node cluster where
+# store s1 handles all read traffic (high CPU load from request processing)
+# while store s2 handles all write traffic (higher write bandwidth).
+#
+# Expected outcome: two stores should roughly equalize their cpu load and write
+# load via range rebalancing.
 gen_cluster nodes=2 node_cpu_rate_capacity=1000000000
 ----
 

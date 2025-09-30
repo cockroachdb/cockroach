@@ -1,10 +1,17 @@
+# This test verifies the allocator's behavior with opposing CPU and write load
+# distributions. The test sets up a 6-node cluster where s1-s3 handle high-CPU
+# read traffic and s4-s6 handle high-write traffic. Initially, all leases are on
+# s1 and s4.
+#
+# Expected outcome: The allocator should rebalance both cpu and write load across
+# all stores, with mma achieving better results than sma.
+#
 # This test can now roughly equalize both cpu and write bandwidth. It didn't
 # use to be able to do this, because the highest cpu node had the lowest write
 # bandwidth and vice versa, so neither was able to shed to the other. The
 # ignoreLevel logic in rebalanceStores with the grace duration to start
 # shedding more aggressively and other related changes have made this much
 # better.
-
 gen_cluster nodes=6 node_cpu_rate_capacity=5000000000
 ----
 

@@ -1,3 +1,11 @@
+# The test sets up a 9-node cluster where every store initiallyhas the same
+# number of replicas.
+# 
+# s1 handles significant cpu load, s2,s3 handle small follower cpu load, while
+# s4-s9 handle minimal cpu load and high write bandwidth.
+#
+# Expected outcome: The allocator should rebalance both leases and replicas to
+# achieve more even cpu and write distribution across all nodes.
 gen_cluster nodes=9 node_cpu_rate_capacity=5000000000
 ----
 
