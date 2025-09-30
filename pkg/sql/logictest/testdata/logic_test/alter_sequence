@@ -395,3 +395,64 @@ SHOW CREATE SEQUENCE seq_alter_no_min_max_des
 ----
 table_name                create_statement
 seq_alter_no_min_max_des  CREATE SEQUENCE public.seq_alter_no_min_max_des MINVALUE -9223372036854775808 MAXVALUE -1 INCREMENT -1 START -5;
+
+subtest issue-52552
+
+statement ok
+CREATE SEQUENCE test_52552_asc INCREMENT BY 3 MINVALUE 1 MAXVALUE 12;
+ALTER SEQUENCE test_52552_asc INCREMENT BY 8 MINVALUE 1 MAXVALUE 12;
+
+query II
+SELECT nextval('test_52552_asc'), nextval('test_52552_asc');
+----
+1  9
+
+statement error pq: reached maximum value of sequence "test_52552_asc" \(12\)
+SELECT nextval('test_52552_asc');
+
+statement error pq: reached maximum value of sequence "test_52552_asc" \(12\)
+SELECT nextval('test_52552_asc');
+
+statement ok
+ALTER SEQUENCE test_52552_asc NO MAXVALUE;
+
+query I
+SELECT nextval('test_52552_asc');
+----
+17
+
+statement ok
+CREATE SEQUENCE test_52552_desc INCREMENT BY -5 MINVALUE 1 MAXVALUE 12;
+ALTER SEQUENCE test_52552_desc INCREMENT BY -8 MINVALUE 1 MAXVALUE 12;
+
+query II
+SELECT nextval('test_52552_desc'), nextval('test_52552_desc');
+----
+12  4
+
+statement error pq: reached minimum value of sequence "test_52552_desc" \(1\)
+SELECT nextval('test_52552_desc');
+
+statement error pq: reached minimum value of sequence "test_52552_desc" \(1\)
+SELECT nextval('test_52552_desc');
+
+statement ok
+ALTER SEQUENCE test_52552_desc NO MINVALUE;
+
+query I
+SELECT nextval('test_52552_desc');
+----
+-4
+
+statement ok
+CREATE SEQUENCE test_52552_start INCREMENT BY 3 MINVALUE 1 MAXVALUE 100 START 50;
+
+statement ok
+ALTER SEQUENCE test_52552_start INCREMENT BY 8;
+
+query I
+SELECT nextval('test_52552_start');
+----
+50
+
+subtest end
