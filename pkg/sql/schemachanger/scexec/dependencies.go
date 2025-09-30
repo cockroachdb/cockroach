@@ -119,6 +119,11 @@ type Catalog interface {
 
 	// InitializeSequence initializes the initial value for a sequence.
 	InitializeSequence(id descpb.ID, startVal int64)
+
+	// CheckMaxSchemaObjects checks if the number of schema objects in the
+	// cluster plus the new objects being created would exceed the configured
+	// limit. Returns an error if the limit would be exceeded.
+	CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.

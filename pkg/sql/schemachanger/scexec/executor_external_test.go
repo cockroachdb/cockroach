@@ -76,6 +76,7 @@ func (ti testInfra) newExecDeps(txn descs.Txn) scexec.Dependencies {
 		noopMetadataUpdater{},
 		noopTemporarySchemaCreator{},
 		noopStatsReferesher{},
+		nil, /* tableStatsCache */
 		&scexec.TestingKnobs{},
 		kvTrace,
 		schemaChangerJobID,

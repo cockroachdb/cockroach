@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/errors"
 )
 
@@ -206,6 +209,11 @@ func (p *planner) createDescriptor(
 			"expected new descriptor, not a modification of version %d",
 			descriptor.OriginalVersion())
 	}
+
+	if err := checkMaxSchemaObjects(ctx, p.InternalSQLTxn(), p.Descriptors(), p.execCfg.TableStatsCache, p.execCfg.Settings, 1); err != nil {
+		return err
+	}
+
 	b := p.Txn().NewBatch()
 	kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 	if err := p.Descriptors().WriteDescToBatch(ctx, kvTrace, descriptor, b); err != nil {
@@ -462,4 +470,61 @@ func (p *planner) GetImmutableTableInterfaceByID(ctx context.Context, id int) (i
 		return nil, err
 	}
 	return desc, nil
+}
+
+// checkMaxSchemaObjects checks if the number of schema objects in the cluster
+// plus the new objects being created would exceed the configured limit.
+// It attempts to use cached table statistics for performance, and will not return
+// an error if the cached stats are not available.
+func checkMaxSchemaObjects(
+	ctx context.Context,
+	txn isql.Txn,
+	descsCollection *descs.Collection,
+	tableStatsCache *stats.TableStatisticsCache,
+	settings *cluster.Settings,
+	numNewObjects int,
+) error {
+	// Skip the check for internal operations (upgrades, system tables, etc.).
+	if txn.SessionData().Internal {
+		return nil
+	}
+
+	limit := sqlclustersettings.ApproxMaxSchemaObjectCount.Get(&settings.SV)
+	if limit == 0 {
+		// Limit disabled.
+		return nil
+	}
+
+	var currentCount int64
+
+	// Try to get the row count from cached table statistics first.
+	if tableStatsCache != nil && descsCollection != nil {
+		// Get the descriptor for system.descriptor table.
+		desc, err := descsCollection.ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.DescriptorTableID)
+		if err == nil {
+			// Get cached statistics for the descriptor table.
+			tableStats, err := tableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+			if err == nil && len(tableStats) > 0 {
+				// Use the row count from the most recent statistic.
+				currentCount = int64(tableStats[0].RowCount)
+			}
+		}
+	}
+
+	// If we couldn't get stats, allow the creation.
+	if currentCount == 0 {
+		return nil
+	}
+
+	projectedCount := currentCount + int64(numNewObjects)
+
+	if projectedCount > limit {
+		return pgerror.Newf(
+			pgcode.ConfigurationLimitExceeded,
+			"cannot create %d new schema object(s): would exceed approximate maximum (%d); "+
+				"current count: %d, projected count: %d",
+			numNewObjects, limit, currentCount, projectedCount,
+		)
+	}
+	return nil
 }
