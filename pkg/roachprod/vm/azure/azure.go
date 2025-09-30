@@ -210,10 +210,49 @@ func (p *Provider) GetLiveMigrationVMs(
 	return liveMigrationVMs, nil
 }
 
+// GetVMSpecs implements the vm.GetVMSpecs interface method which returns a
+// map from VM.Name to a map of VM attributes
 func (p *Provider) GetVMSpecs(
 	l *logger.Logger, vms vm.List,
 ) (map[string]map[string]interface{}, error) {
-	return nil, nil
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	defer cancel()
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return nil, err
+	}
+	client := compute.NewVirtualMachinesClient(sub)
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return nil, err
+	}
+
+	// Extract the spec of all VMs and create a map from VM name to spec.
+	vmSpecs := make(map[string]map[string]interface{})
+	for _, vmInstance := range vms {
+		if vmInstance.ProviderID == "" {
+			return nil, errors.Errorf("provider id not found for vm: %s", vmInstance.Name)
+		}
+		azureVmId, err := parseAzureID(vmInstance.ProviderID)
+		if err != nil {
+			return nil, err
+		}
+		l.Printf("Getting VM Specs for VM: %s", vmInstance.Name)
+		azureVm, err := client.Get(ctx, azureVmId.resourceGroup, azureVmId.resourceName, "")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get vm information for vm %s", vmInstance.Name)
+		}
+		// Marshaling & unmarshalling struct to match interface method return type
+		rawJSON, err := azureVm.MarshalJSON()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal vm information for vm %s", vmInstance.Name)
+		}
+		var vmSpec map[string]interface{}
+		if err := json.Unmarshal(rawJSON, &vmSpec); err != nil {
+			return nil, errors.Wrapf(err, "failed to parse raw json")
+		}
+		vmSpecs[vmInstance.Name] = vmSpec
+	}
+	return vmSpecs, nil
 }
 
 func (p *Provider) CreateVolumeSnapshot(
