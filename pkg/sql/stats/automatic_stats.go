@@ -340,6 +340,9 @@ type TableStatsTestingKnobs struct {
 	// perform full statistics refreshes. Useful for testing the partial stats
 	// refresh logic.
 	DisableFullStatsRefresh bool
+	// StubTimeNow allows tests to override the current time, used by
+	// EstimateStaleness to get the latest stats' age.
+	StubTimeNow func() time.Time
 }
 
 var _ base.ModuleTestingKnobs = &TableStatsTestingKnobs{}
@@ -891,6 +894,56 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 				table.GetName(), table.GetID(), rowsAffected)
 		}
 	}
+}
+
+// EstimateStaleness returns an estimate fraction of stale rows in the given
+// table based on how long it has been since the last full statistics refresh,
+// and the average time between refreshes.
+func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (float64, error) {
+	desc := r.getTableDescriptor(ctx, tableID)
+	if desc == nil {
+		return 0, errors.New("could not access the table descriptor")
+	}
+	if !autostatsCollectionAllowed(desc, r.st) {
+		return 0, errors.New("automatic stats collection is not allowed for this table")
+	}
+
+	var forecast *bool
+	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
+	// the stats cache entry since we don't care whether there is a forecast or
+	// not in the stats.
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */)
+	if err != nil {
+		return 0, err
+	}
+
+	// Find the most recent full statistic
+	var stat *TableStatistic
+	for _, s := range tableStats {
+		if !s.IsPartial() && !s.IsForecast() && !s.IsMerged() {
+			stat = s
+			break
+		}
+	}
+	if stat == nil {
+		return 0, errors.New("no full statistics available")
+	}
+
+	var explicitSettings *catpb.AutoStatsSettings
+	if s, ok := r.settingOverrides[tableID]; ok {
+		explicitSettings = &s
+	}
+	staleTargetFraction := r.autoStatsFractionStaleRows(explicitSettings)
+
+	avgRefreshTime := avgFullRefreshTime(tableStats)
+	statsAge := timeutil.Since(stat.CreatedAt)
+	if r.knobs != nil && r.knobs.StubTimeNow != nil {
+		statsAge = r.knobs.StubTimeNow().Sub(stat.CreatedAt)
+	}
+	staleFraction :=
+		float64(statsAge) / float64(avgRefreshTime) * staleTargetFraction
+
+	return staleFraction, nil
 }
 
 // maybeRefreshStats implements the core logic described in the comment for
