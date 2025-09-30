@@ -5396,6 +5396,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 							// Newly-started stores (including the "rogue" one) should not GC
 							// their replicas. We'll turn this back on when needed.
 							DisableReplicaGCQueue: true,
+							// Some subtests, e.g. (4), expect that n1 catches up on the raft
+							// log after a partition, and runs the split trigger. Disable raft
+							// log truncation to make sure that it doesn't miss the split
+							// trigger by being caught up by a later snapshot. See #154313.
+							DisableRaftLogQueue:   true,
 							TestingProposalFilter: testingProposalFilter,
 						},
 					},
