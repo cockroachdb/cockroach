@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -883,4 +884,46 @@ func TestRPCConnStopOnClose(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestAllUpdatesBufAreSignalled creates a bunch of goroutines that wait on
+// updatesBuf, and then publishes multiple messages to the updatesBuf. It
+// verifies that all goroutines are signalled for all messages, and no goroutine
+// misses any message.
+func TestAllUpdatesBufAreSignalled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	st := cluster.MakeTestingClusterSettings()
+	s, stopper := newMockSenderWithSt(connFactory, st)
+	defer stopper.Stop(ctx)
+
+	const numGoroutines = 100
+	const numMsgs = 100
+	var counter atomic.Int64
+
+	// Start 100 goroutines that will wait on sequence numbers 1-100.
+	wg := sync.WaitGroup{}
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for seqNum := ctpb.SeqNum(1); seqNum <= numMsgs; seqNum++ {
+				_, ok := s.buf.GetBySeq(ctx, seqNum)
+				if ok {
+					counter.Add(1)
+				}
+			}
+			wg.Done()
+		}()
+	}
+
+	// Publish 10 messages.
+	for i := 0; i < numMsgs; i++ {
+		s.publish(ctx)
+	}
+
+	// Verify that eventually all goroutines received all messages.
+	wg.Wait()
+	require.Equal(t, int64(numGoroutines*numMsgs), counter.Load())
 }
