@@ -1099,7 +1099,7 @@ func (u *sqlSymUnion) changefeedFilterOption() *tree.ChangefeedFilterOption {
 %token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
 %token <str> VIRTUAL_CLUSTER_NAME VIRTUAL_CLUSTER
 
-%token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
+%token <str> WATCHED_TABLES WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
 %token <str> YEAR
 
@@ -9498,6 +9498,10 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowChangefeedJobs{}
   }
+| SHOW CHANGEFEED JOBS WITH WATCHED_TABLES
+  {
+    $$.val = &tree.ShowChangefeedJobs{IncludeWatchedTables: true}
+  }
 | SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS error // SHOW HELP: SHOW JOBS
 | SHOW CHANGEFEED JOBS error // SHOW HELP: SHOW JOBS
@@ -9524,6 +9528,13 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowChangefeedJobs{Jobs: $4.slct()}
   }
+| SHOW CHANGEFEED JOBS select_stmt WITH WATCHED_TABLES
+  {
+    $$.val = &tree.ShowChangefeedJobs{
+      Jobs: $4.slct(),
+      IncludeWatchedTables: true,
+    }
+  }
 | SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
 | SHOW JOB a_expr
   {
@@ -9548,6 +9559,15 @@ show_jobs_stmt:
       Jobs: &tree.Select{
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$4.expr()}}},
       },
+    }
+  }
+| SHOW CHANGEFEED JOB a_expr WITH WATCHED_TABLES
+  {
+    $$.val = &tree.ShowChangefeedJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$4.expr()}}},
+      },
+      IncludeWatchedTables: true,
     }
   }
 | SHOW JOB WHEN COMPLETE a_expr
@@ -18939,6 +18959,7 @@ unreserved_keyword:
 | VISIBILITY
 | VOLATILE
 | VOTERS
+| WATCHED_TABLES
 | WITHIN
 | WITHOUT
 | WRITE
@@ -19553,6 +19574,7 @@ bare_label_keywords:
 | VISIBILITY
 | VOLATILE
 | VOTERS
+| WATCHED_TABLES
 | WHEN
 | WORK
 | WRITE
