@@ -12065,7 +12065,10 @@ WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 			require.NoError(t, err)
 			return ts
 		}
-		perTablePTSEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV)
+
+		// In 25.4 we are hard disabling per table protected timestamps.
+		// Regardless of the setting, per table protected timestamps are disabled.
+		perTablePTSEnabled := false
 		perTableProgressEnabled := changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
 		getPTS := func() hlc.Timestamp {
 			if perTablePTSEnabled && perTableProgressEnabled {
