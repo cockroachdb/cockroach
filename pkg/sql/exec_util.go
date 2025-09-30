@@ -2236,12 +2236,8 @@ func shouldDistributeGivenRecAndMode(
 // remote node to the gateway.
 // TODO(yuzefovich): this will be easy to solve once the DistSQL spec factory is
 // completed but is quite annoying to do at the moment.
-func getPlanDistribution(
-	ctx context.Context,
-	txnHasUncommittedTypes bool,
-	sd *sessiondata.SessionData,
-	plan planMaybePhysical,
-	distSQLVisitor *distSQLExprCheckVisitor,
+func (p *planner) getPlanDistribution(
+	ctx context.Context, plan planMaybePhysical,
 ) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
 	if plan.isPhysicalPlan() {
 		// TODO(#47473): store the distSQLProhibitedErr for DistSQL spec factory
@@ -2252,10 +2248,11 @@ func getPlanDistribution(
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
-	if txnHasUncommittedTypes {
+	if p.Descriptors().HasUncommittedDescriptors() {
 		return physicalplan.LocalPlan, nil
 	}
 
+	sd := p.SessionData()
 	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
 		return physicalplan.LocalPlan, nil
 	}
@@ -2265,7 +2262,20 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	rec, err := checkSupportForPlanNode(ctx, plan.planNode, distSQLVisitor, sd)
+	// Determine whether the txn has buffered some writes.
+	txnHasBufferedWrites := p.txn.HasBufferedWrites()
+	if sd.BufferedWritesEnabled && p.curPlan.main == plan {
+		// Given that we're checking the plan distribution for the main query
+		// _before_ executing any of the subqueries, it's possible that some
+		// writes will have been buffered by one of the subqueries. In such a
+		// case, we'll assume that if the query as a whole has any mutations AND
+		// it has at least one subquery, then that subquery will perform some
+		// writes that will be buffered.
+		if p.curPlan.flags.IsSet(planFlagContainsMutation) && len(p.curPlan.subqueryPlans) > 0 {
+			txnHasBufferedWrites = true
+		}
+	}
+	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd, txnHasBufferedWrites)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
