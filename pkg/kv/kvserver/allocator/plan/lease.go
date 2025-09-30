@@ -142,7 +142,6 @@ func (lp LeasePlanner) PlanOneChange(
 		existingVoters,
 		repl,
 		usage,
-		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
 			Goal:                   allocator.FollowTheWorkload,
 			ExcludeLeaseRepl:       false,
