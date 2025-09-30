@@ -203,15 +203,19 @@ func newCloudCheckProcessor(
 	return p, nil
 }
 
+func getCloudCheckConcurrency(params CloudCheckParams) int {
+	concurrency := int(params.Concurrency)
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	return concurrency
+}
+
 // Start is part of the RowSource interface.
 func (p *proc) Start(ctx context.Context) {
 	p.StartInternal(ctx, "cloudcheck.proc")
 
-	concurrency := int(p.spec.Params.Concurrency)
-	if concurrency < 1 {
-		concurrency = 1
-	}
-
+	concurrency := getCloudCheckConcurrency(p.spec.Params)
 	p.results = make(chan result, concurrency)
 
 	if err := p.FlowCtx.Stopper().RunAsyncTask(p.Ctx(), "cloudcheck.proc", func(ctx context.Context) {
