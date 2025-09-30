@@ -1,0 +1,134 @@
+# This test verifies that the allocator can rebalance qps load across a 7-node
+# cluster. mma-only fails here since it doesn't balance based on leases.
+skip_under_ci
+----
+
+# Walk through the basics of the datadriven syntax. Create a state generator
+# where there are 7 stores, 7 ranges and initially the replicas are placed
+# following a skewed distribution (where s1 has the most replicas, s2 has half
+# as many as s1...).
+gen_cluster nodes=7
+----
+
+gen_ranges ranges=7 placement_type=skewed
+----
+
+# Create a load generator, where there are 7k ops/s and the access follows a
+# uniform distribution on the keyspace.
+gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
+----
+
+# Add two assertions (balanced, stable steady state) on QPS of the cluster.
+assertion stat=qps type=balance ticks=6 upper_bound=1.15
+----
+asserting: max_{stores}(qps)/mean_{stores}(qps) ≤ 1.15 at each of last 6 ticks
+
+# TODO(tbg): at this point, six ticks is 3s, not 60s. Update assertion API
+# to take a duration, not ticks.
+assertion stat=qps type=steady ticks=6 upper_bound=0.05
+----
+asserting: |qps(t)/mean_{T}(qps) - 1| ≤ 0.05 ∀ t∈T and each store (T=last 6 ticks)
+
+# The generators are then called and 2 simulation runs, named samples are
+# created and evaluated. Each sample has a fixed duration of 3 minutes.
+# Following the evaluation, the samples are checked individually against the
+# existing assertions, added above. If any assertion fails, the reason is
+# printed. If no assertions fail, then OK is printed.
+eval duration=3m samples=2 seed=42 metrics=(qps,replica_moves) cfgs=(sma-count,mma-only) full=true
+----
+qps#1: last:  [s1=996, s2=1001, s3=999, s4=994, s5=1001, s6=1002, s7=1007] (stddev=3.93, mean=1000.00, sum=7000)
+qps#1: thrash_pct: [s1=12%, s2=9%, s3=4%, s4=8%, s5=5%, s6=6%, s7=4%]  (sum=48%)
+replica_moves#1: last:  [s1=2, s2=1, s3=0, s4=1, s5=1, s6=1, s7=0] (stddev=0.64, mean=0.86, sum=6)
+replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+qps#2: last:  [s1=999, s2=999, s3=997, s4=998, s5=997, s6=1002, s7=998] (stddev=1.59, mean=998.57, sum=6990)
+qps#2: thrash_pct: [s1=11%, s2=8%, s3=4%, s4=103%, s5=4%, s6=105%, s7=5%]  (sum=240%)
+replica_moves#2: last:  [s1=2, s2=1, s3=0, s4=1, s5=0, s6=1, s7=0] (stddev=0.70, mean=0.71, sum=5)
+replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+artifacts[sma-count]: df2fd03851620873
+==========================
+qps#1: last:  [s1=3998, s2=1998, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.41, mean=999.71, sum=6998)
+qps#1: thrash_pct: [s1=5%, s2=6%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=15%)
+qps#2: last:  [s1=3997, s2=2000, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.30, mean=999.86, sum=6999)
+qps#2: thrash_pct: [s1=5%, s2=4%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=13%)
+artifacts[mma-only]: 5f746caa968e0ee
+failed assertion sample 1
+  balance stat=qps threshold=(≤1.15) ticks=6
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
+failed assertion sample 2
+  balance stat=qps threshold=(≤1.15) ticks=6
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
+==========================
+Cluster Set Up
+	n1(AU_EAST,AU_EAST_1,8vcpu): {s1:(256GiB)}
+	n2(AU_EAST,AU_EAST_1,8vcpu): {s2:(256GiB)}
+	n3(AU_EAST,AU_EAST_1,8vcpu): {s3:(256GiB)}
+	n4(AU_EAST,AU_EAST_1,8vcpu): {s4:(256GiB)}
+	n5(AU_EAST,AU_EAST_1,8vcpu): {s5:(256GiB)}
+	n6(AU_EAST,AU_EAST_1,8vcpu): {s6:(256GiB)}
+	n7(AU_EAST,AU_EAST_1,8vcpu): {s7:(256GiB)}
+Key Space
+	[0,10000): 7(rf=3), 0MiB, [s1:(7,4*),s2:(6,2*),s3:(3,0*),s4:(2,0*),s5:(1,0*),s6:(1,1*),s7:(1,0*)]
+Event
+	set LBRebalancingMode to 2
+Workload Set Up
+	[0,10000): 95%r large-block [128-256B/op, 7000ops/s]
+Changed Settings
+	empty
+==========================
+
+# Update the gossip delay to be unreasonably long (default 500ms) to assess
+# uncommon scenarios.
+setting gossip_delay=20s
+----
+
+# Evaluate with the updated gossip setting but otherwise identical generators
+# and seed. Here we see that the balance assertion and steady state assertion
+# are reached, but after more fluctuation and a longer duration of 5m, due to
+# how the system reacts to the long gossip delays.
+#
+# TODO: Adding StoreGossip.RecordNewPerSecondStats() to asim gossip causes
+# thrashing on the fourth sample here.
+eval duration=5m samples=2 seed=42 metrics=(qps,replica_moves) cfgs=(sma-count,mma-only)
+----
+qps#1: last:  [s1=994, s2=999, s3=1005, s4=1000, s5=998, s6=1002, s7=999] (stddev=3.16, mean=999.57, sum=6997)
+qps#1: thrash_pct: [s1=117%, s2=59%, s3=54%, s4=53%, s5=104%, s6=105%, s7=53%]  (sum=543%)
+replica_moves#1: last:  [s1=5, s2=4, s3=0, s4=4, s5=3, s6=5, s7=2] (stddev=1.67, mean=3.29, sum=23)
+replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+qps#2: last:  [s1=1001, s2=1003, s3=994, s4=997, s5=1002, s6=1001, s7=998] (stddev=2.97, mean=999.43, sum=6996)
+qps#2: thrash_pct: [s1=256%, s2=47%, s3=43%, s4=2%, s5=284%, s6=126%, s7=125%]  (sum=882%)
+replica_moves#2: last:  [s1=12, s2=7, s3=1, s4=0, s5=10, s6=8, s7=3] (stddev=4.26, mean=5.86, sum=41)
+replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+artifacts[sma-count]: 1bd16e771629608b
+==========================
+qps#1: last:  [s1=4002, s2=1995, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1414.32, mean=999.86, sum=6999)
+qps#1: thrash_pct: [s1=6%, s2=6%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=16%)
+qps#2: last:  [s1=3996, s2=2000, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.00, mean=999.71, sum=6998)
+qps#2: thrash_pct: [s1=6%, s2=5%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=15%)
+artifacts[mma-only]: d714a7f83140a093
+failed assertion sample 1
+  balance stat=qps threshold=(≤1.15) ticks=6
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
+failed assertion sample 2
+  balance stat=qps threshold=(≤1.15) ticks=6
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
+==========================

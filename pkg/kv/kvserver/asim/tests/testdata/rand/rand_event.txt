@@ -54,7 +54,7 @@ assertion checking event
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
   actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}] at 11:25:00
+	r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}] at 11:25:00
 [0000000000,9999999999): 5voters [voters:{2:region=EU}] [lease:{region=EU}] at 11:25:00
 assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
@@ -128,7 +128,7 @@ assertion checking event
 			failed:   conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
   actual unavailable=0 under=0, over=0 violating=1 lease-violating=0 lease-less-preferred=0
 violating constraints:
-  r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}] at 11:25:00
+	r1:{0000000000-9999999999} [(n18,s18):13, (n17,s17):14, (n21,s21):7] applying num_voters=3 voter_constraints=[+region=US_West] lease_preferences=[{[+region=US_West]}] at 11:25:00
 [0000000000,9999999999): 5voters [voters:{2:region=EU}] [lease:{region=EU}] at 11:25:00
 assertion checking event
 			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 

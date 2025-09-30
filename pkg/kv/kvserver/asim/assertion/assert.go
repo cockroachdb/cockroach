@@ -150,12 +150,15 @@ func (sa SteadyStateAssertion) Assert(
 		}
 
 		if sa.Threshold.isViolated(maxMean) || sa.Threshold.isViolated(minMean) || math.IsNaN(maxMean) || math.IsNaN(minMean) {
+			if buf.Len() != 0 {
+				fmt.Fprintf(&buf, "\n")
+			}
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", sa)
 				holds = false
 			}
 			fmt.Fprintf(&buf,
-				"\tstore=%d min/mean=%.2f max/mean=%.2f\n",
+				"\tstore=%d min/mean=%.2f max/mean=%.2f",
 				i+1, minMean, maxMean)
 		}
 	}
@@ -239,11 +242,14 @@ func (ba BalanceAssertion) Assert(
 			"Balance assertion: stat=%s, max/mean=%.2f, threshold=%+v raw=%v",
 			ba.Stat, maxMeanRatio, ba.Threshold, tickStats)
 		if ba.Threshold.isViolated(maxMeanRatio) {
+			if buf.Len() != 0 {
+				fmt.Fprintf(&buf, "\n")
+			}
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", ba)
 				holds = false
 			}
-			fmt.Fprintf(&buf, "\tmax/mean=%.2f tick=%d\n", maxMeanRatio, tick)
+			fmt.Fprintf(&buf, "\tmax/mean=%.2f tick=%d", maxMeanRatio, tick)
 		}
 	}
 	return holds, buf.String()
@@ -294,12 +300,15 @@ func (sa StoreStatAssertion) Assert(
 		trimmedStoreStats := statTs[store-1][ticks-sa.Ticks-1:]
 		for _, stat := range trimmedStoreStats {
 			if sa.Threshold.isViolated(stat) {
+				if buf.Len() != 0 {
+					fmt.Fprintf(&buf, "\n")
+				}
 				if holds {
 					holds = false
 					fmt.Fprintf(&buf, "  %s\n", sa)
 				}
 				fmt.Fprintf(&buf,
-					"\tstore=%d stat=%.2f\n",
+					"\tstore=%d stat=%.2f",
 					store, stat)
 			}
 		}
@@ -378,6 +387,9 @@ func (ca ConformanceAssertion) Assert(
 	violatingLeases, lessPrefLeases := len(leaseViolatingPrefs), len(leaseLessPrefs)
 
 	maybeInitHolds := func() {
+		if buf.Len() != 0 {
+			fmt.Fprintf(&buf, "\n")
+		}
 		if holds {
 			holds = false
 			fmt.Fprintf(&buf, "  %s\n", ca)
@@ -473,11 +485,13 @@ func printRangeDesc(r roachpb.RangeDescriptor) string {
 
 func PrintSpanConfigConformanceList(tag string, ranges []roachpb.ConformanceReportedRange) string {
 	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("%s:\n", tag))
+	if len(ranges) == 0 {
+		buf.WriteString("\t<none>")
+		return buf.String()
+	}
 	for i, r := range ranges {
-		if i == 0 {
-			buf.WriteString(fmt.Sprintf("%s:\n", tag))
-		}
-		buf.WriteString(fmt.Sprintf("  %s applying %s", printRangeDesc(r.RangeDescriptor),
+		buf.WriteString(fmt.Sprintf("\t%s applying %s", printRangeDesc(r.RangeDescriptor),
 			spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(r.Config)))
 		if i != len(ranges)-1 {
 			buf.WriteString("\n")

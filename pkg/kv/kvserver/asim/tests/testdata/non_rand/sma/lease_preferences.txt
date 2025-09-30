@@ -1,0 +1,53 @@
+# This test verifies lease preference handling in a 5-node cluster (2 in region a, 3 in region b).
+# Tests three configurations:
+# 1. Satisfiable: voters in region b, lease preference for region b (no violations)
+# 2. Less-preferred: voters in region b, preference for region a then b (1 lease-less-preferred)
+# 3. Impossible: voters in region b, preference for region a (1 lease-violating)
+#
+# Expected: 1 lease-violating and 1 lease-less-preferred violation.
+gen_cluster nodes=5 region=(a,b) nodes_per_region=(2,3)
+----
+
+# Set up a single range.
+# TODO(tbg): this may be more interesting with a larger number of ranges.
+gen_ranges ranges=1 placement_type=even
+----
+
+# Setup three span configs, the first span config should produce no violations
+# as all the voters are required to be in the same region as the preference.
+# The second span config lease preferences will be only satisfiable by a less
+# preferred preference (not the first preference in the preference list). The
+# last span config will be impossible to satisfy, so should produce a violation.
+set_span_config 
+[0,1000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
+----
+
+set_span_config 
+[1000,2000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=a'],['+region=b']]
+----
+
+set_span_config 
+[2000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=c']]
+----
+
+assertion type=conformance lease-violating=1 lease-less-preferred=1
+----
+
+eval duration=1m cfgs=(sma-count,mma-only) metrics=(replicas,leases)
+----
+leases#1: first: [s1=4, s2=0, s3=0, s4=0, s5=0] (stddev=1.60, mean=0.80, sum=4)
+leases#1: last:  [s1=1, s2=0, s3=0, s4=2, s5=1] (stddev=0.75, mean=0.80, sum=4)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+replicas#1: first: [s1=4, s2=4, s3=4, s4=0, s5=0] (stddev=1.96, mean=2.40, sum=12)
+replicas#1: last:  [s1=1, s2=1, s3=4, s4=3, s5=3] (stddev=1.20, mean=2.40, sum=12)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+artifacts[sma-count]: eaa5c7254461b39d
+==========================
+leases#1: first: [s1=4, s2=0, s3=0, s4=0, s5=0] (stddev=1.60, mean=0.80, sum=4)
+leases#1: last:  [s1=1, s2=0, s3=0, s4=1, s5=2] (stddev=0.75, mean=0.80, sum=4)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+replicas#1: first: [s1=4, s2=4, s3=4, s4=0, s5=0] (stddev=1.96, mean=2.40, sum=12)
+replicas#1: last:  [s1=1, s2=1, s3=4, s4=3, s5=3] (stddev=1.20, mean=2.40, sum=12)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+artifacts[mma-only]: 2216e9f740949e3d
+==========================
