@@ -1,0 +1,56 @@
+# See comments on top of high_cpu_able_to_shed_leases.txt for test details.
+
+# Case (2) where s1 has leases and is CPU overloaded due to raft CPU. It
+# will be able to shed its own leases because it is the leaseholer. There should
+# be a period of lease-rebalancing activity before replica-rebalancing.
+
+gen_cluster nodes=5 node_cpu_rate_capacity=9000000000
+----
+
+setting split_queue_enabled=false
+----
+
+gen_ranges ranges=25 min_key=0 max_key=10000 placement_type=replica_placement
+{s1:*,s2,s3}:7
+{s1:*,s4,s5}:6
+{s1:*,s2,s4}:6
+{s1:*,s3,s5}:6
+----
+{s1:*,s2,s3}:7
+{s1:*,s4,s5}:6
+{s1:*,s2,s4}:6
+{s1:*,s3,s5}:6
+
+gen_load rate=50000 rw_ratio=0 min_key=0 max_key=10000 raft_cpu_per_write=100000
+----
+
+eval duration=5m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases)
+----
+cpu#1: last:  [s1=2598964872, s2=2599396812, s3=2996720523, s4=3199182403, s5=3599520277] (stddev=379582220.28, mean=2998756977.40, sum=14993784887)
+cpu#1: thrash_pct: [s1=161%, s2=82%, s3=144%, s4=176%, s5=158%]  (sum=721%)
+cpu_util#1: last:  [s1=0.29, s2=0.29, s3=0.33, s4=0.36, s5=0.40] (stddev=0.04, mean=0.33, sum=2)
+cpu_util#1: thrash_pct: [s1=161%, s2=82%, s3=144%, s4=176%, s5=158%]  (sum=721%)
+leases#1: first: [s1=25, s2=0, s3=0, s4=0, s5=0] (stddev=10.00, mean=5.00, sum=25)
+leases#1: last:  [s1=3, s2=5, s3=7, s4=10, s5=0] (stddev=3.41, mean=5.00, sum=25)
+leases#1: thrash_pct: [s1=30%, s2=0%, s3=0%, s4=0%, s5=57%]  (sum=87%)
+replicas#1: first: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
+replicas#1: last:  [s1=13, s2=13, s3=15, s4=16, s5=18] (stddev=1.90, mean=15.00, sum=75)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+write_bytes_per_second#1: last:  [s1=25989, s2=25993, s3=29967, s4=31991, s5=35995] (stddev=3796.01, mean=29987.00, sum=149935)
+write_bytes_per_second#1: thrash_pct: [s1=161%, s2=82%, s3=144%, s4=176%, s5=158%]  (sum=722%)
+artifacts[mma-only]: 9a1122b07e8a1e71
+==========================
+cpu#1: last:  [s1=3199860194, s2=2799497761, s3=3199674637, s4=2800510026, s5=2999404241] (stddev=178780081.94, mean=2999789371.80, sum=14998946859)
+cpu#1: thrash_pct: [s1=124%, s2=62%, s3=49%, s4=108%, s5=79%]  (sum=422%)
+cpu_util#1: last:  [s1=0.36, s2=0.31, s3=0.36, s4=0.31, s5=0.33] (stddev=0.02, mean=0.33, sum=2)
+cpu_util#1: thrash_pct: [s1=124%, s2=62%, s3=49%, s4=108%, s5=79%]  (sum=422%)
+leases#1: first: [s1=25, s2=0, s3=0, s4=0, s5=0] (stddev=10.00, mean=5.00, sum=25)
+leases#1: last:  [s1=6, s2=2, s3=5, s4=5, s5=7] (stddev=1.67, mean=5.00, sum=25)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+replicas#1: first: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
+replicas#1: last:  [s1=16, s2=14, s3=16, s4=14, s5=15] (stddev=0.89, mean=15.00, sum=75)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+write_bytes_per_second#1: last:  [s1=31998, s2=27994, s3=31996, s4=28005, s5=29994] (stddev=1787.74, mean=29997.40, sum=149987)
+write_bytes_per_second#1: thrash_pct: [s1=124%, s2=62%, s3=49%, s4=108%, s5=79%]  (sum=422%)
+artifacts[mma-count]: e81950c3e42f43d
+==========================

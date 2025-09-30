@@ -1,3 +1,14 @@
+# This test verifies allocator's behavior in a heterogeneous cluster where nodes
+# have different CPU capacities. The test sets up a 3-node cluster with nodes n1
+# and n2 having 8vcpu capacity each, and node n3 having 16vcpu capacity. It
+# creates 200 ranges evenly distributed across all stores and generates a
+# read-only workload.
+#
+# Expected outcome: mma should balance cpu load based on cpu utilization
+# percentage rather than absolute cpu nanos. However, both mma and sma currently
+# balance on absolute cpu-nanos. n3 should handle more load due to its higher
+# capacity, but the current implementation doesn't account for this. This is
+# tracked in issue: https://github.com/cockroachdb/cockroach/issues/153777.
 gen_cluster nodes=3 node_cpu_rate_capacity=(8000000000,8000000000,16000000000)
 ----
 
@@ -18,13 +29,13 @@ assertion stat=cpu_util type=balance ticks=6 upper_bound=1.1
 ----
 asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.10 at each of last 6 ticks
 
-eval cfgs=(sma-count,mma-only,mma-count) duration=10m metrics=(cpu,cpu_util)
+eval cfgs=(sma-count,mma-count) duration=3m metrics=(cpu,cpu_util)
 ----
-cpu#1: last:  [s1=6700914166, s2=6696073333, s3=6603012499] (stddev=45053658.00, mean=6666666666.00, sum=19999999998)
-cpu#1: thrash_pct: [s1=185%, s2=170%, s3=189%]  (sum=544%)
+cpu#1: last:  [s1=6702050000, s2=6694069444, s3=6603880555] (stddev=44515870.96, mean=6666666666.33, sum=19999999999)
+cpu#1: thrash_pct: [s1=133%, s2=123%, s3=139%]  (sum=395%)
 cpu_util#1: last:  [s1=0.84, s2=0.84, s3=0.41] (stddev=0.20, mean=0.70, sum=2)
-cpu_util#1: thrash_pct: [s1=7%, s2=6%, s3=3%]  (sum=16%)
-artifacts[sma-count]: 3d4b1466c302acd1
+cpu_util#1: thrash_pct: [s1=5%, s2=5%, s3=3%]  (sum=12%)
+artifacts[sma-count]: 1306b93e8b8d4a39
 failed assertion sample 1
   balance stat=cpu_util threshold=(≤1.10) ticks=6
 	max/mean=1.20 tick=0
@@ -34,25 +45,11 @@ failed assertion sample 1
 	max/mean=1.20 tick=4
 	max/mean=1.20 tick=5
 ==========================
-cpu#1: last:  [s1=6399850833, s2=6395993333, s3=7203112093] (stddev=379573477.72, mean=6666318753.00, sum=19998956259)
-cpu#1: thrash_pct: [s1=32%, s2=37%, s3=40%]  (sum=110%)
+cpu#1: last:  [s1=6399652777, s2=6391952777, s3=7205401827] (stddev=381661598.00, mean=6665669127.00, sum=19997007381)
+cpu#1: thrash_pct: [s1=24%, s2=29%, s3=31%]  (sum=84%)
 cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.16, mean=0.68, sum=2)
-cpu_util#1: thrash_pct: [s1=8%, s2=9%, s3=5%]  (sum=21%)
-artifacts[mma-only]: 10d7af8d9edcf883
-failed assertion sample 1
-  balance stat=cpu_util threshold=(≤1.10) ticks=6
-	max/mean=1.17 tick=0
-	max/mean=1.17 tick=1
-	max/mean=1.17 tick=2
-	max/mean=1.17 tick=3
-	max/mean=1.17 tick=4
-	max/mean=1.17 tick=5
-==========================
-cpu#1: last:  [s1=6399850833, s2=6395993333, s3=7203112093] (stddev=379573477.72, mean=6666318753.00, sum=19998956259)
-cpu#1: thrash_pct: [s1=32%, s2=37%, s3=40%]  (sum=110%)
-cpu_util#1: last:  [s1=0.80, s2=0.80, s3=0.45] (stddev=0.16, mean=0.68, sum=2)
-cpu_util#1: thrash_pct: [s1=8%, s2=9%, s3=5%]  (sum=21%)
-artifacts[mma-count]: 10d7af8d9edcf883
+cpu_util#1: thrash_pct: [s1=6%, s2=7%, s3=4%]  (sum=16%)
+artifacts[mma-count]: c51384f72bf7101d
 failed assertion sample 1
   balance stat=cpu_util threshold=(≤1.10) ticks=6
 	max/mean=1.17 tick=0

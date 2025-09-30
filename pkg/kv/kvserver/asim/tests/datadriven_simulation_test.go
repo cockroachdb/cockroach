@@ -78,7 +78,7 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - "gen_ranges" [ranges=<int>]
 //     [placement_type=(even|skewed|weighted|replica_placement)]
-//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
+//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes_mib=<int>]
 //     [reset=<bool>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
@@ -285,7 +285,7 @@ func TestDataDriven(t *testing.T) {
 				case "gen_ranges":
 					var ranges, replFactor = 1, 3
 					var minKey, maxKey = int64(0), int64(defaultKeyspace)
-					var bytes int64 = 0
+					var bytesMiB int64 = 0
 					var replace bool
 					var placementTypeStr = "even"
 					buf := strings.Builder{}
@@ -294,7 +294,7 @@ func TestDataDriven(t *testing.T) {
 					scanIfExists(t, d, "placement_type", &placementTypeStr)
 					scanIfExists(t, d, "min_key", &minKey)
 					scanIfExists(t, d, "max_key", &maxKey)
-					scanIfExists(t, d, "bytes", &bytes)
+					scanIfExists(t, d, "bytes_mib", &bytesMiB)
 					scanIfExists(t, d, "replace", &replace)
 
 					placementType := gen.GetRangePlacementType(placementTypeStr)
@@ -310,7 +310,7 @@ func TestDataDriven(t *testing.T) {
 							MinKey:            minKey,
 							MaxKey:            maxKey,
 							ReplicationFactor: replFactor,
-							Bytes:             bytes,
+							Bytes:             bytesMiB << 20,
 							ReplicaPlacement:  replicaPlacement,
 						},
 						PlacementType: placementType,
