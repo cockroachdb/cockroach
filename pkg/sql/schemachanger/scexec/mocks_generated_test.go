@@ -58,6 +58,20 @@ func (mr *MockCatalogMockRecorder) AddName(arg0, arg1, arg2 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddName", reflect.TypeOf((*MockCatalog)(nil).AddName), arg0, arg1, arg2)
 }
 
+// CheckMaxSchemaObjects mocks base method.
+func (m *MockCatalog) CheckMaxSchemaObjects(arg0 context.Context, arg1 int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckMaxSchemaObjects", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CheckMaxSchemaObjects indicates an expected call of CheckMaxSchemaObjects.
+func (mr *MockCatalogMockRecorder) CheckMaxSchemaObjects(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckMaxSchemaObjects", reflect.TypeOf((*MockCatalog)(nil).CheckMaxSchemaObjects), arg0, arg1)
+}
+
 // CreateOrUpdateDescriptor mocks base method.
 func (m *MockCatalog) CreateOrUpdateDescriptor(arg0 context.Context, arg1 catalog.MutableDescriptor) error {
 	m.ctrl.T.Helper()

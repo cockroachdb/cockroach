@@ -218,6 +218,13 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	s.descriptorsToDelete.ForEach(func(id descpb.ID) {
 		s.modifiedDescriptors.Remove(id)
 	})
+
+	if len(s.newDescriptors) > 0 {
+		if err := c.CheckMaxSchemaObjects(ctx, len(s.newDescriptors)); err != nil {
+			return err
+		}
+	}
+
 	for _, newDescID := range getOrderedNewDescriptorIDs(s.newDescriptors) {
 		// Create new descs by the ascending order of their ID. This determinism
 		// helps avoid flakes in end-to-end tests in which we assert a particular

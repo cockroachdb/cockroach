@@ -1550,6 +1550,12 @@ func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
 	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
 }
 
+// CheckMaxSchemaObjects is part of the scexec.Catalog interface.
+func (s *TestState) CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error {
+	// In tests, we don't enforce the limit.
+	return nil
+}
+
 // TemporarySchemaName is part of scbuild.TemporarySchemaProvider interface.
 func (s *TestState) TemporarySchemaName() string {
 	return fmt.Sprintf("pg_temp_%d_%d", 123, 456)

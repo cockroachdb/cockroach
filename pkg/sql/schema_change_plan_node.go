@@ -318,6 +318,7 @@ func newSchemaChangerTxnRunDependencies(
 		metaDataUpdater,
 		evalContext.Planner,
 		execCfg.StatsRefresher,
+		execCfg.TableStatsCache,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,
 		schemaChangerJobID,

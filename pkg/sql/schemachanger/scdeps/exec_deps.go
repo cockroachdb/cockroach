@@ -25,11 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,6 +68,7 @@ func NewExecutorDependencies(
 	metadataUpdater scexec.DescriptorMetadataUpdater,
 	temporarySchemaCreator scexec.TemporarySchemaCreator,
 	statsRefresher scexec.StatsRefresher,
+	tableStatsCache *stats.TableStatisticsCache,
 	testingKnobs *scexec.TestingKnobs,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
@@ -77,6 +82,7 @@ func NewExecutorDependencies(
 			jobRegistry:        jobRegistry,
 			validator:          validator,
 			statsRefresher:     statsRefresher,
+			tableStatsCache:    tableStatsCache,
 			schemaChangerJobID: schemaChangerJobID,
 			schemaChangerJob:   nil,
 			kvTrace:            kvTrace,
@@ -105,6 +111,7 @@ type txnDeps struct {
 	createdJobs         []jobspb.JobID
 	validator           scexec.Validator
 	statsRefresher      scexec.StatsRefresher
+	tableStatsCache     *stats.TableStatisticsCache
 	tableStatsToRefresh []descpb.ID
 	schemaChangerJobID  jobspb.JobID
 	schemaChangerJob    *jobs.Job
@@ -368,6 +375,51 @@ func (d *txnDeps) InitializeSequence(id descpb.ID, startVal int64) {
 	batch := d.getOrCreateBatch()
 	sequenceKey := d.codec.SequenceKey(uint32(id))
 	batch.Inc(sequenceKey, startVal)
+}
+
+// CheckMaxSchemaObjects implements the scexec.Catalog interface.
+func (d *txnDeps) CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error {
+	// Skip the check for internal operations (upgrades, system tables, etc.).
+	if d.txn.SessionData().Internal {
+		return nil
+	}
+
+	limit := sqlclustersettings.ApproxMaxSchemaObjectCount.Get(&d.settings.SV)
+	if limit == 0 {
+		// Limit disabled.
+		return nil
+	}
+
+	var currentCount int64
+
+	// Try to get the row count from cached table statistics first.
+	// Get the descriptor for system.descriptor table.
+	desc, err := d.descsCollection.ByIDWithLeased(d.txn.KV()).Get().Table(ctx, keys.DescriptorTableID)
+	if err == nil {
+		// Get cached statistics for the descriptor table.
+		tableStats, err := d.tableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		if err == nil && len(tableStats) > 0 {
+			// Use the row count from the most recent statistic.
+			currentCount = int64(tableStats[0].RowCount)
+		}
+	}
+
+	// If we couldn't get stats, then allow the creation.
+	if currentCount == 0 {
+		return nil
+	}
+
+	projectedCount := currentCount + int64(numNewObjects)
+
+	if projectedCount > limit {
+		return pgerror.Newf(
+			pgcode.ConfigurationLimitExceeded,
+			"cannot create %d new schema object(s): would exceed approximate maximum (%d); "+
+				"current count: %d, projected count: %d",
+			numNewObjects, limit, currentCount, projectedCount,
+		)
+	}
+	return nil
 }
 
 // Reset implements the scexec.Catalog interface.
