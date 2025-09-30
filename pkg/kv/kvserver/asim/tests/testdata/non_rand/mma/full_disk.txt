@@ -14,9 +14,9 @@
 gen_cluster nodes=5 store_byte_capacity_gib=10
 ----
 
-# Each range will be 500 MiB (524288000 B) in size and the placement will be skewed,
+# Each range will be 500 MiB in size and the placement will be skewed,
 # s.t. n1/s1, n2/s2 and n3/s3 will have most replicas initially.
-gen_ranges ranges=15 bytes=524288000 repl_factor=3 placement_type=skewed
+gen_ranges ranges=15 bytes_mib=500 repl_factor=3 placement_type=skewed
 ----
 
 eval duration=10m seed=42 cfgs=(mma-only) metrics=(disk_fraction_used,replicas,leases,cpu,cpu_util,mma-count)

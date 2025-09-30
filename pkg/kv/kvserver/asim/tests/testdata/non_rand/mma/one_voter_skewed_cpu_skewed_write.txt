@@ -8,12 +8,12 @@
 gen_cluster nodes=2 node_cpu_rate_capacity=1000000000
 ----
 
-gen_ranges ranges=100 repl_factor=1 min_key=1 max_key=10000 placement_type=replica_placement bytes=26843545
+gen_ranges ranges=100 repl_factor=1 min_key=1 max_key=10000 placement_type=replica_placement bytes_mib=26
 {s1}:1
 ----
 {s1:*}:1
 
-gen_ranges ranges=100 repl_factor=1 min_key=10001 max_key=20000 placement_type=replica_placement bytes=26843545
+gen_ranges ranges=100 repl_factor=1 min_key=10001 max_key=20000 placement_type=replica_placement bytes_mib=26
 {s2}:1
 ----
 {s2:*}:1
@@ -32,19 +32,19 @@ setting split_queue_enabled=false
 
 eval duration=65m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases)
 ----
-cpu#1: last:  [s1=269737582, s2=229946569] (stddev=19895506.50, mean=249842075.50, sum=499684151)
+cpu#1: last:  [s1=269737583, s2=229946569] (stddev=19895507.00, mean=249842076.00, sum=499684152)
 cpu#1: thrash_pct: [s1=6%, s2=52%]  (sum=58%)
 cpu_util#1: last:  [s1=0.27, s2=0.23] (stddev=0.02, mean=0.25, sum=0)
 cpu_util#1: thrash_pct: [s1=6%, s2=52%]  (sum=58%)
 leases#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 leases#1: last:  [s1=99, s2=101] (stddev=1.00, mean=100.00, sum=200)
-leases#1: thrash_pct: [s1=1470%, s2=1470%]  (sum=2940%)
+leases#1: thrash_pct: [s1=1503%, s2=1503%]  (sum=3007%)
 replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 replicas#1: last:  [s1=99, s2=101] (stddev=1.00, mean=100.00, sum=200)
-replicas#1: thrash_pct: [s1=1470%, s2=1470%]  (sum=2940%)
-write_bytes_per_second#1: last:  [s1=2249075, s2=2750166] (stddev=250545.50, mean=2499620.50, sum=4999241)
-write_bytes_per_second#1: thrash_pct: [s1=24%, s2=3%]  (sum=27%)
-artifacts[mma-only]: 5d019c9eec51a880
+replicas#1: thrash_pct: [s1=1503%, s2=1503%]  (sum=3007%)
+write_bytes_per_second#1: last:  [s1=2249893, s2=2749803] (stddev=249955.00, mean=2499848.00, sum=4999696)
+write_bytes_per_second#1: thrash_pct: [s1=25%, s2=3%]  (sum=28%)
+artifacts[mma-only]: 2504eb4c76f8e7c
 ==========================
 cpu#1: last:  [s1=269737582, s2=229946569] (stddev=19895506.50, mean=249842075.50, sum=499684151)
 cpu#1: thrash_pct: [s1=6%, s2=52%]  (sum=58%)
@@ -52,11 +52,11 @@ cpu_util#1: last:  [s1=0.27, s2=0.23] (stddev=0.02, mean=0.25, sum=0)
 cpu_util#1: thrash_pct: [s1=6%, s2=52%]  (sum=58%)
 leases#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 leases#1: last:  [s1=99, s2=101] (stddev=1.00, mean=100.00, sum=200)
-leases#1: thrash_pct: [s1=1470%, s2=1470%]  (sum=2940%)
+leases#1: thrash_pct: [s1=1503%, s2=1503%]  (sum=3007%)
 replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 replicas#1: last:  [s1=99, s2=101] (stddev=1.00, mean=100.00, sum=200)
-replicas#1: thrash_pct: [s1=1470%, s2=1470%]  (sum=2940%)
-write_bytes_per_second#1: last:  [s1=2249195, s2=2750240] (stddev=250522.50, mean=2499717.50, sum=4999435)
-write_bytes_per_second#1: thrash_pct: [s1=24%, s2=3%]  (sum=27%)
-artifacts[mma-count]: 2d5d07f53dca7040
+replicas#1: thrash_pct: [s1=1503%, s2=1503%]  (sum=3007%)
+write_bytes_per_second#1: last:  [s1=2249634, s2=2750072] (stddev=250219.00, mean=2499853.00, sum=4999706)
+write_bytes_per_second#1: thrash_pct: [s1=25%, s2=3%]  (sum=28%)
+artifacts[mma-count]: 58c310aa59e0af1c
 ==========================
