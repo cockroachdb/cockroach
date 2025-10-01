@@ -1085,3 +1085,101 @@ project
  │    └── columns: b:2
  └── projections
       └── b:2 [as="?column?":5, outer=(2)]
+
+# --------------------------------------------------
+# CollapseRepeatedLikeWildcards
+# --------------------------------------------------
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s LIKE '%%abc%%%%dddd'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 LIKE '%abc%dddd' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s LIKE '%%%%∀%%∀%%%∀%∀%%%%'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 LIKE e'%\U00002200%\U00002200%\U00002200%\U00002200%' [outer=(4), constraints=(/4: (/NULL - ])]
+
+# TODO: This case shows an incorrect transformation. The escaped "%" characters
+# are not wildcards, therefore the string has no repeated wildcards that can be
+# collapsed.
+norm
+SELECT s FROM a WHERE s LIKE '\%%a\%%bc\%%'
+----
+select
+ ├── columns: s:4!null
+ ├── fd: ()-->(4)
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 LIKE e'\\%a\\%bc\\%' [outer=(4), constraints=(/4: [/'%a%bc%' - /'%a%bc%']; tight), fd=()-->(4)]
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s NOT LIKE 'a%%bcd%%' FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 NOT LIKE 'a%bcd%' [as="?column?":12, outer=(4)]
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s ILIKE '%%abc%%%%dddd'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 ILIKE '%abc%dddd' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s NOT ILIKE 'abcd%%%'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 NOT ILIKE 'abcd%' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s SIMILAR TO '%a%b%%c%%d'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 SIMILAR TO '%a%b%c%d' [outer=(4), constraints=(/4: [/'' - ])]
+
+norm expect=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s NOT SIMILAR TO '%%%%'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 NOT SIMILAR TO '%' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect-not=CollapseRepeatedLikeWildcards
+SELECT s FROM a WHERE s LIKE '%abc%'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 LIKE '%abc%' [outer=(4), constraints=(/4: (/NULL - ])]
