@@ -94,7 +94,6 @@ func countLeasesWithDetail(
 ) (countDetail, error) {
 	var whereClause []string
 	forceMultiRegionQuery := false
-	useBytesOnRetry := false
 	for _, t := range versions {
 		versionClause := ""
 		if !forAnyVersion {
@@ -120,19 +119,13 @@ func countLeasesWithDetail(
 		// entire table.
 		if (cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()) ||
 			forceMultiRegionQuery {
-			// If we are injecting a raw leases descriptors, that will not have the enum
-			// type set, so convert the region to byte equivalent physical representation.
-			detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions,
-				useBytesOnRetry, at, whereClause)
+			detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, at, whereClause)
 		} else {
 			detail, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
 		}
 		// If any transient region column errors occur then we should retry the count query.
 		if isTransientRegionColumnError(err) {
 			forceMultiRegionQuery = true
-			// If the query was already multi-region aware, then the system database is MR,
-			// but our lease descriptor has not been upgraded yet.
-			useBytesOnRetry = cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()
 			return txn.KV().GenerateForcedRetryableErr(ctx, "forcing retry once with MR columns")
 		}
 
@@ -187,15 +180,10 @@ func countLeasesByRegion(
 	txn isql.Txn,
 	prober regionliveness.Prober,
 	regionMap regionliveness.LiveRegions,
-	cachedDBRegions regionliveness.CachedDatabaseRegions,
-	convertRegionsToBytes bool,
 	at hlc.Timestamp,
 	whereClauses []string,
 ) (countDetail, error) {
 	regionClause := "crdb_region=$2::system.crdb_internal_region"
-	if convertRegionsToBytes {
-		regionClause = "crdb_region=$2"
-	}
 	stmt := fmt.Sprintf(
 		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE %[3]s `,
 		getCountLeaseColumns(),
@@ -204,28 +192,13 @@ func countLeasesByRegion(
 	)
 	var detail countDetail
 	if err := regionMap.ForEach(func(region string) error {
-		regionEnumValue := region
-		// The leases table descriptor injected does not have the type of the column
-		// set to the region enum type. So, instead convert the logical value to
-		// the physical one for comparison.
-		// TODO(fqazi): In 24.2 when this table format is default we can stop using
-		// synthetic descriptors and use the first code path.
-		if convertRegionsToBytes {
-			regionTypeDesc := cachedDBRegions.GetRegionEnumTypeDesc().AsRegionEnumTypeDescriptor()
-			for i := 0; i < regionTypeDesc.NumEnumMembers(); i++ {
-				if regionTypeDesc.GetMemberLogicalRepresentation(i) == region {
-					regionEnumValue = string(regionTypeDesc.GetMemberPhysicalRepresentation(i))
-					break
-				}
-			}
-		}
 		var values tree.Datums
 		queryRegionRows := func(countCtx context.Context) error {
 			var err error
 			values, err = txn.QueryRowEx(
 				countCtx, "count-leases", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
-				stmt, at.GoTime(), regionEnumValue,
+				stmt, at.GoTime(), region,
 			)
 			return err
 		}
