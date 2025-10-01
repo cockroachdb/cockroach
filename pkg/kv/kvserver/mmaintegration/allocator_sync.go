@@ -66,6 +66,7 @@ type mmaState interface {
 // pool. When mma is disabled, its sole purpose is to track and apply changes
 // to the store pool upon success.
 type AllocatorSync struct {
+	knobs        *TestingKnobs
 	sp           storePool
 	st           *cluster.Settings
 	mmaAllocator mmaState
@@ -82,11 +83,14 @@ type AllocatorSync struct {
 	}
 }
 
-func NewAllocatorSync(sp storePool, mmaAllocator mmaState, st *cluster.Settings) *AllocatorSync {
+func NewAllocatorSync(
+	sp storePool, mmaAllocator mmaState, st *cluster.Settings, knobs *TestingKnobs,
+) *AllocatorSync {
 	as := &AllocatorSync{
 		sp:           sp,
 		st:           st,
 		mmaAllocator: mmaAllocator,
+		knobs:        knobs,
 	}
 	as.mu.trackedChanges = make(map[SyncChangeID]trackedAllocatorChange)
 	return as

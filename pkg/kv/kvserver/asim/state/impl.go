@@ -433,7 +433,7 @@ func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 		stores:      []StoreID{},
 		mmAllocator: mmAllocator,
 		storepool:   sp,
-		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST),
+		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST, nil),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)

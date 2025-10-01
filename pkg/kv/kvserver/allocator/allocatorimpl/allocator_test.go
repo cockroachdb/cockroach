@@ -57,7 +57,7 @@ func MakeAllocatorSync(
 ) *mmaintegration.AllocatorSync {
 	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
-	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st)
+	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st, nil)
 }
 
 var simpleSpanConfig = &roachpb.SpanConfig{
