@@ -502,7 +502,7 @@ func (ca *changeAggregator) startKVFeed(
 	}
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV,
-			&ca.metrics.KVFeedMetrics.AggregatorBufferMetricsWithCompat, options...),
+			&ca.metrics.KVFeedMetrics.AggregatorBufferMetrics, options...),
 		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
