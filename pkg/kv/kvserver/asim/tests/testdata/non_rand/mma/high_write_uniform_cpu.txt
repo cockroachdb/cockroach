@@ -13,6 +13,7 @@ gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
 
 gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=5000000 min_key=1 max_key=10000
 ----
+5.00 access-vcpus
 
 # Write only workload, which generates no CPU and 20000op/s*1000B/op =
 # 20000000B/s (x 3 replication factor) write bytes per second over the second half
@@ -22,6 +23,7 @@ gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
 
 gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_key=20000
 ----
+19 MiB/s goodput
 
 setting split_queue_enabled=false
 ----

@@ -10,6 +10,7 @@ gen_ranges ranges=14 placement_type=skewed
 
 gen_load rate=7000 min_block=512 max_block=512
 ----
+3.4 MiB/s goodput
 
 assertion stat=leases type=balance ticks=6 upper_bound=1
 ----

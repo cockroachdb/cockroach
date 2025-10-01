@@ -19,13 +19,17 @@ gen_ranges ranges=100 repl_factor=1 min_key=10001 max_key=20000 placement_type=r
 {s2:*}:1
 
 # read cpu load of 1000x100=10k, all hitting s1, which is then at 100% cpu.
+# TODO(tbg): the CPU count is accidentally too low.
 gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=500000 min_key=1 max_key=10000
 ----
+0.50 access-vcpus
 
 # Write only workload, which generates 20% cpu and 5mb of writes per second.
 # over the second half of the keyspace.
+# TODO(tbg): the CPU load is too low.
 gen_load rate=5000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1 min_key=10001 max_key=20000
 ----
+0.00 raft-vcpus, 4.8 MiB/s goodput
 
 setting split_queue_enabled=false
 ----
