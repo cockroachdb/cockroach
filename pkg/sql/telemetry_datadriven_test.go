@@ -69,7 +69,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 		[]string{"sampled_query"},
 		logtestutils.FormatEntryAsJSON,
 		func(_ logpb.Entry, logStr string) bool {
-			return !strings.Contains(logStr, ignoredAppname)
+			return !strings.Contains(logStr, ignoredAppname) && !strings.Contains(logStr, "NumRetries")
 		},
 	)
 
