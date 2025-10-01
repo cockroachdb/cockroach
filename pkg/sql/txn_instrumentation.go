@@ -21,14 +21,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type txnDiagnosticsState int
+
+const (
+	txnDiagnosticsNotStarted txnDiagnosticsState = iota
+	txnDiagnosticsInProgress
+	txnDiagnosticsReadyToFinalize
+	txnDiagnosticsAborted
+)
+
 type txnDiagnosticsCollector struct {
 	request           stmtdiagnostics.TxnRequest
 	requestId         stmtdiagnostics.RequestID
 	z                 memzipper.Zipper
 	stmtBundles       []stmtdiagnostics.StmtDiagnostic
 	stmtsFpsToCapture []uint64
-	readyToFinalize   bool
 	span              *tracing.Span
+	state             txnDiagnosticsState
 }
 
 func newTxnDiagnosticsCollector(
@@ -39,41 +48,68 @@ func newTxnDiagnosticsCollector(
 		request:           request,
 		stmtBundles:       nil,
 		requestId:         requestId,
-		readyToFinalize:   false,
 		span:              span,
 	}
+	collector.UpdateState(txnDiagnosticsInProgress)
 	collector.z.Init()
 	return collector
 }
 
+func (tds *txnDiagnosticsCollector) NotStarted() bool {
+	return tds.state == txnDiagnosticsNotStarted
+}
+
+func (tds *txnDiagnosticsCollector) InProgress() bool {
+	return tds.state == txnDiagnosticsInProgress
+}
+
+func (tds *txnDiagnosticsCollector) ReadyToFinalize() bool {
+	return tds.state == txnDiagnosticsReadyToFinalize
+}
+
+func (tds *txnDiagnosticsCollector) Aborted() bool {
+	return tds.state == txnDiagnosticsAborted
+}
+
+func (tds *txnDiagnosticsCollector) UpdateState(state txnDiagnosticsState) {
+	tds.state = state
+}
+
 func (tds *txnDiagnosticsCollector) ShouldCollect(executionDuration time.Duration) bool {
-	if !tds.readyToFinalize {
+	if !tds.ReadyToFinalize() || tds.Aborted() {
 		return false
 	}
 
 	return executionDuration >= tds.request.MinExecutionLatency()
 }
 
+// AddStatementBundle adds a statement diagnostic bundle to the transaction
+// diagnostics collector. It returns true if the bundle was added, and
+// false otherwise. If a statement bundle is added after the collector has
+// been aborted or set ready to finalize, an error is also returned.
 func (tds *txnDiagnosticsCollector) AddStatementBundle(
 	stmtFingerprintId uint64, stmt tree.Statement, bundle stmtdiagnostics.StmtDiagnostic,
 ) (added bool, err error) {
-	if tds.readyToFinalize {
-		return false, errors.Newf("Illegal state, cannot add bundle to completed txn diagnostic")
+	if tds.ReadyToFinalize() || tds.Aborted() {
+		return false, errors.Newf("Illegal state, cannot add bundle to completed or aborted txn diagnostic")
 	}
-	if len(tds.stmtsFpsToCapture) > 0 {
-		nextStmtToCapture := tds.stmtsFpsToCapture[0]
-		if nextStmtToCapture != stmtFingerprintId {
-			return false, nil // Unexpected statement fingerprint - return (false, nil)
-		}
-		tds.stmtsFpsToCapture = tds.stmtsFpsToCapture[1:]
-	} else {
-		if !isCommit(stmt) && !isRollback(stmt) {
-			return false, errors.Newf("Expected commit or rollback, got %s", stmt)
-		}
-		tds.readyToFinalize = true
-	}
-	tds.stmtBundles = append(tds.stmtBundles, bundle)
 
+	if !tds.shouldAllowStatement(stmt) {
+		if len(tds.stmtsFpsToCapture) > 0 {
+			nextStmtToCapture := tds.stmtsFpsToCapture[0]
+			if nextStmtToCapture != stmtFingerprintId {
+				return false, nil
+			}
+			tds.stmtsFpsToCapture = tds.stmtsFpsToCapture[1:]
+		} else {
+			if !isTerminalStatement(stmt) {
+				return false, errors.Newf("Expected a terminal statement, got %s", stmt)
+			}
+			tds.UpdateState(txnDiagnosticsReadyToFinalize)
+		}
+	}
+
+	tds.stmtBundles = append(tds.stmtBundles, bundle)
 	return true, nil
 }
 
@@ -128,21 +164,17 @@ func (h *txnInstrumentationHelper) StartDiagnostics(
 	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID, span)
 }
 
-// DiagnosticsInProgress returns true if diagnostics collection is considered
-// to be progress. This is determined by the following:
-// - there is an active request id
-// - there has been at least 1 statement bundle collected
-// - there are still statements to be collected
-// If none of these are true, then diagnostics collection is not in progress.
-//
-// NB: Currently, transaction diagnostics collection only happens through
-// requests, so the first condition is sufficient. If, in the future, new
-// methods of collecting transaction diagnostics are added, such as through
-// "explain analyze (debug)", then the other two conditions will be necessary.
+func (h *txnInstrumentationHelper) ReadyToStartDiagnostics() bool {
+	return h.diagnosticsCollector.state == txnDiagnosticsNotStarted
+}
+
 func (h *txnInstrumentationHelper) DiagnosticsInProgress() bool {
-	return h.diagnosticsCollector.requestId != 0 ||
-		len(h.diagnosticsCollector.stmtBundles) > 0 ||
-		len(h.diagnosticsCollector.stmtsFpsToCapture) > 0
+	return h.diagnosticsCollector.InProgress()
+}
+
+func (h *txnInstrumentationHelper) Abort() {
+	h.Reset()
+	h.diagnosticsCollector.UpdateState(txnDiagnosticsAborted)
 }
 
 func (h *txnInstrumentationHelper) Reset() {
@@ -154,6 +186,9 @@ func (h *txnInstrumentationHelper) Reset() {
 	h.diagnosticsCollector = txnDiagnosticsCollector{}
 }
 
+// AddStatementBundle adds a statement diagnostic bundle to the transaction
+// diagnostics collector. If the bundle cannot be added, the transaction
+// diagnostics collection is aborted.
 func (h *txnInstrumentationHelper) AddStatementBundle(
 	ctx context.Context,
 	stmt tree.Statement,
@@ -173,7 +208,7 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 		if err != nil {
 			log.Ops.VWarningf(ctx, 2, "Failed to add statement bundle: %s", err)
 		}
-		h.Reset()
+		h.Abort()
 	}
 }
 
@@ -181,38 +216,57 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 // started. If a new diagnostics collection is started, it returns a new
 // context that should be used to capture transaction traces.
 func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
-	ctx context.Context, stmtFpId uint64, tracer *tracing.Tracer,
+	ctx context.Context, stmt tree.Statement, stmtFpId uint64, tracer *tracing.Tracer,
 ) (newCtx context.Context, diagnosticsStarted bool) {
-	if !h.DiagnosticsInProgress() {
-		collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
-		if collectDiagnostics {
-			var sp *tracing.Span
-			if !req.IsRedacted() {
-				ctx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
-					tracing.WithRecording(tracingpb.RecordingVerbose))
+	if h.ReadyToStartDiagnostics() {
+		if h.diagnosticsCollector.shouldAllowStatement(stmt) {
+			// If shouldAllowStatement is true, diagnostics won't be started, but it
+			// can still be started by future statements.
+			return ctx, false
+		} else {
+			// Otherwise, check if there are transaction diagnostics requests for the
+			// provided statement fingerprint. If there are, start collecting diagnostics.
+			// Otherwise, mark the diagnostics collector as aborted to avoid checking
+			// in the future.
+			collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
+			if collectDiagnostics {
+				var sp *tracing.Span
+				if !req.IsRedacted() {
+					ctx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
+						tracing.WithRecording(tracingpb.RecordingVerbose))
+				}
+				h.StartDiagnostics(req, requestId, sp)
+				return ctx, true
+			} else {
+				h.Abort()
 			}
-			h.StartDiagnostics(req, requestId, sp)
-			return ctx, true
 		}
 	}
 	return ctx, false
 }
 
-func (h *txnInstrumentationHelper) ShouldContinueDiagnostics(
+// MaybeContinueDiagnostics checks whether diagnostics collection should
+// continue. If diagnostics collection is not currently in progress, nothing
+// happens. If diagnostics collection should continue, it returns a new
+// context with the diagnostics recording span. Otherwise, collection is
+// aborted and future statements will not be considered for diagnostics.
+func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 	ctx context.Context, stmt tree.Statement, stmtFpId uint64,
 ) (newCtx context.Context, shouldContinue bool) {
 	if !h.DiagnosticsInProgress() {
 		return ctx, false
 	}
 
-	if len(h.diagnosticsCollector.stmtsFpsToCapture) != 0 {
+	if h.diagnosticsCollector.shouldAllowStatement(stmt) {
+		shouldContinue = true
+	} else if len(h.diagnosticsCollector.stmtsFpsToCapture) != 0 {
 		shouldContinue = h.diagnosticsCollector.stmtsFpsToCapture[0] == stmtFpId
 	} else {
-		shouldContinue = isCommit(stmt) || isRollback(stmt)
+		shouldContinue = isTerminalStatement(stmt)
 	}
 
 	if !shouldContinue {
-		h.Reset()
+		h.Abort()
 	} else {
 		// TODO (kyle.wong): due to the existing hierarchy of spans, we have to
 		//  manually manage the span by putting it in the context. Ideally, we
@@ -224,10 +278,13 @@ func (h *txnInstrumentationHelper) ShouldContinueDiagnostics(
 	return ctx, shouldContinue
 }
 
+// ShouldRedact returns whether diagnostics being collected should be redacted
 func (h *txnInstrumentationHelper) ShouldRedact() bool {
 	return h.diagnosticsCollector.request.IsRedacted()
 }
 
+// Finalize finalizes the transaction diagnostics collection by writing all
+// the collected data to the underlying system tables.
 func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
 	defer h.Reset()
 	collector := h.diagnosticsCollector
@@ -245,5 +302,52 @@ func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDurati
 		if err != nil {
 			log.Ops.Errorf(ctx, "Error inserting diagnostics for request: %d. err: %s", collector.requestId, err.Error())
 		}
+	}
+}
+
+func isTerminalStatement(stmt tree.Statement) bool {
+	switch s := stmt.(type) {
+	case *tree.CommitTransaction:
+		return true
+	case *tree.ReleaseSavepoint:
+		// commitOnReleaseSavepointName is a special savepoint that commits
+		// the underlying kv transaction.
+		if s.Savepoint == commitOnReleaseSavepointName {
+			return true
+		}
+		return false
+	case *tree.ShowCommitTimestamp:
+		return true
+	case *tree.RollbackTransaction:
+		return true
+	default:
+		return false
+	}
+}
+
+// shouldAllowStatement returns true if the statement should always be
+// recorded. These will not be part of a transaction's fingerprint but may be
+// executed within a transaction. In this case, the statements should be
+// allowed, and they should not stop the collection of the transaction
+// diagnostics.
+func (tds *txnDiagnosticsCollector) shouldAllowStatement(stmt tree.Statement) bool {
+	switch s := stmt.(type) {
+	case *tree.Savepoint:
+		return true
+	case *tree.ReleaseSavepoint:
+		// commitOnReleaseSavepointName is a special savepoint that commits
+		// the underlying kv transaction.
+		if s.Savepoint == commitOnReleaseSavepointName {
+			return false
+		}
+		return true
+	case *tree.RollbackToSavepoint:
+		return true
+	case *tree.PrepareTransaction:
+		return true
+	case *tree.Prepare:
+		return true
+	default:
+		return false
 	}
 }
