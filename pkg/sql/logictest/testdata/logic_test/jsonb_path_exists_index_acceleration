@@ -34,6 +34,14 @@ SELECT * FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 8  {"a": [{"b": []}]}
 9  {"a": {"b": "c"}}
 
+# Test the session variable gate.
+statement error index "foo_inv" is inverted and cannot be used for this query
+SELECT * FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a') ORDER BY a;
+
+statement ok
+SET enable_json_path_exists_filter_inverted_index = true;
+
+# Should I do `skipif config local-mixed-25.4`?
 query IT
 SELECT * FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----

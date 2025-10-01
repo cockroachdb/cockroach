@@ -4273,6 +4273,23 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension.
+	`enable_json_path_exists_filter_inverted_index`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_json_path_exists_filter_inverted_index`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_json_path_exists_filter_inverted_index", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableJsonPathExistsFilterInvertedIndex(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableInspectCommand), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions
 	// that see a transaction retry error. For statements experiencing contention

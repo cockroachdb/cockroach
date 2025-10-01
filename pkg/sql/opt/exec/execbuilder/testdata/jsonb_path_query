@@ -1,5 +1,8 @@
 # LogicTest: local
 
+statement ok
+SET enable_json_path_exists_filter_inverted_index = true;
+
 # Inverted index acceleration for jsonb_path_query.
 statement ok
 CREATE TABLE json_tab (

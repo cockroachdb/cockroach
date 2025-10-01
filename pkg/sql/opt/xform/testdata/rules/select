@@ -13577,6 +13577,9 @@ scan t124455
  ├── constraint: /1: [/e'\\' - /']')
  └── key: (1)
 
+# Test cases for inverted index scans with jsonb_path_exists filters.
+exec-ddl
+SET enable_json_path_exists_filter_inverted_index = true;
 
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b')

@@ -3038,6 +3038,7 @@ enable_implicit_select_for_update                                on             
 enable_implicit_transaction_for_batch_statements                 on                  NULL      NULL        NULL        string
 enable_insert_fast_path                                          on                  NULL      NULL        NULL        string
 enable_inspect_command                                           off                 NULL      NULL        NULL        string
+enable_json_path_exists_filter_inverted_index                    off                 NULL      NULL        NULL        string
 enable_multiple_modifications_of_table                           off                 NULL      NULL        NULL        string
 enable_multiregion_placement_policy                              off                 NULL      NULL        NULL        string
 enable_scrub_job                                                 off                 NULL      NULL        NULL        string
@@ -3283,6 +3284,7 @@ enable_implicit_select_for_update                                on             
 enable_implicit_transaction_for_batch_statements                 on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                                          on                  NULL  user     NULL      on                  on
 enable_inspect_command                                           off                 NULL  user     NULL      off                 off
+enable_json_path_exists_filter_inverted_index                    off                 NULL  user     NULL      off                 off
 enable_multiple_modifications_of_table                           off                 NULL  user     NULL      off                 off
 enable_multiregion_placement_policy                              off                 NULL  user     NULL      off                 off
 enable_scrub_job                                                 off                 NULL  user     NULL      off                 off
@@ -3516,6 +3518,7 @@ enable_implicit_select_for_update                                NULL    NULL   
 enable_implicit_transaction_for_batch_statements                 NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                                          NULL    NULL     NULL     NULL        NULL
 enable_inspect_command                                           NULL    NULL     NULL     NULL        NULL
+enable_json_path_exists_filter_inverted_index                    NULL    NULL     NULL     NULL        NULL
 enable_multiple_modifications_of_table                           NULL    NULL     NULL     NULL        NULL
 enable_multiregion_placement_policy                              NULL    NULL     NULL     NULL        NULL
 enable_scrub_job                                                 NULL    NULL     NULL     NULL        NULL

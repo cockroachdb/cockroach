@@ -415,15 +415,18 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
 	case *memo.FunctionExpr:
-		if t.Properties.Category == builtinconstants.CategoryJsonpath && t.Name == "jsonb_path_exists" {
-			if len(t.Args) > 1 {
-				if ce, ok := t.Args[1].(*memo.ConstExpr); ok {
-					if dJsonPath, ok := ce.Value.(*tree.DJsonpath); ok {
-						if dJsonPath.Strict {
-							return inverted.NonInvertedColExpression{}, expr, nil
+		sessionData := evalCtx.SessionData()
+		if sessionData.EnableJsonPathExistsFilterInvertedIndex {
+			if t.Properties.Category == builtinconstants.CategoryJsonpath && t.Name == "jsonb_path_exists" {
+				if len(t.Args) > 1 {
+					if ce, ok := t.Args[1].(*memo.ConstExpr); ok {
+						if dJsonPath, ok := ce.Value.(*tree.DJsonpath); ok {
+							if dJsonPath.Strict {
+								return inverted.NonInvertedColExpression{}, expr, nil
+							}
+							jp := dJsonPath.Path
+							invertedExpr = j.extractJSONPathCondition(ctx, evalCtx, jp)
 						}
-						jp := dJsonPath.Path
-						invertedExpr = j.extractJSONPathCondition(ctx, evalCtx, jp)
 					}
 				}
 			}

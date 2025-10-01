@@ -741,6 +741,9 @@ message LocalOnlySessionData {
   bool optimizer_use_improved_hoist_join_project = 186;
   // EnableInspectCommand controls use of the INSPECT command.
   bool enable_inspect_command = 187;
+  // EnableJsonPathExistsFilterInvertedIndex enables using inverted indexes for
+  // accelerating jsonb_path_exists filters.
+  bool enable_json_path_exists_filter_inverted_index = 188;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -4390,6 +4390,10 @@ func (m *sessionDataMutator) SetEnableInspectCommand(val bool) {
 	m.data.EnableInspectCommand = val
 }
 
+func (m *sessionDataMutator) SetEnableJsonPathExistsFilterInvertedIndex(val bool) {
+	m.data.EnableJsonPathExistsFilterInvertedIndex = val
+}
+
 func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.data.InitialRetryBackoffForReadCommitted = val
 }
