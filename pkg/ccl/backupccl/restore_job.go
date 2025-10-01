@@ -1302,6 +1302,11 @@ func createImportingDescriptors(
 
 							return nil
 						})
+
+						var opts []multiregion.MakeRegionConfigOption
+						if desc.RegionConfig.SecondaryRegion != "" {
+							opts = append(opts, multiregion.WithSecondaryRegion(desc.RegionConfig.SecondaryRegion))
+						}
 						regionConfig := multiregion.MakeRegionConfig(
 							regionNames,
 							desc.RegionConfig.PrimaryRegion,
@@ -1310,6 +1315,7 @@ func createImportingDescriptors(
 							desc.RegionConfig.Placement,
 							regionTypeDesc.TypeDesc().RegionConfig.SuperRegions,
 							regionTypeDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
+							opts...,
 						)
 						if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 							ctx,
