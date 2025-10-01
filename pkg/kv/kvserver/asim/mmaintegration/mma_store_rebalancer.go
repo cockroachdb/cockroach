@@ -204,7 +204,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		}
 		log.KvDistribution.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
 		msr.pendingChanges[msr.pendingChangeIdx].syncChangeID =
-			msr.as.MMAPreApply(curChange.usage, curChange.change)
+			msr.as.MMAPreApply(ctx, curChange.usage, curChange.change)
 		msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)
 	}
 }

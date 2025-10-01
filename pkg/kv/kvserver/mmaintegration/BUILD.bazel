@@ -20,6 +20,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/buildutil",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
     ],

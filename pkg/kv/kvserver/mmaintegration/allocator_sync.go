@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -142,6 +143,7 @@ func (as *AllocatorSync) getTrackedChange(syncChangeID SyncChangeID) trackedAllo
 // identifier that can be used to call PostApply to apply the change to the
 // store pool upon success.
 func (as *AllocatorSync) NonMMAPreTransferLease(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
@@ -158,6 +160,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 			transferTo:   transferTo.StoreID,
 		},
 	}
+	log.KvDistribution.VEventf(ctx, 2, "non-mma: adding lease transfer from s%s to s%s", transferFrom.StoreID, transferTo.StoreID)
 	return as.addTrackedChange(trackedChange)
 }
 
@@ -166,6 +169,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 // identifier that can be used to call PostApply to apply the change to the
 // store pool upon success.
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	changes kvpb.ReplicationChanges,
@@ -182,6 +186,9 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 			chgs: changes,
 		},
 	}
+	for _, chg := range changes {
+		log.KvDistribution.VEventf(ctx, 2, "non-mma: adding s%s with change=%s", chg.Target.StoreID, chg.ChangeType)
+	}
 	return as.addTrackedChange(trackedChange)
 }
 
@@ -190,7 +197,9 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 // caller. It is an identifier that can be used to call PostApply to apply the
 // change to the store pool upon success.
 func (as *AllocatorSync) MMAPreApply(
-	usage allocator.RangeUsageInfo, pendingChange mmaprototype.PendingRangeChange,
+	ctx context.Context,
+	usage allocator.RangeUsageInfo,
+	pendingChange mmaprototype.PendingRangeChange,
 ) SyncChangeID {
 	trackedChange := trackedAllocatorChange{
 		changeIDs: pendingChange.ChangeIDs(),
@@ -202,9 +211,13 @@ func (as *AllocatorSync) MMAPreApply(
 			transferFrom: pendingChange.LeaseTransferFrom(),
 			transferTo:   pendingChange.LeaseTransferTarget(),
 		}
+		log.KvDistribution.VEventf(ctx, 2, "mma: adding lease transfer from s%s to s%s", pendingChange.LeaseTransferFrom(), pendingChange.LeaseTransferTarget())
 	case pendingChange.IsChangeReplicas():
 		trackedChange.changeReplicasOp = &changeReplicasOp{
 			chgs: pendingChange.ReplicationChanges(),
+		}
+		for _, chg := range pendingChange.ReplicationChanges() {
+			log.KvDistribution.VEventf(ctx, 2, "mma: adding s%s with change=%s", chg.Target.StoreID, chg.ChangeType)
 		}
 	default:
 		panic("unexpected change type")
