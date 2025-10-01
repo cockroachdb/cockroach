@@ -265,6 +265,11 @@ type lockTableImpl struct {
 	// table. Locks on both Global and Local keys are stored in the same btree.
 	locks treeMu
 
+	// keysFlushThreshold is the number of keys at which we will attempt to
+	// asynchronously flush the in-memory lock table to the replicated lock table.
+	// This flushing is intended to avoid us hitting maxKeysLocked and clearing
+	// the lock table which results in the loss of unreplicated locks.
+	keysFlushThreshold int64
 	// maxKeysLocked is a soft maximum on amount of per-key lock information
 	// tracking[1]. When it is exceeded, and subject to the dampening in
 	// lockAddMaxLocksCheckInterval, locks will be cleared.
@@ -289,17 +294,26 @@ type lockTableImpl struct {
 
 	// settings provides a handle to cluster settings.
 	settings *cluster.Settings
+
+	// ltf is a lockTableFlusher which can optionally be used to generate
+	// FlushLockTable requests when the lock table exceeds keysFlushThreshold.
+	ltf *LockTableFlusher
 }
 
 var _ lockTable = &lockTableImpl{}
 
 func newLockTable(
-	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+	maxLocks int64,
+	rangeID roachpb.RangeID,
+	clock *hlc.Clock,
+	settings *cluster.Settings,
+	ltf *LockTableFlusher,
 ) *lockTableImpl {
 	lt := &lockTableImpl{
 		rID:      rangeID,
 		clock:    clock,
 		settings: settings,
+		ltf:      ltf,
 	}
 	lt.setMaxKeysLocked(maxLocks)
 	return lt
@@ -311,6 +325,7 @@ func (t *lockTableImpl) setMaxKeysLocked(maxKeysLocked int64) {
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
+	t.keysFlushThreshold = int64(float64(maxKeysLocked) * 0.80)
 	t.maxKeysLocked = maxKeysLocked
 	t.minKeysLocked = maxKeysLocked / 2
 	t.locks.lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
@@ -4492,9 +4507,23 @@ func (t *lockTableImpl) MarkIneligibleForExport(acq *roachpb.LockAcquisition) er
 // can to bring things under budget.
 func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
 	totalLocks := t.locks.numKeysLocked.Load()
-	if totalLocks > t.maxKeysLocked {
-		numToClear := totalLocks - t.minKeysLocked
+
+	overMax := totalLocks > t.maxKeysLocked
+	overFlushThreshold := t.keysFlushThreshold > 0 && totalLocks > t.keysFlushThreshold
+	numToClear := totalLocks - t.minKeysLocked
+
+	// If we are between flushThreshold and maxKeysLocked, we'll attempt to flush
+	// the lock table.
+	//
+	// Since a locking request holds latches and since the flush will also require
+	// latches, if a single request pushes us over the max, we'll end up dropping
+	// the lock table.
+	shouldTryFlush := overFlushThreshold && t.ltf != nil && UnreplicatedLockReliabilityLockLimit.Get(&t.settings.SV)
+
+	if overMax {
 		t.tryClearLocks(false /* force */, int(numToClear))
+	} else if shouldTryFlush {
+		t.tryFlushLocks(numToClear)
 	}
 }
 
@@ -4526,6 +4555,41 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 	}
 	t.clearLocksMuLocked(locksToClear)
 	t.locks.mu.Unlock()
+}
+
+// tryFlushLocks uses the lockTableFlusher to asyncronously flush all locks
+// inside the current bounds of the lock table.
+func (t *lockTableImpl) tryFlushLocks(numToFlush int64) {
+	if t.ltf == nil {
+		return
+	}
+
+	span := t.lockTableBounds()
+	if span.Equal(roachpb.Span{}) {
+		return
+	}
+	t.ltf.MaybeEnqueueFlush(t.rID, span, numToFlush)
+}
+
+// lockTableBounds returns a span representing the bounds of the lock table.
+// That is, all locked keys currently in the lock table exist in [StartKey,
+// EndKey).
+func (t *lockTableImpl) lockTableBounds() roachpb.Span {
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
+
+	iter := t.locks.MakeIter()
+	iter.First()
+	if !iter.Valid() {
+		return roachpb.Span{}
+	}
+	startKey := iter.Cur().key.Clone()
+	iter.Last()
+	if !iter.Valid() {
+		return roachpb.Span{}
+	}
+	endKey := iter.Cur().key.Clone().Next()
+	return roachpb.Span{Key: startKey, EndKey: endKey}
 }
 
 // tryClearLockGE attempts to clear all locks greater or equal to given key.

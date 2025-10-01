@@ -133,6 +133,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 			Clock:              store.Clock(),
 			Stopper:            store.Stopper(),
 			IntentResolver:     store.intentResolver,
+			LockTableFlusher:   store.lockTableFlusher,
 			TxnWaitMetrics:     store.txnWaitMetrics,
 			SlowLatchGauge:     store.metrics.SlowLatchRequests,
 			LatchWaitDurations: store.metrics.LatchWaitDurations,
