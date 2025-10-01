@@ -4959,6 +4959,225 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 	}
 }
 
+// TestAllocatorRebalanceMMAConflict tests that the MMA conflict checking logic
+// in RebalanceVoter works correctly. It should skip MMA conflict checks for
+// critical rebalances (constraint repair, disk fullness, diversity
+// improvements) but apply them if it's just for range count based rebalancing.
+func TestAllocatorRebalanceMMAConflict(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	type testCase struct {
+		name                 string
+		mmaReturnsConflict   bool
+		stores               []*roachpb.StoreDescriptor
+		conf                 *roachpb.SpanConfig
+		existingVoters       []roachpb.ReplicaDescriptor
+		expectNoAction       bool
+		expectedRemoveTarget roachpb.StoreID
+		expectedAddTarget    roachpb.StoreID
+	}
+
+	// Stores with locality constraints for testing.
+	constraintRepairConfig := &roachpb.SpanConfig{
+		NumReplicas: 1,
+		Constraints: []roachpb.ConstraintsConjunction{{
+			Constraints: []roachpb.Constraint{{Key: "region", Value: "us-east", Type: roachpb.Constraint_REQUIRED}},
+		}},
+	}
+	constraintRepairStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "us-west"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, LogicalBytes: 100, RangeCount: 40},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "us-east"}, // Has required locality
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, LogicalBytes: 100, RangeCount: 50},
+		},
+	}
+
+	// Stores with disk fullness for testing.
+	diskFullnessStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 10, LogicalBytes: 990, RangeCount: 40}, // Nearly full
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50}, // Plenty of space
+		},
+	}
+
+	// Stores for testing range count rebalancing.
+	rangeCountStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 100}, // High range count
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50}, // Low range count
+		},
+	}
+
+	// Stores for testing diversity improvements - different datacenters for
+	// better diversity.
+	diversityStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "dc1"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "dc2"}, // Different datacenter for better diversity
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "dc1"}, // Same datacenter as store 1, poor diversity
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50},
+		},
+	}
+
+	tests := []testCase{
+		{
+			name:                 "constraint repair bypasses MMA conflict",
+			mmaReturnsConflict:   true, // MMA says conflict, but should be ignored
+			stores:               constraintRepairStores,
+			conf:                 constraintRepairConfig,
+			existingVoters:       replicas(1),
+			expectedRemoveTarget: 1,
+			expectedAddTarget:    2,
+		},
+		{
+			name:                 "disk fullness bypasses MMA conflict",
+			mmaReturnsConflict:   true, // MMA says conflict, but should be ignored
+			stores:               diskFullnessStores,
+			conf:                 emptySpanConfig(),
+			existingVoters:       replicas(1),
+			expectedRemoveTarget: 1,
+			expectedAddTarget:    2,
+		},
+		{
+			name:                 "diversity improvement bypasses MMA conflict",
+			mmaReturnsConflict:   true, // MMA says conflict, but should be ignored for diversity
+			stores:               diversityStores,
+			conf:                 emptySpanConfig(),
+			existingVoters:       replicas(1, 3), // Both replicas in dc1, poor diversity
+			expectedRemoveTarget: 3,              // Remove one from dc1
+			expectedAddTarget:    2,              // Add to dc2 for better diversity
+		},
+		{
+			name:               "range count rebalancing respects MMA conflict",
+			mmaReturnsConflict: true, // MMA says conflict, should be respected
+			stores:             rangeCountStores,
+			conf:               emptySpanConfig(),
+			existingVoters:     replicas(1),
+			expectNoAction:     true, // Should be blocked by MMA conflict
+		},
+		{
+			name:                 "range count rebalancing proceeds when MMA allows",
+			mmaReturnsConflict:   false, // MMA says no conflict
+			stores:               rangeCountStores,
+			conf:                 emptySpanConfig(),
+			existingVoters:       replicas(1),
+			expectedRemoveTarget: 1,
+			expectedAddTarget:    2,
+		},
+	}
+
+	var rangeUsageInfo allocator.RangeUsageInfo
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
+			fmt.Println("test.name", test.name)
+			mmaKnobs := &mmaintegration.TestingKnobs{
+				OverrideIsInConflictWithMMA: func(cand roachpb.StoreID) bool {
+					return test.mmaReturnsConflict
+				},
+			}
+			stopper, g, sp, a, _ := CreateTestAllocatorWithKnobs(
+				ctx, 5, true /* deterministic */, nil /* allocatorKnobs */, mmaKnobs)
+			defer stopper.Stop(ctx)
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(test.stores, t)
+			add, remove, _, ok := a.RebalanceVoter(
+				ctx,
+				sp,
+				test.conf,
+				nil,
+				test.existingVoters,
+				[]roachpb.ReplicaDescriptor{},
+				rangeUsageInfo,
+				storepool.StoreFilterThrottled,
+				a.ScorerOptions(ctx),
+			)
+
+			if test.expectNoAction {
+				require.Falsef(t, ok, "expected no rebalance action but got one")
+			} else {
+				require.Truef(t, ok, "expected rebalance action but got none")
+				require.Equalf(t, test.expectedAddTarget, add.StoreID,
+					"the addition target %+v from RebalanceVoter doesn't match expectation %v",
+					add, test.expectedAddTarget)
+				require.Equalf(t, test.expectedRemoveTarget, remove.StoreID,
+					"the removal target %+v from RebalanceVoter doesn't match expectation %v",
+					remove, test.expectedRemoveTarget)
+			}
+		})
+	}
+}
+
 // TestVotersCanRebalanceToNonVoterStores ensures that rebalancing of voting
 // replicas considers stores that have non-voters as feasible candidates.
 func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
