@@ -562,6 +562,9 @@ func buildInvertedIndexSpans(
 		case Filter:
 			operation := pathType.Condition.(Operation)
 			leftPaths := operation.Left.(Paths)
+			for _, b := range prefixBytes {
+				prefixBytes = append(prefixBytes, encoding.EncodeArrayAscending(b[:len(b):len(b)]))
+			}
 			// Recursively process the filter's left path with the right-hand value as the filter.
 			return buildInvertedIndexSpans(prefixBytes, leftPaths, 0, lastKeyIndex(leftPaths), operation.Right)
 		}
@@ -579,7 +582,14 @@ func buildInvertedIndexSpans(
 			// Encode as array element: {"key": [...]}.
 			nextPrefixes = append(nextPrefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(prefix[:len(prefix):len(prefix)], keyName, false /* end */)))
 		}
-	case Wildcard, Root, Current:
+	case Wildcard:
+		for _, prefix := range prefixBytes {
+			nextPrefixes = append(nextPrefixes, prefix)
+			// Wildcard can unwrap one extra layer of array.
+			nextPrefixes = append(nextPrefixes, encoding.EncodeArrayAscending(prefix[:len(prefix):len(prefix)]))
+		}
+
+	case Root, Current:
 		// For non-Key components, pass through existing prefixes unchanged.
 		nextPrefixes = prefixBytes
 	default:
