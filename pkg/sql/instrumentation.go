@@ -736,7 +736,7 @@ func (ih *instrumentationHelper) Finish(
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
 
-			if !txnHelper.DiagnosticsInProgress() {
+			if !txnHelper.diagnosticsCollector.InProgress() {
 				// Include all non-critical errors as warnings. Note that these
 				// error strings might contain PII, but the warnings are only shown
 				// to the current user and aren't included into the bundle.
@@ -749,7 +749,7 @@ func (ih *instrumentationHelper) Finish(
 		}
 	}
 
-	if txnHelper.DiagnosticsInProgress() {
+	if txnHelper.diagnosticsCollector.InProgress() {
 		// If we're collecting a transaction bundle, add the statement to the
 		// current txn diagnostic bundle. These will be persisted at the end
 		// of the transaction if the transaction matches the request.
