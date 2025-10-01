@@ -597,6 +597,12 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 			d.serializer = nil
 		}
 	}()
+	if d.writer != nil {
+		// The context that we captured when we created the diskQueueWriter
+		// might have a tracing span that has already been finished. To go
+		// around this, we capture the fresh context.
+		d.writer.ctx = ctx
+	}
 	if err := d.serializer.Finish(); err != nil {
 		return err
 	}
