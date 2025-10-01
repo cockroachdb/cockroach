@@ -345,23 +345,26 @@ func startDistChangefeed(
 // The bin packing choice gives preference to leaseholder replicas if possible.
 var replicaOracleChoice = replicaoracle.BinPackingChoice
 
-type rangeDistributionType int
+var useBulkOracle = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.random_replica_selection.enabled",
+	"randomize the selection of which replica backs up each range",
+	true)
+
+type clusterRangeDistributionType int
 
 const (
 	// defaultDistribution employs no load balancing on the changefeed
 	// side. We defer to distsql to select nodes and distribute work.
-	defaultDistribution rangeDistributionType = 0
+	defaultDistribution clusterRangeDistributionType = 0
 	// balancedSimpleDistribution defers to distsql for selecting the
 	// set of nodes to distribute work to. However, changefeeds will try to
 	// distribute work evenly across this set of nodes.
-	balancedSimpleDistribution rangeDistributionType = 1
+	balancedSimpleDistribution clusterRangeDistributionType = 1
 	// TODO(jayant): add balancedFullDistribution which takes
 	// full control of node selection and distribution.
 )
 
-// RangeDistributionStrategy is used to determine how the changefeed balances
-// ranges between nodes.
-// TODO: deprecate this setting in favor of a changefeed option.
 var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"changefeed.default_range_distribution_strategy",
@@ -370,17 +373,11 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 		"will not override locality restrictions",
 	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
 		"default", "balanced_simple"),
-	map[rangeDistributionType]string{
+	map[clusterRangeDistributionType]string{
 		defaultDistribution:        "default",
 		balancedSimpleDistribution: "balanced_simple",
 	},
 	settings.WithPublic)
-
-var useBulkOracle = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.random_replica_selection.enabled",
-	"randomize the selection of which replica backs up each range",
-	true)
 
 func makePlan(
 	execCtx sql.JobExecContext,
@@ -410,7 +407,6 @@ func makePlan(
 			}
 		}
 
-		rangeDistribution := RangeDistributionStrategy.Get(sv)
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
@@ -426,9 +422,21 @@ func makePlan(
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Changefeed.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
+		clusterRangeDistribution := RangeDistributionStrategy.Get(sv)
+		changefeedRangeDistribution, changefeedRangeDistributionSet, err := changefeedbase.MakeStatementOptions(details.Opts).GetRangeDistributionStrategy()
+		if err != nil {
+			return nil, nil, err
+		}
+		useBalancedSimpleDistribution := false
+		if changefeedRangeDistributionSet {
+			useBalancedSimpleDistribution = changefeedRangeDistribution == changefeedbase.RangeDistributionStrategyBalancedSimple
+		} else {
+			useBalancedSimpleDistribution = clusterRangeDistribution == balancedSimpleDistribution
+		}
 		switch {
-		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
-		case rangeDistribution == balancedSimpleDistribution:
+		case distMode == sql.LocalDistribution || !useBalancedSimpleDistribution:
+		case useBalancedSimpleDistribution:
+			fmt.Println("using balanced simple distribution")
 			log.Changefeed.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
@@ -442,8 +450,11 @@ func makePlan(
 				log.Changefeed.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
 			}
 		default:
-			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %d and dist mode %d",
-				rangeDistribution, distMode)
+			return nil, nil, errors.AssertionFailedf(
+				"unsupported dist strategy (using balanced simple distribution: %t) and dist mode %d. Cluster setting: %d, Changefeed option: %s (option set: %t)",
+				useBalancedSimpleDistribution, distMode,
+				clusterRangeDistribution, changefeedRangeDistribution, changefeedRangeDistributionSet,
+			)
 		}
 
 		if haveKnobs && maybeCfKnobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
