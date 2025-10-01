@@ -16367,6 +16367,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.disk-unhealthy.duration
+      exported_name: storage_disk_unhealthy_duration
+      description: Total disk unhealthy duration in nanos
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.disk.io.time
       exported_name: storage_disk_io_time
       description: Time spent reading from or writing to the store's disk since this process started (as reported by the OS)

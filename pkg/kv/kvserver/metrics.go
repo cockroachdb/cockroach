@@ -1247,7 +1247,12 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
-
+	metaDiskUnhealthyDuration = metric.Metadata{
+		Name:        "storage.disk-unhealthy.duration",
+		Help:        "Total disk unhealthy duration in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	// Range event metrics.
 	metaRangeSplits = metric.Metadata{
 		Name:        "range.splits",
@@ -3111,8 +3116,9 @@ type StoreMetrics struct {
 	RdbCheckpoints *metric.Gauge
 
 	// Disk health metrics.
-	DiskSlow    *metric.Counter
-	DiskStalled *metric.Counter
+	DiskSlow              *metric.Counter
+	DiskStalled           *metric.Counter
+	DiskUnhealthyDuration *metric.Counter
 
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of NodeStatus; it would be
@@ -3868,8 +3874,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbCheckpoints: metric.NewGauge(metaRdbCheckpoints),
 
 		// Disk health metrics.
-		DiskSlow:    metric.NewCounter(metaDiskSlow),
-		DiskStalled: metric.NewCounter(metaDiskStalled),
+		DiskSlow:              metric.NewCounter(metaDiskSlow),
+		DiskStalled:           metric.NewCounter(metaDiskStalled),
+		DiskUnhealthyDuration: metric.NewCounter(metaDiskUnhealthyDuration),
 
 		// Range event metrics.
 		RangeSplits:                   metric.NewCounter(metaRangeSplits),
@@ -4261,6 +4268,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbWriteStallNanos.Update(m.WriteStallDuration.Nanoseconds())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
+	sm.DiskUnhealthyDuration.Update(int64(m.DiskUnhealthyDuration))
 	sm.IterBlockBytes.Update(int64(m.Iterator.BlockBytes))
 	sm.IterBlockBytesInCache.Update(int64(m.Iterator.BlockBytesInCache))
 	sm.IterBlockReadDuration.Update(int64(m.Iterator.BlockReadDuration))
