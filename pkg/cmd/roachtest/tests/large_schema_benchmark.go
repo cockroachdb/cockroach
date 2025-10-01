@@ -156,6 +156,10 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// of time. In multi-region this latency can be substantial.
 						_, err := conn.Exec("SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'")
 						require.NoError(t, err)
+						// Allow optimizations to use leased descriptors when querying
+						// pg_catalog and information_schema.
+						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'")
+						require.NoError(t, err)
 						// Since we will be making a large number of databases / tables
 						// quickly,on MR the job retention can slow things down. Let's
 						// minimize how long jobs are kept, so that the creation / ingest
