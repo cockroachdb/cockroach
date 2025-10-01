@@ -95,7 +95,7 @@ func TestLeaseTransferOp(t *testing.T) {
 			results := make([]map[state.RangeID]state.StoreID, len(tc.ticks))
 			pending := []DispatchedTicket{}
 			for i, tick := range tc.ticks {
-				changer.Tick(state.OffsetTick(start, tick), s)
+				changer.Tick(ctx, state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				for _, transfers := range tc.transfers[tick] {
@@ -305,7 +305,7 @@ func TestRelocateRangeOp(t *testing.T) {
 				// range rebalancer will fail if any pending changes that were
 				// set to complete at tick t, still exist at tick t. So we tick
 				// it first here.
-				changer.Tick(state.OffsetTick(start, tick), s)
+				changer.Tick(ctx, state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				relocations := tc.relocations[tick]

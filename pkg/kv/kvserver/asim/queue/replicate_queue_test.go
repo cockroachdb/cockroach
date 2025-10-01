@@ -321,7 +321,7 @@ func TestReplicateQueue(t *testing.T) {
 				s.TickClock(state.OffsetTick(start, tick))
 
 				// Tick state updates that are queued for completion.
-				changer.Tick(state.OffsetTick(start, tick), s)
+				changer.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				// Update the store's view of the cluster, we update all stores
 				// but only care about s1's view.
