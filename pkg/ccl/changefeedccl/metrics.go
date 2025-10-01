@@ -69,6 +69,7 @@ type AggMetrics struct {
 	ParallelIOPendingRows       *aggmetric.AggGauge
 	ParallelIOResultQueueNanos  *aggmetric.AggHistogram
 	ParallelIOInFlightKeys      *aggmetric.AggGauge
+	ParallelIOWorkers           *aggmetric.AggGauge
 	SinkIOInflight              *aggmetric.AggGauge
 	SinkBackpressureNanos       *aggmetric.AggHistogram
 	CommitLatency               *aggmetric.AggHistogram
@@ -128,6 +129,7 @@ type metricsRecorder interface {
 	recordSizeBasedFlush()
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
+	recordParallelIOWorkers(int64)
 	recordSinkBackpressure(time.Duration)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
@@ -158,6 +160,7 @@ type sliMetrics struct {
 	ParallelIOPendingRows       *aggmetric.Gauge
 	ParallelIOResultQueueNanos  *aggmetric.Histogram
 	ParallelIOInFlightKeys      *aggmetric.Gauge
+	ParallelIOWorkers           *aggmetric.Gauge
 	SinkIOInflight              *aggmetric.Gauge
 	SinkBackpressureNanos       *aggmetric.Histogram
 	CommitLatency               *aggmetric.Histogram
@@ -626,6 +629,14 @@ func (m *sliMetrics) recordSinkIOInflightChange(delta int64) {
 	m.SinkIOInflight.Inc(delta)
 }
 
+func (m *sliMetrics) recordParallelIOWorkers(n int64) {
+	if m == nil {
+		return
+	}
+
+	m.ParallelIOWorkers.Update(n)
+}
+
 func (m *sliMetrics) recordSinkBackpressure(duration time.Duration) {
 	if m == nil {
 		return
@@ -710,6 +721,10 @@ func (w *wrappingCostController) recordSizeBasedFlush() {
 
 func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 	w.inner.recordSinkIOInflightChange(delta)
+}
+
+func (w *wrappingCostController) recordParallelIOWorkers(n int64) {
+	w.inner.recordParallelIOWorkers(n)
 }
 
 func (w *wrappingCostController) recordSinkBackpressure(duration time.Duration) {
@@ -992,6 +1007,12 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedParallelIOWorkers := metric.Metadata{
+		Name:        "changefeed.parallel_io_workers",
+		Help:        "The number of workers in the ParallelIO",
+		Measurement: "Workers",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedSinkIOInflight := metric.Metadata{
 		Name:        "changefeed.sink_io_inflight",
 		Help:        "The number of keys currently inflight as IO requests being sent to the sink",
@@ -1138,6 +1159,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
+		ParallelIOWorkers: b.Gauge(metaChangefeedParallelIOWorkers),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
@@ -1245,6 +1267,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		ParallelIOPendingRows:       a.ParallelIOPendingRows.AddChild(scope),
 		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope),
 		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope),
+		ParallelIOWorkers:           a.ParallelIOWorkers.AddChild(scope),
 		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
 		SinkBackpressureNanos:       a.SinkBackpressureNanos.AddChild(scope),
 		CommitLatency:               a.CommitLatency.AddChild(scope),
