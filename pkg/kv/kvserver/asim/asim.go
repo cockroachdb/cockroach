@@ -404,7 +404,9 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
-		s.srs[store.StoreID()].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "StoreRebalancer", func(ctx context.Context) {
+			s.srs[store.StoreID()].Tick(ctx, tick, state)
+		})
 	}
 }
 
