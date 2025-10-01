@@ -149,6 +149,9 @@ func (w Wrapper[T]) MarshalYAML() (any, error) {
 // was stored with metadata, we decode the type information and then decode the
 // value using the type information.
 func (w *Wrapper[T]) UnmarshalYAML(value *yaml.Node) error {
+	if len(value.Content) != 4 {
+		return fmt.Errorf("invalid wrapper")
+	}
 	ft := fieldType(value.Content[1].Value)
 	typeName, err := ft.name()
 	if err != nil {
@@ -166,8 +169,12 @@ func (w *Wrapper[T]) UnmarshalYAML(value *yaml.Node) error {
 	if ft.isPointer() {
 		objValue = reflect.ValueOf(objValuePtr).Interface()
 	}
+	castObj, ok := objValue.(T)
+	if !ok {
+		return fmt.Errorf("invalid type %T", objValue)
+	}
 	*w = Wrapper[T]{
-		objValue.(T),
+		castObj,
 	}
 	return nil
 }
