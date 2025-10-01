@@ -490,32 +490,11 @@ func (f *featureFlag) enabled(r entropy) featureState {
 	return featureDisabled
 }
 
-type enumFeatureFlag struct {
-	state string
-	v     *featureState
-}
-
-// enabled returns a valid string if the returned featureState is featureEnabled.
-func (f *enumFeatureFlag) enabled(r entropy, choose func(entropy) string) (string, featureState) {
-	if f.v != nil {
-		return f.state, *f.v
-	}
-
-	if r.Bool() {
-		f.v = &featureEnabled
-		f.state = choose(r)
-		return f.state, featureEnabled
-	}
-	f.v = &featureDisabled
-	return f.state, featureDisabled
-}
-
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
-	RangeFeedScheduler   featureFlag
-	SchemaLockTables     featureFlag
-	DistributionStrategy enumFeatureFlag
+	RangeFeedScheduler featureFlag
+	SchemaLockTables   featureFlag
 }
 
 func makeDefaultFeatureFlags() cdcFeatureFlags {
@@ -4425,11 +4404,6 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 	return cfc
 }
 
-func chooseDistributionStrategy(r entropy) string {
-	vals := changefeedccl.RangeDistributionStrategy.GetAvailableValues()
-	return vals[r.Intn(len(vals))]
-}
-
 // applySettings aplies various settings to the cluster -- once per the
 // lifetime of changefeedCreator
 func (cfc *changefeedCreator) applySettings() error {
@@ -4447,16 +4421,6 @@ func (cfc *changefeedCreator) applySettings() error {
 		if _, err := cfc.systemDB.Exec(
 			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled == featureEnabled,
 		); err != nil {
-			return err
-		}
-	}
-
-	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
-		chooseDistributionStrategy)
-	if rangeDistributionEnabled == featureEnabled {
-		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
-		if _, err := cfc.db.Exec(fmt.Sprintf(
-			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
 			return err
 		}
 	}

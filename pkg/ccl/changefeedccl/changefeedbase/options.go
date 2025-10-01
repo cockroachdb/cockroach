@@ -75,6 +75,19 @@ const (
 	EnrichedPropertySchema EnrichedProperty = `schema`
 )
 
+// RangeDistributionStrategy configures how the changefeed balances ranges between nodes.
+type RangeDistributionStrategy string
+
+const (
+	// RangeDistributionStrategyDefault employs no load balancing on the changefeed
+	// side. We defer to distsql to select nodes and distribute work.
+	RangeDistributionStrategyDefault RangeDistributionStrategy = `default`
+	// RangeDistributionStrategyBalancedSimple defers to distsql for selecting the
+	// set of nodes to distribute work to. However, changefeeds will try to
+	// distribute work evenly across this set of nodes.
+	RangeDistributionStrategyBalancedSimple RangeDistributionStrategy = `balanced_simple`
+)
+
 // Constants for the initial scan types
 const (
 	InitialScan InitialScanType = iota
@@ -161,6 +174,8 @@ const (
 	OptInitialScanOnly = `initial_scan_only`
 
 	OptEnrichedProperties = `enriched_properties`
+
+	OptRangeDistributionStrategy = `range_distribution_strategy`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -412,6 +427,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
+	OptRangeDistributionStrategy:          enum("default", "balanced_simple"),
 	OptHeadersJSONColumnName:              stringOption,
 	OptExtraHeaders:                       jsonOption,
 }
@@ -428,6 +444,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
+	OptRangeDistributionStrategy,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -803,6 +820,17 @@ func (s StatementOptions) IsInitialScanSpecified() bool {
 	}
 
 	return true
+}
+
+func (s StatementOptions) GetRangeDistributionStrategy() (RangeDistributionStrategy, error) {
+	v, err := s.getEnumValue(OptRangeDistributionStrategy)
+	if err != nil {
+		return "", err
+	}
+	if v == `` {
+		return RangeDistributionStrategyDefault, nil
+	}
+	return RangeDistributionStrategy(v), nil
 }
 
 // ShouldUseFullStatementTimeName returns true if references to the table should be in db.schema.table
