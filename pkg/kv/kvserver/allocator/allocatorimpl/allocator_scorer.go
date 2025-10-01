@@ -68,18 +68,18 @@ const (
 	minRangeRebalanceThreshold = 2
 
 	// DefaultReplicaIOOverloadThreshold is used to avoid allocating to stores with an
-	// IO overload score greater than what's set. This is typically used in
-	// conjunction with IOOverloadMeanThreshold below.
+	// IO overload score greater than or equal to what's set. This is typically
+	// used in conjunction with IOOverloadMeanThreshold below.
 	DefaultReplicaIOOverloadThreshold = 0.3
 
 	// DefaultLeaseIOOverloadThreshold is used to block lease transfers to stores
-	// with an IO overload score greater than this threshold. This is typically
-	// used in conjunction with IOOverloadMeanThreshold below.
+	// with an IO overload score greater than or equal to this threshold. This
+	// is typically used in conjunction with IOOverloadMeanThreshold below.
 	DefaultLeaseIOOverloadThreshold = 0.3
 
 	// DefaultLeaseIOOverloadShedThreshold is used to shed leases from stores
-	// with an IO overload score greater than the this threshold. This is
-	// typically used in conjunction with IOOverloadMeanThreshold below.
+	// with an IO overload score greater than or equal to this threshold. This
+	// is typically used in conjunction with IOOverloadMeanThreshold below.
 	DefaultLeaseIOOverloadShedThreshold = 0.4
 
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
@@ -142,14 +142,14 @@ var RangeRebalanceThreshold = settings.RegisterFloatSetting(
 	settings.WithPublic,
 )
 
-// ReplicaIOOverloadThreshold is the maximum IO overload score of a candidate
-// store before being excluded as a candidate for rebalancing replicas or
+// ReplicaIOOverloadThreshold is the IO overload score at or above which a
+// candidate store is excluded as a candidate for rebalancing replicas or
 // allocation. This is only acted upon if ReplicaIOOverloadThreshold is set to
 // `block_all` or `block_rebalance_to`.
 var ReplicaIOOverloadThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.replica_io_overload_threshold",
-	"the maximum store io overload before the enforcement defined by "+
+	"the threshold store io overload at or above which the enforcement defined by "+
 		"`kv.allocator.io_overload_threshold_enforce` is taken on a store "+
 		"for allocation decisions",
 	DefaultReplicaIOOverloadThreshold,
@@ -182,28 +182,28 @@ var ReplicaIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 	},
 )
 
-// LeaseIOOverloadThreshold is the maximum IO overload score a store may have
-// before being excluded as a candidate for lease transfers. This threshold is
-// only acted upon if LeaseIOOverloadThresholdEnforcement is set to 'shed' or
+// LeaseIOOverloadThreshold is the IO overload score at or above which a store
+// will be excluded as a candidate for lease transfers. This threshold is only
+// acted upon if LeaseIOOverloadThresholdEnforcement is set to 'shed' or
 // `block`.
 var LeaseIOOverloadThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.lease_io_overload_threshold",
-	"a store will not receive new leases when its IO overload score is above this "+
+	"a store will not receive new leases when its IO overload score is at or above this "+
 		"value and `kv.allocator.io_overload_threshold` is "+
 		"`shed` or `block_transfer_to`",
 	DefaultLeaseIOOverloadThreshold,
 )
 
-// LeaseIOOverloadShedThreshold is the maximum IO overload score the current
-// leaseholder store for a range may have before shedding its leases and no
-// longer receiving new leases. This threhsold is acted upon only If
+// LeaseIOOverloadShedThreshold is the IO overload score at or above which the
+// current leaseholder store for a range will shed its leases and no longer
+// receive new leases. This threshold is acted upon only if
 // LeaseIOOverloadThresholdEnforcement is set to 'shed'.
 var LeaseIOOverloadShedThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.lease_shed_io_overload_threshold",
 	"a store will shed its leases and receive no new leases when its "+
-		"IO overload score is above this value and "+
+		"IO overload score is at or above this value and "+
 		"`kv.allocator.lease_io_overload_threshold_enforcement` is `shed`",
 	DefaultLeaseIOOverloadShedThreshold,
 )
@@ -236,12 +236,16 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 // {ReplicaIOOverloadThreshold, ReplicaIOOverloadThresholdEnforcement}, when
 // transferring replicas.
 //
-// TODO(sumeer): change to DefaultLeaseIOOverloadShedThreshold after discussion.
+// The default is set to DefaultLeaseIOOverloadShedThreshold, which is greater
+// than DefaultLeaseIOOverloadThreshold and DefaultReplicaIOOverloadThreshold.
+// Hence, if those settings are left at their defaults, and the enforcement
+// enum settings are at their default, a store with an unhealthy disk will
+// shed leases, and have no new leases or replicas transferred to it.
 var DiskUnhealthyIOOverloadScore = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.disk_unhealthy_io_overload_score",
 	"the IO overload score to assign to a store when its disk is unhealthy",
-	0)
+	DefaultLeaseIOOverloadShedThreshold)
 
 // maxDiskUtilizationThreshold controls the point at which the store cedes
 // having room for new replicas. If the fraction used of a store descriptor
