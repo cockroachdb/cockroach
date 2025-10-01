@@ -289,17 +289,27 @@ type lockTableImpl struct {
 
 	// settings provides a handle to cluster settings.
 	settings *cluster.Settings
+
+	// ltf is a lockTableFlusher which can optionally be used to generate
+	// FlushLockTable requests when the lock table is approaching maxKeyLocked
+	// to avoid losing locks.
+	ltf *LockTableFlusher
 }
 
 var _ lockTable = &lockTableImpl{}
 
 func newLockTable(
-	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+	maxLocks int64,
+	rangeID roachpb.RangeID,
+	clock *hlc.Clock,
+	settings *cluster.Settings,
+	ltf *LockTableFlusher,
 ) *lockTableImpl {
 	lt := &lockTableImpl{
 		rID:      rangeID,
 		clock:    clock,
 		settings: settings,
+		ltf:      ltf,
 	}
 	lt.setMaxKeysLocked(maxLocks)
 	return lt
@@ -4492,9 +4502,24 @@ func (t *lockTableImpl) MarkIneligibleForExport(acq *roachpb.LockAcquisition) er
 // can to bring things under budget.
 func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
 	totalLocks := t.locks.numKeysLocked.Load()
-	if totalLocks > t.maxKeysLocked {
-		numToClear := totalLocks - t.minKeysLocked
+
+	overMax := totalLocks > t.maxKeysLocked
+	numToClear := totalLocks - t.minKeysLocked
+
+	// If we are between flushThreshold and maxKeysLocked, we'll attempt to flush
+	// the lock table.
+	//
+	// Since a locking request holds latches and since the flush will also require
+	// latches, if a single request pushes us over the max, we'll end up dropping
+	// the lock table.
+	shouldTryFlush := UnreplicatedLockReliabilityLockLimit.Get(&t.settings.SV) && t.ltf != nil
+	shouldTryFlush = shouldTryFlush && totalLocks > int64(float64(t.maxKeysLocked)*0.80)
+	shouldTryFlush = shouldTryFlush && !overMax
+
+	if overMax {
 		t.tryClearLocks(false /* force */, int(numToClear))
+	} else if shouldTryFlush {
+		t.tryFlushLocks(numToClear)
 	}
 }
 
@@ -4526,6 +4551,29 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 	}
 	t.clearLocksMuLocked(locksToClear)
 	t.locks.mu.Unlock()
+}
+
+func (t *lockTableImpl) tryFlushLocks(numToFlush int64) {
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
+
+	// TODO(ssd): Here we make the lock table bounds, which in theory could be
+	// used to limit the latch impact of the flush request, but at the moment
+	// FlushLockTable latches the entire range.
+	iter := t.locks.MakeIter()
+	iter.First()
+	if !iter.Valid() {
+		return
+	}
+	startKey := iter.Cur().key.Clone()
+	iter.Last()
+	if !iter.Valid() {
+		return
+	}
+	endKey := iter.Cur().key.Clone().Next()
+
+	span := roachpb.Span{Key: startKey, EndKey: endKey}
+	t.ltf.MaybeEnqueueFlush(t.rID, span, numToFlush)
 }
 
 // tryClearLockGE attempts to clear all locks greater or equal to given key.

@@ -197,7 +197,7 @@ func TestLockTableBasic(t *testing.T) {
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				ltImpl := newLockTable(
-					int64(maxLocks), roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
+					int64(maxLocks), roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(), nil,
 				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
@@ -889,7 +889,7 @@ func newLock(txn *enginepb.TxnMeta, key roachpb.Key, str lock.Strength) *roachpb
 
 func TestLockTableMaxLocks(t *testing.T) {
 	lt := newLockTable(
-		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(), nil,
 	)
 	lt.minKeysLocked = 0
 	lt.enabled = true
@@ -1031,7 +1031,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	lt := newLockTable(
-		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
+		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(), nil,
 	)
 	lt.minKeysLocked = 0
 	lt.enabled = true
@@ -1316,7 +1316,7 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 		nil, /* latchWaitDurations */
 		clock,
 	)
-	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings)
+	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings, nil)
 	ltImpl.enabled = true
 	lt := maybeWrapInVerifyingLockTable(ltImpl)
 	ex := &workloadExecutor{
@@ -2018,7 +2018,7 @@ func BenchmarkLockTable(b *testing.B) {
 						lm := spanlatch.Make(
 							nil /* stopper */, nil /* slowReqs */, settings, nil /* latchWaitDurations */, clock,
 						)
-						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings)
+						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings, nil)
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &lm,
@@ -2063,6 +2063,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 				roachpb.RangeID(3),
 				hlc.NewClockForTesting(nil),
 				cluster.MakeTestingClusterSettings(),
+				nil,
 			)
 			lt.enabled = true
 

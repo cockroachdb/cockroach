@@ -8,6 +8,7 @@ go_library(
         "concurrency_manager.go",
         "latch_manager.go",
         "lock_table.go",
+        "lock_table_flusher.go",
         "lock_table_waiter.go",
         "metrics.go",
         "verifiable_lock_table.go",
@@ -33,6 +34,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/container/list",
         "//pkg/util/debugutil",
@@ -58,6 +60,7 @@ go_test(
     srcs = [
         "concurrency_manager_test.go",
         "datadriven_util_test.go",
+        "lock_table_flusher_test.go",
         "lock_table_test.go",
         "lock_table_waiter_test.go",
         ":keylocks_interval_btree_test.go",  # keep
