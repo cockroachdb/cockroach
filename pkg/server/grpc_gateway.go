@@ -39,11 +39,7 @@ var _ grpcGatewayServer = authserver.Server(nil)
 var _ grpcGatewayServer = (*ts.Server)(nil)
 
 // configureGRPCGateway initializes services necessary for running the
-// GRPC Gateway services proxied against the server at `grpcSrv`.
-//
-// The connection between the reverse proxy provided by grpc-gateway
-// and our grpc server uses a loopback-based listener to create
-// connections between the two.
+// GRPC Gateway services proxied against the server at `grpcAddr`.
 //
 // The function returns 3 arguments that are necessary to call
 // `RegisterGateway` which generated for each of your gRPC services
@@ -53,8 +49,7 @@ func configureGRPCGateway(
 	ambientCtx log.AmbientContext,
 	rpcContext *rpc.Context,
 	stopper *stop.Stopper,
-	grpcSrv *grpcServer,
-	GRPCAddr string,
+	grpcAddr string,
 ) (*gwruntime.ServeMux, context.Context, *grpc.ClientConn, error) {
 	jsonpb := &protoutil.JSONPb{
 		EnumsAsInts:  true,
@@ -77,7 +72,7 @@ func configureGRPCGateway(
 
 	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
 	// uniquely in-process connection.
-	dialOpts, err := rpcContext.GRPCDialOptions(ctx, GRPCAddr, rpcbase.DefaultClass)
+	dialOpts, err := rpcContext.GRPCDialOptions(ctx, grpcAddr, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -93,7 +88,7 @@ func configureGRPCGateway(
 		telemetry.Inc(getServerEndpointCounter(method))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	conn, err := grpc.DialContext(ctx, GRPCAddr, append(
+	conn, err := grpc.DialContext(ctx, grpcAddr, append(
 		dialOpts,
 		grpc.WithUnaryInterceptor(callCountInterceptor),
 	)...)

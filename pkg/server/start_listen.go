@@ -158,7 +158,6 @@ func startListenRPCAndSQL(
 	waitForQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		drpcCancel()
-		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(grpcL.Close())
 		netutil.FatalIfUnexpected(grpcLoopbackL.Close())
 		netutil.FatalIfUnexpected(drpcL.Close())         // Closing this listener is as good as closing drpcTLSL
