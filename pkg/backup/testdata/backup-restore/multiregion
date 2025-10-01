@@ -11,7 +11,7 @@ set-cluster-setting setting=sql.multiregion.system_database_multiregion.enabled 
 
 exec-sql
 ALTER DATABASE system SET PRIMARY REGION "us-east-1";
-CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1" SURVIVE REGION FAILURE;
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1" SURVIVE REGION FAILURE SECONDARY REGION "us-west-1";
 CREATE TABLE d.t (x INT);
 INSERT INTO d.t VALUES (1), (2), (3);
 ----
@@ -22,6 +22,19 @@ SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
 eu-central-1
 us-east-1
 us-west-1
+
+query-sql
+SHOW ZONE CONFIGURATION FROM DATABASE d;
+----
+DATABASE d ALTER DATABASE d CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 14400,
+	num_replicas = 5,
+	num_voters = 5,
+	constraints = '{+region=eu-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+	voter_constraints = '{+region=us-east-1: 2, +region=us-west-1: 2}',
+	lease_preferences = '[[+region=us-east-1], [+region=us-west-1]]'
 
 exec-sql
 BACKUP DATABASE d INTO 'nodelocal://1/database_backup/';
@@ -50,11 +63,24 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database_backup/';
 query-sql
 SHOW DATABASES;
 ----
-d root us-east-1  {eu-central-1,us-east-1,us-west-1} region
+d root us-east-1 us-west-1 {eu-central-1,us-east-1,us-west-1} region
 data root <nil> <nil> {} <nil>
 defaultdb root <nil> <nil> {} <nil>
 postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
+
+query-sql
+SHOW ZONE CONFIGURATION FROM DATABASE d;
+----
+DATABASE d ALTER DATABASE d CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 14400,
+	num_replicas = 5,
+	num_voters = 5,
+	constraints = '{+region=eu-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+	voter_constraints = '{+region=us-east-1: 2, +region=us-west-1: 2}',
+	lease_preferences = '[[+region=us-east-1], [+region=us-west-1]]'
 
 # A new cluster with different localities settings.
 new-cluster name=s3 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
@@ -85,6 +111,7 @@ SET enable_multiregion_placement_policy='true';
 ALTER DATABASE d SURVIVE ZONE FAILURE;
 ALTER DATABASE d PLACEMENT RESTRICTED;
 ALTER DATABASE d SET PRIMARY REGION 'eu-central-1';
+ALTER DATABASE d DROP SECONDARY REGION;
 ALTER DATABASE d DROP REGION 'us-east-1';
 ALTER DATABASE d DROP REGION 'us-west-1';
 ALTER DATABASE d ADD REGION 'eu-north-1';
@@ -104,6 +131,7 @@ SET enable_multiregion_placement_policy='true';
 ALTER DATABASE d_new SURVIVE ZONE FAILURE;
 ALTER DATABASE d PLACEMENT RESTRICTED;
 ALTER DATABASE d_new SET PRIMARY REGION 'eu-central-1';
+ALTER DATABASE d_new DROP SECONDARY REGION;
 ALTER DATABASE d_new DROP REGION 'us-east-1';
 ALTER DATABASE d_new DROP REGION 'us-west-1';
 ALTER DATABASE d_new ADD REGION 'eu-north-1';
