@@ -440,7 +440,7 @@ const spanThreshold = 10_000
 // Filter expressions are handled by recursively processing the
 // left-hand path with the right-hand value.
 //
-// Example: For path $.f1.mclaren[?(@.driver == "Piastri")]
+// Example: For path $.f1.mclaren ? (@.driver == "Piastri")
 //
 // Initial call:
 //
@@ -470,6 +470,17 @@ const spanThreshold = 10_000
 //   - currentIndex=3
 //
 // Iteration 3 (Filter - terminal case):
+//   - We need to add an optional array prefix, since the Filter enables
+//     unwrapping one extra layer of array.
+//   - Thus we have 8 prefixes now:
+//     > f1_obj_mclaren_obj_prefix
+//     > f1_arr_mclaren_obj_prefix
+//     > f1_obj_mclaren_arr_prefix
+//     > f1_arr_mclaren_arr_prefix
+//     > f1_obj_mclaren_obj_prefix_arr
+//     > f1_arr_mclaren_obj_prefix_arr
+//     > f1_obj_mclaren_arr_prefix_arr
+//     > f1_arr_mclaren_arr_prefix_arr
 //   - Extract left path (@.driver) and right value ("Piastri")
 //   - We now construct the new start and new last key index with the left path
 //   - currentIndex: 0, finalKeyIndex: 2 (last Key is "Piastri")
@@ -485,7 +496,7 @@ const spanThreshold = 10_000
 // > Iteration 3.2 (Scalar "Piastri" - terminal case):
 //   - We are at terminal, thus generate single value spans with each of
 //     the prefixes built so far + "Piastri".
-//   - Eventually, we returns the concatenation (OR) of 8 (2^3) spans:
+//   - Eventually, we returns the concatenation (OR) of 16 (2^4) spans:
 //     > f1_obj_mclaren_obj_driver_obj_Piastri
 //     > f1_arr_mclaren_obj_driver_obj_Piastri
 //     > f1_obj_mclaren_arr_driver_obj_Piastri
@@ -494,6 +505,14 @@ const spanThreshold = 10_000
 //     > f1_arr_mclaren_obj_driver_arr_Piastri
 //     > f1_obj_mclaren_arr_driver_arr_Piastri
 //     > f1_arr_mclaren_obj_driver_arr_Piastri
+//     > f1_obj_mclaren_obj_arr_driver_obj_Piastri
+//     > f1_arr_mclaren_obj_arr_driver_obj_Piastri
+//     > f1_obj_mclaren_arr_arr_driver_obj_Piastri
+//     > f1_arr_mclaren_obj_arr_driver_obj_Piastri
+//     > f1_obj_mclaren_obj_arr_driver_arr_Piastri
+//     > f1_arr_mclaren_obj_arr_driver_arr_Piastri
+//     > f1_obj_mclaren_arr_arr_driver_arr_Piastri
+//     > f1_arr_mclaren_obj_arr_driver_arr_Piastri
 func buildInvertedIndexSpans(
 	prefixBytes [][]byte,
 	pathComponents []Path,
@@ -562,6 +581,9 @@ func buildInvertedIndexSpans(
 		case Filter:
 			operation := pathType.Condition.(Operation)
 			leftPaths := operation.Left.(Paths)
+			for _, b := range prefixBytes {
+				prefixBytes = append(prefixBytes, encoding.EncodeArrayAscending(b[:len(b):len(b)]))
+			}
 			// Recursively process the filter's left path with the right-hand value as the filter.
 			return buildInvertedIndexSpans(prefixBytes, leftPaths, 0, lastKeyIndex(leftPaths), operation.Right)
 		}
@@ -579,7 +601,15 @@ func buildInvertedIndexSpans(
 			// Encode as array element: {"key": [...]}.
 			nextPrefixes = append(nextPrefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(prefix[:len(prefix):len(prefix)], keyName, false /* end */)))
 		}
-	case Wildcard, Root, Current:
+	case Wildcard:
+		prefixBytesLen := len(prefixBytes)
+		for i := 0; i < prefixBytesLen; i++ {
+			// Wildcard can unwrap one extra layer of array.
+			prefix := prefixBytes[i]
+			prefixBytes = append(prefixBytes, encoding.EncodeArrayAscending(prefix[:len(prefix):len(prefix)]))
+		}
+		nextPrefixes = prefixBytes
+	case Root, Current:
 		// For non-Key components, pass through existing prefixes unchanged.
 		nextPrefixes = prefixBytes
 	default:
