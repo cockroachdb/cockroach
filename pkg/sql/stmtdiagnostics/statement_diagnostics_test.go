@@ -845,9 +845,110 @@ LIMIT 1`)
 	}
 
 	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).TxnDiagnosticsRecorder
+	t.Run("diagnostics", func(t *testing.T) {
+		for _, testCase := range []struct {
+			name       string
+			statements []string
+		}{
+			{
+				name:       "regular request",
+				statements: txnStatements,
+			},
+			{
+				name: "with savepoint cockroach_restart",
+				statements: []string{
+					"SAVEPOINT cockroach_restart",
+					"SELECT 'aaaaaa', 'bbbbbb'",
+					"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+					"RELEASE SAVEPOINT cockroach_restart",
+				},
+			},
+			{
+				name: "with savepoint",
+				statements: []string{
+					"SAVEPOINT my_savepoint",
+					"SELECT 'aaaaaa', 'bbbbbb'",
+					"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+					"RELEASE SAVEPOINT my_savepoint",
+				},
+			},
+			{
+				name: "with savepoint rollback",
+				statements: []string{
+					"SAVEPOINT my_savepoint",
+					"SELECT 'aaaaaa', 'bbbbbb'",
+					"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+					"ROLLBACK TO SAVEPOINT my_savepoint",
+				},
+			},
+			{
+				name: "with cockroach_restart and regular savepoint",
+				statements: []string{
+					"SAVEPOINT cockroach_restart",
+					"SAVEPOINT my_savepoint",
+					"SELECT 'aaaaaa', 'bbbbbb'",
+					"RELEASE SAVEPOINT my_savepoint",
+					"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+					"RELEASE SAVEPOINT cockroach_restart",
+				},
+			},
+			{
+				name: "with cockroach_restart and regular savepoint and rollback",
+				statements: []string{
+					"SAVEPOINT cockroach_restart",
+					"SELECT 'aaaaaa', 'bbbbbb'",
+					"SAVEPOINT my_savepoint",
+					"ROLLBACK TO SAVEPOINT my_savepoint",
+					"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+					"SHOW SAVEPOINT STATUS",
+					"RELEASE SAVEPOINT cockroach_restart",
+				},
+			},
+			{
+				name: "with show commit timestamp",
+				statements: []string{
+					"SELECT 'aaaaaa', 'bbbbbb'",
+					"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+					"SHOW COMMIT TIMESTAMP",
+				},
+			},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				// Insert a request for the transaction fingerprint
+				reqId, err := registry.InsertTxnRequestInternal(
+					ctx,
+					txnFingerprintId,
+					statementFingerprintIds,
+					"testuser",
+					0,
+					0,
+					0,
+					false,
+				)
+				require.NoError(t, err)
 
-	t.Run("txn diagnostic request", func(t *testing.T) {
-		// Insert a request for the transaction fingerprint
+				// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+				var count int
+				sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
+				require.Equal(t, 1, count)
+
+				// Execute the transaction until the request is marked as complete.
+				// We use a connection to a different server than the diagnostics request
+				// was made on to ensure that the request is properly gossiped.
+				runTxnUntilDiagnosticsCollected(t, tc, sqlutils.MakeSQLRunner(tc.ServerConn(1)), testCase.statements, reqId)
+			})
+		}
+	})
+
+	t.Run("diagnostics with prepared statement", func(t *testing.T) {
+		// Since you can't create the same named prepared statement, we have this
+		// in a separate test that is guaranteed to complete on the first try
+		// by using the same node the request was made on.
+		statements := []string{
+			"PREPARE my_statement as SELECT 'aaaaaa', 'bbbbbb'",
+			"EXECUTE my_statement",
+			"SELECT 'aaaaaa', 'bbbbbb', 'ccccc' UNION select 'ddddd', 'eeeee', 'fffff'",
+		}
 		reqId, err := registry.InsertTxnRequestInternal(
 			ctx,
 			txnFingerprintId,
@@ -859,19 +960,8 @@ LIMIT 1`)
 			false,
 		)
 		require.NoError(t, err)
-
-		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
-		var count int
-		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
-		require.Equal(t, 1, count)
-
-		// Execute the transaction until the request is marked as complete.
-		// We use a connection to a different server than the diagnostics request
-		// was made on to ensure that the request is properly gossiped.
-		runTxnUntilDiagnosticsCollected(t, tc, sqlutils.MakeSQLRunner(tc.ServerConn(1)), txnStatements, reqId)
-
+		runTxnUntilDiagnosticsCollected(t, tc, sqlConn, statements, reqId)
 	})
-
 	t.Run("txn diagnostic with statement diagnostic request", func(t *testing.T) {
 
 		stmtReqId, err := registry.StmtRegistry.InsertRequestInternal(
