@@ -23,6 +23,7 @@ go_test(
     size = "small",
     srcs = [
         "atomic_test.go",
+        "crsync_test.go",
         "map_bench_test.go",
         "map_reference_test.go",
         "map_test.go",
@@ -31,5 +32,8 @@ go_test(
         "set_test.go",
     ],
     embed = [":syncutil"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "@com_github_cockroachdb_crlib//crsync",
+        "@com_github_stretchr_testify//require",
+    ],
 )

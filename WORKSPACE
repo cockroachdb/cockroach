@@ -641,8 +641,8 @@ load("//build:pgo.bzl", "pgo_profile")
 
 pgo_profile(
     name = "pgo_profile",
-    sha256 = "57414977040f9ed887a4e2b0434ca97f0047229928d8456a25acb3e08b4a71f2",
-    url = "https://storage.googleapis.com/cockroach-profiles/20250616172238-909ceb6ada01354d34416f1087fc256a066daa17.pb.gz",
+    sha256 = "7500eeeecba8edc9d25fd65b178568e7c543b50b3ef3ffc5e6e13af186ae2023",
+    url = "https://storage.googleapis.com/cockroach-profiles/20250926213937-4c6b4ce4dd320a7aa835757ed60f295f6e7c692c.pb.gz",
 )
 
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.

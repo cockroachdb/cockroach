@@ -502,6 +502,7 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/schemaobjectlimit",
         "//pkg/sql/scrub",
         "//pkg/sql/sem/asof",
         "//pkg/sql/sem/builtins",

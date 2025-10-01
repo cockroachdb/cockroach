@@ -958,7 +958,6 @@ func TestUnrecoverableErrors(t *testing.T) {
 		// handle duplicated events.
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109472),
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,
