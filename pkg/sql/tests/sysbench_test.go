@@ -202,6 +202,9 @@ func newSysbenchSQL(nodes int, localRPCFastPath bool) sysbenchDriverConstructor 
 		try0(tc.WaitForFullReplication())
 		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(sysbenchDB))
 		cleanup := func() {
+			conn := try(pgx.Connect(ctx, pgURL.String()))
+			defer func() { _ = conn.Close(ctx) }()
+			leaseholders(conn)
 			cleanupURL()
 			tc.Stopper().Stop(ctx)
 		}
@@ -347,6 +350,26 @@ func (s *sysbenchSQL) prepSchema(rng *rand.Rand) {
 
 		// Collect table statistics.
 		try(conn.Exec(s.ctx, fmt.Sprintf(sysbenchAnalyze, i)))
+	}
+	leaseholders(conn)
+}
+
+func leaseholders(conn *pgx.Conn) {
+	const q = `
+SELECT s.range_id, r.lease_holder
+FROM [SHOW RANGES FROM DATABASE sysbench] AS s
+JOIN crdb_internal.ranges AS r USING (range_id);
+`
+	rows, err := conn.Query(context.Background(), q)
+	if err != nil {
+		panic(err)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, "leaseholders:")
+	for rows.Next() {
+		var rangeID int64
+		var lh int64
+		try0(rows.Scan(&rangeID, &lh))
+		_, _ = fmt.Fprintf(os.Stdout, "r%d: s%d\n", rangeID, lh)
 	}
 }
 
@@ -895,6 +918,7 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 					if sys == nil {
 						sys, cleanup = driver.constructorFn(context.Background(), b)
 						sys.prep(rand.New(rand.NewSource(0)))
+
 					}
 					runSysbenchOuter(b, sys, workload.opFn, parallel)
 				})
