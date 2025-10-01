@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -254,4 +256,36 @@ func TestAccessCheckServer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// panickingStatement is a mock Statement that panics during formatting
+type panickingStatement struct{}
+
+func (ps panickingStatement) String() string {
+	return "panicking statement"
+}
+
+func (ps panickingStatement) Format(ctx *tree.FmtCtx) {
+	panic("deliberate panic for testing")
+}
+
+func (ps panickingStatement) StatementReturnType() tree.StatementReturnType {
+	return tree.Unknown
+}
+
+func (ps panickingStatement) StatementType() tree.StatementType {
+	return tree.TypeDML
+}
+
+func (ps panickingStatement) StatementTag() string {
+	return "TEST"
+}
+
+func TestPanickingSQLFormat(t *testing.T) {
+	result := unsafesql.SafeFormatQuery(panickingStatement{}, nil, &settings.Values{})
+	require.Equal(
+		t,
+		"<panicked query format>",
+		string(result),
+	)
 }
