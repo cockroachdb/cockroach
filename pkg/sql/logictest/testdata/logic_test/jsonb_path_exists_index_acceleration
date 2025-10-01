@@ -453,3 +453,52 @@ SELECT a, jsonb_path_query(b, '$.a.b'), jsonb_path_query(b, '$.a.d') FROM json_t
 ----
 3  "c"         "e"
 6  {"c": "d"}  "e"
+
+# Test with deeply nested arrays.
+statement ok
+INSERT INTO json_tab VALUES
+(16, '{"a": [[{"b": 1, "c": "aaa"}, {"b": 2, "c": "bbb"}, {"b": 1, "c": "ccc"}], [{"b": 1, "c": "zzz"}, {"b": 2, "c": "xxx"}, {"b": 1, "c": "yyy"}]]}'),
+(17, '{"a": [[[{"b": 1, "c": "aaa"}, {"b": 2, "c": "bbb"}, {"b": 1, "c": "ccc"}], [{"b": 1, "c": "zzz"}, {"b": 2, "c": "xxx"}, {"b": 1, "c": "yyy"}]]]}'),
+(18, '{"a": [[[[{"b": 1, "c": "aaa"}, {"b": 2, "c": "bbb"}, {"b": 1, "c": "ccc"}], [{"b": 1, "c": "zzz"}, {"b": 2, "c": "xxx"}, {"b": 1, "c": "yyy"}]]]]}');
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a ? (@.b == 1)') ORDER BY a;
+----
+4
+16
+
+query I
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a ? (@.b == 1)') ORDER BY a;
+----
+4
+16
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a[*] ? (@.b == 1)') ORDER BY a;
+----
+4
+16
+17
+
+query I
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*] ? (@.b == 1)') ORDER BY a;
+----
+4
+16
+17
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a[*][*] ? (@.b == 1)') ORDER BY a;
+----
+4
+16
+17
+18
+
+query I
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*][*] ? (@.b == 1)') ORDER BY a;
+----
+4
+16
+17
+18
