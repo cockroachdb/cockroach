@@ -543,6 +543,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		false, "use AWS Spot VMs, which are significantly cheaper, but can be preempted by AWS.")
 	flags.StringVar(&o.IAMProfile, ProviderName+"-iam-profile", o.IAMProfile,
 		"the IAM instance profile to associate with created VMs if non-empty")
+	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
+		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
 }
 
 // ConfigureClusterCleanupFlags implements ProviderOpts.

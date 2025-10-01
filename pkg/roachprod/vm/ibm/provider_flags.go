@@ -152,6 +152,13 @@ If > 1 zone specified, the cluster will be spread out evenly by zone regardless 
 	)
 
 	flags.BoolVar(
+		&o.BootDiskOnly,
+		ProviderName+"-boot-disk-only",
+		o.BootDiskOnly,
+		"Only attach the boot disk. No additional volumes will be provisioned even if specified.",
+	)
+
+	flags.BoolVar(
 		&o.UseMultipleDisks,
 		ProviderName+"-enable-multiple-stores",
 		false,

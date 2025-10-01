@@ -1158,6 +1158,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"enable turbo mode for the instance (only supported on C4 VM families, valid value: 'ALL_CORE_MAX')")
 	flags.IntVar(&o.ThreadsPerCore, ProviderName+"-threads-per-core", 0,
 		"the number of visible threads per physical core (valid values: 1 or 2), default is 0 (auto)")
+	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
+		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
 }
 
 // ConfigureProviderFlags implements Provider
