@@ -800,8 +800,8 @@ CREATE POLICY p_sel ON rls_table FOR SELECT USING (true);
 # Deny some
 copy-from-error
 COPY rls_table FROM STDIN WITH CSV
-20,"twenty"
 4,"four (violates rls policy)"
+20,"twenty"
 ----
 ERROR: new row violates row-level security policy for table "rls_table" (SQLSTATE 42501)
 
