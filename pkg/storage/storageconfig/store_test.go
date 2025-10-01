@@ -6,13 +6,13 @@
 package storageconfig
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -165,9 +165,7 @@ func randSize(rng *rand.Rand, minBytes, maxBytes int64, minPercent, maxPercent f
 
 func unmarshal(data []byte) (Store, error) {
 	var s Store
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&s); err != nil {
+	if err := yamlutil.UnmarshalStrict(data, &s); err != nil {
 		return Store{}, err
 	}
 	return s, nil

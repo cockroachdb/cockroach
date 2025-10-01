@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "yamlutil",
+    srcs = ["yaml_util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/yamlutil",
+    visibility = ["//visibility:public"],
+    deps = ["@in_gopkg_yaml_v3//:yaml_v3"],
+)
+
+go_test(
+    name = "yamlutil_test",
+    srcs = ["yaml_util_test.go"],
+    embed = [":yamlutil"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

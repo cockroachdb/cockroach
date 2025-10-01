@@ -6,10 +6,10 @@
 package codec
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -60,10 +60,7 @@ func TestDynamicTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	var decoded ListWrapper[Animal]
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	err = dec.Decode(&decoded)
-	require.NoError(t, err)
+	require.NoError(t, yamlutil.UnmarshalStrict(data, &decoded))
 
 	// Verify equality of the decoded list and the original list.
 	require.Equal(t, animals, decoded.Get())
