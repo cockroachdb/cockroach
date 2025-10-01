@@ -235,13 +235,11 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 // LeaseIOOverloadThresholdEnforcement} to shed leases, and in the context of
 // {ReplicaIOOverloadThreshold, ReplicaIOOverloadThresholdEnforcement}, when
 // transferring replicas.
-//
-// TODO(sumeer): change to DefaultLeaseIOOverloadShedThreshold after discussion.
 var DiskUnhealthyIOOverloadScore = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.allocator.disk_unhealthy_io_overload_score",
 	"the IO overload score to assign to a store when its disk is unhealthy",
-	0)
+	DefaultLeaseIOOverloadShedThreshold)
 
 // maxDiskUtilizationThreshold controls the point at which the store cedes
 // having room for new replicas. If the fraction used of a store descriptor
