@@ -220,6 +220,16 @@ var PlanTypeAutoCustomCounter = telemetry.GetCounterOnce("sql.plan.type.auto-cus
 // used when plan_cache_mode=auto.
 var PlanTypeAutoGenericCounter = telemetry.GetCounterOnce("sql.plan.type.auto-generic")
 
+// PlanClampedHistogramSelectivityCounter is to be incremented whenever a plan
+// is used that clamped the selectivity estimate derived from a histogram to a
+// minimum value.
+var PlanClampedHistogramSelectivityCounter = telemetry.GetCounterOnce("sql.plan.clamped-histogram-selectivity")
+
+// PlanClampedInequalitySelectivityCounter is to be incremented whenever a plan
+// is used that clamped the selectivity estimate derived from an inequality over
+// a histogram to a minimum value.
+var PlanClampedInequalitySelectivityCounter = telemetry.GetCounterOnce("sql.plan.clamped-inequality-selectivity")
+
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
 // values for the join reorder limit is quite small.
