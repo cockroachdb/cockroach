@@ -103,5 +103,8 @@ func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 func (as *AllocatorSync) IsInConflictWithMMA(
 	cand roachpb.StoreID, advisor mmaprototype.MMARebalanceAdvisor, cpuOnly bool,
 ) bool {
-	return as.mmaAllocator.IsInConflictWithMMA(cand, advisor, cpuOnly)
+	if as.knobs != nil && as.knobs.OverrideIsInConflictWithMMA != nil {
+		return as.knobs.OverrideIsInConflictWithMMA(cand)
+	}
+    return as.mmaAllocator.IsInConflictWithMMA(cand, advisor, cpuOnly)
 }
