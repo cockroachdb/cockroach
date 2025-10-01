@@ -4637,6 +4637,9 @@ func (sb *statisticsBuilder) clampSelForHistogram(
 		resClamp = props.MinSelectivity(resClamp,
 			props.MakeSelectivityFromFraction(oldHist.Resolution(), s.RowCount),
 		)
+		if resClamp.AsFloat() > clampedSel.AsFloat() {
+			sb.mem.optimizationStats.ClampedHistogramSelectivity = true
+		}
 		clampedSel = props.MaxSelectivity(clampedSel, resClamp)
 	}
 
@@ -4647,6 +4650,9 @@ func (sb *statisticsBuilder) clampSelForHistogram(
 		// scan at least 1/10000th of the table. This accounts for the possibility
 		// that the histogram missed extreme values due to sampling or staleness.
 		inequalityClamp := props.MakeSelectivity(histogramUnboundedInequalityMinSelectivity)
+		if inequalityClamp.AsFloat() > clampedSel.AsFloat() {
+			sb.mem.optimizationStats.ClampedInequalitySelectivity = true
+		}
 		clampedSel = props.MaxSelectivity(clampedSel, inequalityClamp)
 	}
 	return clampedSel
