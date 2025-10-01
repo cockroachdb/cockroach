@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -42,13 +41,15 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 		Monitor:          true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8),
-			spec.WorkloadNode(), spec.ReuseNone()),
+			spec.WorkloadNode(), spec.ReuseNone(), spec.Arch(spec.AllExceptFIPS)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			require.Equal(t, 4, c.Spec().NodeCount)
 
 			settings := install.MakeClusterSettings()
 			mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.CRDBNodes(),
+				mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 				mixedversion.NeverUseFixtures,
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
@@ -74,12 +75,11 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 			// Init KV workload with a bunch of pre-split ranges and pre-inserted
 			// rows. The block sizes are picked the same as for the "foreground"
 			// workload below.
-			initKV := func(ctx context.Context, version *clusterupgrade.Version) error {
-				binary := uploadCockroach(ctx, t, c, c.WorkloadNode(), version)
+			initKV := func(ctx context.Context, h *mixedversion.Helper) error {
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
 					"%s workload init kv --drop --splits=1000 --insert-count=3000 "+
 						"--min-block-bytes=512 --max-block-bytes=1024 {pgurl%s}",
-					binary, c.Node(1)))
+					h.VersionedCockroachPath(t), c.Node(1)))
 			}
 			labels := map[string]string{
 				"concurrency":  "500",
@@ -88,46 +88,49 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 			// The workloads are tuned to keep the cluster busy at 30-40% CPU, and IO
 			// overload metric approaching 20-30% which causes elastic traffic being
 			// de-prioritized and wait.
-			runForeground := func(ctx context.Context, duration time.Duration) error {
-				cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
+			runForeground := func(ctx context.Context, duration time.Duration, h *mixedversion.Helper) error {
+				cmd := roachtestutil.NewCommand("%s workload run kv "+
 					"%s --concurrency=500 "+
 					"--max-rate=5000 --read-percent=5 "+
 					"--min-block-bytes=512 --max-block-bytes=1024 "+
 					"--txn-qos='regular' "+
-					"--duration=%v {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
+					"--duration=%v {pgurl%s}",
+					h.VersionedCockroachPath(t), roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration,
+					c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
 
 			labels["read-percent"] = "0"
-			runBackground := func(ctx context.Context, duration time.Duration) error {
-				cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
+			runBackground := func(ctx context.Context, duration time.Duration, h *mixedversion.Helper) error {
+				cmd := roachtestutil.NewCommand("%s workload run kv "+
 					"%s --concurrency=500 "+
 					"--max-rate=10000 --read-percent=0 "+
 					"--min-block-bytes=2048 --max-block-bytes=4096 "+
 					"--txn-qos='background' "+
-					"--duration=%v {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
+					"--duration=%v {pgurl%s}", h.VersionedCockroachPath(t),
+					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
-			runWorkloads := func(ctx2 context.Context) error {
+			runWorkloads := func(ctx2 context.Context, h *mixedversion.Helper) error {
 				const duration = 5 * time.Minute
 				m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-				m.Go(func(ctx context.Context) error { return runForeground(ctx, duration) })
-				m.Go(func(ctx context.Context) error { return runBackground(ctx, duration) })
+				m.Go(func(ctx context.Context) error { return runForeground(ctx, duration, h) })
+				m.Go(func(ctx context.Context) error { return runBackground(ctx, duration, h) })
 				return m.WaitE()
 			}
 
 			mvt.OnStartup("initializing kv dataset",
 				func(ctx context.Context, _ *logger.Logger, _ *rand.Rand, h *mixedversion.Helper) error {
-					return initKV(ctx, h.System.FromVersion)
+					return initKV(ctx, h)
 				})
 			mvt.InMixedVersion("running kv workloads in mixed version",
-				func(ctx context.Context, _ *logger.Logger, _ *rand.Rand, _ *mixedversion.Helper) error {
+				func(ctx context.Context, _ *logger.Logger, _ *rand.Rand, h *mixedversion.Helper) error {
 					setDiskBandwidth()
-					return runWorkloads(ctx)
+					return runWorkloads(ctx, h)
 				})
 			mvt.AfterUpgradeFinalized("running kv workloads after upgrade",
-				func(ctx context.Context, _ *logger.Logger, _ *rand.Rand, _ *mixedversion.Helper) error {
-					return runWorkloads(ctx)
+				func(ctx context.Context, _ *logger.Logger, _ *rand.Rand, h *mixedversion.Helper) error {
+					return runWorkloads(ctx, h)
 				})
 
 			mvt.Run()

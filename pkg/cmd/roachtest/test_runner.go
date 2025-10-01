@@ -2416,10 +2416,6 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 		"coverageBuild":          fmt.Sprintf("%t", t.goCoverEnabled),
 	}
 
-	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
-	if spec.Cluster.Arch != "" {
-		clusterParams["arch"] = string(spec.Cluster.Arch)
-	}
 	// These params can be probabilistically set, so we pass them here to
 	// show what their actual values are in the posted issue.
 	if createOpts != nil {
@@ -2429,11 +2425,7 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 
 	if c != nil {
 		clusterParams["encrypted"] = fmt.Sprintf("%v", c.encAtRest)
-		if spec.Cluster.Arch == "" {
-			// N.B. when Arch is specified, it cannot differ from cluster's arch.
-			// Hence, we only emit when arch was unspecified.
-			clusterParams["arch"] = string(c.arch)
-		}
+		clusterParams["arch"] = string(c.arch)
 
 		c.destroyState.mu.Lock()
 		saved, savedMsg := c.destroyState.mu.saved, c.destroyState.mu.savedMsg

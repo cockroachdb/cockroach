@@ -104,12 +104,13 @@ func registerFailover(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:                   "failover/chaos" + readOnlyStr + leasesStr,
-				Owner:                  registry.OwnerKV,
-				Benchmark:              true,
-				Timeout:                90 * time.Minute,
-				Cluster:                r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
-				CompatibleClouds:       registry.OnlyGCE,                                                                                                           // dmsetup only configured for gce
+				Name:      "failover/chaos" + readOnlyStr + leasesStr,
+				Owner:     registry.OwnerKV,
+				Benchmark: true,
+				Timeout:   90 * time.Minute,
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+				Cluster:                r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone(), spec.Arch(spec.AllExceptFIPS)), // uses disk stalls
+				CompatibleClouds:       registry.OnlyGCE,                                                                                                                                          // dmsetup only configured for gce
 				Suites:                 registry.Suites(registry.Nightly),
 				Leases:                 leases,
 				SkipPostValidations:    registry.PostValidationNoDeadNodes, // cleanup kills nodes
@@ -172,6 +173,8 @@ func registerFailover(r registry.Registry) {
 				// Don't reuse the cluster for tests that call dmsetup to avoid
 				// spurious flakes from previous runs. See #107865
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+				clusterOpts = append(clusterOpts, spec.Arch(spec.AllExceptFIPS))
 				postValidation = registry.PostValidationNoDeadNodes
 				// dmsetup is currently only configured for gce.
 				clouds = registry.OnlyGCE

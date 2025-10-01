@@ -389,6 +389,14 @@ mixedversion.DisableMutators(mixedversion.PreserveDowngradeOptionRandomizerMutat
 
 Use this option to disable specific [mutators](#mutators) that are incompatible with the test.
 
+``` go
+mixedversion.WithWorkloadNodes(c.WorkloadNode())
+```
+Certain workloads i.e. bank are no longer backwards compatible as of 25.3. Therefore a new best practice for using
+using workload during your test is to execute a workload command on a binary that matches the cluster version. Using
+this option tells the framework to handle staging all the binaries you need for your test on the workload node(s)
+during test setup.
+
 ### Deployment Modes
 
 By default, each run of a `mixedversion` test happens in one of 3 possible _deployment modes_: `system-only`, `shared-process`, and `separate-process`. In the latter two options, the framework will create a test tenant, and tests should exercise the feature they are testing by invoking it on the tenant.
