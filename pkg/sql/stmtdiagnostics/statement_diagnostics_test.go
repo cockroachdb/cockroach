@@ -173,8 +173,12 @@ func TestDiagnosticsRequest(t *testing.T) {
 		require.True(t, strings.Contains(err.Error(), sqlerrors.QueryTimeoutError.Error()))
 
 		// Reset the stmt timeout so that it doesn't affect the query in
-		// checkCompleted.
-		runner.Exec(t, "RESET statement_timeout;")
+		// checkCompleted. Wrap it in a SucceedsSoon in case RESET query itself
+		// times out.
+		testutils.SucceedsSoon(t, func() error {
+			_, err = db.Exec("RESET statement_timeout;")
+			return err
+		})
 		checkCompleted(reqID)
 	})
 
