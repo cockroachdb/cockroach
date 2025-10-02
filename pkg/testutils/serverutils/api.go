@@ -148,6 +148,11 @@ func (d DeploymentMode) IsExternal() bool {
 	return d == ExternalProcess
 }
 
+// IsSingleTenant returns whether the deployment mode is single tenant or not.
+func (d DeploymentMode) IsSingleTenant() bool {
+	return d == SingleTenant
+}
+
 // RPCConn defines a common interface for creating RPC clients. It hides the
 // underlying RPC connection (gRPC or DRPC), making it easy to swap
 // them without changing the caller code.

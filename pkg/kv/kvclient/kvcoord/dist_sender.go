@@ -419,6 +419,20 @@ var ProxyBatchRequest = settings.RegisterBoolSetting(
 	true,
 )
 
+// NonTransactionalWritesNotIdempotent controls whether non-transactional writes
+// are considered idempotent or not. When this setting is true, a
+// non-transactional write that experiences an RPC error is not retried, and
+// returns an ambiguous error. This is the same behavior as commit batches (or
+// batched issued concurrently with a commit batch). This is arguably the
+// correct behavior for non-transactional writes, but it's behind a default-off
+// cluster setting to get some kvnemesis mileage first.
+var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.non_transactional_writes_not_idempotent.enabled",
+	"when true, non-transactional writes are not retried and may return an ambiguous error",
+	false,
+)
+
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
 	BatchCount                         *metric.Counter
@@ -2541,7 +2555,13 @@ const slowDistSenderReplicaThreshold = 10 * time.Second
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
-
+	// In addition to batches where withCommit is true, non-transactional write
+	// batches are also not safe to be retried as they are not guaranteed to be
+	// idempotent. Returning ambiguous errors for those batches is controlled by a
+	// cluster setting for now.
+	nonIdempotentWrite :=
+		ba.Txn == nil && ba.IsWrite() && NonTransactionalWritesNotIdempotent.Get(&ds.st.SV)
+	nonIdempotent := withCommit || nonIdempotentWrite
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	// If we don't know the closed timestamp policy, we ought to optimistically
@@ -2759,7 +2779,9 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		tBegin := crtime.NowMono() // for slow log message
-		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).Track(ctx, ba, withCommit, tBegin)
+		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).Track(
+			ctx, ba, nonIdempotent, tBegin,
+		)
 		if cbErr != nil {
 			// Circuit breaker is tripped. err will be handled below.
 			err = cbErr
@@ -2861,12 +2883,12 @@ func (ds *DistSender) sendToReplicas(
 			// prevents them from double evaluation. This can result in, for example,
 			// an increment applying twice, or more subtle problems like a blind write
 			// evaluating twice, overwriting another unrelated write that fell
-			// in-between.
+			// in-between. This is fixed under the cluster setting
+			// NonTransactionalWritesNotIdempotent. Consider enabling it by default.
 			//
-			// NB: If this partial batch does not contain the EndTxn request but the
-			// batch contains a commit, the ambiguous error should be caught on
-			// retrying the writes, should it need to be propagated.
-			if withCommit && !grpcutil.RequestDidNotStart(err) {
+			// NB: If this partial batch is not idempotent, the ambiguous error should
+			// be caught on retrying the writes, should it need to be propagated.
+			if nonIdempotent && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
 			// If we get a gRPC error against the leaseholder, we don't want to
@@ -2987,9 +3009,9 @@ func (ds *DistSender) sendToReplicas(
 					// return it if all other replicas fail (regardless of error).
 					replicaUnavailableError = br.Error.GoError()
 				}
-				// The circuit breaker may have tripped while a commit proposal was in
-				// flight, so we have to mark it as ambiguous as well.
-				if withCommit && ambiguousError == nil {
+				// The circuit breaker may have tripped while a non-idempotent request
+				// was in flight, so we have to mark it as ambiguous as well.
+				if nonIdempotent && ambiguousError == nil {
 					ambiguousError = br.Error.GoError()
 				}
 			case *kvpb.NotLeaseHolderError:

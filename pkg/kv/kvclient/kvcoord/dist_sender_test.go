@@ -3664,6 +3664,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 
 	notLeaseHolderErr := kvpb.NewError(kvpb.NewNotLeaseHolderError(lease3, 0, &descriptor2, ""))
 	startedRequestError := errors.New("request might have started")
+	notStartedRequestError := grpcstatus.Errorf(codes.PermissionDenied, "request did not start")
 	unavailableError1 := kvpb.NewError(kvpb.NewReplicaUnavailableError(errors.New("unavailable"), &initDescriptor, initDescriptor.InternalReplicas[0]))
 	unavailableError2 := kvpb.NewError(kvpb.NewReplicaUnavailableError(errors.New("unavailable"), &initDescriptor, initDescriptor.InternalReplicas[1]))
 
@@ -3675,6 +3676,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 	// See https://cockroachlabs.com/blog/demonic-nondeterminism/#appendix for
 	// the gory details.
 	testCases := []struct {
+		transactional      bool
 		withCommit         bool
 		sendErr1, sendErr2 error
 		err1, err2         *kvpb.Error
@@ -3682,45 +3684,93 @@ func TestReplicaErrorsMerged(t *testing.T) {
 	}{
 		// The ambiguous error is returned with higher priority for withCommit.
 		{
-			withCommit: true,
-			sendErr1:   startedRequestError,
-			err2:       notLeaseHolderErr,
-			expErr:     "result is ambiguous",
+			transactional: true,
+			withCommit:    true,
+			sendErr1:      startedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "result is ambiguous",
 		},
 		// The not leaseholder errors is the last error.
 		{
-			withCommit: false,
-			sendErr1:   startedRequestError,
-			err2:       notLeaseHolderErr,
-			expErr:     "leaseholder not found in transport",
+			transactional: true,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "leaseholder not found in transport",
 		},
 		// The ambiguous error is returned with higher priority for withCommit.
 		{
-			withCommit: true,
-			sendErr1:   startedRequestError,
-			err2:       unavailableError2,
-			expErr:     "result is ambiguous",
+			transactional: true,
+			withCommit:    true,
+			sendErr1:      startedRequestError,
+			err2:          unavailableError2,
+			expErr:        "result is ambiguous",
 		},
 		// The unavailable error is the last error.
 		{
-			withCommit: false,
-			sendErr1:   startedRequestError,
-			err2:       unavailableError2,
-			expErr:     "unavailable",
+			transactional: true,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          unavailableError2,
+			expErr:        "unavailable",
 		},
-		// The unavailable error is returned with higher priority regardless of withCommit.
+		// The ambiguous error is returned with higher priority for
+		// non-transactional batches (next 2 test cases). This is the case only
+		// because the test sets NonTransactionalWritesNotIdempotent = true.
+		// Otherwise, the non-transactional requests would be treated like they are
+		// idempotent and the NLHE/RUE would be returned as the last error.
 		{
-			withCommit: true,
-			err1:       unavailableError1,
-			err2:       notLeaseHolderErr,
-			expErr:     "unavailable",
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "result is ambiguous",
 		},
-		// The unavailable error is returned with higher priority regardless of withCommit.
 		{
-			withCommit: false,
-			err1:       unavailableError1,
-			err2:       notLeaseHolderErr,
-			expErr:     "unavailable",
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          unavailableError2,
+			expErr:        "result is ambiguous",
+		},
+		// If we know the request did not start, do not return an ambiguous error
+		// (next 2 test cases).
+		{
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      notStartedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "leaseholder not found in transport",
+		},
+		{
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      notStartedRequestError,
+			err2:          unavailableError2,
+			expErr:        "unavailable",
+		},
+		// The unavailable error is returned with higher priority regardless of
+		// withCommit and transactional (next 3 test cases).
+		{
+			transactional: true,
+			withCommit:    true,
+			err1:          unavailableError1,
+			err2:          notLeaseHolderErr,
+			expErr:        "unavailable",
+		},
+		{
+			transactional: true,
+			withCommit:    false,
+			err1:          unavailableError1,
+			err2:          notLeaseHolderErr,
+			expErr:        "unavailable",
+		},
+		{
+			transactional: false,
+			withCommit:    false,
+			err1:          unavailableError1,
+			err2:          notLeaseHolderErr,
+			expErr:        "unavailable",
 		},
 	}
 	clock := hlc.NewClockForTesting(nil)
@@ -3744,6 +3794,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 				stopper := stop.NewStopper()
 				defer stopper.Stop(ctx)
 				st := cluster.MakeTestingClusterSettings()
+				NonTransactionalWritesNotIdempotent.Override(ctx, &st.SV, true)
 				rc := rangecache.NewRangeCache(st, nil /* db */, func() int64 { return 100 }, stopper)
 				rc.Insert(ctx, roachpb.RangeInfo{
 					Desc:  initDescriptor,
@@ -3786,12 +3837,16 @@ func TestReplicaErrorsMerged(t *testing.T) {
 						return nil, nil, errors.New("range desc db unexpectedly used")
 					}),
 					TransportFactory: adaptSimpleTransport(transportFn),
-					Settings:         cluster.MakeTestingClusterSettings(),
+					Settings:         st,
 				}
 				ds := NewDistSender(cfg)
 
 				ba := &kvpb.BatchRequest{}
 				ba.Add(kvpb.NewGet(roachpb.Key("a")))
+				ba.Add(kvpb.NewPut(roachpb.Key("b"), roachpb.MakeValueFromString("value")))
+				if tc.transactional {
+					ba.Txn = &roachpb.Transaction{Name: "test"}
+				}
 				tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
 				require.NoError(t, err)
 				br, err := ds.sendToReplicas(ctx, ba, tok, tc.withCommit)
