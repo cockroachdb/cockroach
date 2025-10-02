@@ -158,6 +158,9 @@ type StmtDiagnostic struct {
 	collectionErr   error
 }
 
+func (s StmtDiagnostic) GetStatement() string {
+	return s.stmt
+}
 func NewStmtDiagnostic(
 	requestID RequestID,
 	req Request,
