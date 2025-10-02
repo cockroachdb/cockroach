@@ -24,6 +24,7 @@ func alterTableRenameColumn(
 	n *tree.AlterTable,
 	t *tree.AlterTableRenameColumn,
 ) {
+	//
 	if len(n.Cmds) > 1 {
 		panic(scerrors.NotImplementedError(n))
 	}
