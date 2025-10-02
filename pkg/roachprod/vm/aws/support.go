@@ -31,6 +31,7 @@ const awsStartupScriptTemplate = `#!/usr/bin/env bash
 
 function setup_disks() {
 {{ if .BootDiskOnly }}
+	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
 	echo "VM has no disk attached other than the boot disk."
 	return 0
 {{ end }}
