@@ -413,6 +413,15 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	// MVCC decoding.
 	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
 		if rf.args.Txn != nil && rf.args.Txn.BufferedWritesEnabled() {
+			if rf.args.Txn.Type() == kv.LeafTxn {
+				// We're only allowed to disable buffered writes on the RootTxn.
+				// If we have a LeafTxn, we'll return an assertion error instead
+				// of crashing.
+				//
+				// Note that we might have a LeafTxn with no buffered writes, in
+				// which case BufferedWritesEnabled() is false.
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 			rf.args.Txn.SetBufferedWritesEnabled(false /* enabled */)
 		}
 	}
@@ -540,6 +549,15 @@ func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
 	// MVCC decoding.
 	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
 		if txn != nil && txn.BufferedWritesEnabled() {
+			if txn.Type() == kv.LeafTxn {
+				// We're only allowed to disable buffered writes on the RootTxn.
+				// If we have a LeafTxn, we'll return an assertion error instead
+				// of crashing.
+				//
+				// Note that we might have a LeafTxn with no buffered writes, in
+				// which case BufferedWritesEnabled() is false.
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 			txn.SetBufferedWritesEnabled(false /* enabled */)
 		}
 	}
