@@ -3387,8 +3387,8 @@ type paramStatusUpdater interface {
 }
 
 type bufferableParamStatusUpdate struct {
-	name      string
-	lowerName string
+	name string
+	sv   sessionVar
 }
 
 // bufferableParamStatusUpdates contains all vars which can be sent through
@@ -3403,9 +3403,14 @@ var bufferableParamStatusUpdates = func() []bufferableParamStatusUpdate {
 	}
 	ret := make([]bufferableParamStatusUpdate, len(params))
 	for i, param := range params {
+		svName := strings.ToLower(param)
+		_, sv, err := getSessionVar(svName, false /* missingOk */)
+		if err != nil {
+			panic(errors.Wrapf(err, "could not find session var %q", svName))
+		}
 		ret[i] = bufferableParamStatusUpdate{
-			name:      param,
-			lowerName: strings.ToLower(param),
+			name: param,
+			sv:   sv,
 		}
 	}
 	return ret
