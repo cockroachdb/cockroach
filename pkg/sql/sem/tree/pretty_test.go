@@ -227,6 +227,7 @@ func TestPrettyVerify(t *testing.T) {
 func TestPrettyBigStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "excessive memory usage")
 
 	// Create a SELECT statement with a 1 million item IN expression. Without
 	// mitigation, this can cause stack overflows - see #91197.
