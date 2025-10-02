@@ -20,6 +20,8 @@ echo bar $HOME
 MEMORY_MAX=81%
 NUM_FILES_LIMIT=0
 VIRTUAL_CLUSTER_LABEL=cockroach-system
+
+
 ARGS=(
 start
 --log
@@ -103,6 +105,7 @@ sudo systemd-run --unit "${VIRTUAL_CLUSTER_LABEL}" \
   -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
   -p "LimitNOFILE=${NUM_FILES_LIMIT}" \
+  ${AUTO_RESTART:+-p Restart=always -p RestartSec=5s -p StartLimitIntervalSec=60s -p StartLimitBurst=3} \
   bash "${0}" run
 ----
 ----
