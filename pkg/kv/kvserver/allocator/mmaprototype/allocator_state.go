@@ -473,10 +473,9 @@ func (a *allocatorState) rebalanceStores(
 				if len(candsPL) <= 1 {
 					continue // leaseholder is the only candidate
 				}
-				var means meansForStoreSet
+				var means meansLoad
 				clear(scratchNodes)
-				means.stores = candsPL
-				computeMeansForStoreSet(a.cs, &means.meansLoad, means.stores, scratchNodes)
+				computeMeansForStoreSet(a.cs, &means, candsPL, scratchNodes)
 				sls := a.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 				log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 				if sls.dimSummary[CPURate] < overloadSlow {
@@ -948,7 +947,7 @@ type candidateInfo struct {
 
 type candidateSet struct {
 	candidates []candidateInfo
-	means      *meansForStoreSet
+	means      *meansLoad
 }
 
 type ignoreLevel uint8
@@ -1390,7 +1389,7 @@ func (a *allocatorState) computeCandidatesForRange(
 			storeLoadSummary: csls,
 		})
 	}
-	cset.means = means
+	cset.means = &means.meansLoad
 	return cset, sheddingSLS
 }
 
