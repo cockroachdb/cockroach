@@ -58,20 +58,20 @@ func (c Cardinality) IsUnbounded() bool {
 }
 
 // AsLowAs ratchets the min bound downwards in order to ensure that it allows
-// values that are >= the min value.
-func (c Cardinality) AsLowAs(min uint32) Cardinality {
+// values that are >= the given value.
+func (c Cardinality) AsLowAs(v uint32) Cardinality {
 	return Cardinality{
-		Min: minVal(c.Min, min),
+		Min: min(c.Min, v),
 		Max: c.Max,
 	}
 }
 
 // Limit ratchets the bounds downwards so that they're no bigger than the given
-// max value.
-func (c Cardinality) Limit(max uint32) Cardinality {
+// value.
+func (c Cardinality) Limit(v uint32) Cardinality {
 	return Cardinality{
-		Min: minVal(c.Min, max),
-		Max: minVal(c.Max, max),
+		Min: min(c.Min, v),
+		Max: min(c.Max, v),
 	}
 }
 
@@ -79,8 +79,8 @@ func (c Cardinality) Limit(max uint32) Cardinality {
 // bounds in the given cardinality.
 func (c Cardinality) AtLeast(other Cardinality) Cardinality {
 	return Cardinality{
-		Min: maxVal(c.Min, other.Min),
-		Max: maxVal(c.Max, other.Max),
+		Min: max(c.Min, other.Min),
+		Max: max(c.Max, other.Max),
 	}
 }
 
@@ -134,8 +134,8 @@ func (c Cardinality) Skip(rows uint32) Cardinality {
 // Example: [0-1].Union([5-10]) = [0-10]
 func (c Cardinality) Union(other Cardinality) Cardinality {
 	return Cardinality{
-		Min: minVal(c.Min, other.Min),
-		Max: maxVal(c.Max, other.Max),
+		Min: min(c.Min, other.Min),
+		Max: max(c.Max, other.Max),
 	}
 }
 
@@ -144,18 +144,4 @@ func (c Cardinality) String() string {
 		return fmt.Sprintf("[%d - ]", c.Min)
 	}
 	return fmt.Sprintf("[%d - %d]", c.Min, c.Max)
-}
-
-func minVal(a, b uint32) uint32 {
-	if a <= b {
-		return a
-	}
-	return b
-}
-
-func maxVal(a, b uint32) uint32 {
-	if a >= b {
-		return a
-	}
-	return b
 }
