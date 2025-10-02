@@ -2325,20 +2325,16 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 	after := ex.sessionDataStack.Top()
 	if ex.dataMutatorIterator.paramStatusUpdater != nil {
 		for _, param := range bufferableParamStatusUpdates {
-			_, v, err := getSessionVar(param.lowerName, false /* missingOk */)
-			if err != nil {
-				return err
-			}
-			if v.Equal == nil {
+			if param.sv.Equal == nil {
 				return errors.AssertionFailedf("Equal for %s must be set", param.name)
 			}
-			if v.GetFromSessionData == nil {
+			if param.sv.GetFromSessionData == nil {
 				return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
 			}
-			if !v.Equal(before, after) {
+			if !param.sv.Equal(before, after) {
 				ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
 					param.name,
-					v.GetFromSessionData(after),
+					param.sv.GetFromSessionData(after),
 				)
 			}
 		}
