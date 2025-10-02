@@ -280,7 +280,8 @@ type meansMemo struct {
 	constraintMatcher *constraintMatcher
 	meansMap          *clearableMemoMap[constraintsDisj, *meansForStoreSet]
 
-	scratchNodes map[roachpb.NodeID]*NodeLoad
+	scratchNodes  map[roachpb.NodeID]*NodeLoad
+	scratchStores map[roachpb.StoreID]struct{}
 }
 
 var meansForStoreSetSlicePool = sync.Pool{
@@ -320,7 +321,8 @@ func newMeansMemo(
 		constraintMatcher: constraintMatcher,
 		meansMap: newClearableMapMemo[constraintsDisj, *meansForStoreSet](
 			meansForStoreSetAllocator{}, meansForStoreSetSlicePoolImpl{}),
-		scratchNodes: map[roachpb.NodeID]*NodeLoad{},
+		scratchNodes:  map[roachpb.NodeID]*NodeLoad{},
+		scratchStores: map[roachpb.StoreID]struct{}{},
 	}
 }
 
@@ -342,7 +344,7 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	computeMeansForStoreSet(mm.loadInfoProvider, &means.meansLoad, means.stores, mm.scratchNodes)
+	computeMeansForStoreSet(mm.loadInfoProvider, &means.meansLoad, means.stores, mm.scratchNodes, mm.scratchStores)
 	return means
 }
 
@@ -375,20 +377,21 @@ func computeMeansForStoreSet(
 	means *meansLoad,
 	stores []roachpb.StoreID,
 	scratchNodes map[roachpb.NodeID]*NodeLoad,
+	scratchStores map[roachpb.StoreID]struct{},
 ) {
 	if len(stores) == 0 {
 		panic(fmt.Sprintf("no stores for meansForStoreSet: %v", *means))
 	}
 	clear(scratchNodes)
-	seen := make(map[roachpb.StoreID]struct{})
+	clear(scratchStores)
 	n := 0
 	for _, storeID := range stores {
 		nodeID, sload := loadProvider.getStoreReportedLoad(storeID)
-		if _, ok := seen[storeID]; ok {
+		if _, ok := scratchStores[storeID]; ok {
 			continue
 		}
 		n++
-		seen[storeID] = struct{}{}
+		scratchStores[storeID] = struct{}{}
 		for j := range sload.reportedLoad {
 			means.storeLoad.load[j] += sload.reportedLoad[j]
 			if sload.capacity[j] == UnknownCapacity {
