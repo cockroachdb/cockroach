@@ -7,7 +7,9 @@ package inspect
 
 import (
 	"context"
+	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,4 +46,24 @@ func (l inspectLoggers) hasIssues() bool {
 		}
 	}
 	return false
+}
+
+// metricsLogger increments metrics when issues are logged.
+type metricsLogger struct {
+	foundIssue     atomic.Bool
+	issuesFoundCtr *metric.Counter
+}
+
+var _ inspectLogger = &metricsLogger{}
+
+// logIssue implements the inspectLogger interface.
+func (m *metricsLogger) logIssue(ctx context.Context, issue *inspectIssue) error {
+	m.foundIssue.Store(true)
+	m.issuesFoundCtr.Inc(1)
+	return nil
+}
+
+// hasIssues implements the inspectLogger interface.
+func (m *metricsLogger) hasIssues() bool {
+	return m.foundIssue.Load()
 }
