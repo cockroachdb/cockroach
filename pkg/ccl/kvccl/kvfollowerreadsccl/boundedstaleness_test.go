@@ -270,9 +270,6 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	ctx := context.Background()
 
 	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 	}
 	const numNodes = 3
@@ -305,6 +302,14 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "boundedstaleness"), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
+
+		if tc.DefaultTenantDeploymentMode().IsExternal() {
+			// This test wants to make assertions about local requests (requests to a
+			// local replica) which is a concept that only applies to single-tenant
+			// and shared-process deployment modes. Skip for external-process
+			// multi-tenancy.
+			skip.IgnoreLint(t, "test doesn't apply to external process multi-tenancy")
+		}
 
 		savedTraceStmt := ""
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -360,6 +365,12 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 				switch d.Cmd {
 				case "exec":
 					_, err := dbConn.Exec(d.Input)
+					if err != nil {
+						return err.Error()
+					}
+					return ""
+				case "exec-system-tenant":
+					_, err := tc.SystemLayer(0).SQLConn(t).Exec(d.Input)
 					if err != nil {
 						return err.Error()
 					}
