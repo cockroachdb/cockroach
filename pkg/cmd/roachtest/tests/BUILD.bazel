@@ -183,7 +183,6 @@ go_library(
         "s3_minio.go",
         "schemachange.go",
         "schemachange_random_load.go",
-        "scrub.go",
         "secondary_indexes.go",
         "sequelize.go",
         "slow_drain.go",
