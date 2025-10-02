@@ -118,9 +118,6 @@ func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 	node.ZoneConfigSettings.Format(ctx)
 }
 
-// modifiesSchema implements the canModifySchema interface.
-func (*SetZoneConfig) modifiesSchema() bool { return true }
-
 // ZoneConfigSettings represents info needed for zone config setting.
 type ZoneConfigSettings struct {
 	Discard    bool      // True for `CONFIGURE ZONE DISCARD` stmt
