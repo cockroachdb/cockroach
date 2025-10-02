@@ -60,7 +60,6 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return err
 	}
 
-	// TODO(149460): add a goroutine that will replan the job on topology changes
 	plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, pkSpans)
 	if err != nil {
 		return err
