@@ -1402,6 +1402,8 @@ func (b *builderState) ResolveConstraint(
 	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
 	elts := b.QueryByID(rel.GetID())
 	var constraintID catid.ConstraintID
+	var indexID catid.IndexID
+
 	scpb.ForEachConstraintWithoutIndexName(elts,
 		func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
 			if tree.Name(e.Name) == constraintName {
@@ -1411,7 +1413,6 @@ func (b *builderState) ResolveConstraint(
 	)
 
 	if constraintID == 0 {
-		var indexID catid.IndexID
 		scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
 			if tree.Name(e.Name) == constraintName {
 				indexID = e.IndexID
@@ -1443,8 +1444,14 @@ func (b *builderState) ResolveConstraint(
 	}
 
 	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
-		return idI != nil && idI.(catid.ConstraintID) == constraintID
+		constraintIDAttr, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		constraintIDMatches := constraintIDAttr != nil && constraintIDAttr.(catid.ConstraintID) == constraintID
+
+		// For index-backed constraints, we also want to include the elements that
+		// pertain to that index.
+		indexIDAttr, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+		indexIDMatches := indexIDAttr != nil && indexID != 0 && indexIDAttr.(catid.IndexID) == indexID
+		return constraintIDMatches || indexIDMatches
 	})
 }
 
