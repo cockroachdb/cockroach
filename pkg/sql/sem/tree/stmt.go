@@ -267,6 +267,7 @@ type ObserverStatement interface {
 // It is used to enhance error messages when attempting to use these
 // statements in non-CCL binaries.
 type CCLOnlyStatement interface {
+	PlanHookStatement
 	cclOnlyStatement()
 }
 
@@ -294,6 +295,8 @@ func (*AlterChangefeed) StatementTag() string { return `ALTER CHANGEFEED` }
 
 func (*AlterChangefeed) cclOnlyStatement() {}
 
+func (*AlterChangefeed) planHookStatement() {}
+
 // StatementReturnType implements the Statement interface.
 func (*AlterBackup) StatementReturnType() StatementReturnType { return Rows }
 
@@ -304,6 +307,8 @@ func (*AlterBackup) StatementType() StatementType { return TypeDML }
 func (*AlterBackup) StatementTag() string { return "ALTER BACKUP" }
 
 func (*AlterBackup) cclOnlyStatement() {}
+
+func (*AlterBackup) planHookStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterDatabaseOwner) StatementReturnType() StatementReturnType { return DDL }
@@ -594,6 +599,8 @@ func (*AlterTenantReplication) StatementTag() string { return "ALTER VIRTUAL CLU
 
 func (*AlterTenantReplication) cclOnlyStatement() {}
 
+func (*AlterTenantReplication) planHookStatement() {}
+
 // StatementReturnType implements the Statement interface.
 func (*AlterTenantRename) StatementReturnType() StatementReturnType { return Ack }
 
@@ -613,6 +620,8 @@ func (*AlterTenantReset) StatementType() StatementType { return TypeDCL }
 func (*AlterTenantReset) StatementTag() string { return "ALTER VIRTUAL CLUSTER RESET" }
 
 func (*AlterTenantReset) cclOnlyStatement() {}
+
+func (*AlterTenantReset) planHookStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterTenantService) StatementReturnType() StatementReturnType { return Ack }
@@ -685,6 +694,8 @@ func (*Backup) StatementTag() string { return BackupTag }
 
 func (*Backup) cclOnlyStatement() {}
 
+func (*Backup) planHookStatement() {}
+
 func (*Backup) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
@@ -698,6 +709,8 @@ func (*ScheduledBackup) StatementTag() string { return "SCHEDULED BACKUP" }
 
 func (*ScheduledBackup) cclOnlyStatement() {}
 
+func (*ScheduledBackup) planHookStatement() {}
+
 func (*ScheduledBackup) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
@@ -710,6 +723,8 @@ func (*AlterBackupSchedule) StatementType() StatementType { return TypeDML }
 func (*AlterBackupSchedule) StatementTag() string { return "SCHEDULED BACKUP" }
 
 func (*AlterBackupSchedule) cclOnlyStatement() {}
+
+func (*AlterBackupSchedule) planHookStatement() {}
 
 func (*AlterBackupSchedule) hiddenFromShowQueries() {}
 
@@ -935,6 +950,8 @@ func (n *CreateChangefeed) StatementTag() string {
 
 func (*CreateChangefeed) cclOnlyStatement() {}
 
+func (*CreateChangefeed) planHookStatement() {}
+
 // StatementReturnType implements the Statement interface.
 func (*ScheduledChangefeed) StatementReturnType() StatementReturnType { return Rows }
 
@@ -947,6 +964,8 @@ func (n *ScheduledChangefeed) StatementTag() string {
 }
 
 func (*ScheduledChangefeed) cclOnlyStatement() {}
+
+func (*ScheduledChangefeed) planHookStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*CreateDatabase) StatementReturnType() StatementReturnType { return DDL }
@@ -1015,6 +1034,8 @@ func (*CreateTenantFromReplication) StatementTag() string {
 
 func (*CreateTenantFromReplication) cclOnlyStatement() {}
 
+func (*CreateTenantFromReplication) planHookStatement() {}
+
 // StatementReturnType implements the Statement interface.
 func (*CreateLogicalReplicationStream) StatementReturnType() StatementReturnType { return Rows }
 
@@ -1027,6 +1048,8 @@ func (*CreateLogicalReplicationStream) StatementTag() string {
 }
 
 func (*CreateLogicalReplicationStream) cclOnlyStatement() {}
+
+func (*CreateLogicalReplicationStream) planHookStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*DoBlock) StatementReturnType() StatementReturnType { return Ack }
@@ -1315,6 +1338,8 @@ func (*Export) StatementType() StatementType { return TypeDML }
 
 func (*Export) cclOnlyStatement() {}
 
+func (*Export) planHookStatement() {}
+
 // StatementTag returns a short string identifying the type of statement.
 func (*Export) StatementTag() string { return "EXPORT" }
 
@@ -1374,6 +1399,17 @@ func (*Import) StatementTag() string { return ImportTag }
 
 func (*Import) cclOnlyStatement() {}
 
+func (*Import) planHookStatement() {}
+
+// PlanHookStatement is a marker interface for statements that rely on the
+// planHook.
+type PlanHookStatement interface {
+	planHookStatement()
+}
+
+// Non-CCL planHook-based statements.
+var _ PlanHookStatement = &Inspect{}
+
 // StatementReturnType implements the Statement interface.
 func (*Inspect) StatementReturnType() StatementReturnType { return Ack }
 
@@ -1382,6 +1418,8 @@ func (*Inspect) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Inspect) StatementTag() string { return "INSPECT" }
+
+func (*Inspect) planHookStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*LiteralValuesClause) StatementReturnType() StatementReturnType { return Rows }
@@ -1546,6 +1584,8 @@ func (*Restore) StatementType() StatementType { return TypeDML }
 func (*Restore) StatementTag() string { return RestoreTag }
 
 func (*Restore) cclOnlyStatement() {}
+
+func (*Restore) planHookStatement() {}
 
 func (*Restore) hiddenFromShowQueries() {}
 
@@ -1837,6 +1877,8 @@ func (*ShowBackup) StatementType() StatementType { return TypeDML }
 func (*ShowBackup) StatementTag() string { return "SHOW BACKUP" }
 
 func (*ShowBackup) cclOnlyStatement() {}
+
+func (*ShowBackup) planHookStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*ShowDatabases) StatementReturnType() StatementReturnType { return Rows }

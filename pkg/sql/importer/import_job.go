@@ -328,24 +328,30 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
-			jobID, err := sql.TriggerInspectJob(
+			checks, err := sql.InspectChecksForTable(ctx, nil /* p */, tblDesc)
+			if err != nil {
+				return err
+			}
+
+			job, err := sql.TriggerInspectJob(
 				ctx,
 				fmt.Sprintf("import-validation-%s", tblDesc.GetName()),
 				p.ExecCfg(),
-				tblDesc,
+				nil, /* txn */
+				checks,
 				setPublicTimestamp,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "failed to trigger inspect for import validation for table %s", tblDesc.GetName())
 			}
-			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", jobID, tblDesc.GetName(), setPublicTimestamp)
+			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", job.ID(), tblDesc.GetName(), setPublicTimestamp)
 
 			// For sync mode, wait for the inspect job to complete.
 			if validationMode == ImportRowCountValidationSync {
-				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{jobID}); err != nil {
-					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", jobID, tblDesc.GetName())
+				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{job.ID()}); err != nil {
+					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", job.ID(), tblDesc.GetName())
 				}
-				log.Eventf(ctx, "inspect job %d completed for table %s", jobID, tblDesc.GetName())
+				log.Eventf(ctx, "inspect job %d completed for table %s", job.ID(), tblDesc.GetName())
 			}
 		}
 	}
