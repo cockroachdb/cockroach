@@ -1307,6 +1307,55 @@ func (m *Manager) purgeOldVersions(
 		err = nil
 	}
 
+	// Optionally, acquire the refcount on the previous version.
+	acquireLeaseOnPrevious := func() error {
+		if dropped || !LockedLeaseTimestamp.Get(&m.storage.settings.SV) {
+			return nil
+		}
+		state := m.findDescriptorState(id, false)
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		// Find the previous version and determine the timestamp handle that
+		// it belongs to.
+		prev := state.mu.active.findPrevious()
+		if prev == nil {
+			return nil
+		}
+		handle := m.shouldRetainPriorVersions(ctx, prev.GetModificationTime())
+		if handle == nil {
+			return nil
+		}
+		// Release the timestamp handle, which will allow this lease to be cleaned
+		// up if the timestamp is destroyed.
+		defer handle.release(ctx)
+		// Bump the refcount on the previous version of the descriptor, and attach
+		// it to the relevant timestamp.
+		prev.incRefCount(ctx, false)
+		return func() error {
+			handle.mu.Lock()
+			defer handle.mu.Unlock()
+			// If there is already an old version of the descriptor, then we have
+			// a huge problem. We are violating the two version invariant, since at
+			// least 3 versions exist.
+			if _, ok := handle.mu.leasesToRelease[id]; ok {
+				defer prev.Release(ctx)
+				return errors.AssertionFailedf("two version invariant was violated, since "+
+					"we are retaining more than two versions for %s (%d) (versions: %d, %d, %d)",
+					prev.Underlying().GetName(),
+					prev.GetID(),
+					handle.mu.leasesToRelease[id].Underlying().GetVersion(),
+					prev.GetVersion(),
+					state.mu.active.findNewest().GetVersion())
+			}
+			handle.mu.leasesToRelease[id] = prev
+			return nil
+		}()
+	}
+
+	if err = acquireLeaseOnPrevious(); err != nil {
+		log.Dev.Errorf(ctx, "unable to acquire lease on previous version of descriptor: %s", err)
+	}
+
 	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
@@ -1345,6 +1394,61 @@ type descriptorTxnUpdate struct {
 	}
 	timestamp hlc.Timestamp
 	key       roachpb.Key
+}
+
+// closeTimeStampHandle represents a close timestamp tracked by the lease
+// manager.
+type closeTimeStampHandle struct {
+	timestamp hlc.Timestamp
+	// refCount is the reference count for this handle.
+	refCount atomic.Int64
+	// freeOnRelease is set to true if the handle should be released when the
+	// refCount hits zero.
+	freeOnRelease atomic.Bool
+	mu            struct {
+		syncutil.Mutex
+		// leasesToRelease tracks old leases that should be released when the
+		// the reference count hits zero.
+		leasesToRelease map[descpb.ID]LeasedDescriptor
+	}
+}
+
+// newCloseTimeStampHandle creates a new close timestamp handle for the lease
+// manager.
+func newCloseTimeStampHandle(timestamp hlc.Timestamp) *closeTimeStampHandle {
+	ch := &closeTimeStampHandle{
+		timestamp: timestamp,
+	}
+	ch.mu.leasesToRelease = make(map[descpb.ID]LeasedDescriptor)
+	return ch
+}
+
+// acquire acquires a reference on the close timestamp.
+func (c *closeTimeStampHandle) acquire(_ context.Context) {
+	c.refCount.Add(1)
+}
+
+// release releases a close timestamp handle.
+func (c *closeTimeStampHandle) release(ctx context.Context) {
+	// If freeOnRelease is set when the reference count hits zero, then
+	// clean up instantly.
+	newCount := c.refCount.Add(-1)
+	if newCount == 0 && c.freeOnRelease.Load() {
+		c.cleanupHandle(ctx)
+	}
+	if buildutil.CrdbTestBuild && newCount < 0 {
+		panic(errors.AssertionFailedf("double free of a close timestamp handle"))
+	}
+}
+
+// cleanupHandle releases all old leases held by this older timestamp.
+func (c *closeTimeStampHandle) cleanupHandle(ctx context.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, v := range c.mu.leasesToRelease {
+		v.Release(ctx)
+	}
+	c.mu.leasesToRelease = nil
 }
 
 // Manager manages acquiring and releasing per-descriptor leases. It also
@@ -1393,6 +1497,9 @@ type Manager struct {
 		// hasUpdatesToDelete tracks if there is data in the key space that
 		// should be cleaned up.
 		hasUpdatesToDelete bool
+
+		// closeTimestamps in use close timestamps
+		closeTimestamps []*closeTimeStampHandle
 	}
 
 	// closeTimeStamp for the range feed, which is the timestamp
@@ -1564,7 +1671,7 @@ func NewLeaseManager(
 	// that will be generated will be after the current time. So, historical
 	// queries with in this tenant (i.e. PCR catalog reader) before this point are
 	// guaranteed to be up to date.
-	lm.closeTimestamp.Store(db.KV().Clock().Now())
+	lm.closeTimestamp.Store(newCloseTimeStampHandle(clock.Now()))
 	lm.draining.Store(false)
 	lm.descUpdateCh = make(chan catalog.Descriptor)
 	lm.descDelCh = make(chan descpb.ID)
@@ -2062,7 +2169,7 @@ func (m *Manager) processDescriptorUpdate(
 		// and remove this entry.
 		targetTimestamp := m.markDescriptorUpdatesAsComplete()
 		if !targetTimestamp.IsEmpty() {
-			m.advanceCloseTimestamp(targetTimestamp)
+			m.advanceCloseTimestamp(ctx, targetTimestamp)
 		}
 	}
 }
@@ -2094,19 +2201,84 @@ func (m *Manager) markDescriptorUpdatesAsComplete() hlc.Timestamp {
 
 // advanceCloseTimestamp advances the close timestamp atomically, if the current
 // close timestamp is smaller.
-func (m *Manager) advanceCloseTimestamp(timestamp hlc.Timestamp) {
+func (m *Manager) advanceCloseTimestamp(ctx context.Context, timestamp hlc.Timestamp) {
+	timestampHandle := newCloseTimeStampHandle(timestamp)
 	for {
-		oldTimestamp := m.closeTimestamp.Load().(hlc.Timestamp)
+		oldTimestamp := m.closeTimestamp.Load().(*closeTimeStampHandle)
 		// Timestamp has already been advanced.
-		if !oldTimestamp.Less(timestamp) {
+		if !oldTimestamp.timestamp.Less(timestamp) {
 			return
 		}
-		// Otherwise, attempt to swap the timestamp, if successful we
+		// Otherwise, attempt to swap the timestamp, if successful, we
 		// will return.
-		if m.closeTimestamp.CompareAndSwap(oldTimestamp, timestamp) {
-			return
+		if m.closeTimestamp.CompareAndSwap(oldTimestamp, timestampHandle) {
+			// Insert the new timestamp handle.
+			m.insertNewTimestampHandle(timestampHandle)
+			// Now that the new timestamp is set, we can mark the old one as ready
+			// for removal.
+			oldTimestamp.freeOnRelease.Swap(true)
+			// Purge any old timestamp handles.
+			m.maybeFreeOldTimestampHandlesLocked(ctx)
 		}
 	}
+}
+
+// insertNewTimestampHandle adds a new close timestamp handle.
+func (m *Manager) insertNewTimestampHandle(handle *closeTimeStampHandle) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Insert at a lower position
+	idx := sort.Search(len(m.mu.closeTimestamps), func(i int) bool {
+		return !m.mu.closeTimestamps[i].timestamp.Less(handle.timestamp)
+	})
+	if idx == len(m.mu.closeTimestamps) {
+		m.mu.closeTimestamps = append(m.mu.closeTimestamps, handle)
+		return
+	}
+	// Otherwise insert in the middle.
+	m.mu.closeTimestamps = append(m.mu.closeTimestamps, nil)
+	copy(m.mu.closeTimestamps[idx+1:], m.mu.closeTimestamps[idx:])
+	m.mu.closeTimestamps[idx] = handle
+}
+
+// shouldRetainPriorVersions acquires the close timestamp handle that this
+// lease belongs to and holds a reference count on it.
+func (m *Manager) shouldRetainPriorVersions(
+	ctx context.Context, modificationTime hlc.Timestamp,
+) *closeTimeStampHandle {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := 0; i < len(m.mu.closeTimestamps); i++ {
+		t := m.mu.closeTimestamps[i]
+		if modificationTime.LessEq(t.timestamp) && !t.freeOnRelease.Load() {
+			t.acquire(ctx)
+			return t
+		}
+	}
+	return nil
+}
+
+// maybeFreeOldTimestampHandlesLocked cleans up any old close timestamps that
+// have hit a refcount of zero.
+func (m *Manager) maybeFreeOldTimestampHandlesLocked(ctx context.Context) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	numTimestamps := len(m.mu.closeTimestamps)
+	for i := 0; i < numTimestamps; i++ {
+		t := m.mu.closeTimestamps[i]
+		if !t.freeOnRelease.Load() || t.refCount.Load() != 0 {
+			continue
+		}
+		t.cleanupHandle(ctx)
+		// Move complete elements to the end.
+		if numTimestamps > 1 {
+			m.mu.closeTimestamps[numTimestamps-1], m.mu.closeTimestamps[i] =
+				m.mu.closeTimestamps[i], m.mu.closeTimestamps[numTimestamps-1]
+		}
+		numTimestamps--
+		i--
+	}
+	m.mu.closeTimestamps = m.mu.closeTimestamps[:numTimestamps]
 }
 
 // StartRefreshLeasesTask starts a goroutine that refreshes the lease manager
@@ -2242,10 +2414,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 					return false
 				}()
 				if advanceTimestamp {
-					if m.testingKnobs.TestingOnUpdateReadTimestamp != nil {
-						m.testingKnobs.TestingOnUpdateReadTimestamp(descUpdate.timestamp)
-					}
-					m.advanceCloseTimestamp(descUpdate.timestamp)
+					m.advanceCloseTimestamp(ctx, descUpdate.timestamp)
 				}
 			case <-s.ShouldQuiesce():
 				return
@@ -2264,7 +2433,16 @@ func (m *Manager) GetLeaseGeneration() int64 {
 // GetSafeReplicationTS gets the timestamp till which the leased descriptors
 // have been synced.
 func (m *Manager) GetSafeReplicationTS() hlc.Timestamp {
-	return m.closeTimestamp.Load().(hlc.Timestamp)
+	return m.closeTimestamp.Load().(*closeTimeStampHandle).timestamp
+}
+
+// getSafeReplicationTSHandle returns a handle for the current close time
+// stamp and acquires a ref count. The caller is responsible for releasing
+// this ref count.
+func (m *Manager) getSafeReplicationTSHandle(ctx context.Context) *closeTimeStampHandle {
+	handle := m.closeTimestamp.Load().(*closeTimeStampHandle)
+	handle.acquire(ctx)
+	return handle
 }
 
 // closeRangeFeed closes the currently open range feed, which will involve
@@ -2361,18 +2539,15 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 	}
 
 	handleCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-		if m.testingKnobs.TestingOnUpdateReadTimestamp != nil {
-			m.testingKnobs.TestingOnUpdateReadTimestamp(checkpoint.ResolvedTS)
-		}
-		// Track checkpoints that occur from the rangefeed to make sure progress
-		// is always made.
-		m.mu.Lock()
-		defer m.mu.Unlock()
 		if m.testingKnobs.DisableRangeFeedCheckpoint {
 			return
 		}
+		// Track checkpoints that occur from the rangefeed to make sure progress
+		// is always made.
+		m.advanceCloseTimestamp(ctx, checkpoint.ResolvedTS)
+		m.mu.Lock()
+		defer m.mu.Unlock()
 		m.mu.rangeFeedCheckpoints += 1
-		m.advanceCloseTimestamp(checkpoint.ResolvedTS)
 		// Clean up all entries before the resolve timestamp.
 		for {
 			minTS, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
@@ -3192,15 +3367,17 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 }
 
 // GetReadTimestamp returns a locked timestamp to use for lease management.
-func (m *Manager) GetReadTimestamp(timestamp hlc.Timestamp) ReadTimestamp {
+func (m *Manager) GetReadTimestamp(ctx context.Context, timestamp hlc.Timestamp) ReadTimestamp {
 	if LockedLeaseTimestamp.Get(&m.settings.SV) {
-		replicationTS := m.GetSafeReplicationTS()
-		if !replicationTS.IsEmpty() && replicationTS.Less(timestamp) {
+		replicationTS := m.getSafeReplicationTSHandle(ctx)
+		if replicationTS.timestamp.Less(timestamp) {
 			return LeaseTimestamp{
 				ReadTimestamp:  timestamp,
-				LeaseTimestamp: replicationTS,
+				LeaseTimestamp: replicationTS.timestamp,
+				handle:         replicationTS,
 			}
 		}
+		replicationTS.release(ctx)
 	}
 	// Fallback to existing behavior with timestamps.
 	return LeaseTimestamp{

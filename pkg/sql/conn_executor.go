@@ -4594,6 +4594,8 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			return
 		}
 		ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, cnt)
+		// Release the lease after.
+		ex.extraTxnState.descCollection.ReleaseSpecifiedLeases(ctx, []lease.IDVersion{{Version: desc.GetVersion(), ID: desc.GetID()}})
 	}
 }
 

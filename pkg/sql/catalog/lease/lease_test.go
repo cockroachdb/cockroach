@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -3731,4 +3732,108 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 	}
 	currentBytes := lm.TestingGetBoundAccount().Used()
 	require.Lessf(t, currentBytes, lastBytes, "memory usage should be decreasing after dropping a table")
+}
+
+// TestLeaseManagerLockedTimestampConcurrent test does a simple concurrency
+// stress test with the locked timestamps in the lease manager.
+func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Lower the scale of the test under stress / race.
+	numTablesToCreate := 100
+	if skip.Duress() {
+		numTablesToCreate = 10
+	}
+	testutils.RunTrueAndFalse(t, "LockedTimeStampEnabled", func(t *testing.T, useLockedTimeStamp bool) {
+		st := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
+		if useLockedTimeStamp {
+			lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+		}
+		tc := serverutils.StartCluster(
+			t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						SQLEvalContext: &eval.TestingKnobs{
+							ForceProductionValues: true,
+						},
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				},
+			})
+		defer tc.Stopper().Stop(ctx)
+
+		grp := ctxgroup.WithContext(ctx)
+
+		nextObjectToRead := make(chan string)
+		nextObjectToModify := make(chan string)
+		var objectModified atomic.Bool
+
+		// Creates tables in the background.
+		createThreads := func(ctx context.Context) (err error) {
+			defer close(nextObjectToRead)
+			conn := tc.ServerConn(0)
+			for i := range numTablesToCreate {
+				objectName := fmt.Sprintf("t%d", i)
+				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					panic(err)
+				}
+				select {
+				case nextObjectToRead <- objectName:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			return nil
+		}
+
+		// Reads from the object while a modification maybe occurring.
+		readThreads := func(ctx context.Context) (err error) {
+			defer close(nextObjectToModify)
+			conn := tc.ServerConn(0)
+			for objectName := range nextObjectToRead {
+				// Initial usage of the descriptor.
+				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					panic(err)
+				}
+				objectModified.Store(false)
+				select {
+				case nextObjectToModify <- objectName:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				for !objectModified.Load() {
+					// Repeat usage of the descriptor.
+					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+					if _, err := conn.ExecContext(ctx, sql); err != nil {
+						panic(err)
+					}
+				}
+			}
+			return nil
+		}
+
+		// Alters the object in the background.
+		modifyThreads := func(ctx context.Context) (err error) {
+			defer objectModified.Store(true)
+			conn := tc.ServerConn(0)
+			for objectName := range nextObjectToModify {
+				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					panic(err)
+				}
+				objectModified.Store(true)
+			}
+			return nil
+		}
+
+		grp.GoCtx(createThreads)
+		grp.GoCtx(readThreads)
+		grp.GoCtx(modifyThreads)
+		require.NoError(t, grp.Wait())
+	})
+
 }
