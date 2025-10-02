@@ -812,7 +812,7 @@ func TestTxnBundleCollection(t *testing.T) {
 	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Execute to transaction so that it is in transaction_statistics
-	executeTransactions(t, sqlConn, txnStatements)
+	executeTransaction(t, sqlConn, txnStatements)
 
 	// Get the fingerprint id and statement fingerprint ids for the transaction
 	// to make the txn diagnostics request
@@ -928,9 +928,7 @@ LIMIT 1`)
 				require.NoError(t, err)
 
 				// Ensure that the request shows up in the system.transaction_diagnostics_requests table
-				var count int
-				sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
-				require.Equal(t, 1, count)
+				require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
 
 				// Execute the transaction until the request is marked as complete.
 				// We use a connection to a different server than the diagnostics request
@@ -1016,18 +1014,15 @@ LIMIT 1`)
 		require.NoError(t, err)
 
 		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
-		var count int
-		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
-		require.Equal(t, 1, count)
+		require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
 		runTxnUntilDiagnosticsCollected(t, tc, sqlConn, txnStatements, reqId)
-		// Ensure there are no more active transaction diagnostics requests
-		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
-		require.Equal(t, 0, count)
+		// Ensure the request is complete
+		require.True(t, getRequestCompletedStatus(t, sqlConn, reqId))
 		// make sure the statement diagnostics request is still incomplete
 		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=false and id=$1", stmtReqId).Scan(&stmtcount)
 		require.Equal(t, 1, stmtcount)
 
-		executeTransactions(t, sqlConn, txnStatements)
+		executeTransaction(t, sqlConn, txnStatements)
 		// should be complete now that there is no transaction diagnostics request
 		sqlConn.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics_requests WHERE completed=true and id=$1", stmtReqId).Scan(&stmtcount)
 		require.Equal(t, 1, stmtcount)
@@ -1048,9 +1043,7 @@ LIMIT 1`)
 		require.NoError(t, err)
 
 		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
-		var count int
-		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=false and id=$1", reqId).Scan(&count)
-		require.Equal(t, 1, count)
+		require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
 
 		conn2 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 		conn3 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
@@ -1078,9 +1071,9 @@ LIMIT 1`)
 		conn3.Exec(t, "COMMIT")
 		conn2.Exec(t, "COMMIT")
 
-		sqlConn.QueryRow(t, "SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true and id=$1", reqId).Scan(&count)
-		require.Equal(t, 1, count)
+		require.True(t, getRequestCompletedStatus(t, sqlConn, reqId))
 
+		var count int
 		sqlConn.QueryRow(t, ""+
 			"SELECT count(*) FROM system.statement_diagnostics sd "+
 			"JOIN system.transaction_diagnostics_requests tdr on tdr.transaction_diagnostics_id = sd.transaction_diagnostics_id "+
@@ -1088,6 +1081,69 @@ LIMIT 1`)
 
 		require.Equal(t, 3, count)
 	})
+	t.Run("partial match transaction", func(t *testing.T) {
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			statementFingerprintIds,
+			"testuser",
+			0,
+			0,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+
+		// Ensure that the request shows up in the system.transaction_diagnostics_requests table
+		require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
+
+		executeTransaction(t, sqlConn, []string{txnStatements[0]})
+		require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
+
+		sqlConn.Exec(t, txnStatements[0])
+		require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
+
+		executeTransaction(t, sqlConn, txnStatements)
+		runTxnUntilDiagnosticsCollected(t, tc, sqlConn, txnStatements, reqId)
+	})
+
+	t.Run("implicit txn", func(t *testing.T) {
+		sqlConn.Exec(t, "CREATE DATABASE mydb")
+		sqlConn.Exec(t, "USE mydb")
+		sqlConn.Exec(t, "CREATE TABLE my_table(a int, b int)")
+		sqlConn.Exec(t, "INSERT INTO my_table VALUES (1,1)")
+		var fingerprintIdBytes []byte
+		var txnFingerprintIdBytes []byte
+		sqlConn.QueryRow(t, `
+SELECT fingerprint_id, transaction_fingerprint_id 
+FROM crdb_internal.statement_statistics 
+WHERE metadata->>'db' = 'mydb' 
+    AND metadata->>'query' 
+LIKE 'INSERT INTO my_table%'
+LIMIT 1`).Scan(&fingerprintIdBytes, &txnFingerprintIdBytes)
+		_, fingerprintId, err := encoding.DecodeUint64Ascending(fingerprintIdBytes)
+		require.NoError(t, err)
+		_, txnFingerprintId, err := encoding.DecodeUint64Ascending(txnFingerprintIdBytes)
+		require.NoError(t, err)
+
+		// Insert a request for the transaction fingerprint
+		reqId, err := registry.InsertTxnRequestInternal(
+			ctx,
+			txnFingerprintId,
+			[]uint64{fingerprintId},
+			"testuser",
+			0,
+			0,
+			0,
+			false,
+		)
+		require.NoError(t, err)
+		require.False(t, getRequestCompletedStatus(t, sqlConn, reqId))
+
+		sqlConn.Exec(t, "INSERT INTO my_table VALUES (1,1)")
+		require.True(t, getRequestCompletedStatus(t, sqlConn, reqId))
+	})
+
 }
 
 func TestRequestTxnBundleBuiltin(t *testing.T) {
@@ -1111,7 +1167,7 @@ func TestRequestTxnBundleBuiltin(t *testing.T) {
 	// The built-in requires that the transaction fingerprint exists in
 	// the system.transaction_statistics table, so we execute the transaction
 	// once.
-	executeTransactions(t, runner, txnStatements)
+	executeTransaction(t, runner, txnStatements)
 
 	// Get the fingerprint id and statement fingerprint ids for the transaction
 	// to make the txn diagnostics request
@@ -1334,7 +1390,7 @@ LIMIT 1`)
 	})
 }
 
-func executeTransactions(t *testing.T, runner *sqlutils.SQLRunner, statements []string) {
+func executeTransaction(t *testing.T, runner *sqlutils.SQLRunner, statements []string) {
 	t.Helper()
 	runner.Exec(t, "BEGIN")
 	for _, stmt := range statements {
@@ -1352,18 +1408,10 @@ func runTxnUntilDiagnosticsCollected(
 ) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
-		executeTransactions(t, sqlConn, statements)
-		r := tc.ServerConn(0).QueryRow("SELECT count(*) FROM system.transaction_diagnostics_requests WHERE completed=true and id=$1", reqId)
-		if r.Err() != nil {
-			return r.Err()
-		}
-		var count int
-		err := r.Scan(&count)
-		if err != nil {
-			return err
-		}
-		if count != 1 {
-			return errors.Newf("expected 1 completed bundle, got %d", count)
+		executeTransaction(t, sqlConn, statements)
+		completed := getRequestCompletedStatus(t, sqlConn, reqId)
+		if !completed {
+			return errors.New("expected request to be completed")
 		}
 		return nil
 	})
@@ -1378,4 +1426,13 @@ func runTxnUntilDiagnosticsCollected(
 		}
 		return nil
 	})
+}
+
+func getRequestCompletedStatus(
+	t *testing.T, runner *sqlutils.SQLRunner, reqId stmtdiagnostics.RequestID,
+) bool {
+	t.Helper()
+	var completed bool
+	runner.QueryRow(t, "SELECT completed FROM system.transaction_diagnostics_requests WHERE id=$1", reqId).Scan(&completed)
+	return completed
 }
