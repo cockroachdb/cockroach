@@ -328,8 +328,9 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
-			jobID, err := sql.TriggerInspectJob(
+			jobID, err := sql.TriggerInspectJobForTable(
 				ctx,
+				nil, /* planner */
 				fmt.Sprintf("import-validation-%s", tblDesc.GetName()),
 				p.ExecCfg(),
 				tblDesc,

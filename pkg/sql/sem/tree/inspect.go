@@ -56,6 +56,67 @@ func (n *Inspect) Format(ctx *FmtCtx) {
 // InspectOptions corresponds to a comma-delimited list of inspect options.
 type InspectOptions []InspectOption
 
+// NamedIndexes flattens the indexes named by option.
+func (n *InspectOptions) NamedIndexes() TableIndexNames {
+	var names TableIndexNames
+	for _, option := range *n {
+		if opt, ok := option.(*InspectOptionIndex); ok {
+			names = append(names, opt.IndexNames...)
+		}
+	}
+
+	return names
+}
+
+// Validate checks for internal consistency of the INSPECT command.
+func (n *Inspect) Validate() error {
+	if err := n.Options.validate(); err != nil {
+		return err
+	}
+
+	// TODO(155056): better validate index names from the options with the name
+	// of the database or table from the command.
+	for _, index := range n.Options.NamedIndexes() {
+		switch n.Typ {
+		case InspectTable:
+			if index.Table.ObjectName != "" && n.Table.Object() != index.Table.Object() {
+				return fmt.Errorf("index %q does not belong to table %q", index.String(), n.Table.String())
+			}
+		case InspectDatabase:
+			if index.Table.ExplicitCatalog && n.Database.Object() != index.Table.Catalog() {
+				return fmt.Errorf("index %q does not belong to database %q", index.String(), n.Database.String())
+			}
+		}
+	}
+
+	return nil
+}
+
+// validate checks for internal consistency of options on the INSPECT command.
+func (n *InspectOptions) validate() error {
+	// These two index options are mutually exclusive.
+	var hasOptionIndex, hasOptionIndexAll bool
+
+	for _, option := range *n {
+		switch option.(type) {
+		case *InspectOptionIndex:
+			if hasOptionIndexAll {
+				return fmt.Errorf("conflicting inspect options: INDEX and INDEX ALL")
+			}
+			hasOptionIndex = true
+		case *InspectOptionIndexAll:
+			if hasOptionIndex {
+				return fmt.Errorf("conflicting inspect options: INDEX and INDEX ALL")
+			}
+			hasOptionIndexAll = true
+		default:
+			return fmt.Errorf("unknown inspect option: %T", option)
+		}
+	}
+
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (n *InspectOptions) Format(ctx *FmtCtx) {
 	for i, option := range *n {
@@ -78,8 +139,7 @@ type InspectOption interface {
 
 // InspectOptionIndex implements the InspectOption interface
 func (*InspectOptionIndex) inspectOptionType() {}
-
-func (n *InspectOptionIndex) String() string { return AsString(n) }
+func (n *InspectOptionIndex) String() string   { return AsString(n) }
 
 // InspectOptionIndex represents an INDEX inspect check.
 type InspectOptionIndex struct {
@@ -88,12 +148,19 @@ type InspectOptionIndex struct {
 
 // Format implements the NodeFormatter interface.
 func (n *InspectOptionIndex) Format(ctx *FmtCtx) {
-	ctx.WriteString("INDEX ")
-	if n.IndexNames != nil {
-		ctx.WriteByte('(')
-		ctx.FormatNode(&n.IndexNames)
-		ctx.WriteByte(')')
-	} else {
-		ctx.WriteString("ALL")
-	}
+	ctx.WriteString("INDEX (")
+	ctx.FormatNode(&n.IndexNames)
+	ctx.WriteByte(')')
+}
+
+// InspectOptionIndexAll implements the InspectOption interface
+func (*InspectOptionIndexAll) inspectOptionType() {}
+func (n *InspectOptionIndexAll) String() string   { return AsString(n) }
+
+// InspectOptionIndexAll represents an `INDEX ALL` inspect option.
+type InspectOptionIndexAll struct{}
+
+// Format implements the NodeFormatter interface.
+func (n *InspectOptionIndexAll) Format(ctx *FmtCtx) {
+	ctx.WriteString("INDEX ALL")
 }

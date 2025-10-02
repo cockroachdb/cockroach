@@ -7931,13 +7931,13 @@ inspect_option_list:
   }
 
 inspect_option:
-  INDEX ALL
-  {
-    $$.val = &tree.InspectOptionIndex{}
-  }
-| INDEX_BEFORE_PAREN '(' table_index_name_list ')'
+  INDEX_BEFORE_PAREN '(' table_index_name_list ')'
   {
     $$.val = &tree.InspectOptionIndex{IndexNames: $3.newTableIndexNames()}
+  }
+| INDEX ALL
+  {
+    $$.val = &tree.InspectOptionIndexAll{}
   }
 
 // %Help: SHOW INSPECT ERRORS - list errors recorded by one INSPECT run

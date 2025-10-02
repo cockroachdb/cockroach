@@ -38,6 +38,12 @@ var OnlineRestoreJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "background_download_job_id", Typ: types.Int},
 }
 
+// InspectJobExecutionResultHeader is the header for INSPECT job results.
+var InspectJobExecutionResultHeader = colinfo.ResultColumns{
+	{Name: "job_id", Typ: types.Int},
+	{Name: "status", Typ: types.String},
+}
+
 // DetachedJobExecutionResultHeader is the header for various job commands when
 // job executes in detached mode (i.e. the caller doesn't wait for job completion).
 var DetachedJobExecutionResultHeader = colinfo.ResultColumns{
