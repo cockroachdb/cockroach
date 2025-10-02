@@ -83,7 +83,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "truncate_a" references "trunc_c".
 -HINT:  Truncate table "truncate_a" at the same time, or use TRUNCATE ... CASCADE.
-+ERROR:  "trunc_c" is referenced by foreign key from table "trunc_d"
++ERROR:  "trunc_c" is referenced by foreign key from table "truncate_a"
  TRUNCATE TABLE trunc_c,truncate_a;
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_d" references "trunc_c".

@@ -159,7 +159,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - "PgSQL"
 -(1 row)
 -
-+ERROR:  could not parse "\"\\x50\\u0067\\u{53}\\u{051}\\u{00004C}\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\x50\\u0067\\u{53}\\u{051}\\u{00004C}\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\x50\u0067\u{53}\u{051}\u{00004C}"
 +^
@@ -205,7 +205,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.t" of jsonpath input
 -LINE 1: select '1.type()'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.type()" as type jsonpath: at or near "trailing junk after numeric literal at or near "1.t"": syntax error
++ERROR:  could not parse "1.type()" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1.t"
 +DETAIL:  source SQL:
 +1.type()
 +^
@@ -671,7 +671,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1a" of jsonpath input
 -LINE 1: select '1a'::jsonpath;
 -               ^
-+ERROR:  could not parse "1a" as type jsonpath: at or near "trailing junk after numeric literal at or near "1a"": syntax error
++ERROR:  could not parse "1a" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1a"
 +DETAIL:  source SQL:
 +1a
 +^
@@ -679,7 +679,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1e" of jsonpath input
 -LINE 1: select '1e'::jsonpath;
 -               ^
-+ERROR:  could not parse "1e" as type jsonpath: at or near "invalid floating point literal": syntax error
++ERROR:  could not parse "1e" as type jsonpath: lexical error: invalid floating point literal
 +DETAIL:  source SQL:
 +1e
 +^
@@ -687,7 +687,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.e" of jsonpath input
 -LINE 1: select '1.e'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.e" as type jsonpath: at or near "invalid floating point literal": syntax error
++ERROR:  could not parse "1.e" as type jsonpath: lexical error: invalid floating point literal
 +DETAIL:  source SQL:
 +1.e
 +^
@@ -695,7 +695,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.2a" of jsonpath input
 -LINE 1: select '1.2a'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.2a" as type jsonpath: at or near "trailing junk after numeric literal at or near "1.2a"": syntax error
++ERROR:  could not parse "1.2a" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1.2a"
 +DETAIL:  source SQL:
 +1.2a
 +^
@@ -703,7 +703,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.2e" of jsonpath input
 -LINE 1: select '1.2e'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.2e" as type jsonpath: at or near "invalid floating point literal": syntax error
++ERROR:  could not parse "1.2e" as type jsonpath: lexical error: invalid floating point literal
 +DETAIL:  source SQL:
 +1.2e
 +^
@@ -768,7 +768,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1.2e3a" of jsonpath input
 -LINE 1: select '1.2e3a'::jsonpath;
 -               ^
-+ERROR:  could not parse "1.2e3a" as type jsonpath: at or near "trailing junk after numeric literal at or near "1.2e3a"": syntax error
++ERROR:  could not parse "1.2e3a" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1.2e3a"
 +DETAIL:  source SQL:
 +1.2e3a
 +^
@@ -839,7 +839,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 37
 -(1 row)
 -
-+ERROR:  could not parse "0b100101" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++ERROR:  could not parse "0b100101" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0b"
 +DETAIL:  source SQL:
 +0b100101
 +^
@@ -849,7 +849,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 187
 -(1 row)
 -
-+ERROR:  could not parse "0o273" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++ERROR:  could not parse "0o273" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0o"
 +DETAIL:  source SQL:
 +0o273
 +^
@@ -863,7 +863,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "0b" of jsonpath input
 -LINE 1: select '0b'::jsonpath;
 -               ^
-+ERROR:  could not parse "0b" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++ERROR:  could not parse "0b" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0b"
 +DETAIL:  source SQL:
 +0b
 +^
@@ -871,7 +871,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1b" of jsonpath input
 -LINE 1: select '1b'::jsonpath;
 -               ^
-+ERROR:  could not parse "1b" as type jsonpath: at or near "trailing junk after numeric literal at or near "1b"": syntax error
++ERROR:  could not parse "1b" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1b"
 +DETAIL:  source SQL:
 +1b
 +^
@@ -879,7 +879,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '0b0x'::jsonpath;
 -               ^
-+ERROR:  could not parse "0b0x" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++ERROR:  could not parse "0b0x" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0b"
 +DETAIL:  source SQL:
 +0b0x
 +^
@@ -887,7 +887,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "0o" of jsonpath input
 -LINE 1: select '0o'::jsonpath;
 -               ^
-+ERROR:  could not parse "0o" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++ERROR:  could not parse "0o" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0o"
 +DETAIL:  source SQL:
 +0o
 +^
@@ -895,7 +895,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1o" of jsonpath input
 -LINE 1: select '1o'::jsonpath;
 -               ^
-+ERROR:  could not parse "1o" as type jsonpath: at or near "trailing junk after numeric literal at or near "1o"": syntax error
++ERROR:  could not parse "1o" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1o"
 +DETAIL:  source SQL:
 +1o
 +^
@@ -903,7 +903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '0o0x'::jsonpath;
 -               ^
-+ERROR:  could not parse "0o0x" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++ERROR:  could not parse "0o0x" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0o"
 +DETAIL:  source SQL:
 +0o0x
 +^
@@ -911,7 +911,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "0x" of jsonpath input
 -LINE 1: select '0x'::jsonpath;
 -               ^
-+ERROR:  could not parse "0x" as type jsonpath: lexical error: invalid hexadecimal numeric literal
++ERROR:  could not parse "0x" as type jsonpath: at or near "invalid hexadecimal numeric literal": syntax error
 +DETAIL:  source SQL:
 +0x
 +^
@@ -919,7 +919,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1x" of jsonpath input
 -LINE 1: select '1x'::jsonpath;
 -               ^
-+ERROR:  could not parse "1x" as type jsonpath: at or near "invalid hexadecimal numeric literal": syntax error
++ERROR:  could not parse "1x" as type jsonpath: lexical error: invalid hexadecimal numeric literal
 +DETAIL:  source SQL:
 +1x
 +^
@@ -927,7 +927,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '0x0y'::jsonpath;
 -               ^
-+ERROR:  could not parse "0x0y" as type jsonpath: at or near "trailing junk after numeric literal at or near "0x0y"": syntax error
++ERROR:  could not parse "0x0y" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0x0y"
 +DETAIL:  source SQL:
 +0x0y
 +^
@@ -938,7 +938,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 1000000
 -(1 row)
 -
-+ERROR:  could not parse "1_000_000" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000_000" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000_000
 +^
@@ -948,7 +948,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 123
 -(1 row)
 -
-+ERROR:  could not parse "1_2_3" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_2_3" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_2_3
 +^
@@ -958,7 +958,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 518979583
 -(1 row)
 -
-+ERROR:  could not parse "0x1EEE_FFFF" as type jsonpath: at or near "trailing junk after numeric literal at or near "0x1EEE_"": syntax error
++ERROR:  could not parse "0x1EEE_FFFF" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0x1EEE_"
 +DETAIL:  source SQL:
 +0x1EEE_FFFF
 +^
@@ -968,7 +968,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 187
 -(1 row)
 -
-+ERROR:  could not parse "0o2_73" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++ERROR:  could not parse "0o2_73" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0o"
 +DETAIL:  source SQL:
 +0o2_73
 +^
@@ -978,7 +978,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 37
 -(1 row)
 -
-+ERROR:  could not parse "0b10_0101" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++ERROR:  could not parse "0b10_0101" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0b"
 +DETAIL:  source SQL:
 +0b10_0101
 +^
@@ -988,7 +988,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 1000.000005
 -(1 row)
 -
-+ERROR:  could not parse "1_000.000_005" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000.000_005" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000.000_005
 +^
@@ -998,7 +998,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 1000
 -(1 row)
 -
-+ERROR:  could not parse "1_000." as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000." as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000.
 +^
@@ -1018,7 +1018,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 - 10005
 -(1 row)
 -
-+ERROR:  could not parse "1_000.5e0_1" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000.5e0_1" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000.5e0_1
 +^
@@ -1035,7 +1035,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "100_" of jsonpath input
 -LINE 1: select '100_'::jsonpath;
 -               ^
-+ERROR:  could not parse "100_" as type jsonpath: at or near "trailing junk after numeric literal at or near "100_"": syntax error
++ERROR:  could not parse "100_" as type jsonpath: lexical error: trailing junk after numeric literal at or near "100_"
 +DETAIL:  source SQL:
 +100_
 +^
@@ -1043,7 +1043,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '100__000'::jsonpath;
 -               ^
-+ERROR:  could not parse "100__000" as type jsonpath: at or near "trailing junk after numeric literal at or near "100_"": syntax error
++ERROR:  could not parse "100__000" as type jsonpath: lexical error: trailing junk after numeric literal at or near "100_"
 +DETAIL:  source SQL:
 +100__000
 +^
@@ -1059,7 +1059,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1_000_" of jsonpath input
 -LINE 1: select '1_000_.5'::jsonpath;
 -               ^
-+ERROR:  could not parse "1_000_.5" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000_.5" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000_.5
 +^
@@ -1067,7 +1067,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1_000._" of jsonpath input
 -LINE 1: select '1_000._5'::jsonpath;
 -               ^
-+ERROR:  could not parse "1_000._5" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000._5" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000._5
 +^
@@ -1075,7 +1075,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1_000.5_" of jsonpath input
 -LINE 1: select '1_000.5_'::jsonpath;
 -               ^
-+ERROR:  could not parse "1_000.5_" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000.5_" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000.5_
 +^
@@ -1083,7 +1083,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  trailing junk after numeric literal at or near "1_000.5e" of jsonpath input
 -LINE 1: select '1_000.5e_1'::jsonpath;
 -               ^
-+ERROR:  could not parse "1_000.5e_1" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++ERROR:  could not parse "1_000.5e_1" as type jsonpath: lexical error: trailing junk after numeric literal at or near "1_"
 +DETAIL:  source SQL:
 +1_000.5e_1
 +^
@@ -1092,7 +1092,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '0b_10_0101'::jsonpath;
 -               ^
-+ERROR:  could not parse "0b_10_0101" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++ERROR:  could not parse "0b_10_0101" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0b"
 +DETAIL:  source SQL:
 +0b_10_0101
 +^
@@ -1100,7 +1100,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '0o_273'::jsonpath;
 -               ^
-+ERROR:  could not parse "0o_273" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++ERROR:  could not parse "0o_273" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0o"
 +DETAIL:  source SQL:
 +0o_273
 +^
@@ -1108,7 +1108,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --la
 -ERROR:  syntax error at end of jsonpath input
 -LINE 1: select '0x_42F'::jsonpath;
 -               ^
-+ERROR:  could not parse "0x_42F" as type jsonpath: at or near "trailing junk after numeric literal at or near "0x_"": syntax error
++ERROR:  could not parse "0x_42F" as type jsonpath: lexical error: trailing junk after numeric literal at or near "0x_"
 +DETAIL:  source SQL:
 +0x_42F
 +^

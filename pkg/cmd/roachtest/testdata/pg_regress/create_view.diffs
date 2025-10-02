@@ -667,7 +667,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
 +                                                                              ^
  ALTER TABLE tx1 RENAME TO a1;
-+ERROR:  cannot rename relation "tx1" because view "aliased_view_1" depends on it
++ERROR:  cannot rename relation "root.testviewschm2.tx1" because view "aliased_view_1" depends on it
 +HINT:  consider dropping "aliased_view_1" first.
  \d+ aliased_view_1
 -                    View "testviewschm2.aliased_view_1"
@@ -770,7 +770,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +WHERE c.relname OPERATOR(pg_catalog.~) '^(aliased_view_4)$' COLLATE pg_catalog.default
 +                                                                              ^
  ALTER TABLE tt1 RENAME TO a2;
-+ERROR:  cannot rename relation "tt1" because view "aliased_view_1" depends on it
++ERROR:  cannot rename relation "root.testviewschm2.tt1" because view "aliased_view_1" depends on it
 +HINT:  consider dropping "aliased_view_1" first.
  \d+ aliased_view_1
 -                    View "testviewschm2.aliased_view_1"
