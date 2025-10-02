@@ -228,11 +228,14 @@ func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 // storeLoadSummary no longer matches that of storeState.loadSeqNum.
 type meansForStoreSet struct {
 	constraintsDisj
-	stores    storeIDPostingList
+	meansLoad
+	stores         storeIDPostingList
+	storeSummaries map[roachpb.StoreID]storeLoadSummary
+}
+
+type meansLoad struct {
 	storeLoad meanStoreLoad
 	nodeLoad  meanNodeLoad
-
-	storeSummaries map[roachpb.StoreID]storeLoadSummary
 }
 
 var _ mapEntry = &meansForStoreSet{}
@@ -339,7 +342,7 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	computeMeansForStoreSet(mm.loadInfoProvider, means, mm.scratchNodes)
+	computeMeansForStoreSet(mm.loadInfoProvider, &means.meansLoad, means.stores, mm.scratchNodes)
 	return means
 }
 
@@ -362,18 +365,30 @@ func (mm *meansMemo) getStoreLoadSummary(
 // It does not do any filtering e.g. the stores can include fdDead stores. It
 // is up to the caller to adjust means.stores if it wants to do filtering.
 //
+// stores may contain duplicate storeIDs, in which case computeMeansForStoreSet
+// should deduplicate processing of the stores. stores should be immutable.
+//
 // TODO: fix callers to exclude stores based on node failure detection, from
 // the mean.
 func computeMeansForStoreSet(
-	loadProvider loadInfoProvider, means *meansForStoreSet, scratchNodes map[roachpb.NodeID]*NodeLoad,
+	loadProvider loadInfoProvider,
+	means *meansLoad,
+	stores []roachpb.StoreID,
+	scratchNodes map[roachpb.NodeID]*NodeLoad,
 ) {
-	n := len(means.stores)
-	if n == 0 {
+	if len(stores) == 0 {
 		panic(fmt.Sprintf("no stores for meansForStoreSet: %v", *means))
 	}
 	clear(scratchNodes)
-	for _, storeID := range means.stores {
+	seen := make(map[roachpb.StoreID]struct{})
+	n := 0
+	for _, storeID := range stores {
 		nodeID, sload := loadProvider.getStoreReportedLoad(storeID)
+		if _, ok := seen[storeID]; ok {
+			continue
+		}
+		n++
+		seen[storeID] = struct{}{}
 		for j := range sload.reportedLoad {
 			means.storeLoad.load[j] += sload.reportedLoad[j]
 			if sload.capacity[j] == UnknownCapacity {

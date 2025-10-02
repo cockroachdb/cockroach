@@ -476,7 +476,7 @@ func (a *allocatorState) rebalanceStores(
 				var means meansForStoreSet
 				clear(scratchNodes)
 				means.stores = candsPL
-				computeMeansForStoreSet(a.cs, &means, scratchNodes)
+				computeMeansForStoreSet(a.cs, &means.meansLoad, means.stores, scratchNodes)
 				sls := a.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 				log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 				if sls.dimSummary[CPURate] < overloadSlow {
