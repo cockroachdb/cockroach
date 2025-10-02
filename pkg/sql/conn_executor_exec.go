@@ -2847,10 +2847,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			}
 		}
 	}
-	distributePlan, distSQLProhibitedErr := getPlanDistribution(
-		ctx, planner.Descriptors().HasUncommittedTypes(),
-		ex.sessionData(), planner.curPlan.main, &planner.distSQLVisitor,
-	)
+	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main)
 	if afterGetPlanDistribution != nil {
 		afterGetPlanDistribution()
 	}
