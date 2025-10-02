@@ -41,7 +41,7 @@ type LeaseManager interface {
 
 	GetLeaseGeneration() int64
 
-	GetReadTimestamp(timestamp hlc.Timestamp) lease.ReadTimestamp
+	GetReadTimestamp(ctx context.Context, timestamp hlc.Timestamp) lease.ReadTimestamp
 }
 
 type deadlineHolder interface {
@@ -180,24 +180,27 @@ func (ld *leasedDescriptors) maybeAssertExternalRowDataTS(desc catalog.Descripto
 }
 
 // maybeInitReadTimestamp selects a read timestamp for the lease manager.
-func (ld *leasedDescriptors) maybeInitReadTimestamp(txn deadlineHolder) {
+func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn deadlineHolder) {
 	// Refresh the leased timestamp if the read timestamp has changed on us
 	// or if it hasn't been populated yet.
-	// TODO (fqazi): For locked read timestamps inside leasing,
-	// we will need to have extra logic to ensure this is safe.
 	if ld.leaseTimestampSet &&
 		ld.leaseTimestamp.GetBaseTimestamp() == txn.ReadTimestamp() {
 		return
+	} else if ld.leaseTimestampSet {
+		// Timestamp is already set so release it before picking a new one.
+		// TODO (fqazi): Add handling for moving timestamps forward.
+		ld.leaseTimestamp.Release(ctx)
+		ld.leaseTimestampSet = false
 	}
 	readTimestamp := txn.ReadTimestamp()
 	ld.leaseTimestampSet = true
-	// Fixed timestamp queries will use descriptors at the user select timestamp.
+	// Fixed timestamp queries will use descriptors at the user-selected timestamp.
 	if txn.ReadTimestampFixed() {
 		ld.leaseTimestamp = lease.TimestampToReadTimestamp(readTimestamp)
 		return
 	}
 	// Otherwise, get a safe read timestamp from the lease manager.
-	ld.leaseTimestamp = ld.lm.GetReadTimestamp(readTimestamp)
+	ld.leaseTimestamp = ld.lm.GetReadTimestamp(ctx, readTimestamp)
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -223,7 +226,7 @@ func (ld *leasedDescriptors) getByName(
 		desc = cached.(lease.LeasedDescriptor).Underlying()
 		return desc, false, nil
 	}
-	ld.maybeInitReadTimestamp(txn)
+	ld.maybeInitReadTimestamp(ctx, txn)
 	ldesc, err := ld.lm.AcquireByName(ctx, ld.leaseTimestamp, parentID, parentSchemaID, name)
 	const setTxnDeadline = true
 	return ld.getResult(ctx, txn, setTxnDeadline, ldesc, err)
@@ -238,7 +241,7 @@ func (ld *leasedDescriptors) getByID(
 	if cached := ld.getCachedByID(ctx, id); cached != nil {
 		return cached, false, nil
 	}
-	ld.maybeInitReadTimestamp(txn)
+	ld.maybeInitReadTimestamp(ctx, txn)
 	desc, err := ld.lm.Acquire(ctx, ld.leaseTimestamp, id)
 	const setTxnDeadline = false
 	return ld.getResult(ctx, txn, setTxnDeadline, desc, err)
@@ -286,7 +289,7 @@ func (ld *leasedDescriptors) getResult(
 	expiration := ldesc.Expiration(ctx)
 	readTimestamp := txn.ReadTimestamp()
 	if expiration.LessEq(txn.ReadTimestamp()) {
-		return nil, false, errors.AssertionFailedf("bad descriptor for id=%d readTimestamp=%s, expiration=%s", ldesc.GetID(), readTimestamp, expiration)
+		return nil, false, errors.AssertionFailedf("bad descriptor for id=%d readTimestamp=%s, expiration=%s (leaseTimestamp: %s)", ldesc.GetID(), readTimestamp, expiration, ld.leaseTimestamp.GetTimestamp())
 	}
 
 	ld.cache.Upsert(ldesc, ldesc.Underlying().SkipNamespace())
@@ -391,6 +394,9 @@ func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 		return nil
 	})
 	ld.cache.Clear()
+	if ld.leaseTimestampSet {
+		ld.leaseTimestamp.Release(ctx)
+	}
 	ld.leaseTimestampSet = false
 }
 
@@ -401,6 +407,9 @@ func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersio
 		}
 	}
 	if ld.cache.Len() == 0 {
+		if ld.leaseTimestampSet {
+			ld.leaseTimestamp.Release(ctx)
+		}
 		ld.leaseTimestampSet = false
 	}
 }
