@@ -47,10 +47,13 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			snap := rangefeed.NewCatchUpSnapshot(eng, span, opts.ts, nil, nil, 0)
-			defer snap.Close()
+			iter, err := rangefeed.NewCatchUpIterator(ctx, eng, span, opts.ts, nil, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer iter.Close()
 			counter := 0
-			err := snap.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
+			err = iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
 				counter++
 				return nil
 			}, opts.withDiff, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery)
