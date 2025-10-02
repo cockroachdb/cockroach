@@ -755,6 +755,9 @@ func (ih *instrumentationHelper) Finish(
 		// of the transaction if the transaction matches the request.
 		// NB: It is safe for bundle to be empty here.
 		txnHelper.AddStatementBundle(ctx, ast, uint64(ih.fingerprintId), ih.fingerprint, bundle)
+		if ih.implicitTxn {
+			txnHelper.diagnosticsCollector.UpdateState(txnDiagnosticsReadyToFinalize)
+		}
 	}
 
 	// If there was a communication error already, no point in setting any
