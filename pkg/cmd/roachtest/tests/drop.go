@@ -98,6 +98,7 @@ func registerDrop(r registry.Registry) {
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
+			run(false, "ALTER TABLE tpcc.stock SET (schema_locked=false)")
 			run(false, stmtTruncate)
 
 			const stmtDrop = "DROP DATABASE tpcc"
