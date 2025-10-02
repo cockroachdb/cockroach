@@ -57,25 +57,37 @@ func (d *delegator) delegateShowInspectErrors(n *tree.ShowInspectErrors) (tree.S
 		query.WriteString(fmt.Sprintf(" AND id = %d", *n.JobID))
 	}
 
-	// TODO(148287): query the inspect job payload to figure out if a job touches a particular table or database ID
-	// If a table was specified, only consider jobs that reported errors on it.
-	// If a job ID was specified, only consider that job. The records from the
-	// most recent completed job that satisfies those criteria is used.
+	query.WriteString(`),
+	filtered_jobs AS (
+		SELECT inspect_jobs.id
+		FROM inspect_jobs
+		JOIN crdb_internal.system_jobs sj ON inspect_jobs.id = sj.id
+	`)
+	// If a table is specified, limit results to jobs that include checks
+	// on that table. The table is matched by inspecting the job payload.
+	if tableID != catid.InvalidDescID {
+		query.WriteString(fmt.Sprintf(`
+		WHERE EXISTS (
+			SELECT 1
+			FROM jsonb_array_elements(
+				COALESCE(
+					crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', sj.payload)
+						-> 'inspectDetails' -> 'checks',
+					'[]'::JSONB
+				)
+			) AS c
+			WHERE (c ->> 'tableId')::INT = %d
+		)`, tableID))
+	}
+	// Reports on a single job. If multiple match, use the most recent one.
 	query.WriteString(`),
 	job_id AS (
-		SELECT max(inspect_jobs.id) as id
-		FROM inspect_jobs
-		JOIN crdb_internal.cluster_inspect_errors ie ON inspect_jobs.id = ie.job_id
-		WHERE 1=1
+		SELECT max(id) AS id
+		FROM filtered_jobs
+	)
 	`)
-	if tableID != catid.InvalidDescID {
-		query.WriteString(fmt.Sprintf(" AND ie.id = %d", tableID))
-	}
-	if n.JobID != nil {
-		query.WriteString(fmt.Sprintf(" AND ie.job_id = %d", *n.JobID))
-	}
 
-	query.WriteString(`)
+	query.WriteString(`
 	SELECT 
 		ie.error_type,
 		COALESCE(t.database_name, '<unknown>') AS database_name,
