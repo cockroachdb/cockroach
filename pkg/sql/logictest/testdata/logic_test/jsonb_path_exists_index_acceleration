@@ -428,17 +428,17 @@ SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '
 
 # Test with multiple jsonb_path_exists concatenated with AND as the filter.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a, jpq;
 ----
 3   "c"
 4   [1, 2, 3, 4]
 6   {"c": "d"}
-7   {"x": "y"}
 7   "e"
+7   {"x": "y"}
 8   []
 9   "c"
-11  [{"x": {"y": {"z": "y"}}}, {"x": {"y": {"z": "yuu"}}}, {"x": {"y": {"z": ["y", "yuu"]}}}, [{"x": "y"}], [[[{"x": "y"}]]], {"xx": [{"zz": "oo"}]}]
 11  "e"
+11  [{"x": {"y": {"z": "y"}}}, {"x": {"y": {"z": "yuu"}}}, {"x": {"y": {"z": ["y", "yuu"]}}}, [{"x": "y"}], [[[{"x": "y"}]]], {"xx": [{"zz": "oo"}]}]
 12  [{"x": {"y": {"ztrue": true}}}, {"x": {"y": {"ztrue": [true, "y1"]}}}]
 13  [{"x": {"y": {"zfalse": false}}}, {"x": {"y": {"zfalse": [false, "y1"]}}}]
 14  [{"x": {"y": {"zint": 10}}}, {"x": {"y": {"zint": [10, "y1"]}}}]
