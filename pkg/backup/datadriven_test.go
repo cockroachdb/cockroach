@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -91,10 +92,9 @@ type sqlDBKey struct {
 
 type datadrivenTestState struct {
 	// cluster maps the user defined cluster name to its cluster
-	clusters map[string]serverutils.TestClusterInterface
+	clusters       map[string]serverutils.TestClusterInterface
+	clusterCleanup []func()
 
-	// firstNode maps the cluster name to the first node in the cluster
-	firstNode         map[string]serverutils.TestServerInterface
 	dataDirs          map[string]string
 	sqlDBs            map[sqlDBKey]*gosql.DB
 	jobTags           map[string]jobspb.JobID
@@ -107,7 +107,6 @@ type datadrivenTestState struct {
 func newDatadrivenTestState() datadrivenTestState {
 	return datadrivenTestState{
 		clusters:          make(map[string]serverutils.TestClusterInterface),
-		firstNode:         make(map[string]serverutils.TestServerInterface),
 		dataDirs:          make(map[string]string),
 		sqlDBs:            make(map[sqlDBKey]*gosql.DB),
 		jobTags:           make(map[string]jobspb.JobID),
@@ -120,16 +119,27 @@ func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 	// While the testCluster cleanupFns would close the dbConn and clusters, close
 	// them manually to ensure all queries finish on tests that share these
 	// resources.
+	for _, f := range d.cleanupFns {
+		f()
+	}
+
 	for _, db := range d.sqlDBs {
 		backuptestutils.CheckForInvalidDescriptors(t, db)
 		db.Close()
 	}
-	for _, s := range d.firstNode {
-		s.Stopper().Stop(ctx)
+
+	// Clean up the clusters in parallel so that if one gets stuck we don't see
+	// goroutines for running clusters mixed in with goroutines for the stuck
+	// cluster.
+	group := ctxgroup.WithContext(ctx)
+	for _, cleanup := range d.clusterCleanup {
+		group.Go(func() error {
+			cleanup()
+			return nil
+		})
 	}
-	for _, f := range d.cleanupFns {
-		f()
-	}
+	require.NoError(t, group.Wait())
+
 	d.noticeBuffer = nil
 }
 
@@ -223,9 +233,8 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	var cleanup func()
 	tc, _, cfg.iodir, cleanup = backuptestutils.StartBackupRestoreTestCluster(t, clusterSize, opts...)
 	d.clusters[cfg.name] = tc
-	d.firstNode[cfg.name] = tc.Server(0)
 	d.dataDirs[cfg.name] = cfg.iodir
-	d.cleanupFns = append(d.cleanupFns, cleanup)
+	d.clusterCleanup = append(d.clusterCleanup, cleanup)
 
 	return nil
 }
@@ -262,7 +271,7 @@ func (d *datadrivenTestState) getSQLDBForVC(
 		serverutils.User(user),
 	}
 
-	s := d.firstNode[name].ApplicationLayer()
+	s := d.clusters[name].ApplicationLayer(0)
 	switch vc {
 	case "default":
 		// Nothing to do.
@@ -270,7 +279,7 @@ func (d *datadrivenTestState) getSQLDBForVC(
 		// We use the system layer since in the case of
 		// external SQL server's the application layer can't
 		// route to the system tenant.
-		s = d.firstNode[name].SystemLayer()
+		s = d.clusters[name].SystemLayer(0)
 	default:
 		opts = append(opts, serverutils.DBName("cluster:"+vc))
 	}
@@ -956,7 +965,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			return ""
 
 		case "create-dummy-system-table":
-			al := ds.firstNode[lastCreatedCluster].ApplicationLayer()
+			al := ds.clusters[lastCreatedCluster].ApplicationLayer(0)
 			db := al.DB()
 			execCfg := al.ExecutorConfig().(sql.ExecutorConfig)
 			codec := execCfg.Codec
@@ -1037,7 +1046,7 @@ func handleKVRequest(
 			},
 			UseRangeTombstone: true,
 		}
-		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].SystemLayer().DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
+		if _, err := kv.SendWrapped(ctx, ds.clusters[cluster].SystemLayer(0).DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
 			t.Fatal(err)
 		}
 	} else {
