@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -39,9 +41,15 @@ func RunCloudNemesisTest(t *testing.T, storage cloud.ExternalStorage) {
 		listConcurrency:  1,
 	}
 
-	// We create a context here because we don't want to support a caller supplied
-	// cancelation signal.
-	ctx := context.Background()
+	// Create a root tracing span for the test to ensure ops create spans
+	// which will help flush out span lifetime bugs.
+	tracer := tracing.NewTracerWithOpt(
+		context.Background(),
+		tracing.WithUseAfterFinishOpt(true, true),
+		tracing.WithSpanReusePercent(0))
+	ctx, rootSpan := tracer.StartSpanCtx(context.Background(), "cloud-nemesis-test", tracing.WithRecording(tracingpb.RecordingStructured))
+	defer rootSpan.Finish()
+
 	if err := nemesis.run(ctx, 2*time.Minute); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -85,9 +93,13 @@ func (c *cloudNemesis) run(ctx context.Context, duration time.Duration) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		time.Sleep(duration)
+		wait := time.NewTimer(duration)
+		select {
+		case <-ctx.Done():
+		case <-wait.C:
+		}
 		close(done)
-		return nil
+		return ctx.Err()
 	})
 
 	for i := 0; i < c.writeConcurrency; i++ {
