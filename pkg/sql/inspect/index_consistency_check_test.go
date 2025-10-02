@@ -438,8 +438,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				FROM generate_series(1001, 2000) AS gs1;`,
 			)
 
-			// TODO(148365): Run INSPECT instead of SCRUB.
-			_, err = db.Exec(`SET enable_scrub_job=true`)
+			_, err = db.Exec(`SET enable_inspect_command=true`)
 			require.NoError(t, err)
 
 			// If not using timestamp before corruption, get current timestamp
@@ -451,8 +450,8 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 
 			// Use the absolute timestamp in nanoseconds for inspect command
 			absoluteTimestamp := fmt.Sprintf("'%d'", expectedASOFTime.UnixNano())
-			scrubQuery := fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE test.t AS OF SYSTEM TIME %s WITH OPTIONS INDEX ALL`, absoluteTimestamp)
-			_, err = db.Query(scrubQuery)
+			inspectQuery := fmt.Sprintf(`INSPECT TABLE test.t AS OF SYSTEM TIME %s WITH OPTIONS INDEX ALL`, absoluteTimestamp)
+			_, err = db.Query(inspectQuery)
 			if tc.expectedErrRegex == "" {
 				require.NoError(t, err)
 				require.Equal(t, 0, issueLogger.numIssuesFound())
@@ -587,10 +586,9 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 		`CREATE INDEX idx_having ON test.reserved_table ("having", "group")`,
 	)
 
-	// TODO(148365): Run INSPECT instead of SCRUB.
-	_, err := db.Exec(`SET enable_scrub_job=true`)
+	_, err := db.Exec(`SET enable_inspect_command=true`)
 	require.NoError(t, err)
-	_, err = db.Query(`EXPERIMENTAL SCRUB TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
+	_, err = db.Query(`INSPECT TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
 	require.NoError(t, err, "should succeed on table with reserved word column names")
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 

@@ -706,23 +706,23 @@ func expandIndexName(
 	return &tableName, tblMutable, nil
 }
 
-// getTableAndIndex returns the table and index descriptors for a
+// GetTableAndIndex returns the table and index descriptors for a
 // TableIndexName.
 //
 // It can return indexes that are being rolled out.
-func (p *planner) getTableAndIndex(
+func (p *planner) GetTableAndIndex(
 	ctx context.Context,
 	tableWithIndex *tree.TableIndexName,
 	privilege privilege.Kind,
 	skipCache bool,
 ) (prefix catalog.ResolvedObjectPrefix, mut *tabledesc.Mutable, idx catalog.Index, err error) {
 	p.runWithOptions(resolveFlags{skipCache: skipCache}, func() {
-		prefix, mut, idx, err = p.getTableAndIndexImpl(ctx, tableWithIndex, privilege)
+		prefix, mut, idx, err = p.GetTableAndIndexImpl(ctx, tableWithIndex, privilege)
 	})
 	return prefix, mut, idx, err
 }
 
-func (p *planner) getTableAndIndexImpl(
+func (p *planner) GetTableAndIndexImpl(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, catalog.Index, error) {
 	_, resolvedPrefix, tbl, idx, err := resolver.ResolveIndex(

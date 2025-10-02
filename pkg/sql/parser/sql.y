@@ -7936,7 +7936,7 @@ inspect_option_list:
 inspect_option:
   INDEX ALL
   {
-    $$.val = &tree.InspectOptionIndex{}
+    $$.val = &tree.InspectOptionIndexAll{}
   }
 | INDEX_BEFORE_PAREN '(' table_index_name_list ')'
   {
