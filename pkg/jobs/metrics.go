@@ -42,6 +42,7 @@ type Metrics struct {
 	Changefeed   metric.Struct
 	StreamIngest metric.Struct
 	Backup       metric.Struct
+	Inspect      metric.Struct
 
 	// AdoptIterations counts the number of adopt loops executed by Registry.
 	AdoptIterations *metric.Counter
@@ -402,6 +403,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration, lookup *cidr.Looku
 	if MakeBackupMetricsHook != nil {
 		m.Backup = MakeBackupMetricsHook(histogramWindowInterval)
 	}
+	if MakeInspectMetricsHook != nil {
+		m.Inspect = MakeInspectMetricsHook(histogramWindowInterval)
+	}
 
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
@@ -481,6 +485,9 @@ var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
 
 // MakeBackupMetricsHook allows for registration of backup metrics.
 var MakeBackupMetricsHook func(time.Duration) metric.Struct
+
+// MakeInspectMetricsHook allows for registration of inspect metrics.
+var MakeInspectMetricsHook func(time.Duration) metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {
