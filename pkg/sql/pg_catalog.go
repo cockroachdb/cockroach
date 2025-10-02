@@ -1660,19 +1660,19 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 	schema: vtable.PGCatalogDepend,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		vt := p.getVirtualTabler()
-		pgConstraintsDesc, err := vt.getVirtualTableDesc(&pgConstraintsTableName, p)
+		pgConstraintsDesc, err := vt.getVirtualTableDesc(&pgConstraintsTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_constraint")
 		}
-		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName, p)
+		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
-		pgRewriteDesc, err := vt.getVirtualTableDesc(&pgRewriteTableName, p)
+		pgRewriteDesc, err := vt.getVirtualTableDesc(&pgRewriteTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_rewrite")
 		}
-		pgProcDesc, err := vt.getVirtualTableDesc(&pgProcTableName, p)
+		pgProcDesc, err := vt.getVirtualTableDesc(&pgProcTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_proc")
 		}
@@ -3157,19 +3157,19 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		vt := p.getVirtualTabler()
 		h := makeOidHasher()
 
-		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName, p)
+		pgClassDesc, err := vt.getVirtualTableDesc(&pgClassTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
 		pgClassOid := tableOid(pgClassDesc.GetID())
 
-		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName, p)
+		pgAuthIDDesc, err := vt.getVirtualTableDesc(&pgAuthIDTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_authid")
 		}
 		pgAuthIDOid := tableOid(pgAuthIDDesc.GetID())
 
-		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName, p)
+		pgDatabaseDesc, err := vt.getVirtualTableDesc(&pgDatabaseTableName)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_database")
 		}

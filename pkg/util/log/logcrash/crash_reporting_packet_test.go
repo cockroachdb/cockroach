@@ -247,7 +247,9 @@ func TestInternalErrorReporting(t *testing.T) {
 		assert.Equal(t, "github.com/cockroachdb/errors/errutil/*errutil.leafError (*::)\n"+
 			"github.com/cockroachdb/errors/withstack/*withstack.withStack (*::)\n"+
 			"github.com/cockroachdb/errors/assert/*assert.withAssertionFailure (*::)\n"+
-			"github.com/cockroachdb/cockroach/pkg/sql/colexecerror/*colexecerror.notInternalError (*::)\n",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexecerror/*colexecerror.notInternalError (*::)\n"+
+			"github.com/cockroachdb/errors/safedetails/*safedetails.withSafeDetails (*::)\n"+
+			"github.com/cockroachdb/errors/safedetails/*safedetails.withSafeDetails (*::)\n",
 			extra)
 	}
 
