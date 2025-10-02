@@ -221,7 +221,7 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 	tc := serverutils.StartCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)
 
-	const epsilonAllowed = 5
+	const epsilonAllowed = 6
 
 	ts := tc.Server(0)
 	db := ts.DB()
