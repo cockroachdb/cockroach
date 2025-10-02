@@ -272,7 +272,7 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 		Timeout:           time.Duration(allocSpec.samples) * time.Hour,
 		NonReleaseBlocker: true,
 		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Suites:            registry.Suites(registry.Weekly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
 		},
