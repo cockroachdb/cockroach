@@ -648,6 +648,18 @@ func (b *Builder) indexConstraintMaxResults(
 		return 0, false
 	}
 
+	// The maximum cardinality may have already been calculated when building
+	// logical properties.
+	if !relProps.Cardinality.IsUnbounded() {
+		return uint64(relProps.Cardinality.Max), true
+	}
+
+	// Return early before building the set of index columns if there is no key
+	// at all.
+	if _, hasKey := relProps.FuncDeps.LaxKey(); !hasKey {
+		return 0, false
+	}
+
 	numCols := c.Columns.Count()
 	var indexCols opt.ColSet
 	for i := 0; i < numCols; i++ {
