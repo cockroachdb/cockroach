@@ -76,10 +76,10 @@ type unbufferedRegistration struct {
 		// via publish() are ignored.
 		disconnected bool
 
-		// catchUpSnap is created by a replica under the raftMu lock when a
-		// registration is created. It is set to nil by the output loop for
-		// processing and closed when done.
-		catchUpSnap *CatchUpSnapshot
+		// catchUpIter is created by replica under raftMu lock when registration is
+		// created. It is set to nil by output loop for processing and closed when
+		// done.
+		catchUpIter *CatchUpIterator
 
 		// Used for testing only. Indicates that all events in catchUpBuf have been
 		// sent to BufferedStream.
@@ -93,7 +93,7 @@ func newUnbufferedRegistration(
 	streamCtx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchUpSnap *CatchUpSnapshot,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
@@ -117,10 +117,10 @@ func newUnbufferedRegistration(
 		metrics: metrics,
 		stream:  stream,
 	}
-	br.mu.catchUpSnap = catchUpSnap
+	br.mu.catchUpIter = catchUpIter
 	br.mu.caughtUp = true
-	if br.mu.catchUpSnap != nil {
-		// A nil catchUpSnap indicates we don't need a catch-up scan. We avoid
+	if br.mu.catchUpIter != nil {
+		// A nil catchUpIter indicates we don't need a catch-up scan. We avoid
 		// initializing catchUpBuf in this case, which will result in publish()
 		// sending all events to the underlying stream immediately.
 		br.mu.catchUpBuf = make(chan *sharedEvent, bufferSz)
@@ -187,10 +187,10 @@ func (ubr *unbufferedRegistration) disconnectLocked(pErr *kvpb.Error) {
 	if ubr.mu.disconnected {
 		return
 	}
-	if ubr.mu.catchUpSnap != nil {
+	if ubr.mu.catchUpIter != nil {
 		// Catch-up scan hasn't started yet.
-		ubr.mu.catchUpSnap.Close()
-		ubr.mu.catchUpSnap = nil
+		ubr.mu.catchUpIter.Close()
+		ubr.mu.catchUpIter = nil
 	}
 	if ubr.mu.catchUpScanCancelFn != nil {
 		ubr.mu.catchUpScanCancelFn()
@@ -340,31 +340,31 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 	return nil
 }
 
-// detachCatchUpSnap detaches the catchUpSnap that was previously attached.
-func (ubr *unbufferedRegistration) detachCatchUpSnap() *CatchUpSnapshot {
+// detachCatchUpIter detaches the catchUpIter that was previously attached.
+func (ubr *unbufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
-	catchUpSnap := ubr.mu.catchUpSnap
-	ubr.mu.catchUpSnap = nil
-	return catchUpSnap
+	catchUpIter := ubr.mu.catchUpIter
+	ubr.mu.catchUpIter = nil
+	return catchUpIter
 }
 
-// maybeRunCatchUpScan runs the catch-up scan if catchUpSnap is not nil. It
-// promises to close catchUpSnap once detached. It returns an error if catch-up
+// maybeRunCatchUpScan runs the catch-up scan if catchUpIter is not nil. It
+// promises to close catchUpIter once detached. It returns an error if catch-up
 // scan fails. Note that catch up scan bypasses BufferedStream and are sent to
 // the underlying stream directly.
 func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
-	catchUpSnap := ubr.detachCatchUpSnap()
-	if catchUpSnap == nil {
+	catchUpIter := ubr.detachCatchUpIter()
+	if catchUpIter == nil {
 		return nil
 	}
 	start := crtime.NowMono()
 	defer func() {
-		catchUpSnap.Close()
+		catchUpIter.Close()
 		ubr.metrics.RangeFeedCatchUpScanNanos.Inc(start.Elapsed().Nanoseconds())
 	}()
 
-	return catchUpSnap.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
+	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
 		ubr.withOmitRemote, ubr.bulkDelivery)
 
 }
