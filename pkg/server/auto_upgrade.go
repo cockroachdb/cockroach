@@ -26,7 +26,7 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 		defer cancel()
 
 		retryOpts := retry.Options{
-			InitialBackoff: time.Second,
+			InitialBackoff: 5 * time.Second,
 			MaxBackoff:     30 * time.Second,
 			Multiplier:     2,
 			Closer:         s.stopper.ShouldQuiesce(),
