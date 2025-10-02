@@ -46,39 +46,39 @@ SELECT * FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 
 # To ensure the result is the same with or without leveraging the inverted index.
 query T
-SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
+SELECT jsonb_path_query(b, '$.a.b') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a, jpq;
 ----
 "c"
 [1, 2, 3, 4]
 {"c": "d"}
-{"x": "y"}
 "e"
+{"x": "y"}
 []
 "c"
 
 query T
-SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
+SELECT jsonb_path_query(b, '$.a.b') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a, jpq;
 ----
 "c"
 [1, 2, 3, 4]
 {"c": "d"}
-{"x": "y"}
 "e"
+{"x": "y"}
 []
 "c"
 
 query T
-SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b.c') ORDER BY a;
+SELECT jsonb_path_query(b, '$.a.b.c') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b.c') ORDER BY a, jpq;
 ----
 "d"
 
 query T
-SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b.c') ORDER BY a;
+SELECT jsonb_path_query(b, '$.a.b.c') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b.c') ORDER BY a, jpq;
 ----
 "d"
 
 query IT
-SELECT a, jsonb_path_query(b, '$') FROM json_tab@primary WHERE jsonb_path_exists(b, '$') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$') ORDER BY a, jpq;
 ----
 1   {"a": "b"}
 2   [1, 2, 3, 4, "foo"]
@@ -92,38 +92,38 @@ SELECT a, jsonb_path_query(b, '$') FROM json_tab@primary WHERE jsonb_path_exists
 10  {"a": {"d": "e"}}
 
 statement error index "foo_inv" is inverted and cannot be used for this query
-SELECT a, jsonb_path_query(b, '$') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$') ORDER BY a, jpq;
 
 statement error index "foo_inv" is inverted and cannot be used for this query
-SELECT a, jsonb_path_query(b, '$[*]') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$[*]') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$[*]') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$[*]') ORDER BY a, jpq;
 
 statement error index "foo_inv" is inverted and cannot be used for this query
-SELECT a, jsonb_path_query(b, '$[*][*]') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$[*][*]') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$[*][*]') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$[*][*]') ORDER BY a, jpq;
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a[*].b') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a[*].b') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a, jpq;
 ----
 3  "c"
 4  [1, 2, 3, 4]
 6  {"c": "d"}
-7  {"x": "y"}
 7  "e"
+7  {"x": "y"}
 8  []
 9  "c"
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a[*].b') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a, jpq;
 ----
 3  "c"
 4  [1, 2, 3, 4]
 6  {"c": "d"}
-7  {"x": "y"}
 7  "e"
+7  {"x": "y"}
 8  []
 9  "c"
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a') ORDER BY a, jpq;
 ----
 1   "b"
 3   {"b": "c", "d": "e"}
@@ -138,7 +138,7 @@ SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@primary WHERE jsonb_path_exis
 # To show that adding jsonb_path_exists filter with the same path does
 # not change the result.
 query IT
-SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@primary ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a') as jpq FROM json_tab@primary ORDER BY a, jpq;
 ----
 1   "b"
 3   {"b": "c", "d": "e"}
@@ -151,7 +151,7 @@ SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@primary ORDER BY a;
 10  {"d": "e"}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a') ORDER BY a, jpq;
 ----
 1   "b"
 3   {"b": "c", "d": "e"}
@@ -164,29 +164,29 @@ SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@foo_inv WHERE jsonb_path_exis
 10  {"d": "e"}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a[*]') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a[*]') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a[*]') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a[*]') ORDER BY a, jpq;
 ----
 1   "b"
 3   {"b": "c", "d": "e"}
 4   {"b": [1, 2, 3, 4]}
 5   {}
 6   {"b": {"c": "d"}, "d": "e"}
-7   {"b": {"x": "y"}}
 7   {"b": "e"}
+7   {"b": {"x": "y"}}
 8   {"b": []}
 9   {"b": "c"}
 10  {"d": "e"}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a[*]') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*]') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a[*]') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*]') ORDER BY a, jpq;
 ----
 1   "b"
 3   {"b": "c", "d": "e"}
 4   {"b": [1, 2, 3, 4]}
 5   {}
 6   {"b": {"c": "d"}, "d": "e"}
-7   {"b": {"x": "y"}}
 7   {"b": "e"}
+7   {"b": {"x": "y"}}
 8   {"b": []}
 9   {"b": "c"}
 10  {"d": "e"}
@@ -201,81 +201,81 @@ INSERT INTO json_tab VALUES
 (15, '{"a": [{"b": [{"x": {"y": {"znull": null}}},  {"x": {"y": {"znull": [null, "y1"]}}}]}]}')
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') as jpq FROM json_tab ORDER BY a, jpq;
 ----
 11  {"x": {"y": {"z": "y"}}}
 11  {"x": {"y": {"z": ["y", "yuu"]}}}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') ORDER BY a, jpq;
 ----
 11  {"x": {"y": {"z": "y"}}}
 11  {"x": {"y": {"z": ["y", "yuu"]}}}
 
 # Path exists but the final value doesn't match any row.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "z")') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "z")') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "z")') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "z")') ORDER BY a, jpq;
 ----
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') as jpq FROM json_tab ORDER BY a, jpq;
 ----
 12  {"x": {"y": {"ztrue": true}}}
 12  {"x": {"y": {"ztrue": [true, "y1"]}}}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == true)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == true)') ORDER BY a, jpq;
 ----
 12  {"x": {"y": {"ztrue": true}}}
 12  {"x": {"y": {"ztrue": [true, "y1"]}}}
 
 # Path exists but the final value doesn't match any row.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == false)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == false)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == false)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == false)') ORDER BY a, jpq;
 ----
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == false)') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == false)') as jpq FROM json_tab ORDER BY a, jpq;
 ----
 13  {"x": {"y": {"zfalse": false}}}
 13  {"x": {"y": {"zfalse": [false, "y1"]}}}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == false)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zfalse == false)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == false)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zfalse == false)') ORDER BY a, jpq;
 ----
 13  {"x": {"y": {"zfalse": false}}}
 13  {"x": {"y": {"zfalse": [false, "y1"]}}}
 
 # Path exists but the final value doesn't match any row.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zfalse == true)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == true)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zfalse == true)') ORDER BY a, jpq;
 ----
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 10)') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 10)') as jpq FROM json_tab ORDER BY a, jpq;
 ----
 14  {"x": {"y": {"zint": 10}}}
 14  {"x": {"y": {"zint": [10, "y1"]}}}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 10)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zint == 10)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 10)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zint == 10)') ORDER BY a, jpq;
 ----
 14  {"x": {"y": {"zint": 10}}}
 14  {"x": {"y": {"zint": [10, "y1"]}}}
 
 # Path exists but the final value doesn't match any row.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 12)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zint == 12)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 12)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zint == 12)') ORDER BY a, jpq;
 ----
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.znull == null)') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.znull == null)') as jpq FROM json_tab ORDER BY a, jpq;
 ----
 15  {"x": {"y": {"znull": null}}}
 15  {"x": {"y": {"znull": [null, "y1"]}}}
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.znull == null)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.znull == null)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.znull == null)') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.znull == null)') ORDER BY a, jpq;
 ----
 15  {"x": {"y": {"znull": null}}}
 15  {"x": {"y": {"znull": [null, "y1"]}}}
@@ -305,7 +305,7 @@ SELECT a, jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') FROM json_tab ORDE
 
 # Result from this query is different from PG, tracked by #154588.
 query IT
-SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a, jpq;
 ----
 1   null
 2   null
@@ -344,7 +344,7 @@ SELECT a, jsonb_path_exists(b, '$.a.b like_regex "hi.*"') FROM json_tab ORDER BY
 
 # Result from this query is different from PG, tracked by #154589.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b like_regex "hi.*"') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b like_regex "hi.*"') ORDER BY a, jpq;
 ----
 1   null
 2   null
@@ -364,14 +364,14 @@ SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') FROM json_tab@primary W
 
 # For jsonb_path expression that we don't support for index acceleration, returns error.
 statement error index "foo_inv" is inverted and cannot be used for this query
-SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b like_regex "hi.*"') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b like_regex "hi.*"') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b like_regex "hi.*"') ORDER BY a, jpq;
 
 statement error index "foo_inv" is inverted and cannot be used for this query
-SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a, jpq;
 
 # Result from this query is different from PG, tracked by #154588.
 query IT
-SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') FROM json_tab@primary WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') as jpq FROM json_tab@primary WHERE jsonb_path_exists(b, '$.lllaaann.dddooo == 123123') ORDER BY a, jpq;
 ----
 1   null
 2   null
@@ -391,13 +391,13 @@ SELECT a, jsonb_path_query(b, '$.lllaaann.dddooo == 123123') FROM json_tab@prima
 
 # Without json_path_exists in the filter, hinted inverted index will not work.
 statement error index "foo_inv" is inverted and cannot be used for this query
-SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv ORDER BY a;
+SELECT jsonb_path_query(b, '$.a.b') as jpq FROM json_tab@foo_inv ORDER BY a, jpq;
 
 # Multiple jsonb_path_exists in the filter. For all select clause to be
 # accelerated by the inverted index, use OR to concatenate the jsonb_path_exists
 # filters with the same json path expressions.
 query ITT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') as jpq1, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') as jpq2 FROM json_tab ORDER BY a, jpq1, jpq2;
 ----
 11  {"x": {"y": {"z": "y"}}}           NULL
 11  {"x": {"y": {"z": ["y", "yuu"]}}}  NULL
@@ -405,13 +405,13 @@ SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '
 12  NULL                               {"x": {"y": {"ztrue": [true, "y1"]}}}
 
 query ITT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') as jpq1, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') as jpq2 FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') ORDER BY a, jpq1, jpq2;
 ----
 11  {"x": {"y": {"z": "y"}}}           NULL
 11  {"x": {"y": {"z": ["y", "yuu"]}}}  NULL
 
 query ITT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') OR jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == true)') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') as jpq1, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') as jpq2 FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') OR jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == true)') ORDER BY a, jpq1, jpq2;
 ----
 11  {"x": {"y": {"z": "y"}}}           NULL
 11  {"x": {"y": {"z": ["y", "yuu"]}}}  NULL
@@ -419,7 +419,7 @@ SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '
 12  NULL                               {"x": {"y": {"ztrue": [true, "y1"]}}}
 
 query ITT
-SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') as jpq1, jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') as jpq2 FROM json_tab ORDER BY a, jpq1, jpq2;
 ----
 11  {"x": {"y": {"z": "y"}}}           NULL
 11  {"x": {"y": {"z": ["y", "yuu"]}}}  NULL
@@ -428,31 +428,31 @@ SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '
 
 # Test with multiple jsonb_path_exists concatenated with AND as the filter.
 query IT
-SELECT a, jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a, jpq;
 ----
 3   "c"
 4   [1, 2, 3, 4]
 6   {"c": "d"}
-7   {"x": "y"}
 7   "e"
+7   {"x": "y"}
 8   []
 9   "c"
-11  [{"x": {"y": {"z": "y"}}}, {"x": {"y": {"z": "yuu"}}}, {"x": {"y": {"z": ["y", "yuu"]}}}, [{"x": "y"}], [[[{"x": "y"}]]], {"xx": [{"zz": "oo"}]}]
 11  "e"
+11  [{"x": {"y": {"z": "y"}}}, {"x": {"y": {"z": "yuu"}}}, {"x": {"y": {"z": ["y", "yuu"]}}}, [{"x": "y"}], [[[{"x": "y"}]]], {"xx": [{"zz": "oo"}]}]
 12  [{"x": {"y": {"ztrue": true}}}, {"x": {"y": {"ztrue": [true, "y1"]}}}]
 13  [{"x": {"y": {"zfalse": false}}}, {"x": {"y": {"zfalse": [false, "y1"]}}}]
 14  [{"x": {"y": {"zint": 10}}}, {"x": {"y": {"zint": [10, "y1"]}}}]
 15  [{"x": {"y": {"znull": null}}}, {"x": {"y": {"znull": [null, "y1"]}}}]
 
 query IT
-SELECT a, jsonb_path_query(b, '$.a.d') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.d') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.d') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.d') ORDER BY a, jpq;
 ----
 3   "e"
 6   "e"
 10  "e"
 
 query ITT
-SELECT a, jsonb_path_query(b, '$.a.b'), jsonb_path_query(b, '$.a.d') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') AND jsonb_path_exists(b, '$.a.d') ORDER BY a;
+SELECT a, jsonb_path_query(b, '$.a.b'), jsonb_path_query(b, '$.a.d') as jpq FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') AND jsonb_path_exists(b, '$.a.d') ORDER BY a, jpq;
 ----
 3  "c"         "e"
 6  {"c": "d"}  "e"
