@@ -1265,6 +1265,7 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 	h.buckets = make([]cat.HistogramBucket, numBuckets)
 	for i := 0; i < numBuckets; i++ {
 		h.buckets[i].UpperBound = upperBounds[i]
+		h.buckets[i].NumEq = 1
 	}
 	hd, err := h.toHistogramData(context.Background(), typ, st)
 	if err != nil {
@@ -1274,7 +1275,7 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 	// original ones.
 	var stat TableStatistic
 	stat.HistogramData = &hd
-	if err = DecodeHistogramBuckets(&stat); err != nil {
+	if err = DecodeHistogramBuckets(context.Background(), &stat); err != nil {
 		t.Fatal(err)
 	}
 	evalCtx := eval.MakeTestingEvalContext(st)

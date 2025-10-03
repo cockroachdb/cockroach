@@ -226,7 +226,7 @@ func statisticsMutator(
 			colType := tree.MustBeStaticallyKnownType(col.Type)
 			h := randHistogram(rng, colType)
 			statIdx := colNameToStatIdx[col.Name]
-			if err := allStats[statIdx].SetHistogram(&h); err != nil {
+			if err := allStats[statIdx].SetHistogram(context.Background(), &h); err != nil {
 				panic(err)
 			}
 		}
