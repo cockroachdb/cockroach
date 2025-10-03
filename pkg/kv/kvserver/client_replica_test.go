@@ -778,7 +778,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3"))
+	defer testutils.SetVModule(t, "replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3")()
 	const numNodes = 2
 	var manuals []*hlc.HybridManualClock
 	var clocks []*hlc.Clock
@@ -2955,7 +2955,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
+	defer testutils.SetVModule(t, "replica_range_lease=3,raft=4")()
 
 	ctx := context.Background()
 	stickyVFSRegistry := fs.NewStickyRegistry()
@@ -6072,7 +6072,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_lease=2"))
+	defer testutils.SetVModule(t, "cmd_lease=2")()
 
 	// Test Setup:
 	//
@@ -6106,9 +6106,9 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start with the lease on store 1.
-	t.Logf("transfering to s1")
+	t.Logf("transferring to s1")
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
-	t.Logf("done transfering to s1")
+	t.Logf("done transferring to s1")
 
 	// Txn 1:
 	// - Acquire lock and block until we are are sure txn2 has returned.
@@ -6165,7 +6165,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	// on tx1 to start).
 	<-txn2Started
 
-	t.Log("transfering lease from s1 -> s2")
+	t.Log("transferring lease from s1 -> s2")
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 	time.Sleep(250 * time.Millisecond)
 	t.Log("cancelling txn2")
@@ -6177,7 +6177,7 @@ func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_lease=2"))
+	defer testutils.SetVModule(t, "cmd_lease=2")()
 
 	// Test Plan:
 	//
@@ -6228,7 +6228,7 @@ func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_subsume=2"))
+	defer testutils.SetVModule(t, "cmd_subsume=2")()
 
 	// Test Plan:
 	//
