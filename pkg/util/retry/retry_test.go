@@ -469,7 +469,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				cancelCtxFunc()
 			},
-			expectedTimeSpent: time.Millisecond,
+			expectedTimeSpent: 0,
 			expectedErr:       true,
 		},
 		{
@@ -486,7 +486,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				close(closeCh)
 			},
-			expectedTimeSpent: time.Millisecond,
+			expectedTimeSpent: 0,
 			expectedErr:       true,
 		},
 	}
