@@ -57,6 +57,11 @@ const (
 	InstanceNotRochprod    = "not-roachprod"
 
 	expectedEnvVarIBMAPIKey = defaultAPIKeyEnvVarPrefix + "_" + core.PROPNAME_APIKEY
+
+	// This limits the number of concurrent requests made to the IBM API.
+	// This is not an absolute requests limit, but this is used to limit the number
+	// of goroutines making requests to avoid overwhelming the API.
+	maxConcurrentRequests = 30
 )
 
 var (
@@ -363,6 +368,7 @@ func (p *Provider) List(
 	var ret vm.List
 	var mux syncutil.Mutex
 	g := ctxgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentRequests)
 
 	for r := range p.vpcServices {
 		g.GoCtx(func(ctx context.Context) error {
@@ -531,6 +537,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	deleteFloatingIPs := false
 
 	g := ctxgroup.WithContext(context.TODO())
+	g.SetLimit(maxConcurrentRequests)
 	for _, vm := range vms {
 
 		g.Go(func() error {
@@ -919,6 +926,9 @@ func (p *Provider) GetVMSpecsWithContext(
 	vmSpecs := make(map[string]map[string]interface{})
 	var mu syncutil.Mutex
 	g := ctxgroup.WithContext(ctx)
+	// Not using the maxConcurrentRequests constant as specs fetching can be slower
+	// and we don't want to overload the API with too many requests at once.
+	// 5 seems like a reasonable limit here.
 	g.SetLimit(5)
 
 	for _, vmInstance := range vms {
