@@ -406,7 +406,6 @@ func TestRetryWithMaxDuration(t *testing.T) {
 		// an upper bound instead (e.g. for context or closer).
 		maxExpectedTimeSpent time.Duration
 		expectedErr          bool
-		skipUnderDuress      bool
 	}
 
 	testCases := []testcase{
@@ -474,11 +473,8 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				cancelCtxFunc()
 			},
-			maxExpectedTimeSpent: time.Millisecond * 30,
+			maxExpectedTimeSpent: time.Millisecond * 20,
 			expectedErr:          true,
-			// Under duress, closing a context will not necessarily stop the retry
-			// loop immediately, so we skip this test under duress.
-			skipUnderDuress: true,
 		},
 		{
 			name: "errors with opt.Closer that is closed",
@@ -494,20 +490,13 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				close(closeCh)
 			},
-			maxExpectedTimeSpent: time.Millisecond * 30,
+			maxExpectedTimeSpent: time.Millisecond * 20,
 			expectedErr:          true,
-			// Under duress, closing a channel will not necessarily stop the retry
-			// loop immediately, so we skip this test under duress.
-			skipUnderDuress: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.skipUnderDuress && skip.Duress() {
-				skip.UnderDuress(t, "skipping test under duress: %s", tc.name)
-			}
-
 			timeSource := timeutil.NewManualTime(time.Now())
 			tc.opts.Clock = timeSource
 			// Disable randomization for deterministic tests.
