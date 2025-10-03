@@ -416,7 +416,7 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
 	case *memo.FunctionExpr:
 		if t.Properties.Category == builtinconstants.CategoryJsonpath && t.Name == "jsonb_path_exists" {
-			if len(t.Args) > 1 {
+			if len(t.Args) == 2 {
 				// The first parameter has to be a column reference.
 				if isIndexColumn(j.tabID, j.index, t.Args[0], j.computedColumns) {
 					if ce, ok := t.Args[1].(*memo.ConstExpr); ok {

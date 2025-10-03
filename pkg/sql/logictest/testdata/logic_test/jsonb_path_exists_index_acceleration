@@ -545,3 +545,14 @@ SELECT a FROM json_tab@primary WHERE jsonb_path_exists('{"a": {"b": "c"}}', '$.a
 
 statement error index "foo_inv" is inverted and cannot be used for this query
 SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists('{"a": {"b": "c"}}', '$.a.b') ORDER BY a;
+
+# We don't index accelerate jsonb_path_exists clause with variables.
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '{"x": "c"}') ORDER BY a;
+----
+3
+9
+19
+
+statement error index "foo_inv" is inverted and cannot be used for this query
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '{"x": "c"}') ORDER BY a;
