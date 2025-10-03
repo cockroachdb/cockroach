@@ -29,7 +29,7 @@ import {
 } from "src/redux/alerts";
 import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
-import { statementDiagnostics } from "src/util/docs";
+import { transactionDiagnostics } from "src/util/docs";
 import { trustIcon } from "src/util/trust";
 
 import "./transactionDiagnosticsHistoryView.styl";
@@ -252,11 +252,11 @@ export const TransactionDiagnosticsHistoryView: React.FC<
             icon={EmptyTableIcon}
             message={
               "Transaction diagnostics can help when troubleshooting issues with specific transactions. " +
-              "The diagnostic bundle can be activated from individual transaction pages and will include EXPLAIN" +
+              "The diagnostic bundle can be activated from a builtin function and will include EXPLAIN" +
               " plans, table statistics, and traces for all statements in the transaction."
             }
             footer={
-              <Anchor href={statementDiagnostics} target="_blank">
+              <Anchor href={transactionDiagnostics} target="_blank">
                 Learn more about transaction diagnostics
               </Anchor>
             }
