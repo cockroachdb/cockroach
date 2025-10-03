@@ -599,10 +599,7 @@ func QualifyBuiltinFunctionDefinition(
 func GetBuiltinFuncDefinitionOrFail(
 	fName RoutineName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
-	def, err := GetBuiltinFuncDefinition(fName, searchPath)
-	if err != nil {
-		return nil, err
-	}
+	def := GetBuiltinFuncDefinition(fName, searchPath)
 	if def == nil {
 		forError := fName // prevent fName from escaping
 		return nil, errors.Mark(
@@ -641,21 +638,21 @@ func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, er
 // we change the iterating function in the future.
 func GetBuiltinFuncDefinition(
 	fName RoutineName, searchPath SearchPath,
-) (*ResolvedFunctionDefinition, error) {
+) *ResolvedFunctionDefinition {
 	if fName.ExplicitSchema {
-		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()], nil
+		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()]
 	}
 
 	// First try that if we can get function directly with the function name.
 	// There is a case where the part[0] of the name is a qualified string when
-	// the qualified name is double quoted as a single name like "schema.fn".
+	// the qualified name is double-quoted as a single name like "schema.fn".
 	if def, ok := ResolvedBuiltinFuncDefs[fName.Object()]; ok {
-		return def, nil
+		return def
 	}
 
 	// Then try if it's in pg_catalog.
 	if def, ok := ResolvedBuiltinFuncDefs[catconstants.PgCatalogName+"."+fName.Object()]; ok {
-		return def, nil
+		return def
 	}
 
 	// If not in pg_catalog, go through search path.
@@ -669,5 +666,5 @@ func GetBuiltinFuncDefinition(
 		}
 	}
 
-	return resolvedDef, nil
+	return resolvedDef
 }

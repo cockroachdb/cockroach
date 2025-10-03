@@ -457,10 +457,7 @@ func (sr *schemaResolver) ResolveFunction(
 	}
 
 	// Get builtin and udf functions if there is any match.
-	builtinDef, err := tree.GetBuiltinFuncDefinition(fn, path)
-	if err != nil {
-		return nil, err
-	}
+	builtinDef := tree.GetBuiltinFuncDefinition(fn, path)
 	routine, err := maybeLookupRoutine(ctx, sr, path, fn)
 	if err != nil {
 		return nil, err
