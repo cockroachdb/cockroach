@@ -4176,7 +4176,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				return advanceInfo{}, err
 			}
 		}
-		if ex.extraTxnState.descCollection.HasUncommittedNewOrDroppedDescriptors() {
+		if ex.extraTxnState.descCollection.CountUncommittedNewOrDroppedDescriptors() > 0 {
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
 				log.Dev.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
@@ -4577,6 +4577,16 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			// created/refreshed here.
 			ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 		}
+	}
+	if cnt := ex.extraTxnState.descCollection.CountUncommittedNewOrDroppedDescriptors(); cnt > 0 {
+		// Notify the refresher of a mutation on the system.descriptor table.
+		// We conservatively assume that any transaction which creates or
+		desc, err := ex.extraTxnState.descCollection.ByIDWithLeased(ex.planner.txn).Get().Table(ctx, keys.DescriptorTableID)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to fetch descriptor table to refresh stats: %v", err)
+			return
+		}
+		ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, cnt)
 	}
 }
 
