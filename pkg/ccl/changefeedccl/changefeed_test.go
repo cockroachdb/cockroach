@@ -11712,9 +11712,9 @@ func TestParallelIOMetrics(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
-
+		numWorkers := 1
 		db := sqlutils.MakeSQLRunner(s.DB)
-		db.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 1`)
+		db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING changefeed.sink_io_workers = %d`, numWorkers))
 		db.Exec(t, `
 		  CREATE TABLE foo (a INT PRIMARY KEY);
 		`)
@@ -11743,6 +11743,7 @@ func TestParallelIOMetrics(t *testing.T) {
 		// Set the frequency to 1s. The default frequency at the time of writing is
 		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH pubsub_sink_config=" +
 			"'{\"Flush\": {\"Frequency\": \"100ms\"}}'")
+		defer closeFeed(t, foo)
 		require.NoError(t, err)
 
 		testutils.SucceedsSoon(t, func() error {
@@ -11775,6 +11776,19 @@ func TestParallelIOMetrics(t *testing.T) {
 			}
 			return nil
 		})
+
+		assert.Equal(t, int64(numWorkers), metrics.ParallelIOWorkers.Value())
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.Pause())
+		db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING changefeed.sink_io_workers = %d`, numWorkers+1))
+		require.NoError(t, jobFeed.Resume())
+		testutils.SucceedsSoon(t, func() error {
+			if metrics.ParallelIOWorkers.Value() != int64(numWorkers+1) {
+				return errors.Newf("waiting for workers: %d", metrics.ParallelIOWorkers.Value())
+			}
+			return nil
+		})
+
 		close(done)
 		require.NoError(t, g.Wait())
 		require.NoError(t, foo.Close())

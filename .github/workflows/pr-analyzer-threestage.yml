@@ -23,7 +23,7 @@ jobs:
         with:
           project_id: 'vertex-model-runners'
           service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
-          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/github'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
 
       - name: Stage 1 - Initial Bug Screening
         id: stage1

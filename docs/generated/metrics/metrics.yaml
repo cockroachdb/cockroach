@@ -1780,7 +1780,7 @@ layers:
     - name: changefeed.parallel_io_pending_rows
       exported_name: changefeed_parallel_io_pending_rows
       description: Number of rows which are blocked from being sent due to conflicting in-flight keys
-      y_axis_label: Keys
+      y_axis_label: Messages
       type: GAUGE
       unit: COUNT
       aggregation: AVG
@@ -1799,6 +1799,14 @@ layers:
       y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.parallel_io_workers
+      exported_name: changefeed_parallel_io_workers
+      description: The number of workers in the ParallelIO
+      y_axis_label: Workers
+      type: GAUGE
+      unit: COUNT
       aggregation: AVG
       derivative: NONE
     - name: changefeed.progress_skew.span
