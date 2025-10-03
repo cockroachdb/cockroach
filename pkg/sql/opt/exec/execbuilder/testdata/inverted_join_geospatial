@@ -24,7 +24,6 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -47,7 +46,6 @@ EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -68,7 +66,6 @@ EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 5)
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -314,14 +311,8 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • root
 │
@@ -330,22 +321,17 @@ quality of service: regular
 │   └── • group (hash)
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 0
 │       │ execution time: 0µs
-│       │ estimated max memory allocated: 0 B
-│       │ estimated max sql temp disk usage: 0 B
+│       │ actual row count: 0
 │       │ group by: lk
 │       │
 │       └── • lookup join (left outer) (streamer)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
-│           │ actual row count: 0
 │           │ KV time: 0µs
 │           │ KV rows decoded: 0
-│           │ KV bytes read: 0 B
-│           │ KV gRPC calls: 0
 │           │ execution time: 0µs
-│           │ estimated max memory allocated: 0 B
+│           │ actual row count: 0
 │           │ table: rtable@rtable_pkey
 │           │ equality: (rk1, rk2) = (rk1, rk2)
 │           │ equality cols are key
@@ -354,21 +340,17 @@ quality of service: regular
 │           └── • inverted join (left outer)
 │               │ sql nodes: <hidden>
 │               │ regions: <hidden>
-│               │ actual row count: 0
 │               │ KV time: 0µs
 │               │ KV rows decoded: 0
-│               │ KV bytes read: 0 B
-│               │ KV gRPC calls: 0
 │               │ execution time: 0µs
-│               │ estimated max memory allocated: 0 B
-│               │ estimated max sql temp disk usage: 0 B
+│               │ actual row count: 0
 │               │ table: rtable@geom_index
 │               │
 │               └── • scan buffer
 │                     sql nodes: <hidden>
 │                     regions: <hidden>
-│                     actual row count: 0
 │                     execution time: 0µs
+│                     actual row count: 0
 │                     label: buffer 1 (q)
 │
 ├── • subquery
@@ -379,20 +361,17 @@ quality of service: regular
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 0
 │       │ execution time: 0µs
+│       │ actual row count: 0
 │       │ label: buffer 1 (q)
 │       │
 │       └── • scan
 │             sql nodes: <hidden>
 │             kv nodes: <hidden>
 │             regions: <hidden>
-│             actual row count: 0
 │             KV time: 0µs
 │             KV rows decoded: 0
-│             KV bytes read: 0 B
-│             KV gRPC calls: 0
-│             estimated max memory allocated: 0 B
+│             actual row count: 0
 │             missing stats
 │             table: ltable@ltable_pkey
 │             spans: [/3 - ]
@@ -405,14 +384,14 @@ quality of service: regular
     └── • group (scalar)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 1
         │ execution time: 0µs
+        │ actual row count: 1
         │
         └── • scan buffer
               sql nodes: <hidden>
               regions: <hidden>
-              actual row count: 0
               execution time: 0µs
+              actual row count: 0
               label: buffer 1 (q)
 
 # Anti joins are also converted to paired joins by the optimizer.
@@ -623,7 +602,6 @@ query T
 EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k
@@ -647,7 +625,6 @@ query T
 EXPLAIN SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k
@@ -674,7 +651,6 @@ WHERE ST_Contains(g1.geom, g2.geom)
 ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k
@@ -702,7 +678,6 @@ WHERE ST_Contains(g1.geom, g2.geom)
 ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k

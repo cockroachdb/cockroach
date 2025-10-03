@@ -174,7 +174,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	runQuery := func(query string, hideCPU bool) {
-		rows := db.QueryStr(t, "EXPLAIN ANALYZE "+query)
+		rows := db.QueryStr(t, "EXPLAIN ANALYZE (VERBOSE) "+query)
 		var err error
 		var foundCPU bool
 		var cpuTime time.Duration
@@ -185,7 +185,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 			if strings.Contains(row[0], "sql cpu time") {
 				foundCPU = true
 				cpuStr := strings.Split(row[0], " ")
-				require.Equal(t, len(cpuStr), 4)
+				require.Equal(t, 4, len(cpuStr))
 				cpuTime, err = time.ParseDuration(cpuStr[3])
 				require.NoError(t, err)
 				break
@@ -476,7 +476,7 @@ func TestMaximumMemoryUsage(t *testing.T) {
 		return err
 	})
 
-	rows := db.QueryStr(t, "EXPLAIN ANALYZE SELECT max(v) FROM t GROUP BY bucket;")
+	rows := db.QueryStr(t, "EXPLAIN ANALYZE (VERBOSE) SELECT max(v) FROM t GROUP BY bucket;")
 	var output strings.Builder
 	maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
 	var maxMemoryUsage float64

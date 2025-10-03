@@ -215,7 +215,6 @@ query T
 EXPLAIN ALTER TABLE kv RENAME TO kv2
 ----
 distribution: local
-vectorized: true
 ·
 • alter table
 

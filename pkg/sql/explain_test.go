@@ -712,7 +712,7 @@ func TestExplainAnalyzeBufferedWrites(t *testing.T) {
 			_, err = conn.ExecContext(ctx, stmt)
 			require.NoError(t, err)
 		}
-		result, err := conn.QueryContext(ctx, "EXPLAIN ANALYZE "+tc.query)
+		result, err := conn.QueryContext(ctx, "EXPLAIN ANALYZE (VERBOSE) "+tc.query)
 		require.NoError(t, err)
 		rows, err := sqlutils.RowsToStrMatrix(result)
 		require.NoError(t, err)

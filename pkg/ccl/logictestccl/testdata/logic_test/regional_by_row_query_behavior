@@ -343,7 +343,7 @@ query T retry
 SELECT * FROM [
   EXPLAIN INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
   VALUES ('ca-central-1', 7, 7, 8, 9) ON CONFLICT DO NOTHING
-] OFFSET 2
+] OFFSET 1
 ----
 ·
 • insert
@@ -413,7 +413,7 @@ SET locality_optimized_partitioned_index_scan = false
 
 # Query with locality optimized search disabled.
 query T
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 1
 ----
 ·
 • scan
@@ -421,7 +421,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
   table: regional_by_row_table@regional_by_row_table_pkey
   spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8klGrmzAUx9_3KcJ52kaKxu5hBAZ33Fom9LZ3VdjgViTVczunNVkS6S3F7z602-6tuLH2oXkQcnL8nf8vegDzowQOoT_zbyPylkyXizvy4H-9n30M5uT1JAij8PPsDTlt0LjJZSXKZL1PtNwlVqxLJF8--UufqIJ8ICwmi-k09CPiAYVKZjgXWzTAH4BBTEFpmaIxUrelQ9cQZE_AXQp5pWrblmMKqdQI_AA2tyUCh6ids0SRoXZcoJChFXnZYQcj3QxWE1XgHijcyrLeVoYTVVCiCo8SQcmaku9AIVSiPXFWcLMChzkuxA0FWdvncMaKDQJnL2yCCXC3oZcJsSsJrVZP790zpdilUt71pNJzpby_Sj271JXUGWrMTjziZkB7LkdSOeNe43AUrxdlfM79LtEoWRn8r0lub9KItdkx2-BR1Mhap3ivZdr1HreLDtQVMjT2eDo-boKqO2LtBI1i--eff0lil5JYn-RdSvL6pPE_Se9OSO6pXUzhsZS7JM-Ag_trjQYevxe0L4iNaT9b-E3uOmy0V-2lP4rSIIU7UeAELeptXuXG5ilwq2tsmlc_AwAA__9wGtJB
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8klGrmzAUx9_3KcJ52kaKxu5hBAZ33Fom9LZ3VdjgViTVczunNVkS6S3F7z602-6tuLH2oXkQcnL8nf8vegDzowQOoT_zbyPylkyXizvy4H-9n30M5uT1JAij8PPsDTlt0LjJZSXKZL1PtNwlVqxLJF8--UufqIJ8ICwmi-k09CPCgEIlM5yLLRrgD8AgpqC0TNEYqdvSoWsIsifgLoW8UrVtyzGFVGoEfgCb2xKBQ9TOWaLIUDsuUMjQirzssIORbgariSpwDxRuZVlvK8OJKihRhUeJoGRNyXegECrRnjgruFmBwxwX4oaCrO1zOGPFBoGzFzbBBLjb0MuE2JWEVqun9-6ZUuxSKe96Uum5Ut5fpZ5d6krqDDVmJx5xM6A9lyOpnHGvcTiK14syPud-l2iUrAz-1yS3N2nE2uyYbfAoamStU7zXMu16j9tFB-oKGRp7PB0fN0HVHbF2gkax_fPPvySxS0msT_IuJXl90vifpHcnJPfULqbwWMpdkmfAwf21RgOP3wvaF8TGtJ8t_CZ3HTbaq_bSH0VpkMKdKHCCFvU2r3Jj8xS41TU2zaufAQAA__9q59JA
 
 statement ok
 SET vectorize=on
@@ -465,7 +465,7 @@ statement ok
 SET vectorize=on
 
 query T retry
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 1
 ----
 ·
 • union all
@@ -481,7 +481,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
       table: regional_by_row_table@regional_by_row_table_pkey
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kmGL2jAYx9_vU4Tn1TYiNq2DERjcOCsTPL1ZYYOzSGyfc5m1yZIUT8TvPlq33bXU2-mLywshTx5_-f_ydA_2VwYconAUXs_IezKYTm7IXfj9dvR5OCZv-8NoFn0dvSP1BoMrqXKRLZa7hVHbhRPLDMm3L-E0JHpNPhEWk8lgEIUz4gOFXKU4Fhu0wO-AQUxBG5WgtcqUpX3VMEwfgHsUZK4LV5ZjCokyCHwPTroMgcOsvGeKIkXT9YBCik7IrMK2RrpqrS70GndA4VplxSa3nOg1JXrtUyIoWVLyEyhEWpQn3TlczaHLuh7EBwqqcI_hrBMrBM6e2Az7wL0DvUyIvZLQfP7w0fuPlN-QYpdK-a8nlZwr5Z-UenQpcmVSNJjWPOJDi_ZYdZTuBo3G9ihBI0rwgigWjRQZOTtRrz6CkdxIR9jJV-o1ovXOGf0UrVa5xRc9gte4qcNKCUxXeBS3qjAJ3hqVVL3H7aQCVYUUrTue9o6bYV4dsfIGg2Lzb8hPSexZUnCa5DVJ_qUk1iQFl9oFTVLvWdKHGsmr28UU7jO1XcgUOHh_Vqfl5--C8g9iZcsPIPqhthV2ttPl-O5FZpHCjVhjHx2ajcyldTIB7kyBh8Ob3wEAAP__tq0eJw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kmGL2jAYx9_vU4Tn1TYiNtbBCAxunJUJnt6ssMFZJLbPuczaZEmKJ9LvPlq33bXU2-mLywshTx5_-f_y9AD2VwocwmAcXM_JezKcTW_IXfD9dvx5NCFvB6NwHn4dvyP1BoNrqTKRLlf7pVG7pROrFMm3L8EsIHpDPhEWkelwGAZzwoBCphKciC1a4HfAIKKgjYrRWmXK0qFqGCUPwD0KMtO5K8sRhVgZBH4AJ12KwGFe3jNDkaDpekAhQSdkWmFbI121Vpd6g3ugcK3SfJtZTvSGEr3pUSIoWVHyEyiEWpQn3QVcLaDLuh5EBQWVu8dw1ok1AmdPbEYD4F5BLxNiryS0WDx89P4j1WtIsUuleq8nFZ8r1Tsp9eiSZ8okaDCpeURFi_ZEdZTu-o3G9ih-I4r_gigWjRQpOTtRvz6CsdxKR9jJV-o3ovXPGf0MrVaZxRc9gte4qcNKCUzWeBS3Kjcx3hoVV73H7bQCVYUErTue9o-bUVYdsfIGg2L7b8hPSexZkn-a5DVJvUtJrEnyL7Xzm6T-s6QPNZJXt4so3Kdqt5QJcPD-rE7Lz98F5R_E2pYfQPhD7SrsfK_L8d2L1CKFG7HBATo0W5lJ62QM3Jkci-LN7wAAAP__sJUeJg==
 
 query T
 EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
@@ -567,7 +567,7 @@ RESET vectorize
 # scanned in the first child of the limited union all.
 query T nodeidx=3 retry
 USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
-SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 1
 ----
 ·
 • union all
@@ -586,7 +586,7 @@ SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 
 
 # Query with more than one key.
 query T retry
-SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 1
 ----
 ·
 • union all
@@ -661,7 +661,7 @@ SET locality_optimized_partitioned_index_scan = false
 
 # Anti join with locality optimized search disabled.
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 1
 ----
 ·
 • lookup join (anti)
@@ -691,7 +691,7 @@ fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 
 # Semi join with locality optimized search disabled.
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 1
 ----
 ·
 • lookup join (semi)
@@ -722,7 +722,7 @@ output row: [10 10]
 
 # Inner join with locality optimized search disabled.
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 1
 ----
 ·
 • lookup join
@@ -753,7 +753,7 @@ output row: [10 10 10]
 
 # Left join with locality optimized search disabled.
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 1
 ----
 ·
 • lookup join (left outer)
@@ -787,7 +787,7 @@ SET locality_optimized_partitioned_index_scan = true
 
 # Anti join with locality optimized search enabled.
 query T retry
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 1
 ----
 ·
 • lookup join (anti)
@@ -813,7 +813,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * 
               table: child@child_pkey
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslGFr8kgQx9_fpxjmjXqkuBstlIWCpUbOYmNPA1eoImkytXuN2Ty7CbUUv_vDJvapCbXQ0ryI7uzkN___7LCvaH4lKHDuTbzLAP6G0Wx6DXfe7c3kYuxDezieB_N_Jx2oJ0SPMonhv3-8mQdtfxqAd2sToV1Py0JNab7Py1YyhnOIVvZPpwMX_hDaURXkrLOE6Wg09wJw0cFUxeSHGzIo7pDj0sFMq4iMUdqGXsuEcbxFwRyUaVbkNrx0MFKaULxiLvOEUGAQ3ic0ozAm3WXoYEx5KJMSW3oYlO9V9kQv6OClSopNagRYWc5eKjo4z0Ib7S5wsMAuZ12Gy52DqsjfK5s8XBMKfiB1PETBds731PIfULtYbM_YXjGEaQwcVP5I-qh6t6GeH1X_LtqQlmECRap0TJrimu7l7gObvjpRWdetG5zIjcyBH5XWa0hzv9LYKyXTfV979bLBS0YCJt4ogAs_GMPVdOyjg9XkDqqft4ZPlHoqMvhfyRRUKqA96MM5bFt91hJCDDhjnJ3tB3vgwjkMep3Dc8qqc9Lx_UrTWqr0qNl-w2zvm2b7P2vW3gjb1tmhXQe2rajm_0cacNpoQP8rDZiRyVRqqDGJH1dijUon3I4sxWuqxtyoQkd0o1VU5lbLaQkqAzGZvNp1q8U4Lbe4raAp3Py5BQ5J_Lsk3iS5n5J6NRI7JLlNUu9TUv84qdck9T8lnR4nMdv7h0Q925tMINs_Jx-83h60H4RrYwdg_qieS6wddIPiIUwMOXgdPtGQctIbmUqTywhFrgva7f76HQAA__8pKDXV
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslGFr8kgQx9_fpxjmjXqkuKsWykLBUiOXYmNPA1eoImkytXuN2Ty7CbUUv_vDJvapCbXQ0ryI7uzkN___7LCvaH4lKHDuTtzLAP6G8Wx6DXfu7c3kwvOhPfLmwfzfSQfqCdGjTGL47x935kLbnwbg3tpEaNfTslBTmu_zspWM4Ryilf3T6cCFP4J2VAU56yxhOh7P3QA4OpiqmPxwQwbFHXJcOphpFZExStvQa5ngxVsUzEGZZkVuw0sHI6UJxSvmMk8IBQbhfUIzCmPSXYYOxpSHMimxpYdh-V5lT_SCDl6qpNikRoCV5eylooPzLLTR7gKHC-xy1mW43Dmoivy9ssnDNaHgB1K9EQq2c76nlv-A2sVie8b2iiFMY-Cg8kfSR9X3Gur5UfXvog1pGSZQpErHpCmu6V7uPrDpqxOVdXt1gxO5kTnwo9L6DWm9rzT2Ssl039d-vWzwkpGAiTsO4MIPPLiaej46WE3usPp5a_hEqacig_-VTEGlAtrDAZzDtjVgLSHEkDPG2dl-sIc9OIdhv3N4Tll1Tjq-X2laS5UeNTtomO1_0-zgZ83aG2HbOju068C2FdX8_0gDThsNGHylATMymUoNNSbx40qsUemE25GleE3VmBtV6IhutIrK3Go5LUFlICaTV7u9auGl5Ra3FTSFmz-3wCGJf5fEm6Tep6R-jcQOSb0mqf8paXCc1G-SBp-STo-TmO39Q6Ke7U0mkO2fkw9ebw_aD8K1sQMwf1TPJdYOukHxECaGHLwOn2hEOemNTKXJZYQi1wXtdn_9DgAA__8ivDXU
 
 statement ok
 SET vectorize=on
@@ -868,7 +868,7 @@ fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 
 # Semi join with locality optimized search enabled.
 query T retry
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 1
 ----
 ·
 • lookup join (semi)
@@ -890,7 +890,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1FrIjEQx9_vUwzzoh4pJqsPJVCw1JWzWO2pcIUqst2d2lzXzV4SqaX43Y_s2lY9LbRcHrKbyeQ_v8xMXtD-SVHiKOyFF2P4Dp3h4Apuw5vr3nm3D9V2dzQe_ezVYNchflBpAr9-hMMQwhvvA9VdjzwylLmNSz5TCZxBPPM_NTjvt6EalzbBa1MYdDqjcAwBMsx0Qv1oQRblLQqcMsyNjslabbzppXDoJiuUnKHK8qXz5inDWBtC-YJOuZRQ4ji6S2lIUUKmzpFhQi5SaSFb0LeKeZY_0jMyvNDpcpFZCR6LbUiR4SiPvLU-wdYE64LXOU7XDPXSvUe2LpoTSrGF2m2j5Gv2NVrxH2gnk9Up3xBDlCUgQLsHMkfpgz16cZT-HdqSUVEKy0ybhAwlO9zT9YFr9vWJzuvB7gV7aqEciKNojT204DOJvdQq2-S1sRt2_JyThF7YGcMovOrC5aDbR4Zl47bKz2vCe1o_LnP4rVUGOpNQbTXhDFaVJq9IKVuCc8FPN43dCuAMWo0aMhzSQjuC9MBp_7hWldPt8wxWlXhH8F_Ft8rnZeVNcjczNFc6O5q-5l76Gp9J35BsrjNLe6U9HInvRToRvgcomVPZN1YvTUzXRseFb7kcFEKFISHryt2gXHSzYkv4CIaixduz2lYSX1US-0rBh0qNHSW-rRTsKzU-VGoeV-I-Y_epfvIPWiLfjJMD0-tAfyCaW1-20YN-KmR9c1uU91FqieFV9EhtcmQWKlPWqRilM0tar7_9DQAA__-kMOJR
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1FrIjEQx9_vUwzzoh4pJupDCRQsdeUsVnsqXKGKbHenNtd1s5dEail-9yO7ttU9LbRcHrKbyeQ_v8xMXtD-SVDiOOgHFxP4Dt3R8Apug5vr_nlvANVObzwZ_-zXYN8helBJDL9-BKMAghvvA9V9jyw0lLqtSzZXMZxBNPc_NTgfdKAaFTbBazMYdrvjYAICGaY6pkG4JIvyFgXOGGZGR2StNt70kjv04jVKzlCl2cp584xhpA2hfEGnXEIocRLeJTSiMCZT58gwJheqJJfN6dv5PM8e6RkZXuhktUytBI_FtqTIcJyF3lqfYnuKdcHrHGcbhnrl3iNbFy4IpdhB7XVQ8g37Gq34D7TT6fqUb4khTGMQoN0DmaP0jRK9OEr_Dm3JqDCBVapNTIbiPe7Z5sA1B_pEZ_XG_gX7aqkciKNozRJa4zOJvdQq3ea1uR928pyRhH7QncA4uOrB5bA3QIZF47aLz2vC-1o_rjL4rVUKOpVQbbfgDNaVFq9IKduCc8FPt43dbsAZtJs1ZDiipXYEyYHT_nGtK6e75xmsK9Ge4L-Kb5XPisqb-G5uaKF0ejR9rVL6mp9J34hsplNLpdIejsRLkU6E7wGKF1T0jdUrE9G10VHuWyyHuVBuiMm6YrdRLHppviV8BEPh8u1Z7SqJryqJslLjQ6XmnhLfVWqUlZofKrWOK3GfsftEP_kHLZFvx8mB6XWgPxAurC_b-EE_5bK-uS3K-zCxxPAqfKQOOTJLlSrrVITSmRVtNt_-BgAA__-eveJQ
 
 statement ok
 SET vectorize=on
@@ -946,7 +946,7 @@ output row: [20 20]
 
 # Inner join with locality optimized search enabled.
 query T retry
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 1
 ----
 ·
 • lookup join
@@ -968,7 +968,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk0FP4zwQhu_frxjNpfDJqHbaA7KEFESLNqikbFtpV6JVFZKheEnjrO2IItT_vkpSoM22SKD1wYnH9juP37Ff0P5OUeK4P-hfTOB_uBwNr-G2__NmcB6EcNQLxpPx98Ex7C6IH1SaQBCG_RFcDYMQ8shQ5mAYQj5XCZxBPK9-fnzrj_oQ1zHBZzC8vBz3J-Ahw0wnFEZLsihvUeCMYW50TNZqU4ZeqgVBskLJGaosL1wZnjGMtSGUL-iUSwklTqK7lEYUJWTaHBkm5CKVVrIVqF_18_yRnpHhhU6LZWZlRcU2oMhwnEdltD1Ff4ptwdscZ2uGunDvma2LFoRSbKEGPZR8zb5GK_4B7XS6OuUbYoiyBARo90DmIL3XoBcH6d-hLRkVpVBk2iRkKNnhnq33HDPUJzpve7sHHKilciAOonUaaN5njL3SKtv42tlNW99Ov_68OjvQ-rHI4ZdWGehMwpHfhTNYtbq8JaX0BeeCnx7DediDI9-DM_A7x8hwREvtCNI9u8sHs2qdbu9nsGrFO4J_K76VOK9LbJK7uaGF0hkyHBZOgi-Y7zG_c9C3bsO3zmd8G5HNdWapUdP9mXgj04koi0_JguoLY3VhYroxOq7W1sNhJVQFErKunvXqQZBVU6LMYChavr2nbSXxVSXRVPI-VOrsKPFtJa-p1PlQqXtYiZeO3af6qXzJEvmmnezpXhuWG6KFLcs2ftBPlezkOS9Nv49SSwyvo0fqkSOzVJmyTsUonSlovf7vTwAAAP__9TTaxw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk0FP4zwQhu_frxjNpfDJqHbaA7KEFESLNqikbFtpV6JVFZKheEnjrO2IItT_vkpSoM22SKD1wYnH9juP37Ff0P5OUeK4P-hfTOB_uBwNr-G2__NmcB6EcNQLxpPx98Ex7C6IH1SaQBCG_RFcDYMQ8shQ5mAYQj5XCZxBPK9-fnzrj_oQ1zHBZzC8vBz3JyCQYaYTCqMlWZS3KHDGMDc6Jmu1KUMv1YIgWaHkDFWWF64MzxjG2hDKF3TKpYQSJ9FdSiOKEjJtjgwTcpFKK9kK1K_6ef5Iz8jwQqfFMrOyomIbUGQ4zqMy2p6iP8W24G2OszVDXbj3zNZFC0IptlCDHkq-Zl-jFf-AdjpdnfINMURZAgK0eyBzkN5r0IuD9O_QloyKUigybRIylOxwz9Z7jhnqE523vd0DDtRSORAH0ToNNO8zxl5plW187eymrW-nX39enR1o_Vjk8EurDHQm4cjvwhmsWl3eklL6gnPBT4_hPOzBke_BGfidY2Q4oqV2BOme3eWDWbVOt_czWLXiHcG_Fd9KnNclNsnd3NBC6QwZDgsnwRfM95jfOehbt-Fb5zO-jcjmOrPUqOn-TLyR6USUxadkQfWFsbowMd0YHVdr6-GwEqoCCVlXz3r1IMiqKVFmMBQt397TtpL4qpJoKnkfKnV2lPi2ktdU6nyo1D2sxEvH7lP9VL5kiXzTTvZ0rw3LDdHClmUbP-inSnbynJem30epJYbX0SP1yJFZqkxZp2KUzhS0Xv_3JwAA___vyNrG
 
 statement ok
 SET vectorize=on
@@ -1024,7 +1024,7 @@ output row: [20 20 20]
 
 # Left join with locality optimized search enabled.
 query T retry
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 1
 ----
 ·
 • lookup join (left outer)
@@ -1046,7 +1046,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fv2jAQx9_3KU73Qju5wg48VJYqpSpBo6LQAdMmFYTS5Eq9hjizHZWq4rtPSWgLGVRqtTwYfLb_9_P_zs9o_yQocRz0g4sJfIXuaHgFN8Gv6_55bwBHnd54Mv7eP4bdDdG9SmLoB90JXA57A8hCQ6mD4QCyuYrhDKJ5-efnt2AUQFTFBJ_BsNsdBxPwkGGqYxqES7Iob1DgjGFmdETWalOEnssNvXiFkjNUaZa7IjxjGGlDKJ_RKZcQSpyEtwmNKIzJNDkyjMmFKillS06_HOfZAz0hwwud5MvUypKKbUCR4TgLi2hziv4Um4I3Oc7WDHXu3jJbFy4IpdhC7XVQ8jX7HK34D7TT6eqUb4ghTGMQoN09mYP0Xo1eHKR_g7ZkVJhAnmoTk6F4h3u23nPNgT7RWdPbvWBfLZUDcRCtVUPzPmLspVbpxtfWbtrJU0ay6tbhj0kwKnsWGVZd61c_L473tX7IM_itVQo6lXDkt-EMVo02b0gpfcG54KfHcD7owJHvwRn4rWNkOKKldgTJntPFO1o1TrfPM1g1oh3BfxVfS59VpTfx7dzQQukUGQ5zJ8EXzPeY3zroZ7vmZ-sjfo7IZjq1VKv1_ky8lulEFE1B8YKqRrI6NxFdGx2Ve6vpsBQqAzFZV6161aSXlkuiyGAoXL6-s20l8VklUVfy3lVq7SjxbSWvrtR6V6l9WIkXjt0l-rF44RL55jvZM7x8WBwIF7Yo2_heP5ayRbdblHdhYonhVfhAHXJklipV1qkIpTM5rddf_gYAAP__PpHhDA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fv2jAQx9_3KU73Qju5wg48VJYqpSpBo6LQAdMmFYTS5Eq9hjizHZWq4rtPSWgLGVRqtTwYfLb_9_P_zs9o_yQocRz0g4sJfIXuaHgFN8Gv6_55bwBHnd54Mv7eP4bdDdG9SmLoB90JXA57A8hCQ6mD4QCyuYrhDKJ5-efnt2AUQFTFBJ_BsNsdBxMQyDDVMQ3CJVmUNyhwxjAzOiJrtSlCz-WGXrxCyRmqNMtdEZ4xjLQhlM_olEsIJU7C24RGFMZkmhwZxuRClZSyJadfjvPsgZ6Q4YVO8mVqZUnFNqDIcJyFRbQ5RX-KTcGbHGdrhjp3b5mtCxeEUmyh9joo-Zp9jlb8B9rpdHXKN8QQpjEI0O6ezEF6r0YvDtK_QVsyKkwgT7WJyVC8wz1b77nmQJ_orOntXrCvlsqBOIjWqqF5HzH2Uqt042trN-3kKSNZdevwxyQYlT2LDKuu9aufF8f7Wj_kGfzWKgWdSjjy23AGq0abN6SUvuBc8NNjOB904Mj34Az81jEyHNFSO4Jkz-niHa0ap9vnGawa0Y7gv4qvpc-q0pv4dm5ooXSKDIe5k-AL5nvMbx30s13zs_URP0dkM51aqtV6fyZey3QiiqageEFVI1mdm4iujY7KvdV0WAqVgZisq1a9atJLyyVRZDAULl_f2baS-KySqCt57yq1dpT4tpJXV2q9q9Q-rMQLx-4S_Vi8cIl8853sGV4-LA6EC1uUbXyvH0vZotstyrswscTwKnygDjkyS5Uq61SE0pmc1usvfwMAAP__OQ3hCw==
 
 statement ok
 SET vectorize=on
@@ -1101,7 +1101,7 @@ fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20 20]
 
 query T retry
-SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -1151,7 +1151,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 # Non-constant insert values cannot be inlined in uniqueness check, and all
 # regions must be searched for duplicates.
 query T retry
-SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 1
 ----
 ·
 • root
@@ -1199,7 +1199,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1), (2, 2)] OFFSET 2
                       label: buffer 1
 
 query T retry
-SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -1249,7 +1249,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
                       label: buffer 1
 
 query T
-SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
+SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 1
 ----
 ·
 • root
@@ -1530,7 +1530,7 @@ ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 # The unique partial index disallows fast path insert.
 query T retry
-SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -1649,7 +1649,7 @@ INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-
 # to stats issues w/ empty stats, partial indexes and multicol stats its not.
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T retry
-SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 1
 ----
 ·
 • root
@@ -1725,7 +1725,7 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, 
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
-VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 1
 ----
 ·
 • root
@@ -1896,7 +1896,7 @@ pk  a     b     crdb_region_col
 # We do not need uniqueness checks on pk since uniqueness can be inferred
 # through the functional dependency between pk and the computed region column.
 query T retry
-SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 1
 ----
 ·
 • insert fast path
@@ -1916,7 +1916,7 @@ INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (2, 1, 1)
 
 # Verify that we plan single-region scans for REGIONAL BY ROW tables with a computed region.
 query T
-SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10] OFFSET 1
 ----
 ·
 • scan
@@ -1939,7 +1939,7 @@ CREATE TABLE regional_by_row_table_virt (
 
 # Uniqueness checks for virtual columns should be efficient.
 query T retry
-SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -2015,7 +2015,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
                                   spans: [/'ap-southeast-2'/11 - /'ap-southeast-2'/11] [/'ca-central-1'/11 - /'ca-central-1'/11] [/'us-east-1'/11 - /'us-east-1'/11]
 
 query T retry
-SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -2104,7 +2104,7 @@ CREATE TABLE regional_by_row_table_virt_partial (
 
 # Uniqueness checks for virtual columns should be efficient.
 query T retry
-SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -2197,7 +2197,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
                                   spans: FULL SCAN (SOFT LIMIT)
 
 query T retry
-SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 1
 ----
 ·
 • root
@@ -2340,7 +2340,7 @@ ALTER TABLE t65064 INJECT STATISTICS '[
 ]';
 
 query T retry
-SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 1
 ----
 ·
 • union all
@@ -2393,7 +2393,6 @@ LIMIT
     1]
 ----
 distribution: local
-vectorized: true
 ·
 • union all
 │ limit: 1
@@ -2882,7 +2881,7 @@ INSERT INTO regional_by_row_table_as1 (pk) VALUES (1), (2), (3), (10), (20)
 
 # An extra crdb_region check constraint should still allow locality optimized scan.
 query T retry
-SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as1 LIMIT 3] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as1 LIMIT 3] OFFSET 1
 ----
 ·
 • render
@@ -2926,7 +2925,6 @@ EXPLAIN INSERT INTO users (name, email)
 VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: users(id, name, email, crdb_region)
@@ -2984,7 +2982,6 @@ EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS us
   FROM users JOIN user_settings ON users.id = user_settings.user_id AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3020,7 +3017,6 @@ EXPLAIN SELECT users_dt.crdb_region AS user_region, user_settings.crdb_region AS
   users_dt.crdb_region = user_settings.crdb_region
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3063,7 +3059,6 @@ EXPLAIN SELECT users_dt.crdb_region AS user_region, user_settings.crdb_region AS
   FROM (SELECT crdb_region, * FROM users@id2_idx LIMIT 1) users_dt JOIN user_settings ON users_dt.id2+1 > user_settings.id2 AND users_dt.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882' and users_dt.crdb_region = user_settings.crdb_region
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3100,7 +3095,6 @@ EXPLAIN SELECT users.crdb_region AS user_region, user_settings.crdb_region AS us
   FROM users JOIN user_settings ON users.crdb_region = user_settings.crdb_region AND users.id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882';
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
@@ -3124,7 +3118,6 @@ query T
 EXPLAIN INSERT INTO user_settings (user_id, value) VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: user_settings(id, id2, user_id, value, crdb_region)
@@ -3136,7 +3129,6 @@ query T
 EXPLAIN INSERT INTO user_settings_cascades (user_id, value) VALUES ('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: user_settings_cascades(id, user_id, value, crdb_region)
@@ -3148,7 +3140,6 @@ query T retry
 EXPLAIN DELETE FROM users WHERE id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3495,7 +3486,7 @@ output row: [20 20]
 
 # Left join with locality optimized search enabled.
 query T retry
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM t108206_c WHERE EXISTS (SELECT * FROM t108206_p WHERE p_id = c_p_id) AND c_id = 20] OFFSET 2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM t108206_c WHERE EXISTS (SELECT * FROM t108206_p WHERE p_id = c_p_id) AND c_id = 20] OFFSET 1
 ----
 ·
 • lookup join (semi)
@@ -3516,7 +3507,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM t108206_c WHERE EXISTS (SELECT * 
           table: t108206_c@t108206_c_pkey
           spans: [/'ca-central-1'/20 - /'ca-central-1'/20] [/'us-east-1'/20 - /'us-east-1'/20]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr4kAQx9_vUwzzoh5b3EQ5ZKFgqZGzWO2pcIUqkiZTu9eYze1uqKX43Y-NntWcFlouDyGZnf3Nf_47-4rmd4ICx0E_uJzAV-iOhtdwF9ze9C96A6h2euPJ-Ee_BocJ1uMtn3-bR_DzezAKILh1eVA9npVts7K5jOEcorn7qMHFoAPVaBPzeW0Gw253HEzAR4apimkQLsmguEMPZwwzrSIyRmkXei0SevEKBWco0yy3LjxjGClNKF7RSpsQCpyE9wmNKIxJ1zkyjMmGMimwuybau6959kQvyPBSJfkyNQKcPLZVjAzHWeii9Sm2p1j3eZ3jbM1Q5fZNgbHhglB4e5J7HRR8zT6n2vuPqqfTVYtvlUOYxuCBso-kT3bhl7rwTnbxJt6QlmECeap0TJriA_2z9ZF2B-pMZXX_sNG-XEoL3klpjZI0_yMGXymZbv1tHJadvGQkoB90JzAOrntwNewNkO1sz3a2Z4W9cxmvkGFfqac8g19KpqBSAdV2E85hVWnyihCi7XHu8dZ25Ns-nEO7UUOGI1oqS5Ac2e1u36rS2t_PYFWJDoD_EnczkG1mQMf3c00LqdKTRjZLRjY-YuSITKZSQ6VDPl6JlyqdeW4aKF7QZoKMynVEN1pFRe7md1iAikBMxm5W_c1PLy2WPFdBU7jcXbR9kvdZklcm-e-SGgckvk_yy6TGu6TmaRJ3jj0k6tldbYF8-5wdef190G0IF8Yd2_hRPRdYN-YGxUOYGGJ4HT5RhyzppUylsTJCYXVO6_WXPwEAAP__fkfliA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1FrIjEQx9_vUwzzoh4pJqscEihY6spZrPZUuEIV2e5Oba7rZi-J1FL87kdWz6qnhZbbh2V3MvnNf_6ZvKL9naLEYdgNL0fwFdqD_jXchbc33YtOD8qtznA0_NGtwH6CE7wR8G_TGH5-DwchhLc-D8rHs_JNVj5VCZxDPPUfFbjotaAcr2MBr0yg324PwxEIZJjphHrRnCzKOxQ4YZgbHZO12vjQa5HQSZYoOUOV5QvnwxOGsTaE8hWdcimhxFF0n9KAooRMlSPDhFyk0gK7baK5_ZrmT_SCDC91uphnVoKXxzaKkeEwj3y0OsbmGKsBr3KcrBjqhXtTYF00I5RiR3KnhZKv2OdUi_-oejxeNvhGOURZAgK0eyRzsovgoAtxsos38ZaMilJYZNokZCjZ0z9ZHWm3p890Xg32G-2quXIgTkqrHUgLPmLwlVbZxt_aftnRS04SumF7BMPwugNX_U4P2db2fGt7Xtg7VckSGXa1flrk8EurDHQmodyswzksS3VeklI2BeeCNzYj3wzgHJq1CjIc0Fw7gvTIbn_7lqXG7n4Gy1K8B_yXuJ2BfD0DJrmfGpopnZ00sn5gZO0jRg7I5jqzdHDIxyvxg0pnwk8DJTNaT5DVCxPTjdFxkbv-7RegIpCQdevVYP3TyYol4SsYiubbi7ZLEp8liUNS8C6ptkfiu6TgkFR7l1Q_TeLesYdUP_urLZFvnrMjr78P-g3RzPpjGz7q5wLrx9yifIhSSwyvoydqkSMzV5myTsUonVnQavXlTwAAAP__eLrlhw==
 
 statement ok
 SET vectorize=on
@@ -3727,7 +3718,6 @@ EXPLAIN INSERT INTO users2 (crdb_region, name, email)
 VALUES ('ap-southeast-2', 'Craig Roacher', 'craig@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: users2(id, name, email, crdb_region)
@@ -3741,7 +3731,6 @@ EXPLAIN INSERT INTO users2 (name, email)
 VALUES ('Bill Roacher', 'bill@cockroachlabs.com'), ('Jill Roacher', 'jill@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3779,7 +3768,6 @@ query T nosort
 EXECUTE e1 ('Bill Roacher', 'bill@cockroachlabs.com', 'Jo Roacher', 'jo@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3832,7 +3820,6 @@ EXPLAIN INSERT INTO users3 (crdb_region, name, email)
 VALUES ('ap-southeast-2', 'craig@cockroachlabs.com', 'craig@cockroachlabs.com')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3867,7 +3854,6 @@ EXPLAIN INSERT INTO multi_region_test_db.regional_by_row_table (pk, pk2, a, b) V
 (1, 1, 1, -5)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
@@ -3891,7 +3877,6 @@ query T nosort
 EXECUTE s1 (1, 1, 1, -5)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: regional_by_row_table(pk, pk2, a, b, j, crdb_region)
@@ -3914,7 +3899,6 @@ query T nosort
 EXECUTE s3 (7, 7, 7, 7, 6, 7, 8, -5)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -3991,7 +3975,6 @@ query T
 EXPLAIN INSERT INTO user_settings2 (id2, user_id, value) VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: user_settings2(id, id2, user_id, value, crdb_region)
@@ -4009,7 +3992,6 @@ VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo'),
        (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo');
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -4075,7 +4057,6 @@ VALUES
   ('east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: hash_sharded_rbr_computed(region_id, my_uuid, my_uuid2, another_id, row_ts, crdb_region_col, crdb_internal_region_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
@@ -4112,7 +4093,6 @@ VALUES
   ('east1234', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: hash_sharded_rbr_computed_check(region_based_id, my_uuid, my_uuid2, another_id, row_ts, geo_zone, crdb_region_col, crdb_internal_region_based_id_shard_16, crdb_internal_another_id_row_ts_shard_16)
@@ -4132,7 +4112,6 @@ VALUES
   ('east1235', 'east1234', gen_random_uuid(), gen_random_uuid(), 1, TIMESTAMP '2016-01-25 10:10:10.555555')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -4185,7 +4164,6 @@ query T
 EXPLAIN INSERT INTO user_settings3 (id2, user_id, value) VALUES (2, '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 'foo')
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -4234,7 +4212,7 @@ CREATE UNIQUE INDEX ON regional_by_row_table (b, a) USING HASH
 
 # After adding a hash sharded unique index, fast path is still legal.
 query T
-SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 1
 ----
 ·
 • insert fast path
