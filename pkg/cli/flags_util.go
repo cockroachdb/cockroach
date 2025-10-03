@@ -521,13 +521,8 @@ type storeEncryptionSpec struct {
 func (es storeEncryptionSpec) String() string {
 	// All fields are set.
 	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s",
-		es.Path, es.Options.KeyFiles.CurrentKey, es.Options.KeyFiles.OldKey, es.RotationPeriod(),
+		es.Path, es.Options.KeyFiles.CurrentKey, es.Options.KeyFiles.OldKey, es.Options.RotationPeriod,
 	)
-}
-
-// RotationPeriod returns the rotation period as a duration.
-func (es storeEncryptionSpec) RotationPeriod() time.Duration {
-	return time.Duration(es.Options.DataKeyRotationPeriod) * time.Second
 }
 
 // PathMatches returns true if this storeEncryptionSpec matches the given store path.
@@ -546,9 +541,9 @@ func parseStoreEncryptionSpec(value string) (storeEncryptionSpec, error) {
 	es := storeEncryptionSpec{
 		Path: "",
 		Options: storageconfig.EncryptionOptions{
-			KeySource:             storageconfig.EncryptionKeyFromFiles,
-			KeyFiles:              &storageconfig.EncryptionKeyFiles{},
-			DataKeyRotationPeriod: int64(storageconfig.DefaultRotationPeriod / time.Second),
+			KeySource:      storageconfig.EncryptionKeyFromFiles,
+			KeyFiles:       &storageconfig.EncryptionKeyFiles{},
+			RotationPeriod: storageconfig.DefaultRotationPeriod,
 		},
 	}
 
@@ -611,7 +606,7 @@ func parseStoreEncryptionSpec(value string) (storeEncryptionSpec, error) {
 			if err != nil {
 				return storeEncryptionSpec{}, errors.Wrapf(err, "could not parse rotation-duration value: %s", value)
 			}
-			es.Options.DataKeyRotationPeriod = int64(dur / time.Second)
+			es.Options.RotationPeriod = dur
 		default:
 			return storeEncryptionSpec{}, fmt.Errorf("%s is not a valid enterprise-encryption field", field)
 		}

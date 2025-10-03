@@ -13,8 +13,8 @@ type EncryptionOptions struct {
 	KeySource EncryptionKeySource
 	// Set if key_source == KeyFiles.
 	KeyFiles *EncryptionKeyFiles
-	// Default data key rotation in seconds.
-	DataKeyRotationPeriod int64
+	// Data key rotation period.
+	RotationPeriod time.Duration
 }
 
 // EncryptionKeyFiles is used when plain key files are passed.
