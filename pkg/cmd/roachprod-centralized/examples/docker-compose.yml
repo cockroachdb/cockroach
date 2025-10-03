@@ -1,0 +1,66 @@
+# Docker Compose configuration for roachprod-centralized development
+# Provides a simple local environment with CockroachDB for testing
+
+version: '3.8'
+
+services:
+  # roachprod-centralized API service
+  roachprod-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"  # API port
+      - "8081:8081"  # Metrics port
+    environment:
+      - ROACHPROD_LOG_LEVEL=debug
+      - ROACHPROD_API_AUTHENTICATION_DISABLED=true
+      - ROACHPROD_DATABASE_TYPE=cockroachdb
+      - ROACHPROD_DATABASE_URL=postgresql://root@cockroachdb:26257/roachprod?sslmode=disable
+      - ROACHPROD_DATABASE_MAX_CONNS=10
+      - ROACHPROD_TASKS_WORKERS=2
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    command: ["api"]
+    # Uncomment to mount custom configuration:
+    # volumes:
+    #   - ./development-config.yaml:/etc/roachprod/config.yaml:ro
+    #   - ./secrets:/secrets:ro  # For cloud provider credentials
+
+  # CockroachDB database for testing with real persistence
+  cockroachdb:
+    image: cockroachdb/cockroach:latest
+    command: start-single-node --insecure --http-addr=0.0.0.0:8080
+    ports:
+      - "26257:26257"  # SQL port
+      - "8090:8080"    # CockroachDB Admin UI
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Uncomment to run separate worker instances
+  # This demonstrates horizontally scaled deployment with dedicated workers
+  # roachprod-worker:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile
+  #   ports:
+  #     - "9081:8081"  # Worker metrics port
+  #   environment:
+  #     - ROACHPROD_LOG_LEVEL=debug
+  #     - ROACHPROD_DATABASE_TYPE=cockroachdb
+  #     - ROACHPROD_DATABASE_URL=postgresql://root@cockroachdb:26257/roachprod?sslmode=disable
+  #     - ROACHPROD_TASKS_WORKERS=3
+  #   depends_on:
+  #     cockroachdb:
+  #       condition: service_healthy
+  #   command: ["workers"]
+
+volumes:
+  cockroach-data:
