@@ -1987,3 +1987,39 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
+
+# Testcase for issue 154461: drop an enum value when the histogram contains
+# range counts.
+
+statement ok
+CREATE TYPE e154461 AS ENUM ('e', 'f', 'g')
+
+statement ok
+CREATE TABLE t154461 (a e154461, INDEX (a))
+WITH (sql_stats_automatic_collection_enabled = false, sql_stats_histogram_buckets_count = 2)
+
+statement ok
+INSERT INTO t154461 VALUES ('e'), ('e'), ('f'), ('g'), ('g')
+
+statement ok
+ANALYZE t154461
+
+query T
+SELECT * FROM t154461 WHERE a != 'g' ORDER BY a
+----
+e
+e
+f
+
+# Now drop the enum value that is the first bucket in the 2-bucket histogram.
+
+statement ok
+DELETE FROM t154461 WHERE a = 'e'
+
+statement ok
+ALTER TYPE e154461 DROP VALUE 'e'
+
+query T
+SELECT * FROM t154461 WHERE a != 'g' ORDER BY a
+----
+f

@@ -140,6 +140,30 @@ func DecodeUpperBound(
 	return datum, err
 }
 
+func enumValueExistsBetweenEncodedUpperBounds(
+	version HistogramVersion, enumType *types.T, lowerBound, upperBound []byte,
+) error {
+	// This relies on enum encoding being simply the encoding of the physical
+	// representation bytes.
+	var a tree.DatumAlloc
+	var lowerPhys, upperPhys tree.Datum
+	var lowerErr, upperErr error
+	if version >= upperBoundsValueEncodedVersion {
+		lowerPhys, _, lowerErr = valueside.Decode(&a, types.Bytes, lowerBound)
+		upperPhys, _, upperErr = valueside.Decode(&a, types.Bytes, upperBound)
+	} else {
+		lowerPhys, _, lowerErr = keyside.Decode(&a, types.Bytes, lowerBound, encoding.Ascending)
+		upperPhys, _, upperErr = keyside.Decode(&a, types.Bytes, upperBound, encoding.Ascending)
+	}
+	if lowerErr != nil || upperErr != nil {
+		return errors.CombineErrors(lowerErr, upperErr)
+	}
+	_, err := enumType.EnumGetFirstIdxOfPhysicalBetween(
+		[]byte(*lowerPhys.(*tree.DBytes)), []byte(*upperPhys.(*tree.DBytes)),
+	)
+	return err
+}
+
 // GetDefaultHistogramBuckets gets the default number of histogram buckets to
 // create for the given table.
 func GetDefaultHistogramBuckets(sv *settings.Values, desc catalog.TableDescriptor) uint32 {

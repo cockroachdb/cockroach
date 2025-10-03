@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -714,7 +715,7 @@ func (sc *TableStatisticsCache) parseStats(
 				}
 			}
 		}
-		if err = DecodeHistogramBuckets(res); err != nil {
+		if err = DecodeHistogramBuckets(ctx, res); err != nil {
 			return nil, nil, err
 		}
 		// Update the HistogramData proto to nil out Buckets field to allow for
@@ -726,7 +727,7 @@ func (sc *TableStatisticsCache) parseStats(
 
 // DecodeHistogramBuckets decodes encoded HistogramData in tabStat and writes
 // the resulting buckets into tabStat.Histogram.
-func DecodeHistogramBuckets(tabStat *TableStatistic) error {
+func DecodeHistogramBuckets(ctx context.Context, tabStat *TableStatistic) error {
 	h := tabStat.HistogramData
 	if tabStat.NullCount > 0 {
 		// A bucket for NULL is not persisted, but we create a fake one to
@@ -748,23 +749,130 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 
 	// Decode the histogram data so that it's usable by the opt catalog.
 	var a tree.DatumAlloc
+	var carriedNumRange, carriedDistinctRange float64
 	for i := range h.Buckets {
 		bucket := &h.Buckets[i]
+		numRange := float64(bucket.NumRange)
+		distinctRange := bucket.DistinctRange
+		// If we dropped all enum values counted by these range counts, zero them.
+		if h.ColumnType.Family() == types.EnumFamily && i > 0 {
+			if err := enumValueExistsBetweenEncodedUpperBounds(
+				h.Version, h.ColumnType, h.Buckets[i-1].UpperBound, bucket.UpperBound,
+			); err != nil {
+				numRange = 0
+				distinctRange = 0
+			}
+		}
 		datum, err := DecodeUpperBound(h.Version, h.ColumnType, &a, bucket.UpperBound)
 		if err != nil {
 			if h.ColumnType.Family() == types.EnumFamily && errors.Is(err, types.EnumValueNotFound) {
-				// Skip over buckets for enum values that were dropped.
+				// Skip over buckets for enum values that were dropped. Carry the range
+				// counts forward to the next bucket.
+				carriedNumRange += numRange
+				carriedDistinctRange += distinctRange
 				continue
 			}
 			return err
 		}
 		tabStat.Histogram = append(tabStat.Histogram, cat.HistogramBucket{
 			NumEq:         float64(bucket.NumEq),
-			NumRange:      float64(bucket.NumRange),
-			DistinctRange: bucket.DistinctRange,
+			NumRange:      numRange + carriedNumRange,
+			DistinctRange: distinctRange + carriedDistinctRange,
 			UpperBound:    datum,
 		})
+		carriedNumRange = 0
+		carriedDistinctRange = 0
 	}
+
+	// If we skipped some buckets for enum values that were dropped, we might need
+	// to handle extra range counts at the beginning or end of the histogram
+	// (similar to histogram.addOuterBuckets).
+
+	// We don't use any session data for conversions or operations on upper
+	// bounds, so a nil *eval.Context works as our tree.CompareContext.
+	var compareCtx *eval.Context
+
+	// Start by adding a last bucket for any range counts that were carried forward to
+	// the end of the histogram.
+	if carriedNumRange != 0 || carriedDistinctRange != 0 {
+		var finalVal tree.Datum
+		if len(tabStat.Histogram) > 0 {
+			finalVal = tabStat.Histogram[len(tabStat.Histogram)-1].UpperBound
+		} else {
+			// If we have no buckets, use a default value. (We'll only use this to get
+			// the maximum value below.)
+			collationEnv := &tree.CollationEnvironment{}
+			if defaultVal, err := tree.NewDefaultDatum(collationEnv, h.ColumnType); err == nil {
+				finalVal = defaultVal
+			}
+		}
+		// Try to append a new bucket with the maximum value.
+		if finalVal != nil {
+			if maxVal, ok := getMaxVal(ctx, finalVal, h.ColumnType, compareCtx); ok {
+				newFinalBucket := cat.HistogramBucket{
+					NumRange:      carriedNumRange,
+					DistinctRange: carriedDistinctRange,
+					UpperBound:    maxVal,
+				}
+				// If there are no other values between the maximum value and the final
+				// upper bound, steal the carried range count for NumEq of the new
+				// bucket.
+				if len(tabStat.Histogram) > 0 {
+					if prevVal, ok := maxVal.Prev(ctx, compareCtx); ok {
+						if cmp, err := prevVal.Compare(ctx, compareCtx, finalVal); err == nil && cmp == 0 {
+							newFinalBucket.NumEq = carriedNumRange
+							newFinalBucket.NumRange = 0
+							newFinalBucket.DistinctRange = 0
+						}
+					}
+				}
+				tabStat.Histogram = append(tabStat.Histogram, newFinalBucket)
+			} else if len(tabStat.Histogram) == 0 &&
+				len(h.ColumnType.TypeMeta.EnumData.LogicalRepresentations) == 1 {
+				// If there's only one enum value, it becomes the single value in the
+				// histogram.
+				tabStat.Histogram = []cat.HistogramBucket{{NumEq: carriedNumRange, UpperBound: finalVal}}
+			}
+			// If the final upper bound is already the maximum value, just drop the
+			// counts. They don't mean anything at this point.
+		}
+	}
+	// Now add a first bucket for any extra range counts at the front of the
+	// histogram.
+	if len(tabStat.Histogram) > 0 {
+		firstBucket := &tabStat.Histogram[0]
+		firstVal := firstBucket.UpperBound
+		if firstBucket.NumRange != 0 || firstBucket.DistinctRange != 0 {
+			// Try to prepend a new bucket with the minimum value.
+			if minVal, ok := getMinVal(ctx, firstVal, h.ColumnType, compareCtx); ok {
+				newFirstBucket := cat.HistogramBucket{
+					UpperBound: minVal,
+				}
+				// If there are no other values between the minimum value and the first
+				// upper bound, steal the range counts from the first bucket for NumEq
+				// of the new bucket.
+				if nextVal, ok := minVal.Next(ctx, compareCtx); ok {
+					if cmp, err := nextVal.Compare(ctx, compareCtx, firstVal); err == nil && cmp == 0 {
+						newFirstBucket.NumEq = firstBucket.NumRange
+						firstBucket.NumRange = 0
+						firstBucket.DistinctRange = 0
+					}
+				}
+				tabStat.Histogram = append([]cat.HistogramBucket{newFirstBucket}, tabStat.Histogram...)
+			} else {
+				// If the first upper bound is already the minimum value, just drop the
+				// counts. They don't mean anything at this point.
+				firstBucket.NumRange = 0
+				firstBucket.DistinctRange = 0
+			}
+		}
+	}
+
+	// Remove any extra zero buckets.
+	hist := histogram{tabStat.Histogram}
+	hist.removeZeroBuckets()
+	tabStat.Histogram = hist.buckets
+
 	return nil
 }
 

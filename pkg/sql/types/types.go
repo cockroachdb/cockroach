@@ -3066,6 +3066,30 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 	return 0, err
 }
 
+// EnumGetFirstIdxOfPhysicalBetween returns the first index within the
+// TypeMeta's slice of enum physical representations that is greater than
+// physLower and less than physUpper.
+func (t *T) EnumGetFirstIdxOfPhysicalBetween(physLower, physUpper []byte) (int, error) {
+	t.ensureHydratedEnum()
+	reps := t.TypeMeta.EnumData.PhysicalRepresentations
+	for i := range reps {
+		if bytes.Compare(reps[i], physUpper) >= 0 {
+			break
+		}
+		if bytes.Compare(reps[i], physLower) > 0 {
+			return i, nil
+		}
+	}
+	err := errors.Wrapf(EnumValueNotFound,
+		"could not find value between %v and %v in enum %q representation %s %s",
+		physLower, physUpper,
+		t.TypeMeta.Name.FQName(true /* explicitCatalog */),
+		t.TypeMeta.EnumData.debugString(),
+		debugutil.Stack(),
+	)
+	return 0, err
+}
+
 // EnumValueNotYetPublicError enum value is not public yet.
 var EnumValueNotYetPublicError = pgerror.New(pgcode.InvalidParameterValue, "enum value is not yet public")
 
