@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cmd",
+    srcs = [
+        "api.go",
+        "root.go",
+        "workers.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/cmd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/config",
+        "//pkg/cmd/roachprod-centralized/controllers/clusters",
+        "//pkg/cmd/roachprod-centralized/controllers/health",
+        "//pkg/cmd/roachprod-centralized/controllers/public-dns",
+        "//pkg/cmd/roachprod-centralized/controllers/tasks",
+        "//pkg/cmd/roachprod-centralized/models/health",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

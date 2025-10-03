@@ -1,0 +1,71 @@
+# Cloud Provider Configuration Example
+# 
+# This configuration can be overridden with environment variables using the pattern:
+# ROACHPROD_PROVIDERS_<index>_<field>
+#
+# Examples:
+# - Override GCE project for the first provider:
+#   ROACHPROD_PROVIDERS_0_GCE_PROJECT=my-custom-project
+# 
+# - Add a completely new provider:
+#   ROACHPROD_PROVIDERS_9_TYPE=azure
+#   ROACHPROD_PROVIDERS_9_AZURE_SUBSCRIPTION_NAME=my-subscription
+#
+providers:
+  # GCE Providers
+  - type: gce
+    gce:
+      project: cockroach-ephemeral
+      metadata_project: cockroach-ephemeral
+      dns_project: cockroach-shared
+      dns_public_zone: roachprod
+      dns_public_domain: roachprod.crdb.io
+      dns_managed_zone: roachprod-managed
+      dns_managed_domain: roachprod-managed.crdb.io
+  
+  - type: gce
+    gce:
+      project: cockroach-roachstress
+      metadata_project: cockroach-ephemeral
+      dns_project: cockroach-shared
+      dns_public_zone: roachprod
+      dns_public_domain: roachprod.crdb.io
+      dns_managed_zone: roachprod-managed
+      dns_managed_domain: roachprod-managed.crdb.io
+  
+  - type: gce
+    gce:
+      project: cockroach-drt
+      metadata_project: cockroach-ephemeral
+      dns_project: cockroach-shared
+      dns_public_zone: drt
+      dns_public_domain: drt.crdb.io
+      dns_managed_zone: roachprod-managed
+      dns_managed_domain: roachprod-managed.crdb.io
+
+  # AWS Providers
+  - type: aws
+    aws:
+      account_id: "541263489771"
+      assume_sts_role: true
+  
+  - type: aws
+    aws:
+      account_id: "337380398238"
+      assume_sts_role: true
+
+  # IBM Provider
+  - type: ibm
+
+  # Azure Providers
+  - type: azure
+    azure:
+      subscription_name: e2e-adhoc
+  
+  - type: azure
+    azure:
+      subscription_name: e2e-infra
+  
+  - type: azure
+    azure:
+      subscription_name: Microsoft Azure Sponsorship
