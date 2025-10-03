@@ -529,7 +529,7 @@ func init() {
 		cliflagcfg.StringFlag(f, &deprecatedStorageEngine, cliflags.StorageEngine)
 		_ = pf.MarkHidden(cliflags.StorageEngine.Name)
 
-		cliflagcfg.VarFlag(f, &serverCfg.StorageConfig.WALFailover, cliflags.WALFailover)
+		cliflagcfg.VarFlag(f, &walFailoverWrapper{cfg: &serverCfg.StorageConfig.WALFailover}, cliflags.WALFailover)
 		// TODO(storage): Consider combining the uri and cache manual settings.
 		// Alternatively remove the ability to configure shared storage without
 		// passing a bootstrap configuration file.
