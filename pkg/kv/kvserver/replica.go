@@ -1482,7 +1482,7 @@ func entireSpanExcludedFromBackup(
 			return false, errors.Newf("replica's span configuration bounds not set")
 		}
 		if !confSpan.Contains(sp) {
-			log.KvExec.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
+			log.KvExec.Warningf(ctx, "ExcludeDataFromBackup set but span %q not contained by span config bounds %q",
 				sp,
 				confSpan)
 
