@@ -106,12 +106,510 @@ message UnsafeInternalsDenied {
 }
 
 
-// TODO (#151948): Update channel from SQL_PERF to SQL_EXEC once the
-// `log.channel_compatibility_mode.enabled` cluster setting is set to false
-// by default and cluster setting is set for removal.
+// Category: Sampled SQL Events
+// Channel: SQL_EXEC
+//
+// Events in this category report sample of SQL events.
+
+// SampledQuery is the SQL query event logged to the telemetry channel. It
+// contains common SQL event/execution details.
+//
+// Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
+// To test compatability prior to this, set the cluster setting
+// `log.channel_compatibility_mode.enabled` to true. This will send the
+// events to `TELEMETRY` instead of `SQL_EXEC`.
+message SampledQuery {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // skipped_queries indicate how many SQL statements were not
+  // considered for sampling prior to this one. If the field is
+  // omitted, or its value is zero, this indicates that no statement
+  // was omitted since the last event.
+  uint64 skipped_queries = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Cost of the query as estimated by the optimizer.
+  double cost_estimate = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The distribution of the DistSQL query plan (local, full, or partial).
+  string distribution = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The query's plan gist bytes as a base64 encoded string.
+  string plan_gist = 7 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // SessionID is the ID of the session that initiated the query.
+  string session_id = 8 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Name of the database that initiated the query.
+  string database = 9 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Statement ID of the query.
+  string statement_id = 10 [(gogoproto.customname) = "StatementID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Transaction ID of the query.
+  string transaction_id = 11 [(gogoproto.customname) = "TransactionID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Maximum number of rows scanned by a full scan, as estimated by the
+  // optimizer.
+  double max_full_scan_rows_estimate = 14 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Total number of rows read by all scans in the query, as estimated by the
+  // optimizer.
+  double total_scan_rows_estimate = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of rows output by the query, as estimated by the optimizer.
+  double output_rows_estimate = 16 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Whether table statistics were available to the optimizer when planning the
+  // query.
+  bool stats_available = 17 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The maximum number of nanoseconds that have passed since stats were
+  // collected on any table scanned by this query.
+  int64 nanos_since_stats_collected = 18 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of bytes read from disk.
+  int64 bytes_read = 19 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of rows read from disk.
+  int64 rows_read = 20 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of rows written.
+  int64 rows_written = 21 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of inner joins in the query plan.
+  int64 inner_join_count = 22 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of left (or right) outer joins in the query plan.
+  int64 left_outer_join_count = 23 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of full outer joins in the query plan.
+  int64 full_outer_join_count = 24 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of semi joins in the query plan.
+  int64 semi_join_count = 25 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of anti joins in the query plan.
+  int64 anti_join_count = 26 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of intersect all joins in the query plan.
+  int64 intersect_all_join_count = 27 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of except all joins in the query plan.
+  int64 except_all_join_count = 28 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of hash joins in the query plan.
+  int64 hash_join_count = 29 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of cross joins in the query plan.
+  int64 cross_join_count = 30 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of index joins in the query plan.
+  int64 index_join_count = 31 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of lookup joins in the query plan.
+  int64 lookup_join_count = 32 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of merge joins in the query plan.
+  int64 merge_join_count = 33 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of inverted joins in the query plan.
+  int64 inverted_join_count = 34 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of apply joins in the query plan.
+  int64 apply_join_count = 35 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of zig zag joins in the query plan.
+  int64 zig_zag_join_count = 36 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The duration of time in nanoseconds that the query experienced contention.
+  int64 contention_nanos = 37 [(gogoproto.jsontag) = ',omitempty'];
+
+  // The regions of the nodes where SQL processors ran.
+  repeated string regions = 38 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The number of network bytes by DistSQL components.
+  int64 network_bytes_sent = 39 [(gogoproto.jsontag) = ',omitempty'];
+
+  // The maximum amount of memory usage by nodes for this query.
+  int64 max_mem_usage = 40 [(gogoproto.jsontag) = ',omitempty'];
+
+  // The maximum amount of disk usage by nodes for this query.
+  int64 max_disk_usage = 41 [(gogoproto.jsontag) = ',omitempty'];
+
+  // The number of bytes read at the KV layer for this query.
+  int64 kv_bytes_read = 42 [(gogoproto.customname) = "KVBytesRead", (gogoproto.jsontag) = ',omitempty'];
+
+  // The number of key-value pairs read at the KV layer for this query.
+  int64 kv_pairs_read = 75 [(gogoproto.customname) = "KVPairsRead", (gogoproto.jsontag) = ',omitempty'];
+
+  // The number of rows read at the KV layer for this query.
+  int64 kv_rows_read = 43 [(gogoproto.customname) = "KVRowsRead", (gogoproto.jsontag) = ',omitempty'];
+
+  // The number of network messages sent by nodes for this query by DistSQL
+  // components.
+  int64 network_messages = 44 [(gogoproto.jsontag) = ',omitempty'];
+
+  // Generated index recommendations for this query.
+  repeated string index_recommendations = 45 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The number of scans in the query plan.
+  int64 scan_count = 46 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of scans using statistics (including forecasted statistics) in
+  // the query plan.
+  int64 scan_with_stats_count = 47 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of scans using forecasted statistics in the query plan.
+  int64 scan_with_stats_forecast_count = 48 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Total number of rows read by all scans in the query, as estimated by the
+  // optimizer without using forecasts.
+  double total_scan_rows_without_forecasts_estimate = 49 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The greatest quantity of nanoseconds that have passed since the forecast
+  // time (or until the forecast time, if it is in the future, in which case it
+  // will be negative) for any table with forecasted stats scanned by this
+  // query.
+  int64 nanos_since_stats_forecasted = 50 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The list of indexes used by this query.
+  repeated string indexes = 51 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Collects the cumulative CPU time spent executing SQL operations in
+  // nanoseconds. Currently, it is only collected for statements without
+  // mutations that have a vectorized plan.
+  int64 cpu_time_nanos  = 52 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of grpc calls done to get data form KV nodes
+  int64 kv_grpc_calls = 53 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Cumulated time spent waiting for a KV request. This includes disk IO time
+  // and potentially network time (if any of the keys are not local).
+  int64 kv_time_nanos = 54 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to service the query, from start of parse to end of execute.
+  int64 service_latency_nanos =      56 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The difference between service latency and the sum of parse latency + plan latency + run latency .
+  int64 overhead_latency_nanos =      57 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to run the query and fetch or compute the result rows.
+  int64 run_latency_nanos    =      58 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to transform the AST into a logical query plan.
+  int64 plan_latency_nanos    =      59 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time between statement executions in a transaction
+  int64 idle_latency_nanos    =      60 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The time to transform the SQL string into an abstract syntax tree (AST).
+  int64 parse_latency_nanos    =      61 [(gogoproto.jsontag) = ",omitempty"];
+
+  // StepCount collects the number of times the iterator moved forward or backward over the
+  // DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_step_count = 62 [(gogoproto.jsontag) = ",omitempty"];
+
+  // StepCountInternal collects the number of times the iterator moved forward or backward
+  // over LSM internal keys.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_step_count_internal = 63 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SeekCount collects the number of times the iterator moved to a specific key/value pair
+  // in the DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_seek_count = 64 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SeekCountInternal collects the number of times the iterator moved to a specific LSM
+  // internal key.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 mvcc_seek_count_internal = 65 [(gogoproto.jsontag) = ",omitempty"];
+
+  // BlockBytes collects the bytes in the loaded SSTable data blocks.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_block_bytes = 66 [(gogoproto.jsontag) = ",omitempty"];
+
+  // BlockBytesInCache collects the subset of BlockBytes in the block cache.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_block_bytes_in_cache = 67 [(gogoproto.jsontag) = ",omitempty"];
+
+  // KeyBytes collects the bytes in keys that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_key_bytes = 68 [(gogoproto.jsontag) = ",omitempty"];
+
+  // ValueBytes collects the bytes in values that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_value_bytes = 69 [(gogoproto.jsontag) = ",omitempty"];
+
+  // PointCount collects the count of point keys iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 mvcc_point_count = 70 [(gogoproto.jsontag) = ",omitempty"];
+
+  // PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that
+  // were covered by range tombstones.
+  // For details, see pebble.InternalIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_points_covered_by_range_tombstones = 71 [(gogoproto.jsontag) = ",omitempty"];
+
+  // RangeKeyCount collects the count of range keys encountered during iteration.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_range_key_count = 72 [(gogoproto.jsontag) = ",omitempty"];
+
+  // RangeKeyContainedPoints collects the count of point keys encountered within the bounds of
+  // a range key.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_range_key_contained_points = 73 [(gogoproto.jsontag) = ",omitempty"];
+
+  // RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that
+  // were skipped during iteration due to range-key masking.
+  // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 mvcc_range_key_skipped_points = 74 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SchemaChangerMode is the mode that was used to execute the schema change,
+  // if any.
+  string schema_changer_mode = 76 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // SQLInstanceIDs is a list of all the SQL instances used in this statement's
+  // execution.
+  repeated int32 sql_instance_ids = 77 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "SQLInstanceIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // KVNodeIDs is a list of all the KV nodes used in this statement's execution.
+  repeated int32 kv_node_ids = 78 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "KVNodeIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Statement fingerprint ID of the query.
+  string statement_fingerprint_id = 79 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // UsedFollowerRead indicates whether at least some reads were served by the
+  // follower replicas.
+  bool used_follower_read = 80 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  reserved 12;
+
+  // Previously used for statement_fingerprint_id. Originally this was typed as a uint64
+  // but has been re-typed to be a string due to downstream json parsing issues. For
+  // more details see: https://github.com/cockroachdb/cockroach/issues/123665
+  reserved 13;
+
+  // Next available ID: 81.
+}
+
+// SampledTransaction is the event logged to telemetry at the end of transaction execution.
+//
+// Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
+// To test compatability prior to this, set the cluster setting
+// `log.channel_compatibility_mode.enabled` to true. This will send the
+// events to `TELEMETRY` instead of `SQL_EXEC`.
+message SampledTransaction {
+  // Common contains common event details shared by all log events.
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // User is the user account that triggered the transaction.
+  // The special usernames `root` and `node` are not considered sensitive.
+  string user = 2 [(gogoproto.jsontag) = ",includeempty", (gogoproto.moretags) = "redact:\"safeif:root|node\""];
+
+  // ApplicationName is the application name for the session where the transaction was executed.
+  // This is included in the event to ease filtering of logging output by application.
+  string application_name = 3 [(gogoproto.jsontag) = ",includeempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // TxnCounter is the sequence number of the SQL transaction inside its session.
+  uint32 txn_counter = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SessionID is the ID of the session that initiated the transaction.
+  string session_id = 5 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",includeemepty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // TransactionID is the id of the transaction.
+  string transaction_id = 6 [(gogoproto.customname) = "TransactionID", (gogoproto.jsontag) = ',includeempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Committed indicates if the transaction committed successfully. We want to include this value even if it is false.
+  bool committed = 8 [(gogoproto.jsontag) = ",includeempty"];
+
+  // ImplicitTxn indicates if the transaction was an implicit one. We want to include this value even if it is false.
+  bool implicit_txn = 9 [(gogoproto.jsontag) = ",includeempty"];
+
+  // StartTimeUnixNanos is the time the transaction was started. Expressed as unix time in nanoseconds.
+  int64 start_time_unix_nanos = 10 [(gogoproto.jsontag) = ",includeempty"];
+
+  // EndTimeUnixNanos the time the transaction finished (either committed or aborted).
+  // Expressed as unix time in nanoseconds.
+  int64 end_time_unix_nanos = 11 [(gogoproto.jsontag) = ",includeempty"];
+
+  // ServiceLatNanos is the time to service the whole transaction, from start to end of execution.
+  int64 service_lat_nanos = 12 [(gogoproto.jsontag) = ",includeempty"];
+
+  // SQLSTATE is the SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error.
+  string sqlstate = 13 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ErrorText is the text of the error if any.
+  string error_text = 14 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
+
+  // NumRetries is the number of time when the txn was retried automatically by the server.
+  int64 num_retries = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  // LastAutoRetryReason is a string containing the reason for the last automatic retry.
+  string last_auto_retry_reason = 16 [(gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"mixed\""];
+
+  // NumRows is the total number of rows returned across all statements.
+  int64 num_rows = 18 [(gogoproto.jsontag) = ",includeempty"];
+
+  // RetryLatNanos is the amount of time spent retrying the transaction.
+  int64 retry_lat_nanos  = 19 [(gogoproto.jsontag) = ",omitempty"];
+
+  // CommitLatNanos is the amount of time spent committing the transaction after all statement operations.
+  int64 commit_lat_nanos = 20 [(gogoproto.jsontag) = ",includeempty"];
+
+  // IdleLatNanos is the amount of time spent waiting for the client to send statements
+  // while the transaction is open.
+  int64 idle_lat_nanos = 21 [(gogoproto.jsontag) = ",includeempty"];
+
+  // BytesRead is the number of bytes read from disk.
+  int64 bytes_read = 22 [(gogoproto.jsontag) = ",includeempty"];
+
+  // RowsRead is the number of rows read from disk.
+  int64 rows_read = 23 [(gogoproto.jsontag) = ",includeempty"];
+
+  // RowsWritten is the number of rows written to disk.
+  int64 rows_written = 24 [(gogoproto.jsontag) = ",includeempty"];
+
+  // SampledExecStats is a nested field containing execution statistics.
+  // This field will be omitted if the stats were not sampled.
+  SampledExecStats sampled_exec_stats = 25 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SkippedTransactions is the number of transactions that were skipped as part of sampling prior to
+  // this one. We only count skipped transactions when telemetry logging is enabled and the sampling
+  // mode is set to "transaction".
+  int64 skipped_transactions = 26 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TransactionFingerprintID is the fingerprint ID of the transaction.
+  // This can be used to find the transaction in the console.
+  string transaction_fingerprint_id = 27 [(gogoproto.customname) = "TransactionFingerprintID", (gogoproto.jsontag) = 'TransactionFingerprintID,', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction.
+  repeated string statement_fingerprint_ids = 28 [(gogoproto.customname) = "StatementFingerprintIDs", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+
+  // Previously used for transaction_fingerprint_id. Originally this was typed as a uint64
+  // but has been re-typed to be a string due to downstream json parsing issues. For
+  // more details see: https://github.com/cockroachdb/cockroach/issues/123665
+  reserved 7;
+
+  // Previously used for statement_fingerprint_ids. Originally this was typed as a uint64
+  // but has been re-typed to be a string due to downstream json parsing issues. For
+  // more details see: https://github.com/cockroachdb/cockroach/issues/123665
+  reserved 17;
+
+  // Next available ID: 29.
+
+}
+
+// SampledExecStats contains execution statistics that apply to both statements
+// and transactions. These stats as a whole are collected using a sampling approach.
+// These exec stats are meant to contain the same fields as ExecStats in
+// apps_stats.proto but are for a single execution rather than aggregated executions.
+// Fields in this struct should be updated in sync with apps_stats.proto.
+message SampledExecStats {
+
+  // NetworkBytes collects the number of bytes sent over the network by DistSQL
+  // components.
+  int64 network_bytes = 1 [(gogoproto.jsontag) = ",includeempty"];
+
+  // MaxMemUsage collects the maximum memory usage that occurred on a node.
+  int64 max_mem_usage = 2 [(gogoproto.jsontag) = ",includeempty"];
+
+  // ContentionTime collects the time in seconds statements in the transaction spent contending.
+  int64 contention_time = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // NetworkMessages collects the number of messages that were sent over the
+  // network by DistSQL components.
+  int64 network_messages = 4 [(gogoproto.jsontag) = ",includeempty"];
+
+  // MaxDiskUsage collects the maximum temporary disk usage that occurred. This
+  // is set in cases where a query had to spill to disk, e.g. when performing a
+  // large sort where not all of the tuples fit in memory.
+  int64 max_disk_usage = 5 [(gogoproto.jsontag) = ",includeempty"];
+
+  // CPUSQLNanos collects the CPU time spent executing SQL operations in
+  // nanoseconds. Currently, it is only collected for statements without
+  // mutations that have a vectorized plan.
+  int64 cpu_sql_nanos = 6 [(gogoproto.customname) = "CPUSQLNanos", (gogoproto.jsontag) = "CPUSQLNanos,includeempty"];
+
+  // Internal storage iteration statistics.
+  MVCCIteratorStats mvcc_iterator_stats = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCIteratorStats"];
+}
+
+// Internal storage iteration statistics for a single execution.
+message MVCCIteratorStats {
+  // StepCount collects the number of times the iterator moved forward or backward over the
+  // DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 step_count = 1 [(gogoproto.jsontag) = ",includeempty"];
+
+  // StepCountInternal collects the number of times the iterator moved forward or backward
+  // over LSM internal keys.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 step_count_internal = 2 [(gogoproto.jsontag) = ",includeempty"];
+
+  // SeekCount collects the number of times the iterator moved to a specific key/value pair
+  // in the DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 seek_count = 3 [(gogoproto.jsontag) = ",includeempty"];
+
+  // SeekCountInternal collects the number of times the iterator moved to a specific LSM
+  // internal key.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 seek_count_internal = 4 [(gogoproto.jsontag) = ",includeempty"];
+
+  // BlockBytes collects the bytes in the loaded SSTable data blocks.
+  // For details, see pebble.InternalIteratorStats.
+  int64 block_bytes = 5 [(gogoproto.jsontag) = ",includeempty"];
+
+  // BlockBytesInCache collects the subset of BlockBytes in the block cache.
+  // For details, see pebble.InternalIteratorStats.
+  int64 block_bytes_in_cache = 6 [(gogoproto.jsontag) = ",includeempty"];
+
+  // KeyBytes collects the bytes in keys that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 key_bytes = 7 [(gogoproto.jsontag) = ",includeempty"];
+
+  // ValueBytes collects the bytes in values that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 value_bytes = 8 [(gogoproto.jsontag) = ",includeempty"];
+
+  // PointCount collects the count of point keys iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 point_count = 9 [(gogoproto.jsontag) = ",includeempty"];
+
+  // PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that
+  // were covered by range tombstones.
+  // For details, see pebble.InternalIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 points_covered_by_range_tombstones = 10 [(gogoproto.jsontag) = ",includeempty"];
+
+  // RangeKeyCount collects the count of range keys encountered during iteration.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 range_key_count = 11 [(gogoproto.jsontag) = ",includeempty"];
+
+  // RangeKeyContainedPoints collects the count of point keys encountered within the bounds of
+  // a range key.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 range_key_contained_points = 12 [(gogoproto.jsontag) = ",includeempty"];
+
+  // RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that
+  // were skipped during iteration due to range-key masking.
+  // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 range_key_skipped_points = 13 [(gogoproto.jsontag) = ",includeempty"];
+}
+
 
 // Category: SQL Slow Query Log
-// Channel: SQL_PERF
+// Channel: SQL_EXEC
 //
 // Events in this category report slow query execution.
 //
@@ -119,10 +617,10 @@ message UnsafeInternalsDenied {
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
 //
-// In version 26.1, these events will be moved to the `SQL_EXEC` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `SQL_EXEC` instead of `SQL_PERF`.
+// In version 26.1, these events moved to the `SQL_EXEC` channel.
+// To test compatability prior to this, set the cluster setting
+// `log.channel_compatibility_mode.enabled` to true. This will send the
+// events to `SQL_PERF` instead of `SQL_EXEC`.
 
 // SlowQuery is recorded when a query triggers the "slow query" condition.
 //
@@ -191,12 +689,9 @@ message TxnRowsReadLimit {
   CommonTxnRowsLimitDetails info = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
-// TODO (#151948): Update channel from SQL_INTERNAL_PERF to SQL_EXEC once the
-// `log.channel_compatibility_mode.enabled` cluster setting is set to false
-// by default and cluster setting is set for removal.
 
 // Category: SQL Slow Query Log (Internal)
-// Channel: SQL_INTERNAL_PERF
+// Channel: SQL_EXEC
 //
 // Events in this category report slow query execution by
 // internal executors, i.e., when CockroachDB internally issues
@@ -206,10 +701,10 @@ message TxnRowsReadLimit {
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
 //
-// In version 26.1, these events will be moved to the `SQL_EXEC` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `SQL_EXEC` instead of `SQL_INTERNAL_PERF`.
+// In version 26.1, these events moved to the `SQL_EXEC` channel.
+// To test compatability prior to this, set the cluster setting
+// `log.channel_compatibility_mode.enabled` to true. This will send the
+// events to `SQL_INTERNAL_PERF` instead of `SQL_EXEC`.
 
 // SlowQueryInternal is recorded when a query triggers the "slow query" condition,
 // and the cluster setting `sql.log.slow_query.internal_queries.enabled` is

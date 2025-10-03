@@ -10732,6 +10732,8 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 		logtestutils.FromLogEntry[eventpb.CreateChangefeed],
 	)
 
+	log.ChannelCompatibilityModeEnabled.Override(ctx, &s.Server.ClusterSettings().SV, false)
+
 	cleanup := log.InterceptWith(ctx, cfLogSpy)
 	defer cleanup()
 
