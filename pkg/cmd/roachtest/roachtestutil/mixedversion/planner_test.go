@@ -144,7 +144,7 @@ func TestTestPlanner(t *testing.T) {
 			case "after-upgrade-finalized":
 				mvt.AfterUpgradeFinalized(d.CmdArgs[0].Vals[0], dummyHook)
 			case "workload":
-				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
+				initCmd := roachtestutil.NewCommand("./cockroach workload selectProtectedNodes some-workload")
 				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
 				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd, false /* overrideBinary */)
 			case "background-command":
@@ -391,7 +391,7 @@ func TestNoConcurrentFailureInjections(t *testing.T) {
 	rngSource := rand.NewSource(randutil.NewPseudoSeed())
 	// Set all failure injection mutator probabilities to 1.
 	var opts []CustomOption
-	for _, mutator := range failureInjectionMutators {
+	for _, mutator := range failureInjectionMutators(nil) {
 		opts = append(opts, WithMutatorProbability(mutator.Name(), 1.0))
 	}
 	opts = append(opts, NumUpgrades(3))

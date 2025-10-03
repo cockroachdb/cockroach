@@ -51,6 +51,19 @@ type NetworkPartition struct {
 	// Type describes the network partition being created.
 	Type PartitionType
 }
+
+func (p NetworkPartition) String() string {
+	switch p.Type {
+	case Bidirectional:
+		return fmt.Sprintf("n%d <--> n%v", p.Source, p.Destination)
+	case Incoming:
+		return fmt.Sprintf("n%d <-- n%v", p.Source, p.Destination)
+	case Outgoing:
+		return fmt.Sprintf("n%d --> n%v", p.Source, p.Destination)
+	}
+	panic("unknown PartitionType")
+}
+
 type NetworkPartitionArgs struct {
 	// List of network partitions to create.
 	//

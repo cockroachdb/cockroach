@@ -229,11 +229,17 @@ const (
 	spanConfigTenantLimit = 50000
 )
 
-// failureInjectionMutators includes a list of all
-// failure injection mutators.
-var failureInjectionMutators = []mutator{
-	panicNodeMutator{},
-	networkPartitionMutator{},
+// failureInjectionMutators returns a list of all failure injection mutators.
+// It takes a partition strategy to configure the network partition mutator.
+func failureInjectionMutators(strategy partitionStrategy) []mutator {
+	// Default to singlePartitionStrategy if not provided
+	if strategy == nil {
+		strategy = singlePartitionStrategy{}
+	}
+	return []mutator{
+		panicNodeMutator{},
+		networkPartitionMutator{strategy: strategy},
+	}
 }
 
 // clusterSettingMutators includes a list of all
@@ -272,16 +278,21 @@ var clusterSettingMutators = []mutator{
 	),
 }
 
-// planMutators includes a list of all known `mutator`
-// implementations. A subset of these mutations might be enabled in
-// planMutators includes a list of all known `mutator`
-// implementations. A subset of these mutations might be enabled in
-var planMutators = func() []mutator {
+// planMutatorsFunc returns a list of all known `mutator` implementations.
+// A subset of these mutations might be enabled in each test run.
+func planMutatorsFunc(partitionStrategy partitionStrategy) []mutator {
 	mutators := []mutator{preserveDowngradeOptionRandomizerMutator{}}
 	mutators = append(mutators, clusterSettingMutators...)
-	mutators = append(mutators, failureInjectionMutators...)
+	mutators = append(mutators, failureInjectionMutators(partitionStrategy)...)
+	if planMutators != nil {
+		mutators = append(mutators, planMutators...)
+	}
 	return mutators
-}()
+}
+
+// planMutators is a package-level variable that can be modified by tests.
+// In production code, this should be nil and planMutatorsFunc will be used.
+var planMutators []mutator
 
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan
@@ -446,13 +457,13 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 	}
 
 	failureInjections := make(map[string]struct{})
-	for _, m := range failureInjectionMutators {
+	for _, m := range failureInjectionMutators(p.options.partitionStrategy) {
 		failureInjections[m.Name()] = struct{}{}
 	}
 
 	// Probabilistically enable some of the mutators on the base test
 	// plan generated above.
-	for _, mut := range planMutators {
+	for _, mut := range planMutatorsFunc(p.options.partitionStrategy) {
 		if p.mutatorEnabled(mut) {
 			if _, found := failureInjections[mut.Name()]; found {
 				// We disable any failure injections that would occur on clusters with
@@ -1869,7 +1880,7 @@ func (u UpgradeStage) String() string {
 	case BackgroundStage:
 		return "background"
 	case InitUpgradeStage:
-		return "init"
+		return "selectProtectedNodes"
 	case TemporaryUpgradeStage:
 		return "temporary-upgrade"
 	case RollbackUpgradeStage:
