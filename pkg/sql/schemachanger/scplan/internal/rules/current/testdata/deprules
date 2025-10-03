@@ -4339,8 +4339,8 @@ deprules
   kind: SameStagePrecedence
   to: old-secondary-index-Node
   query:
-    - $old-secondary-index[Type] = '*scpb.PrimaryIndex'
     - $new-primary-index[Type] = '*scpb.SecondaryIndex'
+    - $old-secondary-index[Type] = '*scpb.PrimaryIndex'
     - joinOnDescID($new-primary-index, $old-secondary-index, $table-id)
     - $new-primary-index-Target[TargetStatus] = ABSENT
     - $new-primary-index-Node[CurrentStatus] = VALIDATED
@@ -4348,7 +4348,7 @@ deprules
     - $old-secondary-index-Node[CurrentStatus] = PUBLIC
     - $new-index[RecreateTargetIndexID] = $new-primary-index-id
     - $old-secondary-index[IndexID] = $new-primary-index-id
-    - only apply to secondary indexes created after 25.4(*scpb.PrimaryIndex, *scpb.SecondaryIndex)($new-primary-index, $old-secondary-index)
+    - only apply to secondary indexes created after 25.4(*scpb.SecondaryIndex, *scpb.PrimaryIndex)($new-index, $old-secondary-index)
     - $new-primary-index[Type] = '*scpb.SecondaryIndex'
     - $new-index[Type] = '*scpb.SecondaryIndex'
     - $new-primary-index-Target[TargetStatus] = ABSENT
@@ -9421,8 +9421,8 @@ deprules
   kind: SameStagePrecedence
   to: old-secondary-index-Node
   query:
-    - $old-secondary-index[Type] = '*scpb.PrimaryIndex'
     - $new-primary-index[Type] = '*scpb.SecondaryIndex'
+    - $old-secondary-index[Type] = '*scpb.PrimaryIndex'
     - joinOnDescID($new-primary-index, $old-secondary-index, $table-id)
     - $new-primary-index-Target[TargetStatus] = ABSENT
     - $new-primary-index-Node[CurrentStatus] = VALIDATED
@@ -9430,7 +9430,7 @@ deprules
     - $old-secondary-index-Node[CurrentStatus] = PUBLIC
     - $new-index[RecreateTargetIndexID] = $new-primary-index-id
     - $old-secondary-index[IndexID] = $new-primary-index-id
-    - only apply to secondary indexes created after 25.4(*scpb.PrimaryIndex, *scpb.SecondaryIndex)($new-primary-index, $old-secondary-index)
+    - only apply to secondary indexes created after 25.4(*scpb.SecondaryIndex, *scpb.PrimaryIndex)($new-index, $old-secondary-index)
     - $new-primary-index[Type] = '*scpb.SecondaryIndex'
     - $new-index[Type] = '*scpb.SecondaryIndex'
     - $new-primary-index-Target[TargetStatus] = ABSENT
