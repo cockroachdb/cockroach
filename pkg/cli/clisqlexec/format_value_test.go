@@ -46,7 +46,6 @@ func Example_sql_format() {
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
 	// CREATE DATABASE
-	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
 	// INSERT 0 1

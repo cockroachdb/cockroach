@@ -58,7 +58,6 @@ thenshort`,
 	// not much" int, "very very long
 	// thenshort" int, "κόσμε" int, "a|b" int, ܈85 int)
 	// CREATE DATABASE
-	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0, 0, 0)
 	// INSERT 0 1
@@ -213,11 +212,8 @@ func Example_sql_empty_table() {
 	// Output:
 	// sql -e create database t;create table t.norows(x int);create table t.nocolsnorows();create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);
 	// CREATE DATABASE
-	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
-	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
-	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// INSERT 0 3
 	// sql --format=tsv -e select * from t.norows
@@ -549,7 +545,6 @@ func Example_sql_table() {
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE DATABASE
-	// NOTICE: auto-committing transaction before processing DDL due to autocommit_before_ddl setting
 	// CREATE TABLE
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
 	// INSERT 0 1
