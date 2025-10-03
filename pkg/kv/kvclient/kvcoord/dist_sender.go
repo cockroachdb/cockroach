@@ -460,8 +460,9 @@ type DistSenderMetrics struct {
 	ProxyForwardSentCount              *metric.Counter
 	ProxyForwardErrCount               *metric.Counter
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
-	ErrCounts                          [kvpb.NumErrors]*metric.Counter
-	CircuitBreaker                     DistSenderCircuitBreakerMetrics
+	// ErrCounts[i] can be nil if i'th error has been deprecated.
+	ErrCounts      [kvpb.NumErrors]*metric.Counter
+	CircuitBreaker DistSenderCircuitBreakerMetrics
 	DistSenderRangeFeedMetrics
 }
 
@@ -526,6 +527,10 @@ func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 	}
 	for i := range m.ErrCounts {
 		errType := kvpb.ErrorDetailType(i).String()
+		if strings.HasPrefix(errType, "ErrorDetailType") {
+			// This error index has been deprecated.
+			continue
+		}
 		meta := metaDistSenderErrCountTmpl
 		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(errType))
 		meta.Help = fmt.Sprintf(meta.Help, errType)
@@ -3187,14 +3192,18 @@ func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err erro
 	if err == nil && br.Error == nil {
 		return
 	}
+	var counter *metric.Counter
 	if err != nil {
-		ds.metrics.ErrCounts[kvpb.CommunicationErrType].Inc(1)
+		counter = ds.metrics.ErrCounts[kvpb.CommunicationErrType]
 	} else {
 		typ := kvpb.InternalErrType
 		if detail := br.Error.GetDetail(); detail != nil {
 			typ = detail.Type()
 		}
-		ds.metrics.ErrCounts[typ].Inc(1)
+		counter = ds.metrics.ErrCounts[typ]
+	}
+	if counter != nil {
+		counter.Inc(1)
 	}
 }
 
