@@ -208,3 +208,5 @@ func (c *cancelCtxDisconnector) IsDisconnected() bool {
 	defer c.mu.Unlock()
 	return c.mu.disconnected
 }
+
+func (c *cancelCtxDisconnector) Unregister() {}
