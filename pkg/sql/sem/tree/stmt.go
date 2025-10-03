@@ -17,6 +17,9 @@ package tree
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Instructions for creating new types: If a type needs to satisfy an
@@ -142,13 +145,6 @@ type Statement interface {
 	StatementTag() string
 }
 
-// canModifySchema is to be implemented by statements that can modify
-// the database schema but may have StatementReturnType() != DDL.
-// See CanModifySchema() below.
-type canModifySchema interface {
-	modifiesSchema() bool
-}
-
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {
@@ -156,11 +152,29 @@ func CanModifySchema(stmt Statement) bool {
 		// Some drivers send empty queries to test the connection.
 		return false
 	}
-	if stmt.StatementReturnType() == DDL || stmt.StatementType() == TypeDDL {
+	if t := stmt.StatementType(); t == TypeDML {
+		// Return early for the common case of DML, which never modify schema.
+		if buildutil.CrdbTestBuild {
+			// Assert this invariant in test builds.
+			if stmt.StatementReturnType() == DDL {
+				panic(errors.AssertionFailedf("DML statement %T has unexpected DDL return type", stmt))
+			}
+			// Also assert that the special cases are not TypeDML.
+			switch stmt.(type) {
+			case *Discard, *SetZoneConfig:
+				panic(errors.AssertionFailedf("%T has unexpected DDL statement type", stmt))
+			}
+		}
+		return false
+	} else if t == TypeDDL || stmt.StatementReturnType() == DDL {
 		return true
 	}
-	scm, ok := stmt.(canModifySchema)
-	return ok && scm.modifiesSchema()
+	// Special cases for non-DDL statements which modify the schema.
+	switch stmt.(type) {
+	case *Discard, *SetZoneConfig:
+		return true
+	}
+	return false
 }
 
 // CanWriteData returns true if the statement can modify data.
@@ -472,9 +486,6 @@ func (*AlterPolicy) StatementType() StatementType { return TypeDDL }
 func (*AlterPolicy) StatementTag() string { return AlterPolicyTag }
 
 func (*AlterPolicy) hiddenFromShowQueries() {}
-
-// modifiesSchema implements the canModifySchema interface.
-func (*AlterPolicy) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterTable) StatementReturnType() StatementReturnType { return DDL }
@@ -1055,9 +1066,6 @@ func (*CreatePolicy) StatementTag() string { return CreatePolicyTag }
 
 func (*CreatePolicy) hiddenFromShowQueries() {}
 
-// modifiesSchema implements the canModifySchema interface.
-func (*CreatePolicy) modifiesSchema() bool { return true }
-
 // StatementReturnType implements the Statement interface.
 func (n *CreateSchema) StatementReturnType() StatementReturnType { return DDL }
 
@@ -1068,9 +1076,6 @@ func (*CreateSchema) StatementType() StatementType { return TypeDDL }
 func (n *CreateSchema) StatementTag() string {
 	return CreateSchemaTag
 }
-
-// modifiesSchema implements the canModifySchema interface.
-func (*CreateSchema) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (n *CreateTable) StatementReturnType() StatementReturnType { return DDL }
@@ -1086,9 +1091,6 @@ func (n *CreateTable) StatementTag() string {
 	return "CREATE TABLE"
 }
 
-// modifiesSchema implements the canModifySchema interface.
-func (*CreateTable) modifiesSchema() bool { return true }
-
 // StatementReturnType implements the Statement interface.
 func (*CreateType) StatementReturnType() StatementReturnType { return DDL }
 
@@ -1097,8 +1099,6 @@ func (*CreateType) StatementType() StatementType { return TypeDDL }
 
 // StatementTag implements the Statement interface.
 func (*CreateType) StatementTag() string { return "CREATE TYPE" }
-
-func (*CreateType) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (*CreateRole) StatementReturnType() StatementReturnType { return DDL }
@@ -1168,9 +1168,6 @@ func (d *Discard) StatementTag() string {
 	return "DISCARD"
 }
 
-// modifiesSchema implements the canModifySchema interface.
-func (*Discard) modifiesSchema() bool { return true }
-
 // StatementReturnType implements the Statement interface.
 func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
 
@@ -1217,9 +1214,6 @@ func (*DropPolicy) StatementType() StatementType { return TypeDDL }
 func (*DropPolicy) StatementTag() string { return DropPolicyTag }
 
 func (*DropPolicy) hiddenFromShowQueries() {}
-
-// modifiesSchema implements the canModifySchema interface.
-func (*DropPolicy) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (*DropTable) StatementReturnType() StatementReturnType { return DDL }
@@ -2347,9 +2341,6 @@ func (*Truncate) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Truncate) StatementTag() string { return TruncateTag }
-
-// modifiesSchema implements the canModifySchema interface.
-func (*Truncate) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (n *Update) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }

@@ -2339,6 +2339,7 @@ GO_TARGETS = [
     "//pkg/sql/sem/plpgsqltree:plpgsqltree",
     "//pkg/sql/sem/semenumpb:semenumpb",
     "//pkg/sql/sem/transform:transform",
+    "//pkg/sql/sem/tree/datumrange:datumrange",
     "//pkg/sql/sem/tree/evalgen:evalgen",
     "//pkg/sql/sem/tree/evalgen:evalgen_lib",
     "//pkg/sql/sem/tree/treebin:treebin",
