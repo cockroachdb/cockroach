@@ -19,14 +19,23 @@ import (
 
 type cancelQueriesNode struct {
 	singleInputPlanNode
+	rowsAffectedOutputHelper
 	ifExists bool
 }
 
-func (n *cancelQueriesNode) startExec(runParams) error {
-	return nil
+// startExec implements the planNode interface.
+func (n *cancelQueriesNode) startExec(params runParams) error {
+	// Execute the node to completion, keeping track of the affected row count.
+	for {
+		ok, err := n.cancelQuery(params)
+		if !ok || err != nil {
+			return err
+		}
+		n.incAffectedRows()
+	}
 }
 
-func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
+func (n *cancelQueriesNode) cancelQuery(params runParams) (bool, error) {
 	// TODO(knz): instead of performing the cancels sequentially,
 	// accumulate all the query IDs and then send batches to each of the
 	// nodes.
@@ -71,7 +80,15 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (*cancelQueriesNode) Values() tree.Datums { return nil }
+// Next implements the planNode interface.
+func (n *cancelQueriesNode) Next(_ runParams) (bool, error) {
+	return n.next(), nil
+}
+
+// Values implements the planNode interface.
+func (n *cancelQueriesNode) Values() tree.Datums {
+	return n.values()
+}
 
 func (n *cancelQueriesNode) Close(ctx context.Context) {
 	n.input.Close(ctx)

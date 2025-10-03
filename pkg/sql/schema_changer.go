@@ -2256,7 +2256,7 @@ func maybeUpdateZoneConfigsForPKChange(
 
 	// Write the zone back. This call regenerates the index spans that apply
 	// to each partition in the index.
-	_, err = writeZoneConfig(
+	err = writeZoneConfig(
 		ctx, txn, table.ID, table,
 		zoneWithRaw.ZoneConfigProto(), zoneWithRaw.GetRawBytesInStorage(),
 		execCfg, false, kvTrace,

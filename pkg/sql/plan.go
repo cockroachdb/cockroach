@@ -75,8 +75,7 @@ type planNode interface {
 	// of results each time that Next() returns true.
 	//
 	// Available after startPlan(). It is illegal to call Next() after it returns
-	// false. It is legal to call Next() even if the node implements
-	// planNodeFastPath and the FastPathResults() method returns true.
+	// false.
 	Next(params runParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
@@ -150,17 +149,10 @@ type mutationPlanNode interface {
 	// rowsWritten returns the number of rows modified by this planNode. It
 	// should only be called once Next returns false.
 	rowsWritten() int64
-}
 
-// planNodeFastPath is implemented by nodes that can perform all their
-// work during startPlan(), possibly affecting even multiple rows. For
-// example, DELETE can do this.
-type planNodeFastPath interface {
-	// FastPathResults returns the affected row count and true if the
-	// node has no result set and has already executed when startPlan() completes.
-	// Note that Next() must still be valid even if this method returns
-	// true, although it may have nothing left to do.
-	FastPathResults() (int, bool)
+	// returnsRowsAffected indicates that the planNode returns the number of
+	// rows affected by the mutation, rather than the rows themselves.
+	returnsRowsAffected() bool
 }
 
 // planNodeReadingOwnWrites can be implemented by planNodes which do
@@ -243,11 +235,9 @@ var _ planNode = &renameIndexNode{}
 var _ planNode = &renameTableNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &RevokeRoleNode{}
-var _ planNode = &rowCountNode{}
 var _ planNode = &scanBufferNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
-var _ planNode = &serializeNode{}
 var _ planNode = &sequenceSelectNode{}
 var _ planNode = &showFingerprintsNode{}
 var _ planNode = &showTraceNode{}
@@ -269,13 +259,6 @@ var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
 
-var _ planNodeFastPath = &deleteRangeNode{}
-var _ planNodeFastPath = &rowCountNode{}
-var _ planNodeFastPath = &serializeNode{}
-var _ planNodeFastPath = &setZoneConfigNode{}
-var _ planNodeFastPath = &controlJobsNode{}
-var _ planNodeFastPath = &controlSchedulesNode{}
-
 var _ planNodeReadingOwnWrites = &alterIndexNode{}
 var _ planNodeReadingOwnWrites = &alterSchemaNode{}
 var _ planNodeReadingOwnWrites = &alterSequenceNode{}
@@ -293,31 +276,6 @@ var _ planNodeReadingOwnWrites = &dropSchemaNode{}
 var _ planNodeReadingOwnWrites = &dropTypeNode{}
 var _ planNodeReadingOwnWrites = &refreshMaterializedViewNode{}
 var _ planNodeReadingOwnWrites = &setZoneConfigNode{}
-
-// planNodeRequireSpool serves as marker for nodes whose parent must
-// ensure that the node is fully run to completion (and the results
-// spooled) during the start phase. This is currently implemented by
-// all mutation statements except for upsert.
-type planNodeRequireSpool interface {
-	requireSpool()
-}
-
-var _ planNodeRequireSpool = &serializeNode{}
-
-// planNodeSpool serves as marker for nodes that can perform all their
-// execution during the start phase. This is different from the "fast
-// path" interface because a node that performs all its execution
-// during the start phase might still have some result rows and thus
-// not implement the fast path.
-//
-// This interface exists for the following optimization: nodes
-// that require spooling but are the children of a spooled node
-// do not require the introduction of an explicit spool.
-type planNodeSpooled interface {
-	spooled()
-}
-
-var _ planNodeSpooled = &spoolNode{}
 
 type flowInfo struct {
 	typ planComponentType

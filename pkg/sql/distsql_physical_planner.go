@@ -503,19 +503,6 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	return false
 }
 
-func shouldWrapPlanNodeForExecStats(planCtx *PlanningCtx, node planNode) bool {
-	if !planCtx.collectExecStats {
-		// If execution stats aren't being collected, there is no point in
-		// having the overhead of wrappers.
-		return false
-	}
-	// Wrapping batchedPlanNodes breaks some assumptions (namely that Start is
-	// called on the processor-adapter) because it's executed in a special "fast
-	// path" way, so we exempt these from wrapping.
-	_, ok := node.(batchedPlanNode)
-	return !ok
-}
-
 // wrapValuesNode returns whether a valuesNode can and should be wrapped into
 // the physical plan, rather than creating a Values processor. This method can
 // be used before actually creating the valuesNode to decide whether that
@@ -4202,18 +4189,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-	case *rowCountNode:
-		isVectorInsert := false
-		if in, ok := n.source.(*insertNode); ok {
-			isVectorInsert = in.vectorInsert
-		}
-
-		if isVectorInsert {
-			plan, err = dsp.createPlanForRowCount(ctx, planCtx, n)
-		} else {
-			plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
-		}
-
 	case *scanNode:
 		plan, err = dsp.createTableReaders(ctx, planCtx, n)
 
@@ -4310,8 +4285,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 func (dsp *DistSQLPlanner) wrapPlan(
 	ctx context.Context, planCtx *PlanningCtx, n planNode, allowPartialDistribution bool,
 ) (*PhysicalPlan, error) {
-	useFastPath := planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected
-
 	// First, we search the planNode tree we're trying to wrap for the first
 	// DistSQL-enabled planNode in the tree. If we find one, we ask the planner to
 	// continue the DistSQL planning recursion on that planNode.
@@ -4326,7 +4299,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		}
 		if !seenTop {
 			seenTop = true
-		} else if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
+		} else if !dsp.mustWrapNode(planCtx, plan) || planCtx.collectExecStats {
 			p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
 			if err != nil {
 				return nil, nil, err
@@ -4366,20 +4339,19 @@ func (dsp *DistSQLPlanner) wrapPlan(
 
 	// Copy the evalCtx.
 	evalCtx := *planCtx.ExtendedEvalCtx
-	// We permit the planNodeToRowSource to trigger the wrapped planNode's fast
-	// path if its the very first node in the flow, and if the statement type we're
-	// expecting is in fact RowsAffected. RowsAffected statements return a single
-	// row with the number of rows affected by the statement, and are the only
-	// types of statement where it's valid to invoke a plan's fast path.
 	wrapper := newPlanNodeToRowSource(
 		n,
 		runParams{
 			extendedEvalCtx: &evalCtx,
 			p:               planCtx.planner,
 		},
-		useFastPath,
 		firstNotWrapped,
 	)
+	if !wrapper.rowsAffected && planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected {
+		// Return an error if the receiver expects to get the number of rows
+		// affected, but the planNode returns something else.
+		return nil, errors.AssertionFailedf("planNode %T should return rows affected", n)
+	}
 
 	localProcIdx := p.AddLocalProcessor(wrapper)
 	var input []execinfrapb.InputSyncSpec
@@ -5669,33 +5641,6 @@ func finalizePlanWithRowCount(
 	}
 }
 
-// TODO(cucaroach): this doesn't work, get it working as part of effort to make
-// distsql inserts handle general inserts.
-func (dsp *DistSQLPlanner) createPlanForRowCount(
-	ctx context.Context, planCtx *PlanningCtx, n *rowCountNode,
-) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
-	plan.PlanToStreamColMap = identityMap(nil, 1)
-	// fn := newAggregateFuncHolder(
-	// 	execinfrapb.AggregatorSpec_Func_name[int32(execinfrapb.AggregatorSpec_COUNT_ROWS)],
-	// 	[]int{0},
-	// 	nil,   /* arguments */
-	// 	false, /* isDistinct */
-	// )
-	// gn := groupNode{
-	// 	columns:   []colinfo.ResultColumn{{Name: "rowCount", Typ: types.Int}},
-	// 	plan:      n,
-	// 	groupCols: []int{0},
-	// 	isScalar:  true,
-	// 	funcs:     []*aggregateFuncHolder{fn},
-	// }
-	// // This errors:  no builtin aggregate for COUNT_ROWS on [int]
-	// if err := dsp.addAggregators(ctx, planCtx, plan, &gn); err != nil {
-	// 	return nil, err
-	// }
-	return plan, err
-}
-
 func (dsp *DistSQLPlanner) createPlanForInsert(
 	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
 ) (*PhysicalPlan, error) {
@@ -5732,6 +5677,7 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 		execinfrapb.Ordering{},
 		planCtx.associateWithPlanNode(n),
 	)
+	plan.PlanToStreamColMap = []int{0}
 	return plan, nil
 }
 
