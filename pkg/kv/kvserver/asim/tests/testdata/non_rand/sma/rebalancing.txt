@@ -1,5 +1,10 @@
 # This test verifies that the allocator can rebalance qps load across a 7-node
 # cluster. mma-only fails here since it doesn't balance based on leases.
+# TODO(tbg): this test works because the default rebalancing objective in asim
+# was accidentally left as 'qps' (even though we use 'cpu' in production).
+# When the default changes, this test needs to override the setting and probably
+# rename the test to specify that it's about qps rebalancing in particular,
+# which otherwise sees little explicit testing.
 skip_under_ci
 ----
 
@@ -17,6 +22,7 @@ gen_ranges ranges=7 placement_type=skewed
 # uniform distribution on the keyspace.
 gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 ----
+66 KiB/s goodput
 
 # Add two assertions (balanced, stable steady state) on QPS of the cluster.
 assertion stat=qps type=balance ticks=6 upper_bound=1.15
@@ -85,6 +91,8 @@ Workload Set Up
 Changed Settings
 	empty
 ==========================
+
+# TODO(tbg): make this a separate testdata file.
 
 # Update the gossip delay to be unreasonably long (default 500ms) to assess
 # uncommon scenarios.

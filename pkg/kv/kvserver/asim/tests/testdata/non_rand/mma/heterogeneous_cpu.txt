@@ -21,6 +21,7 @@ gen_ranges ranges=200 min_key=1 max_key=10000 placement_type=even
 # cpu nanos per second.
 gen_load rate=40000 rw_ratio=1 request_cpu_per_access=500000 min_key=1 max_key=10000
 ----
+20.00 access-vcpus
 
 # We want the CPU load to balance based on %cpu. But both the MMA and SMA balance
 # on absolute cpu-nanos, i.e. not taking into account that n3 has double the capacity.

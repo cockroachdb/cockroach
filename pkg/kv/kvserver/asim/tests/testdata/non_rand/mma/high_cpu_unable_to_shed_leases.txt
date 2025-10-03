@@ -35,6 +35,7 @@ gen_ranges ranges=25 min_key=0 max_key=10000 placement_type=replica_placement
 
 gen_load rate=5000 rw_ratio=0 min_key=0 max_key=10000 raft_cpu_per_write=1000000
 ----
+5.00 raft-vcpus, 4.9 KiB/s goodput
 
 eval duration=5m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases)
 ----

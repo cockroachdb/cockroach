@@ -244,15 +244,17 @@ func TestDataDriven(t *testing.T) {
 					// CPU consumptions. This isn't exact because it doesn't account for
 					// replication, but it's close enough.
 					// NB: writes also consume requestCPUPerAccess.
-					approxVCPUs := (rate * (float64(requestCPUPerAccess) + float64(raftCPUPerAccess)*(1.0-rwRatio))) / 1e9
+					accessVCPUs := rate * float64(requestCPUPerAccess) / 1e9
+					beforeReplicationRaftVCPUs := rate * (1 - rwRatio) * float64(raftCPUPerAccess) / 1e9
+					approxVCPUs := accessVCPUs + beforeReplicationRaftVCPUs
 					// Ditto for writes. Here too we don't account for replication. Note
 					// that at least under uniform writes, real clusters can have a write
 					// amp that easily surpasses 20, so writing at 40mb/s to a small set
 					// of stores would often constitute an issue in production.
-					approxWriteBytes := float64(maxBlock+minBlock) * rate * (1.0 - rwRatio) / 2
+					beforeReplicationWriteBytes := float64(maxBlock+minBlock) * rate * (1.0 - rwRatio) / 2
 
 					const tenkb = 10 * 1024
-					neitherWriteNorCPUHeavy := approxWriteBytes < tenkb && approxVCPUs < .5
+					neitherWriteNorCPUHeavy := beforeReplicationWriteBytes < tenkb && approxVCPUs < .5
 
 					// We tolerate abnormally low CPU if there's a sensible amount of
 					// write load. Otherwise, it's likely a mistake.
@@ -261,9 +263,24 @@ func TestDataDriven(t *testing.T) {
 					}
 					// Similarly, tolerate abnormally low write load when there's
 					// significant CPU. Independently, call out high write load.
-					if (neitherWriteNorCPUHeavy && approxWriteBytes > 0) || approxWriteBytes > 40*(1<<20) {
+					if (neitherWriteNorCPUHeavy && beforeReplicationWriteBytes > 0) || beforeReplicationWriteBytes > 40*(1<<20) {
 						_, _ = fmt.Fprintf(&buf, "WARNING: write load of %s is likely accidental\n",
-							humanizeutil.IBytes(int64(approxWriteBytes)))
+							humanizeutil.IBytes(int64(beforeReplicationWriteBytes)))
+					}
+					{
+						var parts []string
+						if accessVCPUs > 0 {
+							parts = append(parts, fmt.Sprintf("%.2f access-vcpus", accessVCPUs))
+						}
+						if beforeReplicationRaftVCPUs > 0 {
+							parts = append(parts, fmt.Sprintf("%.2f raft-vcpus", beforeReplicationRaftVCPUs))
+						}
+						if beforeReplicationWriteBytes > 0 {
+							parts = append(parts, fmt.Sprintf("%s/s goodput", humanizeutil.IBytes(int64(beforeReplicationWriteBytes))))
+						}
+						if len(parts) > 0 {
+							_, _ = fmt.Fprintln(&buf, strings.Join(parts, ", "))
+						}
 					}
 
 					var nextLoadGen gen.BasicLoad
@@ -560,8 +577,12 @@ func TestDataDriven(t *testing.T) {
 							seedGen := rand.New(rand.NewSource(seed))
 							for sample := 0; sample < samples; sample++ {
 								tr := makeTraceHelper(rewrite, plotDir, testName, sample+1, duration)
-								settingsGen.Settings.OnRecording = func(storeID int64, atDuration time.Duration, rec tracingpb.Recording) {
-									tr.OnRecording(t, storeID, atDuration, rec)
+								if tr.enabled {
+									// Only populate OnRecording if we're going to save the results.
+									// That way, we avoid creating trace spans during normal test runs.
+									settingsGen.Settings.OnRecording = func(storeID int64, atDuration time.Duration, rec tracingpb.Recording) {
+										tr.OnRecording(t, storeID, atDuration, rec)
+									}
 								}
 
 								assertionFailures := []string{}

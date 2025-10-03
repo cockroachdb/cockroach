@@ -16,6 +16,7 @@ gen_ranges ranges=500 bytes_mib=286
 
 gen_load rate=500 max_block=60000 min_block=60000
 ----
+29 MiB/s goodput
 
 # Set the disk storage capacity of s5 to 100 GiB. This will necessitate
 # shedding replicas from s5 continously as the workload fills up ranges.

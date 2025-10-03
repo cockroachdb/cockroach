@@ -98,13 +98,18 @@ func NewSimulator(
 	changer := state.NewReplicaChanger()
 	controllers := make(map[state.StoreID]op.Controller)
 
+	var onRecording func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording)
+	if fn := settings.OnRecording; fn != nil {
+		onRecording = func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording) {
+			fn(int64(storeID), atDuration, rec)
+		}
+	}
+
 	s := &Simulator{
 		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
-		onRecording: func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording) {
-			if fn := settings.OnRecording; fn != nil {
-				fn(int64(storeID), atDuration, rec)
-			}
-		},
+		// onRecording is intentionally nil if settings.OnRecording is nil, to
+		// short-circuit trace creation overhead in that case.
+		onRecording: onRecording,
 		curr:        settings.StartTime,
 		end:         settings.StartTime.Add(duration),
 		interval:    settings.TickInterval,
@@ -404,7 +409,9 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
-		s.srs[store.StoreID()].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "StoreRebalancer", func(ctx context.Context) {
+			s.srs[store.StoreID()].Tick(ctx, tick, state)
+		})
 	}
 }
 
