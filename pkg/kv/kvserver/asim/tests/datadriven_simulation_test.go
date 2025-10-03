@@ -577,7 +577,7 @@ func TestDataDriven(t *testing.T) {
 							seedGen := rand.New(rand.NewSource(seed))
 							for sample := 0; sample < samples; sample++ {
 								tr := makeTraceHelper(rewrite, plotDir, testName, sample+1, duration)
-								if !tr.enabled {
+								if tr.enabled {
 									// Only populate OnRecording if we're going to save the results.
 									// That way, we avoid creating trace spans during normal test runs.
 									settingsGen.Settings.OnRecording = func(storeID int64, atDuration time.Duration, rec tracingpb.Recording) {
