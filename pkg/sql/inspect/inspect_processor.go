@@ -29,6 +29,10 @@ import (
 )
 
 var (
+	// errInspectFoundInconsistencies is a sentinel error used to mark errors
+	// returned when INSPECT jobs find data inconsistencies.
+	errInspectFoundInconsistencies = pgerror.New(pgcode.DataException, "INSPECT found inconsistencies")
+
 	processorConcurrencyOverride = settings.RegisterIntSetting(
 		settings.ApplicationLevel,
 		"sql.inspect.processor_concurrency",
@@ -176,7 +180,7 @@ func (p *inspectProcessor) runInspect(ctx context.Context, output execinfra.RowR
 
 	log.Dev.Infof(ctx, "INSPECT processor completed processorID=%d issuesFound=%t", p.processorID, p.logger.hasIssues())
 	if p.logger.hasIssues() {
-		return pgerror.Newf(pgcode.DataException, "INSPECT found inconsistencies")
+		return errInspectFoundInconsistencies
 	}
 	return nil
 }
@@ -194,15 +198,21 @@ func getProcessorConcurrency(flowCtx *execinfra.FlowCtx) int {
 
 // getInspectLogger returns a logger for the inspect processor.
 func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) inspectLogger {
+	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	metrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
+
 	loggers := inspectLoggers{
 		&logSink{},
 		&tableSink{
 			db:    flowCtx.Cfg.DB,
 			jobID: jobID,
 		},
+		&metricsLogger{
+			issuesFoundCtr: metrics.IssuesFound,
+		},
 	}
 
-	knobs := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).InspectTestingKnobs
+	knobs := execCfg.InspectTestingKnobs
 	if knobs != nil && knobs.InspectIssueLogger != nil {
 		loggers = append(loggers, knobs.InspectIssueLogger.(inspectLogger))
 	}
