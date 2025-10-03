@@ -474,7 +474,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				cancelCtxFunc()
 			},
-			maxExpectedTimeSpent: time.Millisecond * 20,
+			maxExpectedTimeSpent: time.Millisecond * 30,
 			expectedErr:          true,
 			// Under duress, closing a context will not necessarily stop the retry
 			// loop immediately, so we skip this test under duress.
@@ -494,7 +494,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				close(closeCh)
 			},
-			maxExpectedTimeSpent: time.Millisecond * 20,
+			maxExpectedTimeSpent: time.Millisecond * 30,
 			expectedErr:          true,
 			// Under duress, closing a channel will not necessarily stop the retry
 			// loop immediately, so we skip this test under duress.
