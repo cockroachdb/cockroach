@@ -4,7 +4,8 @@
 statement ok
 CREATE TABLE json_tab (
   a INT PRIMARY KEY,
-  b JSONB
+  b JSONB,
+  c JSONB
 )
 
 statement ok
@@ -25,7 +26,7 @@ INSERT INTO json_tab VALUES
 
 # To confirm which rows contain the specified path.
 query IT
-SELECT * FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
+SELECT a, b FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a, b;
 ----
 3  {"a": {"b": "c", "d": "e"}}
 4  {"a": {"b": [1, 2, 3, 4]}}
@@ -35,7 +36,7 @@ SELECT * FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 9  {"a": {"b": "c"}}
 
 query IT
-SELECT * FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
+SELECT a, b FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a, b;
 ----
 3  {"a": {"b": "c", "d": "e"}}
 4  {"a": {"b": [1, 2, 3, 4]}}
@@ -505,3 +506,53 @@ SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*][*] ? (@.b == 1
 16
 17
 18
+
+# If json parameter is not part of the inverted index, the filter should
+# not be index accelerated.
+statement ok
+INSERT INTO json_tab VALUES (19, '{"a": {"b": "c"}}', '{"a": {"b": "c"}}')
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(c, '$.a.b') ORDER BY a;
+----
+19
+
+statement error index "foo_inv" is inverted and cannot be used for this query
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(c, '$.a.b') ORDER BY a;
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists('{"a": {"b": "c"}}', '$.a.b') ORDER BY a;
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+
+statement error index "foo_inv" is inverted and cannot be used for this query
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists('{"a": {"b": "c"}}', '$.a.b') ORDER BY a;
+
+# We don't index accelerate jsonb_path_exists clause with variables.
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '{"x": "c"}') ORDER BY a;
+----
+3
+9
+19
+
+statement error index "foo_inv" is inverted and cannot be used for this query
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '{"x": "c"}') ORDER BY a;

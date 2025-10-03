@@ -1692,6 +1692,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			sqlsmith.DisableWith(),
 			sqlsmith.DisableMutations(),
 			sqlsmith.DisableLimits(),
+			sqlsmith.DisableDoBlocks(),
 			sqlsmith.DisableAggregateFuncs(),
 			sqlsmith.DisableWindowFuncs(),
 			sqlsmith.DisableJoins(),
