@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -404,9 +405,8 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		perTablePTSEnabled :=
-			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
-				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+		// In 25.4 we are hard disabling per table protected timestamps.
+		perTablePTSEnabled := false
 
 		if perTablePTSEnabled {
 			eFeed, ok := f2.(cdctest.EnterpriseTestFeed)
@@ -751,8 +751,6 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -870,12 +868,6 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
-		// Since old style PTS records should not be created when per-table PTS records are enabled,
-		// we disable them for this test. Per-table PTS breaks assumptions about where we can find
-		// the PTS record uuids.
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
-
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
 
@@ -976,10 +968,6 @@ func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
-
-		// Ensure we use legacy single protected timestamp behavior for this test
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (id INT)`)
@@ -1087,12 +1075,14 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 93793, "unreleased feature as of 25.4")
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		// Enable per-table protected timestamps and progress tracking
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, true)
+		// It's not possible to enable per-table protected timestamps
+		// since it's disabled in 25.4. This is where we will enable the setting
+		// for 26.1.
 		changefeedbase.TrackPerTableProgress.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, true)
 
