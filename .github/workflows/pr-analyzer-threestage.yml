@@ -1,0 +1,176 @@
+name: Claude Code PR Review
+
+on:
+  pull_request:
+    types: [synchronize, ready_for_review, reopened, labeled]
+
+jobs:
+  claude-code-pr-review:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'O-AI-Review')
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/github'
+
+      - name: Stage 1 - Initial Bug Screening
+        id: stage1
+        uses: cockroachdb/claude-code-action@v1
+        with:
+          use_vertex: "true"
+          claude_args: |
+            --model claude-sonnet-4-5-20250929
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Examine each line of code in this PR for potential bugs that could negatively impact
+            CockroachDB users. Focus on:
+            - Basic logic errors
+            - Obvious security vulnerabilities
+            - Clear error handling problems
+            - Type safety issues
+
+            When performing your analysis, be conservative but thorough. You should think:
+            "would I be willing to go to jail if my analysis is incorrect?"
+
+            **CRITICAL**: You must respond with EXACTLY one of these formats:
+            1. 'POTENTIAL_BUG_DETECTED - [brief description]' if you find a definite bug
+            2. 'NO_BUG_FOUND' if no obvious bugs are found
+
+            If you detect bugs, clearly explain what you found and why it's problematic.
+
+            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
+            - `STAGE1_RESULT - POTENTIAL_BUG_DETECTED` or
+            - `STAGE1_RESULT - NO_BUG_FOUND`
+
+      - name: Stage 2 - Database Expert Review
+        id: stage2
+        if: contains(steps.stage1.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
+        uses: cockroachdb/claude-code-action@v1
+        with:
+          use_vertex: "true"
+          claude_args: |
+            --model claude-4-5-sonnet-20250929
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are a database systems expert providing a second opinion. Stage 1 analysis
+            found potential issues. Your job is to confirm or reject those findings.
+
+            **Stage 1 Results**:
+            ${{ steps.stage1.outputs.result }}
+
+            Review the Stage 1 findings and perform your own analysis. Do not identify
+            new bugs unless they're glaringly obvious.
+
+            Be very thorough and conservative. Ask yourself: "would I risk losing my job
+            over falsely identifying a bug?" If there's doubt, err on the side of
+            NO_BUG_DETECTED.
+
+            **CRITICAL**: You must respond with EXACTLY one of these formats:
+            1. 'POTENTIAL_BUG_DETECTED - [detailed description of confirmed bugs]'
+            2. 'NO_BUG_FOUND' if bugs are not confirmed
+
+            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
+            - `STAGE2_RESULT - POTENTIAL_BUG_DETECTED [detailed description of confirmed bugs]` or
+            - `STAGE2_RESULT - NO_BUG_FOUND`
+
+      - name: Stage 3 - Principal Engineer Final Review
+        id: stage3
+        if: contains(steps.stage2.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
+        uses: cockroachdb/claude-code-action@v1
+        with:
+          use_vertex: "true"
+          claude_args: |
+            --model claude-4-5-sonnet-20250929
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are a principal engineer performing the final, most critical analysis.
+            Two previous stages have found potential issues that need final validation.
+
+            **Stage 1 Results**:
+            ${{ steps.stage1.outputs.result }}
+
+            **Stage 2 Results**:
+            ${{ steps.stage2.outputs.result }}
+
+            This is the final gate before flagging this PR as having critical bugs.
+            Only confirm bugs that could cause:
+            - Data loss or corruption
+            - Incorrect errors, traps or panics
+            - Security breaches
+            - Cluster instability
+            - Production outages
+
+            Be extremely conservative - only flag truly critical issues. If you're wrong,
+            it could mean serious consequences for the project.
+
+            Use conservative language and minimize superlatives. Assume the reader has
+            a heart condition - just articulate facts without emotion.
+
+            **CRITICAL**: You must respond with EXACTLY one of these formats:
+            1. 'BUG_DETECTED: [description, line numbers and suggested fix]'
+            2. 'NO_BUG_DETECTED' if issues are not critical enough
+
+            For each issue found, provide:
+            1. The specific line(s) where the issue occurs
+            2. A clear description of what is wrong
+            3. A suggested fix
+
+            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
+            - `STAGE3_RESULT: POTENTIAL_BUG_CONFIRMED` or
+            - `STAGE3_RESULT: NO_BUG_FOUND`
+
+      - name: Final Analysis Report
+        if: always()
+        uses: cockroachdb/claude-code-action@v1
+        with:
+          use_vertex: "true"
+          claude_args: |
+            --model claude-4-5-sonnet-20250929
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            ## Three-Stage Analysis Summary
+
+            Generate a final summary report based on the completed analysis stages:
+
+            **Stage 1 Result**: ${{ steps.stage1.outputs.result || 'Not completed' }}
+            **Stage 2 Result**: ${{ steps.stage2.outputs.result || 'Skipped - Stage 1 found no bugs' }}
+            **Stage 3 Result**: ${{ steps.stage3.outputs.result || 'Skipped - Stage 2 did not confirm bugs' }}
+
+            **Analysis Process**:
+            - Stage 1 (Initial Screening): ${{ steps.stage1.conclusion }}
+            - Stage 2 (Database Expert): ${{ steps.stage2.conclusion || 'Skipped' }}
+            - Stage 3 (Principal Engineer): ${{ steps.stage3.conclusion || 'Skipped' }}
+
+            Provide a clear, concise summary of:
+            1. How many stages were executed
+            2. The final determination (critical bug found or no critical bugs)
+            3. If bugs were found, what actions are recommended
+
+            **If all three stages detected bugs**, this indicates a potential issue that warrants investigation.
