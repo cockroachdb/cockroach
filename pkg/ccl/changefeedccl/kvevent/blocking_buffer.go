@@ -523,13 +523,16 @@ func logSlowAcquisition(
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Changefeed.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)", redact.SafeString(bufType),
-				timeutil.Since(start))
+			log.Changefeed.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)",
+				timeutil.Since(start),
+				redact.SafeString(bufType))
 		}
 
 		return func() {
 			if shouldLog {
-				log.Changefeed.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)", timeutil.Since(start), redact.SafeString(bufType))
+				log.Changefeed.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)",
+					timeutil.Since(start),
+					redact.SafeString(bufType))
 			}
 		}
 	}
