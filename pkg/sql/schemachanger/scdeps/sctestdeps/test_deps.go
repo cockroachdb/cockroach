@@ -1393,10 +1393,7 @@ func (s *TestState) ResolveFunction(
 	if err != nil {
 		return nil, err
 	}
-	fd, err := tree.GetBuiltinFuncDefinition(fnName, path)
-	if err != nil {
-		return nil, err
-	}
+	fd := tree.GetBuiltinFuncDefinition(fnName, path)
 	if fd != nil {
 		return fd, nil
 	}

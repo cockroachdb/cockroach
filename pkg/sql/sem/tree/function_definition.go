@@ -599,10 +599,7 @@ func QualifyBuiltinFunctionDefinition(
 func GetBuiltinFuncDefinitionOrFail(
 	fName RoutineName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
-	def, err := GetBuiltinFuncDefinition(fName, searchPath)
-	if err != nil {
-		return nil, err
-	}
+	def := GetBuiltinFuncDefinition(fName, searchPath)
 	if def == nil {
 		forError := fName // prevent fName from escaping
 		return nil, errors.Mark(
@@ -634,28 +631,23 @@ func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, er
 // in the specific schema are searched. Otherwise, all schemas on the given
 // searchPath are searched. A nil is returned if no function is found. It's
 // caller's choice to error out if function not found.
-//
-// In theory, this function returns an error only when the search path iterator
-// errors which won't happen since the iterating function never errors out. But
-// error is still checked and return from the function signature just in case
-// we change the iterating function in the future.
 func GetBuiltinFuncDefinition(
 	fName RoutineName, searchPath SearchPath,
-) (*ResolvedFunctionDefinition, error) {
+) *ResolvedFunctionDefinition {
 	if fName.ExplicitSchema {
-		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()], nil
+		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()]
 	}
 
 	// First try that if we can get function directly with the function name.
 	// There is a case where the part[0] of the name is a qualified string when
-	// the qualified name is double quoted as a single name like "schema.fn".
+	// the qualified name is double-quoted as a single name like "schema.fn".
 	if def, ok := ResolvedBuiltinFuncDefs[fName.Object()]; ok {
-		return def, nil
+		return def
 	}
 
 	// Then try if it's in pg_catalog.
 	if def, ok := ResolvedBuiltinFuncDefs[catconstants.PgCatalogName+"."+fName.Object()]; ok {
-		return def, nil
+		return def
 	}
 
 	// If not in pg_catalog, go through search path.
@@ -669,5 +661,5 @@ func GetBuiltinFuncDefinition(
 		}
 	}
 
-	return resolvedDef, nil
+	return resolvedDef
 }
