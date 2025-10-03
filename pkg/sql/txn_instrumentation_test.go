@@ -43,11 +43,11 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_NoMoreFps(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, success)
 			require.Len(t, collector.stmtBundles, 1)
-			require.True(t, collector.readyToFinalize)
+			require.True(t, collector.ReadyToFinalize())
 		})
 }
 
-func TestTxnDiagnosticsCollector_AddStatementBundle_ExpectedCommitOrRollback(t *testing.T) {
+func TestTxnDiagnosticsCollector_AddStatementBundle_ExpectedTerminalStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -62,7 +62,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_ExpectedCommitOrRollback(t *
 	success, err := collector.AddStatementBundle(123, stmt, bundle)
 	require.Error(t, err)
 	require.False(t, success)
-	require.Contains(t, err.Error(), "Expected commit or rollback")
+	require.Contains(t, err.Error(), "Expected a terminal statement")
 }
 
 func TestTxnDiagnosticsCollector_AddStatementBundle_AlreadyFinalized(t *testing.T) {
@@ -72,7 +72,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_AlreadyFinalized(t *testing.
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
 	collector := newTxnDiagnosticsCollector(request, requestID, nil)
-	collector.readyToFinalize = true
+	collector.UpdateState(txnDiagnosticsReadyToFinalize)
 
 	stmt := &tree.Select{
 		Select: &tree.SelectClause{},
@@ -81,7 +81,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_AlreadyFinalized(t *testing.
 	success, err := collector.AddStatementBundle(123, stmt, bundle)
 	require.Error(t, err)
 	require.False(t, success)
-	require.Contains(t, err.Error(), "Illegal state, cannot add bundle to completed txn diagnostic")
+	require.Contains(t, err.Error(), "Illegal state: transaction diagnostics collector is not in progress")
 }
 
 func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testing.T) {
@@ -103,7 +103,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testin
 	require.True(t, success)
 	require.Len(t, collector.stmtBundles, 1)
 	require.Equal(t, []uint64{456}, collector.stmtsFpsToCapture)
-	require.False(t, collector.readyToFinalize)
+	require.False(t, collector.ReadyToFinalize())
 
 	stmt2 := &tree.Insert{}
 	bundle2 := stmtdiagnostics.StmtDiagnostic{}
@@ -113,7 +113,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testin
 	require.True(t, success)
 	require.Len(t, collector.stmtBundles, 2)
 	require.Empty(t, collector.stmtsFpsToCapture)
-	require.False(t, collector.readyToFinalize)
+	require.False(t, collector.ReadyToFinalize())
 }
 
 func TestTxnDiagnosticsCollector_AddStatementBundle_WrongFingerprint(t *testing.T) {
@@ -152,49 +152,7 @@ func TestTxnInstrumentationHelper_StartDiagnostics(t *testing.T) {
 	require.Equal(t, request, helper.diagnosticsCollector.request)
 	require.Equal(t, requestID, helper.diagnosticsCollector.requestId)
 	require.Equal(t, span, helper.diagnosticsCollector.span)
-	require.True(t, helper.DiagnosticsInProgress())
-}
-
-func TestTxnInstrumentationHelper_DiagnosticsInProgress(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, tc := range []struct {
-		name               string
-		requestId          stmtdiagnostics.RequestID
-		stmtsFpsToCapture  []uint64
-		stmtBundles        []stmtdiagnostics.StmtDiagnostic
-		expectedInProgress bool
-	}{
-		{
-			name:               "not in progress",
-			expectedInProgress: false,
-		}, {
-			name:               "with requestId",
-			requestId:          stmtdiagnostics.RequestID(42),
-			stmtsFpsToCapture:  nil,
-			stmtBundles:        nil,
-			expectedInProgress: true,
-		}, {
-			name:               "with stmtFpsToCapture",
-			stmtsFpsToCapture:  []uint64{123, 456},
-			expectedInProgress: true,
-		}, {
-			name:               "with stmtBundles",
-			stmtsFpsToCapture:  nil,
-			stmtBundles:        []stmtdiagnostics.StmtDiagnostic{{}},
-			expectedInProgress: true,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-
-			helper := &txnInstrumentationHelper{}
-			helper.diagnosticsCollector.requestId = tc.requestId
-			helper.diagnosticsCollector.stmtsFpsToCapture = tc.stmtsFpsToCapture
-			helper.diagnosticsCollector.stmtBundles = tc.stmtBundles
-			require.Equal(t, tc.expectedInProgress, helper.DiagnosticsInProgress())
-		})
-	}
+	require.True(t, helper.diagnosticsCollector.InProgress())
 }
 
 func TestTxnInstrumentationHelper_AddStatementBundle_Success(t *testing.T) {
@@ -216,7 +174,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Success(t *testing.T) {
 	helper.AddStatementBundle(ctx, stmt, stmtFingerprintId, stmtFingerprint, bundle)
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 1)
-	require.True(t, helper.diagnosticsCollector.readyToFinalize)
+	require.True(t, helper.diagnosticsCollector.ReadyToFinalize())
 }
 
 func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
@@ -231,7 +189,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
 	helper.StartDiagnostics(request, requestID, nil)
 
 	// Set collector to already finalized to trigger error
-	helper.diagnosticsCollector.readyToFinalize = true
+	helper.diagnosticsCollector.UpdateState(txnDiagnosticsReadyToFinalize)
 
 	ctx := context.Background()
 	stmt := &tree.Select{Select: &tree.SelectClause{}}
@@ -242,7 +200,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
 	helper.AddStatementBundle(ctx, stmt, stmtFingerprintId, stmtFingerprint, bundle)
 
 	// After error, helper should be reset
-	require.False(t, helper.DiagnosticsInProgress())
+	require.False(t, helper.diagnosticsCollector.InProgress())
 }
 
 func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
@@ -268,10 +226,10 @@ func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
 	helper.AddStatementBundle(ctx, stmt, stmtFingerprintId, stmtFingerprint, bundle)
 
 	// After no success, helper should be reset
-	require.False(t, helper.DiagnosticsInProgress())
+	require.False(t, helper.diagnosticsCollector.InProgress())
 }
 
-func TestTxnInstrumentationHelper_ShouldContinueDiagnostics(t *testing.T) {
+func TestTxnInstrumentationHelper_MaybeContinueDiagnostics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -340,17 +298,18 @@ func TestTxnInstrumentationHelper_ShouldContinueDiagnostics(t *testing.T) {
 		tracer := tracing.NewTracer()
 		sp := tracer.StartSpan("parent-span", tracing.WithRecording(tracingpb.RecordingVerbose))
 		helper.StartDiagnostics(request, requestID, sp)
-		newCtx, actual := helper.ShouldContinueDiagnostics(ctx, tc.stmt.stmt, tc.stmt.fpId)
+		newCtx, actual := helper.MaybeContinueDiagnostics(ctx, tc.stmt.stmt, tc.stmt.fpId)
 		require.Equal(t, tc.shouldContinue, actual)
 
 		if !tc.shouldContinue {
-			require.Zero(t, helper.diagnosticsCollector)
-			require.False(t, helper.DiagnosticsInProgress())
+			require.True(t, helper.diagnosticsCollector.IsReset())
+			require.False(t, helper.diagnosticsCollector.InProgress())
 			require.Equal(t, ctx, newCtx)
 		} else {
 			require.NotEqual(t, ctx, newCtx)
 			returnedSpan := tracing.SpanFromContext(newCtx)
 			require.Equal(t, sp, returnedSpan)
+			require.True(t, helper.diagnosticsCollector.InProgress())
 		}
 	}
 }
@@ -389,7 +348,7 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	// Process first statement
 	stmt1 := &tree.Select{Select: &tree.SelectClause{}}
-	_, shouldContinue := helper.ShouldContinueDiagnostics(ctx, stmt1, 100)
+	_, shouldContinue := helper.MaybeContinueDiagnostics(ctx, stmt1, 100)
 	require.True(t, shouldContinue)
 
 	bundle1 := diagnosticsBundle{zip: []byte("stmt1-zip")}
@@ -397,11 +356,11 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 1)
 	require.Equal(t, []uint64{200, 300}, helper.diagnosticsCollector.stmtsFpsToCapture)
-	require.False(t, helper.diagnosticsCollector.readyToFinalize)
+	require.False(t, helper.diagnosticsCollector.ReadyToFinalize())
 
 	// Process second statement
 	stmt2 := &tree.Select{Select: &tree.SelectClause{}}
-	_, shouldContinue = helper.ShouldContinueDiagnostics(ctx, stmt2, 200)
+	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, stmt2, 200)
 	require.True(t, shouldContinue)
 
 	bundle2 := diagnosticsBundle{zip: []byte("stmt2-zip")}
@@ -409,11 +368,11 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 2)
 	require.Equal(t, []uint64{300}, helper.diagnosticsCollector.stmtsFpsToCapture)
-	require.False(t, helper.diagnosticsCollector.readyToFinalize)
+	require.False(t, helper.diagnosticsCollector.ReadyToFinalize())
 
 	// Process third statement
 	stmt3 := &tree.Select{Select: &tree.SelectClause{}}
-	_, shouldContinue = helper.ShouldContinueDiagnostics(ctx, stmt2, 300)
+	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, stmt2, 300)
 	require.True(t, shouldContinue)
 
 	bundle3 := diagnosticsBundle{zip: []byte("stmt3-zip")}
@@ -421,18 +380,18 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 3)
 	require.Empty(t, helper.diagnosticsCollector.stmtsFpsToCapture)
-	require.False(t, helper.diagnosticsCollector.readyToFinalize)
+	require.False(t, helper.diagnosticsCollector.ReadyToFinalize())
 
 	// Process commit statement
 	commit := &tree.CommitTransaction{}
-	_, shouldContinue = helper.ShouldContinueDiagnostics(ctx, commit, 0)
+	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, commit, 0)
 	require.True(t, shouldContinue)
 
 	bundleCommit := diagnosticsBundle{zip: []byte("commit-zip")}
 	helper.AddStatementBundle(ctx, commit, uint64(0), "COMMIT", bundleCommit)
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 4)
-	require.True(t, helper.diagnosticsCollector.readyToFinalize)
+	require.True(t, helper.diagnosticsCollector.ReadyToFinalize())
 }
 
 func TestTxnDiagnosticsCollector_collectTrace_RedactedRequest(t *testing.T) {
@@ -553,24 +512,55 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 	baseHelper := txnInstrumentationHelper{
 		TxnDiagnosticsRecorder: stmtdiagnostics.NewTxnRegistry(nil, nil, nil, timeutil.DefaultTimeSource{}),
 	}
-
-	t.Run("already in progress", func(t *testing.T) {
-		ctx := context.Background()
-		helper := baseHelper
-		helper.diagnosticsCollector.requestId = stmtdiagnostics.RequestID(42)
-		newCtx, started := helper.MaybeStartDiagnostics(ctx, 123, nil)
-		require.False(t, started)
-		require.Equal(t, ctx, newCtx)
-
-	})
-
 	t.Run("not started", func(t *testing.T) {
 		ctx := context.Background()
-		helper := baseHelper
-		newCtx, started := helper.MaybeStartDiagnostics(ctx, 123, nil)
-		require.False(t, started)
-		require.Equal(t, ctx, newCtx)
+		for _, tc := range []struct {
+			name          string
+			stmt          tree.Statement
+			expectedState txnDiagnosticsState
+		}{
+			{
+				name:          "should reset",
+				stmt:          &tree.Select{Select: &tree.SelectClause{}},
+				expectedState: txnDiagnosticsReset,
+			}, {
+				name:          "should stay not started",
+				stmt:          &tree.Savepoint{},
+				expectedState: txnDiagnosticsNotStarted,
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				helper := baseHelper
+				helper.diagnosticsCollector.UpdateState(txnDiagnosticsNotStarted)
+				newCtx, started := helper.MaybeStartDiagnostics(ctx, tc.stmt, 123, nil)
+				require.False(t, started)
+				require.Equal(t, ctx, newCtx)
+				require.Equal(t, tc.expectedState, helper.diagnosticsCollector.state)
+			})
+		}
 	})
+
+	t.Run("already in progress", func(t *testing.T) {
+		testutils.RunValues(t,
+			"with state",
+			[]txnDiagnosticsState{txnDiagnosticsInProgress, txnDiagnosticsReadyToFinalize},
+			func(t *testing.T, state txnDiagnosticsState) {
+				ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+				ctx := context.Background()
+				defer ts.Stopper().Stop(ctx)
+
+				helper := baseHelper
+				helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(ts.InternalDB().(isql.DB), nil, nil, timeutil.DefaultTimeSource{})
+
+				_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, false)
+				require.NoError(t, err)
+				helper.diagnosticsCollector.UpdateState(state)
+				newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer())
+				require.False(t, started)
+				require.Equal(t, ctx, newCtx)
+			})
+	})
+
 	t.Run("started", func(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "redacted", func(t *testing.T, redacted bool) {
 
@@ -579,14 +569,15 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			defer ts.Stopper().Stop(ctx)
 
 			helper := baseHelper
+			helper.diagnosticsCollector.UpdateState(txnDiagnosticsNotStarted)
 			helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(ts.InternalDB().(isql.DB), nil, nil, timeutil.DefaultTimeSource{})
 
 			_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, redacted)
 			require.NoError(t, err)
 
-			newCtx, started := helper.MaybeStartDiagnostics(ctx, 123, ts.Tracer())
+			newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer())
 			require.True(t, started)
-			require.True(t, helper.DiagnosticsInProgress())
+			require.True(t, helper.diagnosticsCollector.InProgress())
 			if redacted {
 				require.Equal(t, ctx, newCtx)
 				require.Nil(t, helper.diagnosticsCollector.span)
