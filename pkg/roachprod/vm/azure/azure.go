@@ -215,7 +215,6 @@ func (p *Provider) GetLiveMigrationVMs(
 func (p *Provider) GetVMSpecs(
 	l *logger.Logger, vms vm.List,
 ) (map[string]map[string]interface{}, error) {
-	// Boiler Plate
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
 	sub, err := p.getSubscription(ctx)
@@ -236,14 +235,7 @@ func (p *Provider) GetVMSpecs(
 		azureVmId, err := parseAzureID(vmInstance.ProviderID)
 		if err != nil {
 			return nil, err
-		} else if azureVmId.resourceGroup == "" {
-			return nil, errors.Errorf("resource group not found in azure id: %s", azureVmId.String())
-		} else if azureVmId.resourceName == "" {
-			return nil, errors.Errorf("resource name not found in azure id: %s", azureVmId.String())
 		}
-
-		// expand with InstanceViewTypesInstanceView and InstanceViewTypesUserData
-		// return the same json in initial usage
 		azureVm, err := client.Get(ctx, azureVmId.resourceGroup, azureVmId.resourceName, "")
 		if err != nil {
 			return nil, errors.Errorf("failed to get vm information for vm: %s", vmInstance.Name)
