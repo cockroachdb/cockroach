@@ -149,10 +149,6 @@ func (ubr *unbufferedRegistration) publish(
 	// is nil. Safe to send to underlying stream.
 	if ubr.mu.catchUpBuf == nil {
 		if err := ubr.stream.SendBuffered(strippedEvent, alloc); err != nil {
-			// Disconnect here for testing purposes only: there are test stream
-			// implementations that inject errors without calling disconnect. For
-			// production code, we expect buffered sender to shut down all
-			// registrations.
 			ubr.disconnectLocked(kvpb.NewError(err))
 		}
 	} else {
