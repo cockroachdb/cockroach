@@ -23,7 +23,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── PUBLIC                → VALIDATED   ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 9}
-      │    │    ├── PUBLIC                → VALIDATED   SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
+      │    │    ├── PUBLIC                → VALIDATED   SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (i), IndexID: 5}
@@ -77,7 +77,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    ├── 9 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 104 (t), IndexID: 8 (t_pkey-), ConstraintID: 9, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── VALIDATED   → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
-      │    │    ├── VALIDATED   → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
+      │    │    ├── VALIDATED   → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
       │    │    ├── PUBLIC      → ABSENT      IndexName:{DescID: 104 (t), Name: "t_i_j_idx", IndexID: 4 (t_i_j_idx-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16), IndexID: 4 (t_i_j_idx-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (i), IndexID: 4 (t_i_j_idx-)}
@@ -103,7 +103,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-)}
       │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_j_shard_3-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), ReferencedColumnIDs: [3], Usage: REGULAR}
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 5}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 6 (t_i_key-)}

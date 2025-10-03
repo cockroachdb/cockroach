@@ -35,6 +35,16 @@ SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='table_
 idx_v
 table_regional_by_row_pkey
 
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM  multiregion_db.public.table_regional_by_row@idx_v
+----
+true
+
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM  multiregion_db.public.table_regional_by_row@idx_v
+----
+true
 
 stage-query phase=PostCommitNonRevertiblePhase stage=:
 SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='table_regional_by_row' ORDER BY index_name;
