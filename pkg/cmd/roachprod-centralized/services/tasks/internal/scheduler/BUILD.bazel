@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scheduler",
+    srcs = [
+        "purge_scheduler.go",
+        "scheduler.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/scheduler",
+    visibility = ["//pkg/cmd/roachprod-centralized/services/tasks:__subpackages__"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = ["config.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/config/flags",
+        "//pkg/cmd/roachprod-centralized/config/processing",
+        "//pkg/cmd/roachprod-centralized/config/recursive",
+        "//pkg/cmd/roachprod-centralized/config/types",
+        "@com_github_pkg_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_github_spf13_viper//:viper",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = ["config_test.go"],
+    embed = [":config"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/config/env",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
