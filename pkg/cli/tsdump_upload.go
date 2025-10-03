@@ -87,7 +87,7 @@ type FailedRequestsFile struct {
 }
 
 // GapFillProcessor interpolates 30-minute resolution counter metrics to 10-second resolution
-// by filling gaps with zero values while preserving the original data points.
+// by distributing each delta value evenly across 180 points (1800s / 10s = 180).
 type GapFillProcessor struct{}
 
 func NewGapFillProcessor() *GapFillProcessor {
@@ -96,7 +96,7 @@ func NewGapFillProcessor() *GapFillProcessor {
 
 // processCounterMetric interpolates 30-minute resolution counter metrics to 10-second resolution.
 // It checks if the metric is a counter type with 30-minute interval (1800 seconds) and converts
-// it to 10-second resolution by filling gaps with zero values between original data points.
+// it to 10-second resolution by distributing each delta value evenly across 180 points.
 func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries) error {
 	// Only process counter metrics
 	if series.Type == nil || *series.Type != datadogV2.METRICINTAKETYPE_COUNT {
@@ -108,36 +108,29 @@ func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries
 		return nil
 	}
 
-	// If no points or only one point, nothing to interpolate
-	if len(series.Points) <= 1 {
-		// Still update interval to 10 seconds for consistency
+	// If no points, nothing to interpolate
+	if len(series.Points) == 0 {
 		series.Interval = datadog.PtrInt64(10)
 		return nil
 	}
 
-	// Create new points array with interpolated values
+	// Create new points array with distributed values
 	var newPoints []datadogV2.MetricPoint
 
 	for i := 0; i < len(series.Points); i++ {
-		// Add the original point
-		newPoints = append(newPoints, series.Points[i])
+		currentValue := *series.Points[i].Value
+		currentTimestamp := *series.Points[i].Timestamp
 
-		// If this is not the last point, add 179 zero-value points between this and the next
-		if i < len(series.Points)-1 {
-			currentTimestamp := *series.Points[i].Timestamp
-			nextTimestamp := *series.Points[i+1].Timestamp
+		// Distribute the delta value across 180 points (1800s / 10s = 180)
+		distributedValue := currentValue / 180.0
 
-			// Add 179 zero points (10-second intervals) between current and next
-			for j := 1; j < 180; j++ {
-				interpolatedTimestamp := currentTimestamp + int64(j*10)
-				// Only add if the interpolated timestamp is before the next original timestamp
-				if interpolatedTimestamp < nextTimestamp {
-					newPoints = append(newPoints, datadogV2.MetricPoint{
-						Timestamp: datadog.PtrInt64(interpolatedTimestamp),
-						Value:     datadog.PtrFloat64(0.0),
-					})
-				}
-			}
+		// Create 180 points with distributed values, each 10 seconds apart
+		for j := 0; j < 180; j++ {
+			timestamp := currentTimestamp + int64(j*10)
+			newPoints = append(newPoints, datadogV2.MetricPoint{
+				Timestamp: datadog.PtrInt64(timestamp),
+				Value:     datadog.PtrFloat64(distributedValue),
+			})
 		}
 	}
 
@@ -629,6 +622,14 @@ func getUploadTags(d *datadogWriter) []string {
 
 func (d *datadogWriter) flush(data []datadogV2.MetricSeries) error {
 	if debugTimeSeriesDumpOpts.dryRun {
+
+		for i := 0; i < len(data); i++ {
+			fmt.Printf("dry-run: would upload metric %s with points:\n", data[i].Metric)
+			for j := 0; j < len(data[i].Points); j++ {
+				fmt.Printf("  %d: %f\n", *data[i].Points[j].Timestamp, *data[i].Points[j].Value)
+			}
+		}
+
 		return nil
 	}
 
