@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -4237,6 +4238,19 @@ func (ex *connExecutor) waitForTxnJobs() error {
 		}
 	}
 	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
+
+		noticeMsg := strings.Builder{}
+		noticeMsg.WriteString("waiting for job(s) to complete: ")
+		for i, jobID := range ex.extraTxnState.jobs.created {
+			if i > 0 {
+				noticeMsg.WriteString(", ")
+			}
+			noticeMsg.WriteString(strconv.Itoa(int(jobID)))
+		}
+		if err := ex.planner.SendClientNotice(ex.Ctx(), pgnotice.Newf(noticeMsg.String()), true /* immediateFlush */); err != nil {
+			return err
+		}
+
 		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
 			ex.extraTxnState.jobs.created); err != nil {
 			if errors.Is(err, context.Canceled) && queryTimedout.Load() {
