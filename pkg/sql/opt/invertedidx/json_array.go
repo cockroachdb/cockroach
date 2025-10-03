@@ -380,6 +380,19 @@ type jsonOrArrayFilterPlanner struct {
 	computedColumns map[opt.ColumnID]opt.ScalarExpr
 }
 
+// isInvertedIndexColumn checks if the given column ID corresponds to the source
+// column of an inverted index.
+func (j *jsonOrArrayFilterPlanner) isInvertedIndexColumn(colID opt.ColumnID) bool {
+	colOrd := j.tabID.ColumnOrdinal(colID)
+	for i := 0; i < j.index.ColumnCount(); i++ {
+		idxCol := j.index.Column(i)
+		if idxCol.Kind() == cat.Inverted && idxCol.InvertedSourceColumnOrdinal() == colOrd {
+			return true
+		}
+	}
+	return false
+}
+
 var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
 
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
@@ -417,13 +430,18 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	case *memo.FunctionExpr:
 		if t.Properties.Category == builtinconstants.CategoryJsonpath && t.Name == "jsonb_path_exists" {
 			if len(t.Args) > 1 {
-				if ce, ok := t.Args[1].(*memo.ConstExpr); ok {
-					if dJsonPath, ok := ce.Value.(*tree.DJsonpath); ok {
-						if dJsonPath.Strict {
-							return inverted.NonInvertedColExpression{}, expr, nil
+				// The first parameter has to be a column reference.
+				if varExpr, ok := t.Args[0].(*memo.VariableExpr); ok {
+					if j.isInvertedIndexColumn(varExpr.Col) {
+						if ce, ok := t.Args[1].(*memo.ConstExpr); ok {
+							if dJsonPath, ok := ce.Value.(*tree.DJsonpath); ok {
+								if dJsonPath.Strict {
+									return inverted.NonInvertedColExpression{}, expr, nil
+								}
+								jp := dJsonPath.Path
+								invertedExpr = j.extractJSONPathCondition(ctx, evalCtx, jp)
+							}
 						}
-						jp := dJsonPath.Path
-						invertedExpr = j.extractJSONPathCondition(ctx, evalCtx, jp)
 					}
 				}
 			}
