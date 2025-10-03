@@ -27,11 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -1730,4 +1733,159 @@ func TestTenantIDFromFile(t *testing.T) {
 			require.Eventually(t, func() bool { return watcherEventCount.Load() > 0 }, 10*time.Second, 10*time.Millisecond)
 			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, 10*time.Second, 10*time.Millisecond)
 		})
+}
+
+// TestParseEncryptionSpec verifies that the --enterprise-encryption arguments
+// are correctly parsed into storeEncryptionSpecs.
+func TestParseEncryptionSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	absDataPath, err := filepath.Abs("data")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		value       string
+		expectedErr string
+		expected    storeEncryptionSpec
+	}{
+		// path
+		{value: ",", expectedErr: "no path specified"},
+		{expectedErr: "no path specified"},
+		{value: "/mnt/hda1", expectedErr: "field not in the form <key>=<value>: /mnt/hda1"},
+		{value: "path=", expectedErr: "no value specified for path"},
+		{value: "path=~/data", expectedErr: "path cannot start with '~': ~/data"},
+		{value: "path=data,path=data2", expectedErr: "path field was used twice in encryption definition"},
+
+		// The same logic applies to key and old-key, don't repeat everything.
+		{value: "path=data", expectedErr: "no key specified"},
+		{value: "path=data,key=new.key", expectedErr: "no old key specified"},
+
+		// Rotation period.
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period", expectedErr: "field not in the form <key>=<value>: rotation-period"},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=", expectedErr: "no value specified for rotation-period"},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1", expectedErr: `could not parse rotation-duration value: 1: time: missing unit in duration "1"`},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1d", expectedErr: `could not parse rotation-duration value: 1d: time: unknown unit "d" in duration "1d"`},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1ms", expectedErr: `invalid rotation period 1ms`},
+
+		// Good values. Note that paths get absolutized so we start most of them
+		// with / so we can used fixed expected values.
+		{
+			value: "path=/data,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: storageconfig.DefaultRotationPeriod,
+				},
+			},
+		},
+		{
+			value: "path=/data,key=/new.key,old-key=/old.key,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: time.Hour,
+				},
+			},
+		},
+		{
+			value: "path=/data,key=plain,old-key=/old.key,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "plain", OldKey: "/old.key"},
+					RotationPeriod: time.Hour,
+				},
+			},
+		},
+		{
+			value: "path=/data,key=/new.key,old-key=plain,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "plain"},
+					RotationPeriod: time.Hour,
+				},
+			},
+		},
+
+		// One relative path to test absolutization.
+		{
+			value: "path=data,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: absDataPath,
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: storageconfig.DefaultRotationPeriod,
+				},
+			},
+		},
+
+		// Special path * is not absolutized.
+		{
+			value: "path=*,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: "*",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: storageconfig.DefaultRotationPeriod,
+				},
+			},
+		},
+	}
+
+	for i, testCase := range testCases {
+		storeEncryptionSpec, err := parseStoreEncryptionSpec(testCase.value)
+		if err != nil {
+			if len(testCase.expectedErr) == 0 {
+				t.Errorf("%d(%s): no expected error, got %s", i, testCase.value, err)
+			}
+			if testCase.expectedErr != fmt.Sprint(err) {
+				t.Errorf("%d(%s): expected error \"%s\" does not match actual \"%s\"", i, testCase.value,
+					testCase.expectedErr, err)
+			}
+			continue
+		}
+		if len(testCase.expectedErr) > 0 {
+			t.Errorf("%d(%s): expected error %s but there was none", i, testCase.value, testCase.expectedErr)
+			continue
+		}
+		if !reflect.DeepEqual(testCase.expected, storeEncryptionSpec) {
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %+v\nexpected: %+v", i,
+				testCase.value, storeEncryptionSpec, testCase.expected)
+		}
+
+		// Now test String() to make sure the result can be parsed.
+		storeEncryptionSpecString := storeEncryptionSpec.String()
+		storeEncryptionSpec2, err := parseStoreEncryptionSpec(storeEncryptionSpecString)
+		if err != nil {
+			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
+			continue
+		}
+		// Compare strings to deal with floats not matching exactly.
+		if !reflect.DeepEqual(storeEncryptionSpecString, storeEncryptionSpec2.String()) {
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %#+v\nexpected: %#+v", i, testCase.value,
+				storeEncryptionSpec, storeEncryptionSpec2)
+		}
+	}
+}
+
+func TestWALFailoverWrapperRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal-failover-config"), func(t *testing.T, d *datadriven.TestData) string {
+		var buf bytes.Buffer
+		for _, l := range strings.Split(d.Input, "\n") {
+			cfg := walFailoverWrapper{cfg: &storageconfig.WALFailover{}}
+			if err := cfg.Set(l); err != nil {
+				fmt.Fprintf(&buf, "err: %s\n", err)
+				continue
+			}
+			fmt.Fprintln(&buf, cfg.String())
+		}
+		return buf.String()
+	})
 }

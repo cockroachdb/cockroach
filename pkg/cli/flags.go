@@ -62,7 +62,7 @@ var storeSpecs base.StoreSpecList
 var goMemLimit int64
 var tenantIDFile string
 var localityFile string
-var encryptionSpecs storageconfig.EncryptionSpecList
+var encryptionSpecs encryptionSpecList
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -431,7 +431,11 @@ func init() {
 
 		// Add a new pre-run command to match encryption specs to store specs.
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
-			return populateStoreSpecsEncryption()
+			return populateWithEncryptionOpts(
+				serverCfg.Stores,
+				&serverCfg.StorageConfig.WALFailover,
+				encryptionSpecs,
+			)
 		})
 	}
 
@@ -525,7 +529,7 @@ func init() {
 		cliflagcfg.StringFlag(f, &deprecatedStorageEngine, cliflags.StorageEngine)
 		_ = pf.MarkHidden(cliflags.StorageEngine.Name)
 
-		cliflagcfg.VarFlag(f, &serverCfg.StorageConfig.WALFailover, cliflags.WALFailover)
+		cliflagcfg.VarFlag(f, &walFailoverWrapper{cfg: &serverCfg.StorageConfig.WALFailover}, cliflags.WALFailover)
 		// TODO(storage): Consider combining the uri and cache manual settings.
 		// Alternatively remove the ability to configure shared storage without
 		// passing a bootstrap configuration file.
@@ -1483,17 +1487,6 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		}
 	}
 	return nil
-}
-
-// populateStoreSpecsEncryption is a PreRun hook that matches store encryption
-// specs with the parsed stores and populates some fields in the StoreSpec and
-// WAL failover config.
-func populateStoreSpecsEncryption() error {
-	return base.PopulateWithEncryptionOpts(
-		GetServerCfgStores(),
-		GetWALFailoverConfig(),
-		encryptionSpecs,
-	)
 }
 
 // sizeFlagVal is a pflag.Value wrapper for storageconfig.Size. It can be

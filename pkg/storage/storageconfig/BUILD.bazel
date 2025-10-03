@@ -12,27 +12,21 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/storageconfig",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/cli/cliflags",
         "@com_github_cockroachdb_crlib//crhumanize",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
-        "@com_github_spf13_pflag//:pflag",
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
 go_test(
     name = "storageconfig_test",
-    srcs = [
-        "encryption_spec_test.go",
-        "store_test.go",
-    ],
+    srcs = ["store_test.go"],
     data = glob(["testdata/**"]),
     embed = [":storageconfig"],
     deps = [
         "//pkg/testutils/datapathutils",
-        "//pkg/util/leaktest",
         "//pkg/util/yamlutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",

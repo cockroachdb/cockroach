@@ -46,10 +46,7 @@ func (d *DistSQLFunctionResolver) ResolveFunction(
 		return nil, err
 	}
 	// Get builtin and udf functions if there is any match.
-	builtinDef, err := tree.GetBuiltinFuncDefinition(fn, path)
-	if err != nil {
-		return nil, err
-	}
+	builtinDef := tree.GetBuiltinFuncDefinition(fn, path)
 	if builtinDef == nil {
 		return nil, errors.Mark(
 			pgerror.Newf(pgcode.UndefinedFunction, "function %s not found", fn.Object()),
