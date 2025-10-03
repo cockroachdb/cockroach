@@ -187,7 +187,6 @@ func (p *pebbleIterator) initReuseOrCreate(
 
 	p.init(ctx, nil, opts, durability, statsReporter)
 	if iter == nil {
-		// TODO(sumeer): fix after bumping to latest Pebble.
 		innerIter, err := handle.NewIterWithContext(ctx, &p.options)
 		if err != nil {
 			return err
