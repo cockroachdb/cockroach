@@ -199,7 +199,9 @@ func (e *schemaChangerUserError) SafeFormatError(p errors.Printer) (next error) 
 
 // Error implements error.
 func (e *schemaChangerUserError) Error() string {
-	return fmt.Sprintf("schema change operation encountered an error: %v", e.err)
+	// We don't want to print the schemaChangerUserError wrapper in the error,
+	// this only serves as a marker to the declarative schema changer to surface.
+	return fmt.Sprintf("%v", e.err)
 }
 
 // Unwrap implements errors.Wrapper.
