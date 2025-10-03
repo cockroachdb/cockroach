@@ -529,11 +529,9 @@ func TestRetryWithMaxDuration(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			if tc.expectedTimeSpent != 0 {
-				require.Equal(
-					t, tc.expectedTimeSpent, timeSource.Since(start), "expected time does not match actual spent time",
-				)
-			}
+			require.Equal(
+				t, tc.expectedTimeSpent, timeSource.Since(start), "expected time does not match actual spent time",
+			)
 		})
 	}
 }
