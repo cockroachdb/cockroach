@@ -159,7 +159,11 @@ func LoadClusters() error {
 		}
 
 		if len(c.VMs) == 0 {
-			return errors.Errorf("found no VMs in %s", clusterFilename(name))
+			// When roachprod-centralized is available, clusters are registered empty
+			// and updated later when the cluster is actually created to avoid race conditions
+			// in creation and background clusters syncs.
+			// Ignore empty clusters for now.
+			continue
 		}
 		if shouldIgnoreCluster(c) {
 			continue
