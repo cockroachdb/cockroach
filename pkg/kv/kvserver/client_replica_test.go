@@ -6171,6 +6171,11 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	t.Log("cancelling txn2")
 	txn2Cancel()
 	require.NoError(t, g.Wait())
+
+	// Check metrics
+	locksWritten, err := tc.GetFirstStoreFromServer(t, 0).Metrics().GetStoreMetric("leases.transfers.locks_written")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, locksWritten, int64(1))
 }
 
 func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
@@ -6312,15 +6317,16 @@ func TestMergeReplicatesLocks(t *testing.T) {
 	)
 	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 
-	for _, b := range []bool{true, false} {
+	for _, rhsLock := range []bool{true, false} {
 		name := "lhs-lock"
 		lockKeySuffix := lhsKey
-		if b {
+		if rhsLock {
 			name = "rhs-lock"
 			lockKeySuffix = rhsKey
 		}
 		t.Run(name, func(t *testing.T) {
-			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			nodeCount := 3
+			tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Settings: st,
 				},
@@ -6416,6 +6422,17 @@ func TestMergeReplicatesLocks(t *testing.T) {
 			})
 			for _, err := range failures {
 				t.Errorf("consistency failure: %s", err.Error())
+			}
+			if rhsLock {
+				// The range could have been on any node. We just care that this metric
+				// is written somewhere.
+				var locksWritten int64
+				for i := range nodeCount {
+					l, err := tc.GetFirstStoreFromServer(t, i).Metrics().GetStoreMetric("subsume.locks_written")
+					require.NoError(t, err)
+					locksWritten += l
+				}
+				require.GreaterOrEqual(t, locksWritten, int64(1))
 			}
 		})
 	}
