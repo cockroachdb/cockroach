@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -1579,6 +1580,55 @@ func TestProcessorContextCancellation(t *testing.T) {
 		case <-pushDoneC:
 		case <-time.After(3 * time.Second):
 			t.Fatal("txn pusher did not exit")
+		}
+	})
+}
+
+// TestIntentScannerOnError tests that when a processor is given with an intent
+// scanner constructor that fails to create a scanner, the processor will fail
+// to start gracefully.
+func TestIntentScannerOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	cfg := testConfig{
+		Config: Config{
+			RangeID:  2,
+			Stopper:  stopper,
+			Span:     roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+			Metrics:  NewMetrics(),
+			Priority: true,
+		},
+	}
+	sch := NewScheduler(SchedulerConfig{
+		Workers:         1,
+		PriorityWorkers: 1,
+		Metrics:         NewSchedulerMetrics(time.Second),
+	})
+	require.NoError(t, sch.Start(ctx, stopper))
+	cfg.Scheduler = sch
+
+	s := NewProcessor(cfg.Config)
+	erroringScanConstructor := func() (IntentScanner, error) {
+		return nil, errors.New("scanner error")
+	}
+	err := s.Start(stopper, erroringScanConstructor)
+	require.ErrorContains(t, err, "scanner error")
+
+	// The processor should be stopped eventually.
+	p := (s).(*ScheduledProcessor)
+	testutils.SucceedsSoon(t, func() error {
+		select {
+		case <-p.stoppedC:
+			_, ok := sch.shards[shardIndex(p.ID(), len(sch.shards), p.Priority)].procs[p.ID()]
+			require.False(t, ok)
+			require.False(t, sch.priorityIDs.Contains(p.ID()))
+			return nil
+		default:
+			return errors.New("processor not stopped")
 		}
 	})
 }
