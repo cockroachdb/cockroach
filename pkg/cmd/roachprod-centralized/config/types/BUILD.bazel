@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "types",
+    srcs = ["types.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config/types",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/ibm",
+        "@com_github_iancoleman_strcase//:strcase",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
