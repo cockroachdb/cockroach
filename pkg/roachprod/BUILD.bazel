@@ -16,6 +16,7 @@ go_library(
         "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/cmd/roachprod/grafana",
+        "//pkg/roachprod/centralizedapi",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
