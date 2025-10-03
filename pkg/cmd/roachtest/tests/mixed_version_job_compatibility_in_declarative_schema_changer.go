@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -27,7 +28,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
+		Name:    "declarative_schema_changer/job-compatibility-mixed-version-V253-V254",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
 		// Disabled on IBM because s390x is only built on master and mixed-version
@@ -107,13 +108,19 @@ func executeSupportedDDLs(
 		return err
 	}
 
-	// DDLs supported in V24_2.
-	// TODO(sql-foundations): uncomment these when the final 24.2 cluster version
-	// is created.
-	v242DDLs := []string{
-		// `ALTER DATABASE testdb CONFIGURE ZONE USING gc.ttlseconds=1000`,
-		// `ALTER TABLE testdb.testsc.t CONFIGURE ZONE USING gc.ttlseconds=2000`,
-		// `COMMENT ON TYPE testdb.testsc.typ IS 'comment'`,
+	// DDLs supported in V25_3.
+	v253DDLs := []string{
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN i DROP NOT NULL`,
+	}
+
+	// DDLs supported in V25_4.
+	v254DDLs := []string{
+		`TRUNCATE testdb.testsc.t3`,
+		`ALTER TABLE testdb.testsc.t RENAME TO t_renamed`,
+		`ALTER TABLE testdb.testsc.t_renamed RENAME TO t`,
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET ON UPDATE j + 1`,
+		`ALTER TABLE testdb.testsc.t2 RENAME COLUMN k TO k_renamed`,
+		`ALTER TABLE testdb.testsc.t2 RENAME COLUMN k_renamed TO k`,
 	}
 
 	// Used to clean up our CREATE-d elements after we are done with them.
@@ -130,9 +137,26 @@ func executeSupportedDDLs(
 		`DROP OWNED BY foo`,
 	}
 
-	ddls := append(v242DDLs, cleanup...)
+	clusterVersion, err := helper.ClusterVersion(r)
+	if err != nil {
+		return err
+	}
+	if clusterVersion.AtLeast(clusterversion.V25_3.Version()) {
+		for _, ddl := range v253DDLs {
+			if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
+				return err
+			}
+		}
+	}
+	if clusterVersion.AtLeast(clusterversion.V25_4.Version()) {
+		for _, ddl := range v254DDLs {
+			if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
+				return err
+			}
+		}
+	}
 
-	for _, ddl := range ddls {
+	for _, ddl := range cleanup {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
 			return err
 		}
