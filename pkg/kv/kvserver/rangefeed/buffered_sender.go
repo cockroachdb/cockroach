@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -169,11 +168,13 @@ func (bs *BufferedSender) sendBuffered(
 		// The unbufferedRegistration is the only component that sends non-error
 		// events to our stream. In response to the error we return when moving to
 		// stateOverflowing, it should immediately send us an error and mark itself
-		// as disconnected. As a result, no non-error events are expected.
-		if ev.Error == nil {
-			panic("only error events expected after stream has exceeded capacity")
+		// as disconnected.
+		//
+		// The only unfortunate exception is if we get disconnected while flushing
+		// the catch-up scan buffer.
+		if ev.Error != nil {
+			status.state = streamOverflowed
 		}
-		status.state = streamOverflowed
 	case streamOverflowed:
 		// If we are overflowed, we don't expect any further events because the
 		// registration should have disconnected in response to the error.
@@ -253,8 +254,6 @@ func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
 		if streamFound {
 			state.queueItems -= 1
 			bs.queueMu.byStream[event.ev.StreamID] = state
-		} else {
-			assumedUnreachable("event found in queue with no state in byStream")
 		}
 	}
 	return event, ok
@@ -304,10 +303,4 @@ func (bs *BufferedSender) waitForEmptyBuffer(ctx context.Context) error {
 		return err
 	}
 	return errors.New("buffered sender failed to send in time")
-}
-
-func assumedUnreachable(msg string) {
-	if buildutil.CrdbTestBuild {
-		panic(fmt.Sprintf("assumed unreachable code reached: %v", msg))
-	}
 }
