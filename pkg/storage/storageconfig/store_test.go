@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
@@ -35,6 +36,14 @@ func TestStoreYAMLOutput(t *testing.T) {
 			BallastSize:     PercentSize(10),
 			Attributes:      []string{"foo", "bar"},
 			ProvisionedRate: ProvisionedRate{ProvisionedBandwidth: 1000 * 1024},
+			EncryptionOptions: &EncryptionOptions{
+				KeySource: EncryptionKeyFromFiles,
+				KeyFiles: &EncryptionKeyFiles{
+					CurrentKey: "/path/to/current-key",
+					OldKey:     "/path/to/old-key",
+				},
+				RotationPeriod: time.Hour,
+			},
 		},
 		"pebble-opts": {
 			Path: "/mnt/data1",
@@ -73,7 +82,9 @@ l0_stop_writes_threshold=10`,
 			if err := s.Validate(); err != nil {
 				return err.Error()
 			}
-			return "ok"
+			out, err := yaml.Marshal(s)
+			require.NoError(t, err)
+			return string(out)
 
 		default:
 			t.Fatalf("unknown command %q", td.Cmd)

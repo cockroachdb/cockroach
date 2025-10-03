@@ -57,6 +57,8 @@ func (s *Store) IsEncrypted() bool {
 // hard coded to 640MiB.
 const MinimumStoreSize = 10 * 64 << 20
 
+// Validate checks all fields, possibly normalizing them and filling in
+// defaults.
 func (s *Store) Validate() error {
 	if s.Size.IsBytes() && s.Size.Bytes() < MinimumStoreSize {
 		return errors.Newf("store size (%s) must be at least %s",
@@ -86,6 +88,11 @@ func (s *Store) Validate() error {
 		}
 		if s.StickyVFSID != "" {
 			return errors.Newf("on-disk store cannot use a sticky VFS ID")
+		}
+	}
+	if s.EncryptionOptions != nil {
+		if err := s.EncryptionOptions.Validate(); err != nil {
+			return errors.Wrap(err, "invalid encryption options")
 		}
 	}
 

@@ -1751,28 +1751,30 @@ func TestParseEncryptionSpec(t *testing.T) {
 		expected    storeEncryptionSpec
 	}{
 		// path
-		{",", "no path specified", storeEncryptionSpec{}},
-		{"", "no path specified", storeEncryptionSpec{}},
-		{"/mnt/hda1", "field not in the form <key>=<value>: /mnt/hda1", storeEncryptionSpec{}},
-		{"path=", "no value specified for path", storeEncryptionSpec{}},
-		{"path=~/data", "path cannot start with '~': ~/data", storeEncryptionSpec{}},
-		{"path=data,path=data2", "path field was used twice in encryption definition", storeEncryptionSpec{}},
+		{value: ",", expectedErr: "no path specified"},
+		{expectedErr: "no path specified"},
+		{value: "/mnt/hda1", expectedErr: "field not in the form <key>=<value>: /mnt/hda1"},
+		{value: "path=", expectedErr: "no value specified for path"},
+		{value: "path=~/data", expectedErr: "path cannot start with '~': ~/data"},
+		{value: "path=data,path=data2", expectedErr: "path field was used twice in encryption definition"},
 
 		// The same logic applies to key and old-key, don't repeat everything.
-		{"path=data", "no key specified", storeEncryptionSpec{}},
-		{"path=data,key=new.key", "no old-key specified", storeEncryptionSpec{}},
+		{value: "path=data", expectedErr: "no key specified"},
+		{value: "path=data,key=new.key", expectedErr: "no old key specified"},
 
 		// Rotation period.
-		{"path=data,key=new.key,old-key=old.key,rotation-period", "field not in the form <key>=<value>: rotation-period", storeEncryptionSpec{}},
-		{"path=data,key=new.key,old-key=old.key,rotation-period=", "no value specified for rotation-period", storeEncryptionSpec{}},
-		{"path=data,key=new.key,old-key=old.key,rotation-period=1", `could not parse rotation-duration value: 1: time: missing unit in duration "1"`, storeEncryptionSpec{}},
-		{"path=data,key=new.key,old-key=old.key,rotation-period=1d", `could not parse rotation-duration value: 1d: time: unknown unit "d" in duration "1d"`, storeEncryptionSpec{}},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period", expectedErr: "field not in the form <key>=<value>: rotation-period"},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=", expectedErr: "no value specified for rotation-period"},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1", expectedErr: `could not parse rotation-duration value: 1: time: missing unit in duration "1"`},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1d", expectedErr: `could not parse rotation-duration value: 1d: time: unknown unit "d" in duration "1d"`},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1ms", expectedErr: `invalid rotation period 1ms`},
 
 		// Good values. Note that paths get absolutized so we start most of them
 		// with / so we can used fixed expected values.
 		{
-			"path=/data,key=/new.key,old-key=/old.key", "",
-			storeEncryptionSpec{Path: "/data",
+			value: "path=/data,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: "/data",
 				Options: storageconfig.EncryptionOptions{
 					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
 					RotationPeriod: storageconfig.DefaultRotationPeriod,
@@ -1780,8 +1782,9 @@ func TestParseEncryptionSpec(t *testing.T) {
 			},
 		},
 		{
-			"path=/data,key=/new.key,old-key=/old.key,rotation-period=1h", "",
-			storeEncryptionSpec{Path: "/data",
+			value: "path=/data,key=/new.key,old-key=/old.key,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
 				Options: storageconfig.EncryptionOptions{
 					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
 					RotationPeriod: time.Hour,
@@ -1789,8 +1792,9 @@ func TestParseEncryptionSpec(t *testing.T) {
 			},
 		},
 		{
-			"path=/data,key=plain,old-key=/old.key,rotation-period=1h", "",
-			storeEncryptionSpec{Path: "/data",
+			value: "path=/data,key=plain,old-key=/old.key,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
 				Options: storageconfig.EncryptionOptions{
 					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "plain", OldKey: "/old.key"},
 					RotationPeriod: time.Hour,
@@ -1798,8 +1802,9 @@ func TestParseEncryptionSpec(t *testing.T) {
 			},
 		},
 		{
-			"path=/data,key=/new.key,old-key=plain,rotation-period=1h", "",
-			storeEncryptionSpec{Path: "/data",
+			value: "path=/data,key=/new.key,old-key=plain,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
 				Options: storageconfig.EncryptionOptions{
 					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "plain"},
 					RotationPeriod: time.Hour,
@@ -1809,8 +1814,9 @@ func TestParseEncryptionSpec(t *testing.T) {
 
 		// One relative path to test absolutization.
 		{
-			"path=data,key=/new.key,old-key=/old.key", "",
-			storeEncryptionSpec{Path: absDataPath,
+			value: "path=data,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: absDataPath,
 				Options: storageconfig.EncryptionOptions{
 					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
 					RotationPeriod: storageconfig.DefaultRotationPeriod,
@@ -1820,8 +1826,9 @@ func TestParseEncryptionSpec(t *testing.T) {
 
 		// Special path * is not absolutized.
 		{
-			"path=*,key=/new.key,old-key=/old.key", "",
-			storeEncryptionSpec{Path: "*",
+			value: "path=*,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: "*",
 				Options: storageconfig.EncryptionOptions{
 					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
 					RotationPeriod: storageconfig.DefaultRotationPeriod,
