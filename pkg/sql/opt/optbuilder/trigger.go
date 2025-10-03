@@ -36,7 +36,7 @@ import (
 // based on the event type. It returns true if triggers were built, and false
 // otherwise.
 func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
-	eventType tree.TriggerEventType, cascade bool,
+	eventType tree.TriggerEventType, cascade bool, recomputeCols bool,
 ) bool {
 	var eventsToMatch tree.TriggerEventTypeSet
 	eventsToMatch.Add(eventType)
@@ -155,7 +155,7 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 
 	// Since INSERT and UPDATE triggers can modify the row, we need to recompute
 	// the computed columns.
-	if eventType == tree.TriggerEventInsert || eventType == tree.TriggerEventUpdate {
+	if recomputeCols && (eventType == tree.TriggerEventInsert || eventType == tree.TriggerEventUpdate) {
 		mb.recomputeComputedColsForTrigger(eventType)
 	}
 	return true

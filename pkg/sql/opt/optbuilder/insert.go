@@ -307,7 +307,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// Case 1: Simple INSERT statement.
 	case ins.OnConflict == nil:
 		// Project row-level BEFORE triggers for INSERT.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */)
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */, true /* recomputeCols */)
 
 		// Build the final insert statement, including any returned expressions.
 		mb.buildInsert(returning, ins.VectorInsert(), false /* hasOnConflict */)
@@ -316,7 +316,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	case ins.OnConflict.DoNothing:
 
 		// Project row-level BEFORE triggers for INSERT.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */)
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */, true /* recomputeCols */)
 
 		// Wrap the input in one ANTI JOIN per UNIQUE index, and filter out rows
 		// that have conflicts. See the buildInputForDoNothing comment for more
@@ -345,7 +345,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 			// NOTE: we avoid building INSERT triggers until after buildInputForUpsert
 			// so that there are no buffering operators between INSERT and UPDATE
 			// triggers. This helps preserve Postgres compatibility
-			if mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */) {
+			if mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */, true /* recomputeCols */) {
 				// INSERT triggers are able to modify the row being inserted, so we need
 				// to recompute the upsert columns.
 				mb.setUpsertCols(nil /* insertCols */)
@@ -356,10 +356,10 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 			mb.addSynthesizedColsForUpdate()
 
 			// Project row-level BEFORE triggers for UPDATE.
-			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */, true /* recomputeCols */)
 		} else {
 			// Project row-level BEFORE triggers for INSERT.
-			if mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */) {
+			if mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */, true /* recomputeCols */) {
 				// INSERT triggers are able to modify the row being inserted, so we need
 				// to recompute the upsert columns.
 				mb.setUpsertCols(nil /* insertCols */)
@@ -376,7 +376,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		canaryCol := mb.buildInputForUpsert(inScope, ins.Table, ins.OnConflict)
 
 		// Project row-level BEFORE triggers for INSERT.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */)
+		// NOTE: Do not recompute computed columns, this will happen in
+		// addUpdateCols.
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventInsert, false /* cascade */, false /* recomputeCols */)
 
 		// Add a filter from the WHERE clause if one exists. This must happen after
 		// the INSERT triggers are added, since BEFORE INSERT triggers are called
@@ -392,7 +394,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.addUpdateCols(ins.OnConflict.Exprs, nil /* colRefs */)
 
 		// Project row-level BEFORE triggers for UPDATE.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
+		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */, true /* recomputeCols */)
 
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
