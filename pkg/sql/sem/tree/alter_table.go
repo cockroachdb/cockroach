@@ -78,6 +78,7 @@ func (*AlterTableSetIdentity) alterTableCmd()        {}
 func (*AlterTableIdentity) alterTableCmd()           {}
 func (*AlterTableDropIdentity) alterTableCmd()       {}
 func (*AlterTableSetRLSMode) alterTableCmd()         {}
+func (*AlterTableSetCanaryWindow) alterTableCmd()    {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -103,6 +104,7 @@ var _ AlterTableCmd = &AlterTableSetIdentity{}
 var _ AlterTableCmd = &AlterTableIdentity{}
 var _ AlterTableCmd = &AlterTableDropIdentity{}
 var _ AlterTableCmd = &AlterTableSetRLSMode{}
+var _ AlterTableCmd = &AlterTableSetCanaryWindow{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -939,6 +941,20 @@ func (node *AlterTableSetRLSMode) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.WriteString(node.Mode.String())
 	ctx.WriteString(" ROW LEVEL SECURITY")
+}
+
+type AlterTableSetCanaryWindow struct {
+	CanaryWindow Expr
+}
+
+func (w *AlterTableSetCanaryWindow) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET CANARY WINDOW ")
+	ctx.FormatNode(w.CanaryWindow)
+}
+
+// TODO: figure out the right val to return.
+func (w *AlterTableSetCanaryWindow) TelemetryName() string {
+	return "set_canary_window"
 }
 
 // GetTableType returns a string representing the type of table the command
