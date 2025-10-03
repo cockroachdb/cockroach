@@ -4,6 +4,11 @@ object AliasType
 AliasType :  TypeID
 AliasType :  TypeT
 
+object CanaryWindow
+
+CanaryWindow :  TableID
+CanaryWindow :  Duration
+
 object CheckConstraint
 
 CheckConstraint :  TableID
@@ -561,6 +566,7 @@ View : []ForwardReferences
 View :  IsTemporary
 View :  IsMaterialized
 
+Table <|-- CanaryWindow
 Table <|-- CheckConstraint
 Table <|-- CheckConstraintUnvalidated
 Table <|-- Column
