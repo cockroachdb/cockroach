@@ -92,6 +92,7 @@ message ElementProto {
     Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityEnabled row_level_security_enabled = 138 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityForced row_level_security_forced = 139 [(gogoproto.moretags) = "parent:\"Table\""];
+    CanaryWindow canary_window = 250 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -178,7 +179,7 @@ message ElementProto {
     PolicyWithCheckExpr policy_with_check_expr = 243 [(gogoproto.moretags) = "parent:\"Policy\""];
     PolicyDeps policy_deps = 244 [(gogoproto.moretags) = "parent:\"Policy\""];
 
-    // Next element group start id: 250
+    // Next element group start id: 251
   }
 
   // Reserved for the now-removed SecondaryIndexPartial element.
@@ -435,6 +436,13 @@ message PolicyDeps {
 // RowLevelSecurityEnabled handles enabling and disabling row level security of a table.
 message RowLevelSecurityEnabled {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// CanaryWindow handles the canary window size for a table.
+// TODO: better comment.
+message CanaryWindow {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  int64 duration = 2  [(gogoproto.casttype) = "time.Duration"];
 }
 
 // RowLevelSecurityForced handles forced and no-force row level security of a table.

@@ -161,3 +161,12 @@ func (i *immediateVisitor) ForcedRowLevelSecurityMode(
 	tbl.RowLevelSecurityForced = op.Forced
 	return nil
 }
+
+func (i *immediateVisitor) SetCanaryWindow(ctx context.Context, op scop.SetCanaryWindow) error {
+	_, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	// TODO: tbl.CanaryWindow
+	return nil
+}

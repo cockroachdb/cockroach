@@ -40,9 +40,11 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         {fn: alterTableSetRLSMode, on: true, checks: isV252Active},
-	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        {fn: alterTableDropNotNull, on: true, checks: isV253Active},
-	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
-	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       {fn: alterTableRenameColumn, on: true, checks: isV254Active},
+	// TODO: figure out right value for each field.
+	reflect.TypeOf((*tree.AlterTableSetCanaryWindow)(nil)): {fn: alterTableSetCanaryWindow, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):     {fn: alterTableDropNotNull, on: true, checks: isV253Active},
+	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):     {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):    {fn: alterTableRenameColumn, on: true, checks: isV254Active},
 }
 
 func init() {

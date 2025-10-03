@@ -168,6 +168,7 @@ type ImmediateMutationVisitor interface {
 	AddPartitionZoneConfig(context.Context, AddPartitionZoneConfig) error
 	EnableRowLevelSecurityMode(context.Context, EnableRowLevelSecurityMode) error
 	ForcedRowLevelSecurityMode(context.Context, ForcedRowLevelSecurityMode) error
+	SetCanaryWindow(context.Context, SetCanaryWindow) error
 	MarkRecreatedIndexAsInvisible(context.Context, MarkRecreatedIndexAsInvisible) error
 	MarkRecreatedIndexesAsVisible(context.Context, MarkRecreatedIndexesAsVisible) error
 	MarkRecreatedIndexAsVisible(context.Context, MarkRecreatedIndexAsVisible) error
@@ -927,6 +928,11 @@ func (op EnableRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutat
 // Visit is part of the ImmediateMutationOp interface.
 func (op ForcedRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.ForcedRowLevelSecurityMode(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetCanaryWindow) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetCanaryWindow(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
