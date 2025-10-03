@@ -2529,7 +2529,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	defer l.Close()
 
 	cmd := strings.Join(args, " ")
-	c.f.L().Printf("running cmd `%s` on nodes [%v]", roachprod.TruncateString(cmd, 30), nodes)
+	c.f.L().Printf("running cmd `%s` on nodes [%v]", roachprod.TruncateString(cmd, 100), nodes)
 	if c.l.File != nil {
 		c.f.L().Printf("details in %s.log", logFile)
 	}
