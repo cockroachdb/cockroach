@@ -78,7 +78,7 @@ type fileSSTSink struct {
 }
 
 // fileSpanByteLimit is the maximum size of a file span that can be extended.
-const fileSpanByteLimit = 64 << 20
+var fileSpanByteLimit int64 = 64 << 20
 
 func makeFileSSTSink(
 	conf sstSinkConf, dest cloud.ExternalStorage, pacer *admission.Pacer,
