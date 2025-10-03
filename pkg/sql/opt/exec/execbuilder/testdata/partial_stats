@@ -377,12 +377,6 @@ WHERE stat->>'name' = '__forecast__';
         },
         {
             "distinct_range": 0,
-            "num_eq": 0,
-            "num_range": 0,
-            "upper_bound": "10"
-        },
-        {
-            "distinct_range": 0,
             "num_eq": 2,
             "num_range": 0,
             "upper_bound": "11"
@@ -410,12 +404,6 @@ WHERE stat->>'name' = '__forecast__';
             "num_eq": 1,
             "num_range": 0,
             "upper_bound": "15"
-        },
-        {
-            "distinct_range": 0,
-            "num_eq": 0,
-            "num_range": 0,
-            "upper_bound": "16"
         },
         {
             "distinct_range": 0,
