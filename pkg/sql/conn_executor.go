@@ -4175,11 +4175,10 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
-		}
-		if ex.extraTxnState.descCollection.CountUncommittedNewOrDroppedDescriptors() > 0 {
+
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
-				log.Dev.Warningf(ex.Ctx(), "failed to scan descriptor table: %v", err)
+				log.Dev.Warningf(ex.Ctx(), "failed to update descriptor count metric: %v", err)
 			}
 		}
 		fallthrough
