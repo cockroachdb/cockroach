@@ -40,21 +40,48 @@ SELECT '2025-09-23-11:02:14-04:00'::timestamp
 statement ok
 INSERT INTO system.jobs (id, owner, status, job_type)
 VALUES (555, 'testuser', 'failed', 'INSPECT');
-INSERT INTO system.job_info (job_id, info_key)
-VALUES (555, 'legacy_payload');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  555,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id),
+          json_build_object('tableId', $bar_table_id)
+        )
+      )
+    )
+  )
+);
 
 skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
-VALUES 
+VALUES
   (555, '555_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail":"555\"foo"}'),
   (555, '555_bar', '$aost', $database_id, $schema_id, $bar_table_id, '{"detail":"555\"bar"}');
 
 statement ok
 INSERT INTO system.jobs (id, owner, status, job_type)
 VALUES (666, 'testuser', 'failed', 'INSPECT');
-INSERT INTO system.job_info (job_id, info_key)
-VALUES (666, 'legacy_payload');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  666,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id)
+        )
+      )
+    )
+  )
+);
 
 skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
@@ -64,8 +91,21 @@ VALUES (666, '666_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"det
 statement ok
 INSERT INTO system.jobs (id, owner, status, job_type)
 VALUES (777, 'testuser', 'running', 'INSPECT');
-INSERT INTO system.job_info (job_id, info_key)
-VALUES (777, 'legacy_payload');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  777,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id)
+        )
+      )
+    )
+  )
+);
 
 skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
@@ -140,3 +180,93 @@ error_type  database_name  schema_name  table_name  primary_key  job_id  aost   
 555_foo     test           public       foo         NULL         555     2025-09-23 04:00:00.000000  {
                                                                                                          "detail": "555\"foo"
                                                                                                      }
+
+# Test SHOW selects the most recent job for a table even if it has no errors.
+subtest show_after_clean_inspect
+
+user root
+
+# Job 888 inspects foo (payload check) but finds no errors (no inspect_errors
+# records).
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (888, 'testuser', 'succeeded', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  888,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id)
+        )
+      )
+    )
+  )
+);
+
+# No errors inserted for job 888 - it inspected foo but found no problems.
+
+user testuser
+
+# Now query for foo errors without specifying a job.
+# Even though job 666 has errors for foo, job 888 is the most recent completed job
+# that inspected foo, so we should get no results.
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo
+----
+
+# Verify we can still get job 666's errors by specifying the job explicitly.
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666
+----
+666_foo  test  public  foo  NULL  666  2025-09-23 04:00:00.000000
+
+subtest end
+
+# Verify the SHOW query works if an INSPECT job is created with empty checks.
+subtest empty_checks_array
+
+user root
+
+# Job 999 has an empty checks array in its payload.
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (999, 'testuser', 'succeeded', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  999,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array()
+      )
+    )
+  )
+);
+
+user testuser
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo
+----
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query TTTTTIT
+SHOW INSPECT ERRORS FOR JOB 999
+----
+
+subtest end
