@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -1346,7 +1345,7 @@ type Manager struct {
 	settings         *cluster.Settings
 	mu               struct {
 		syncutil.Mutex
-		// TODO(james): Track size of leased descriptors in memory.
+
 		descriptors map[descpb.ID]*descriptorState
 
 		// Session based leases that will be removed with expiry, since
@@ -2732,9 +2731,21 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 
 	var distinctSessions []tree.Datums
 	aostTime := hlc.Timestamp{WallTime: initialTimestamp}
-	distinctSessionQuery := `SELECT DISTINCT(session_id) FROM system.lease AS OF SYSTEM TIME %s WHERE crdb_region=$1 AND NOT crdb_internal.sql_liveness_is_alive(session_id, true) LIMIT $2`
-	syntheticDescriptors := catalog.Descriptors{systemschema.LeaseTable()}
 	const limit = 50
+
+	// Build the query based on whether the system database is multi-region.
+	// For multi-region, we need to cast the region parameter to the enum type.
+	// For single-region, we use the bytes representation.
+	var distinctSessionQuery string
+	var regionParam interface{}
+	isMultiRegion := bool(multiRegionSystemDb)
+	if isMultiRegion {
+		distinctSessionQuery = `SELECT DISTINCT(session_id) FROM system.lease AS OF SYSTEM TIME %s WHERE crdb_region=$1::system.crdb_internal_region AND NOT crdb_internal.sql_liveness_is_alive(session_id, true) LIMIT $2`
+		regionParam = region
+	} else {
+		distinctSessionQuery = `SELECT DISTINCT(session_id) FROM system.lease AS OF SYSTEM TIME %s WHERE crdb_region=$1 AND NOT crdb_internal.sql_liveness_is_alive(session_id, true) LIMIT $2`
+		regionParam = enum.One
+	}
 
 	totalSessionsProcessed := 0
 	totalLeasesDeleted := 0
@@ -2742,17 +2753,14 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		// Get a list of distinct, dead session IDs that exist in the system.lease
 		// table.
-		err = ex.WithSyntheticDescriptors(syntheticDescriptors, func() error {
-			distinctSessions, err = ex.QueryBufferedEx(ctx,
-				"query-lease-table-dead-sessions",
-				nil,
-				sessiondata.NodeUserSessionDataOverride,
-				fmt.Sprintf(distinctSessionQuery, aostTime.AsOfSystemTime()),
-				region,
-				limit,
-			)
-			return err
-		})
+		distinctSessions, err = ex.QueryBufferedEx(ctx,
+			"query-lease-table-dead-sessions",
+			nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(distinctSessionQuery, aostTime.AsOfSystemTime()),
+			regionParam,
+			limit,
+		)
 		if err != nil {
 			if !startup.IsRetryableReplicaError(err) {
 				log.Dev.Warningf(ctx, "unable to read session IDs for orphaned leases: %v", err)
@@ -2767,7 +2775,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		// Delete rows in our lease table with orphaned sessions.
 		for _, sessionRow := range distinctSessions {
 			sessionID := sqlliveness.SessionID(tree.MustBeDBytes(sessionRow[0]))
-			sessionLeasesDeleted, err := deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, syntheticDescriptors, sessionID, region, limit)
+			sessionLeasesDeleted, err := deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, isMultiRegion, sessionID, regionParam, limit)
 			if err != nil {
 				log.Dev.Warningf(ctx, "unable to delete orphaned leases for session %s: %v", sessionID, err)
 				break
@@ -2802,25 +2810,32 @@ func deleteLeaseWithSessionIDWithBatch(
 	ctx context.Context,
 	ex isql.Executor,
 	retryOpts retry.Options,
-	syntheticDescriptors catalog.Descriptors,
+	multiRegionSystemDb bool,
 	sessionID sqlliveness.SessionID,
-	region string,
+	regionParam interface{},
 	batchSize int,
 ) (int, error) {
+	// Build the query based on whether the system database is multi-region.
+	// For multi-region, we need to cast the region parameter to the enum type.
+	// For single-region, we use the bytes representation.
+	var deleteOrphanedQuery string
+	if multiRegionSystemDb {
+		deleteOrphanedQuery = `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2::system.crdb_internal_region LIMIT $3`
+	} else {
+		deleteOrphanedQuery = `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2 LIMIT $3`
+	}
+
 	totalDeleted := 0
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var rowsDeleted int
-		deleteOrphanedQuery := `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2 LIMIT $3`
-		if err := ex.WithSyntheticDescriptors(syntheticDescriptors, func() error {
-			var err error
-			rowsDeleted, err = ex.ExecEx(ctx, "delete-orphaned-leases-by-session", nil,
-				sessiondata.NodeUserSessionDataOverride,
-				deleteOrphanedQuery,
-				sessionID.UnsafeBytes(),
-				region,
-				batchSize)
-			return err
-		}); err != nil {
+		var err error
+		rowsDeleted, err = ex.ExecEx(ctx, "delete-orphaned-leases-by-session", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			deleteOrphanedQuery,
+			sessionID.UnsafeBytes(),
+			regionParam,
+			batchSize)
+		if err != nil {
 			if !startup.IsRetryableReplicaError(err) {
 				return totalDeleted, err
 			}

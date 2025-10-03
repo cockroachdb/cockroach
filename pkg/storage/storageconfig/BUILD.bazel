@@ -33,6 +33,7 @@ go_test(
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
+        "//pkg/util/yamlutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v3//:yaml_v3",
