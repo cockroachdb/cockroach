@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -106,16 +107,44 @@ var performConstraintValidation = settings.RegisterBoolSetting(
 	settings.WithUnsafe,
 )
 
-// TODO(janexing): tune the default to True when INSPECT is merged in stable release.
-var importRowCountValidation = settings.RegisterBoolSetting(
+// ImportRowCountValidationMode represents the mode for row count validation after import.
+type ImportRowCountValidationMode int64
+
+const (
+	// ImportRowCountValidationOff disables row count validation after import.
+	ImportRowCountValidationOff ImportRowCountValidationMode = iota
+	// ImportRowCountValidationAsync enables asynchronous row count validation after import.
+	ImportRowCountValidationAsync
+	// ImportRowCountValidationSync enables synchronous (blocking) row count validation after import.
+	ImportRowCountValidationSync
+)
+
+// importRowCountValidationMetamorphicValue determines the default value for
+// importRowCountValidation in metamorphic test builds. It randomly selects
+// between "off", "async", and "sync" modes to increase test coverage.
+var importRowCountValidationMetamorphicValue = metamorphic.ConstantWithTestChoice(
+	"import-row-count-validation",
+	"off",   // no validation
+	"async", // background validation
+	"sync",  // blocking validation for tests
+)
+
+// TODO(janexing): tune the default to async when INSPECT is merged in stable release.
+var importRowCountValidation = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
-	"bulkio.import.row_count_validation.unsafe.enabled",
-	"enables asynchronous validation of imported data via INSPECT "+
-		"jobs. When enabled, an INSPECT job runs after import completion to "+
-		"detect potential data corruption. Disabling this setting may result "+
-		"in undetected data corruption if the import process fails.",
-	false,
+	"bulkio.import.row_count_validation.unsafe.mode",
+	"controls validation of imported data via INSPECT jobs. "+
+		"Options: 'off' (no validation), 'async' (background validation), "+
+		"'sync' (blocking validation). "+
+		"If disabled, IMPORT will not perform a post-import row count check.",
+	importRowCountValidationMetamorphicValue,
+	map[ImportRowCountValidationMode]string{
+		ImportRowCountValidationOff:   "off",
+		ImportRowCountValidationAsync: "async",
+		ImportRowCountValidationSync:  "sync",
+	},
 	settings.WithUnsafe,
+	settings.WithRetiredName("bulkio.import.row_count_validation.unsafe.enabled"),
 )
 
 func getTable(details jobspb.ImportDetails) (jobspb.ImportDetails_Table, error) {
@@ -288,14 +317,18 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if importRowCountValidation.Get(&p.ExecCfg().Settings.SV) {
+	validationMode := importRowCountValidation.Get(&p.ExecCfg().Settings.SV)
+	switch validationMode {
+	case ImportRowCountValidationOff:
+	// No validation required.
+	case ImportRowCountValidationAsync, ImportRowCountValidationSync:
 		table, err := getTable(details)
 		if err != nil {
 			return err
 		}
 		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
-			_, err := sql.TriggerInspectJob(
+			jobID, err := sql.TriggerInspectJob(
 				ctx,
 				fmt.Sprintf("import-validation-%s", tblDesc.GetName()),
 				p.ExecCfg(),
@@ -305,7 +338,15 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			if err != nil {
 				return errors.Wrapf(err, "failed to trigger inspect for import validation for table %s", tblDesc.GetName())
 			}
-			log.Eventf(ctx, "triggered inspect job for import validation for table %s with AOST %s", tblDesc.GetName(), setPublicTimestamp)
+			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", jobID, tblDesc.GetName(), setPublicTimestamp)
+
+			// For sync mode, wait for the inspect job to complete.
+			if validationMode == ImportRowCountValidationSync {
+				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{jobID}); err != nil {
+					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", jobID, tblDesc.GetName())
+				}
+				log.Eventf(ctx, "inspect job %d completed for table %s", jobID, tblDesc.GetName())
+			}
 		}
 	}
 

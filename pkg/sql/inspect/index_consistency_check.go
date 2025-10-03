@@ -384,6 +384,18 @@ func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 					"unsupported index type for consistency check: partial index",
 				)
 			}
+			// TODO(154762): support hash sharded indexes
+			if idx.IsSharded() {
+				return errors.AssertionFailedf(
+					"unsupported index type for consistency check: hash-sharded index",
+				)
+			}
+			// TODO(154772): support expression indexes
+			if c.tableDesc.IsExpressionIndex(idx) {
+				return errors.AssertionFailedf(
+					"unsupported index type for consistency check: expression index",
+				)
+			}
 			switch idx.GetType() {
 			case idxtype.INVERTED, idxtype.VECTOR:
 				return errors.AssertionFailedf(
