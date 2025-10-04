@@ -1,0 +1,68 @@
+setup
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.tbl_with_partial_idx (
+      id INT NOT NULL,
+      cluster_id UUID NULL,
+      organization_id UUID NULL,
+      kind STRING NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      finished_at TIMESTAMPTZ NULL,
+      request BYTES NULL,
+      unclaimable BOOL NULL DEFAULT false,
+      success BOOL NULL,
+      finish_hook_error STRING NULL,
+      idempotency_key STRING NOT NULL DEFAULT gen_random_uuid()::STRING,
+      response BYTES NULL,
+      metadata JSONB NULL,
+      finish_hook_error_proto BYTES NULL,
+      trace_context BYTES NULL,
+      last_heartbeat_at TIMESTAMPTZ NULL,
+      cancelled_at TIMESTAMPTZ NULL,
+      claimed_by_job_system_id UUID NULL,
+      CONSTRAINT "primary" PRIMARY KEY (id ASC),
+      INDEX jobs_auto_index_fk_cluster_id_ref_clusters (cluster_id ASC),
+      INDEX jobs_auto_index_fk_organization_id_ref_organizations (organization_id ASC),
+      INDEX jobs_finished_at_unclaimable_idx (finished_at ASC, unclaimable ASC),
+      UNIQUE INDEX unique_job_request (kind ASC, idempotency_key ASC),
+      INDEX jobs_created_at_idx (created_at ASC),
+      INDEX jobs_success_idx (success ASC),
+      FAMILY "primary" (id, cluster_id, organization_id, kind, created_at, finished_at, request, unclaimable, success, finish_hook_error, idempotency_key, response, metadata, finish_hook_error_proto, trace_context, cancelled_at, claimed_by_job_system_id),
+      FAMILY heartbeat_family (last_heartbeat_at),
+      CONSTRAINT check_request_not_null CHECK (request IS NOT NULL),
+      CONSTRAINT check_unclaimable_not_null CHECK (unclaimable IS NOT NULL)
+  ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+INSERT INTO tbl_with_partial_idx (id, kind, request) VALUES ($stageKey, $stageKey::text, $stageKey::text::bytes);
+INSERT INTO tbl_with_partial_idx (id, kind, request) VALUES ($stageKey * -1, $stageKey::text, $stageKey::text::bytes);
+DELETE FROM tbl_with_partial_idx WHERE id = $stageKey;
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+INSERT INTO tbl_with_partial_idx (id, kind, request) VALUES (100 + $stageKey, $stageKey::text, $stageKey::text::bytes);
+INSERT INTO tbl_with_partial_idx (id, kind, request) VALUES ((100 + $stageKey) * -1, $stageKey::text, $stageKey::text::bytes);
+DELETE FROM tbl_with_partial_idx WHERE id = (100 + $stageKey);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+
+test
+CREATE INDEX IF NOT EXISTS jobs_claim_loop_idx ON multiregion_db.public.tbl_with_partial_idx(
+        kind ASC,
+        idempotency_key ASC
+    ) WHERE claimed_by_job_system_id IS NULL
+    AND finished_at IS NULL
+    AND cancelled_at IS NULL
+    AND unclaimable = false;
+----
