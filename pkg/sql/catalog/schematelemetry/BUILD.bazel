@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/scheduledjobs",
         "//pkg/security/username",
         "//pkg/server/telemetry",

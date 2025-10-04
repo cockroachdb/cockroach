@@ -273,21 +273,17 @@ func (tc *Collection) IsVersionBumpOfUncommittedDescriptor(id descpb.ID) bool {
 	return tc.uncommitted.versionBumpOnly[id]
 }
 
-// HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
-// any uncommitted descriptors that are newly created or dropped.
-func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {
-	isNewDescriptor := false
-	err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+// CountUncommittedNewOrDroppedDescriptors returns the number of uncommitted
+// descriptors that are newly created or dropped.
+func (tc *Collection) CountUncommittedNewOrDroppedDescriptors() int {
+	count := 0
+	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
 		if desc.GetVersion() == 1 || desc.Dropped() {
-			isNewDescriptor = true
-			return iterutil.StopIteration()
+			count++
 		}
 		return nil
 	})
-	if err != nil {
-		return false
-	}
-	return isNewDescriptor
+	return count
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted

@@ -7,9 +7,11 @@ package schematelemetry
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -62,6 +64,31 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 	var knobs sql.SchemaTelemetryTestingKnobs
 	if k := p.ExecCfg().SchemaTelemetryTestingKnobs; k != nil {
 		knobs = *k
+	}
+	// Notify the stats refresher to update the system.descriptors table stats,
+	// and update the object count in schema changer metrics.
+	err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.DescriptorTableID)
+		if err != nil {
+			return err
+		}
+		p.ExecCfg().StatsRefresher.NotifyMutation(desc, math.MaxInt64 /* rowCount */)
+
+		// Note: This won't be perfectly up-to-date, but it will make sure the
+		// metric gets updated periodically. It also gets updated after every
+		// schema change.
+		tableStats, err := p.ExecCfg().TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		if err != nil {
+			return err
+		}
+		if len(tableStats) > 0 {
+			// Use the row count from the most recent statistic.
+			p.ExecCfg().SchemaChangerMetrics.ObjectCount.Update(int64(tableStats[0].RowCount))
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to notify stats refresher to update system.descriptors table stats")
 	}
 
 	// Outside of tests, scan the catalog tables AS OF SYSTEM TIME slightly in the
