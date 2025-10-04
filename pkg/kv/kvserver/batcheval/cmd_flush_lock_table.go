@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -74,6 +75,7 @@ func FlushLockTable(
 		return true
 	})
 
+	log.KvExec.Infof(ctx, "flushing %d locks; latched: %s", len(locksToFlush), cArgs.Concurrency.LatchSpans())
 	for i, l := range locksToFlush {
 		locksToFlush[i].Durability = lock.Replicated
 		if err := storage.MVCCAcquireLock(ctx, rw,
