@@ -34,3 +34,12 @@ func WithRegion(region string) OptionFunc {
 		p.regions[region] = struct{}{}
 	}
 }
+
+// ProviderOptions holds options for configuring the IBM provider.
+type ProviderOptions struct{}
+
+// ToOptions converts ProviderOptions to a slice of Option functions to be used
+// in NewProvider(opts ...Option).
+func (po *ProviderOptions) ToOptions() []Option {
+	return []Option{}
+}
