@@ -356,6 +356,9 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 	numNodes := 3
 	tcArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 	}
 
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
