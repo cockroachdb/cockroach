@@ -81,7 +81,7 @@ func TestBlockingBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	metrics := kvevent.MakeMetrics(time.Minute).AggregatorBufferMetricsWithCompat
+	metrics := kvevent.MakeMetrics(time.Minute).AggregatorBufferMetrics
 	ba, release := getBoundAccountWithBudget(4096)
 	defer release()
 
@@ -178,11 +178,53 @@ func TestBlockingBuffer(t *testing.T) {
 	require.EqualValues(t, 0, metrics.AllocatedMem.Value())
 }
 
+func TestMultipleBlockingBufferMemoryMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	rnd, _ := randutil.NewTestRand()
+	metrics := kvevent.MakeMetrics(time.Minute)
+	ba, release := getBoundAccountWithBudget(4096)
+	defer release()
+
+	st := cluster.MakeTestingClusterSettings()
+	bufRangefeed := kvevent.TestingNewMemBuffer(ba, &st.SV, &metrics.RangefeedBufferMetrics, nil)
+	bufAggregator := kvevent.TestingNewMemBuffer(ba, &st.SV, &metrics.AggregatorBufferMetrics, nil)
+	defer func() {
+		require.NoError(t, bufRangefeed.CloseWithReason(ctx, nil))
+		require.NoError(t, bufAggregator.CloseWithReason(ctx, nil))
+	}()
+
+	// Make an event and add it to one buffer, then the next.
+	evt := kvevent.MakeKVEvent(makeRangeFeedEvent(rnd, 256, 0))
+	require.NoError(t, bufRangefeed.Add(ctx, evt))
+	evt, err := bufRangefeed.Get(ctx)
+	require.NoError(t, err)
+
+	// The event is in neither buffer, but it's memory allocation is still tracked.
+	require.GreaterOrEqual(t, metrics.AllocatedMem.Value(), int64(100))
+
+	require.NoError(t, bufAggregator.Add(ctx, evt))
+	_, err = bufAggregator.Get(ctx)
+	require.NoError(t, err)
+
+	require.GreaterOrEqual(t, metrics.BufferEntriesMemAcquired.Count(), int64(100))
+
+	// Release the event's allocation.
+	a := evt.DetachAlloc()
+	a.Release(ctx)
+
+	require.Equal(t, metrics.BufferEntriesMemAcquired.Count(), metrics.BufferEntriesMemReleased.Count())
+
+}
+
 func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	metrics := kvevent.MakeMetrics(time.Minute).AggregatorBufferMetricsWithCompat
+	metrics := kvevent.MakeMetrics(time.Minute).AggregatorBufferMetrics
 	ba, release := getBoundAccountWithBudget(4096)
 	defer release()
 

@@ -26,7 +26,7 @@ import (
 // from a mon.BoundAccount and blocks if no resources are available.
 type blockingBuffer struct {
 	sv       *settings.Values
-	metrics  *PerBufferMetricsWithCompat
+	metrics  *BufferMetrics
 	qp       allocPool     // Pool for memory allocations.
 	signalCh chan struct{} // Signal when new events are available.
 
@@ -55,7 +55,7 @@ type blockingBuffer struct {
 func NewMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *BufferMetrics,
 	options ...BlockingBufferOption,
 ) Buffer {
 	return newMemBuffer(acc, sv, metrics, nil, options...)
@@ -66,7 +66,7 @@ func NewMemBuffer(
 func TestingNewMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *BufferMetrics,
 	onWaitStart quotapool.OnWaitStartFunc,
 ) Buffer {
 	return newMemBuffer(acc, sv, metrics, onWaitStart)
@@ -75,7 +75,7 @@ func TestingNewMemBuffer(
 func newMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *BufferMetrics,
 	onWaitStart quotapool.OnWaitStartFunc,
 	options ...BlockingBufferOption,
 ) Buffer {
@@ -489,7 +489,7 @@ func (r *memRequest) ShouldWait() bool {
 
 type allocPool struct {
 	*quotapool.AbstractPool
-	metrics *PerBufferMetricsWithCompat
+	metrics *BufferMetrics
 	sv      *settings.Values
 }
 
