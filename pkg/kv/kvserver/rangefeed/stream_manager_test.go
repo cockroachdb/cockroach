@@ -211,10 +211,11 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		t.Run("Fail to register rangefeed with the processor", func(t *testing.T) {
 			p, _, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
-			sm.NewStream(sID, rID)
-			// We mock failed registration by not calling p.Register.
-			// node.MuxRangefeed would call sendBuffered with error event.
-			require.NoError(t, sm.sender.sendBuffered(makeMuxRangefeedErrorEvent(sID, rID, disconnectErr), nil))
+			streamSink := sm.NewStream(sID, rID)
+			// We mock failed registration by not calling p.Register and calling
+			// SendError just as (*Node).muxRangeFeed does.
+			sm.RegisteringStream(sID)
+			streamSink.SendError(disconnectErr)
 			expectErrorHandlingInvariance(p)
 			testServerStream.reset()
 		})
@@ -223,6 +224,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 				p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 				defer stopper.Stop(ctx)
 				stream := sm.NewStream(sID, rID)
+				sm.RegisteringStream(sID)
 				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 					stream)
@@ -237,6 +239,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			stream := sm.NewStream(sID, rID)
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
+			sm.RegisteringStream(sID)
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				stream)
@@ -252,6 +255,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			stream := sm.NewStream(sID, rID)
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
+			sm.RegisteringStream(sID)
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				stream)
