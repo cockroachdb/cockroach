@@ -25,7 +25,7 @@ Events not documented on this page will have an unstructured format in log messa
 
 Events in this category pertain to changefeed usage and metrics.
 
-Events in this category are logged to the `TELEMETRY` channel.
+Events in this category are logged to the `CHANGEFEED` channel.
 
 
 ### `alter_changefeed`
@@ -143,10 +143,10 @@ An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query
 successfully starts running. Failed CREATE statements will show up as
 ChangefeedFailed events.
 
-Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `CHANGEFEED` instead of `TELEMETRY`.
+Note: in version 26.1, these events moved to the `CHANGEFEED` channel.
+To test compatability prior to this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to true. This will send the
+events to `TELEMETRY` instead of `CHANGEFEED`.
 
 
 | Field | Description | Sensitive |
@@ -2876,12 +2876,12 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-In version 26.1, these events will be moved to the `SQL_EXEC` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `SQL_EXEC` instead of `SQL_PERF`.
+In version 26.1, these events moved to the `SQL_EXEC` channel.
+To test compatability prior to this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to true. This will send the
+events to `SQL_PERF` instead of `SQL_EXEC`.
 
-Events in this category are logged to the `SQL_PERF` channel.
+Events in this category are logged to the `SQL_EXEC` channel.
 
 
 ### `large_row`
@@ -3011,12 +3011,12 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-In version 26.1, these events will be moved to the `SQL_EXEC` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `SQL_EXEC` instead of `SQL_INTERNAL_PERF`.
+In version 26.1, these events moved to the `SQL_EXEC` channel.
+To test compatability prior to this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to true. This will send the
+events to `SQL_INTERNAL_PERF` instead of `SQL_EXEC`.
 
-Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
+Events in this category are logged to the `SQL_EXEC` channel.
 
 
 ### `large_row_internal`
@@ -3263,6 +3263,217 @@ are automatically converted server-side.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+## Sampled SQL Events
+
+Events in this category report sample of SQL events.
+
+Events in this category are logged to the `SQL_EXEC` channel.
+
+
+### `m_v_c_c_iterator_stats`
+
+Internal storage iteration statistics for a single execution.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StepCount` | StepCount collects the number of times the iterator moved forward or backward over the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `StepCountInternal` | StepCountInternal collects the number of times the iterator moved forward or backward over LSM internal keys. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `SeekCount` | SeekCount collects the number of times the iterator moved to a specific key/value pair in the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `SeekCountInternal` | SeekCountInternal collects the number of times the iterator moved to a specific LSM internal key. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `BlockBytes` | BlockBytes collects the bytes in the loaded SSTable data blocks. For details, see pebble.InternalIteratorStats. | no |
+| `BlockBytesInCache` | BlockBytesInCache collects the subset of BlockBytes in the block cache. For details, see pebble.InternalIteratorStats. | no |
+| `KeyBytes` | KeyBytes collects the bytes in keys that were iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `ValueBytes` | ValueBytes collects the bytes in values that were iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `PointCount` | PointCount collects the count of point keys iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `PointsCoveredByRangeTombstones` | PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that were covered by range tombstones. For details, see pebble.InternalIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `RangeKeyCount` | RangeKeyCount collects the count of range keys encountered during iteration. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `RangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `RangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+
+
+
+### `sampled_exec_stats`
+
+An event of type `sampled_exec_stats` contains execution statistics that apply to both statements
+and transactions. These stats as a whole are collected using a sampling approach.
+These exec stats are meant to contain the same fields as ExecStats in
+apps_stats.proto but are for a single execution rather than aggregated executions.
+Fields in this struct should be updated in sync with apps_stats.proto.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NetworkBytes` | NetworkBytes collects the number of bytes sent over the network by DistSQL components. | no |
+| `MaxMemUsage` | MaxMemUsage collects the maximum memory usage that occurred on a node. | no |
+| `ContentionTime` | ContentionTime collects the time in seconds statements in the transaction spent contending. | no |
+| `NetworkMessages` | NetworkMessages collects the number of messages that were sent over the network by DistSQL components. | no |
+| `MaxDiskUsage` | MaxDiskUsage collects the maximum temporary disk usage that occurred. This is set in cases where a query had to spill to disk, e.g. when performing a large sort where not all of the tuples fit in memory. | no |
+| `CPUSQLNanos` | CPUSQLNanos collects the CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
+| `MVCCIteratorStats` | Internal storage iteration statistics. | yes |
+
+
+
+### `sampled_query`
+
+An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
+contains common SQL event/execution details.
+
+Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
+To test compatability prior to this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to true. This will send the
+events to `TELEMETRY` instead of `SQL_EXEC`.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SkippedQueries` | skipped_queries indicate how many SQL statements were not considered for sampling prior to this one. If the field is omitted, or its value is zero, this indicates that no statement was omitted since the last event. | no |
+| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
+| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
+| `PlanGist` | The query's plan gist bytes as a base64 encoded string. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the query. | no |
+| `Database` | Name of the database that initiated the query. | no |
+| `StatementID` | Statement ID of the query. | no |
+| `TransactionID` | Transaction ID of the query. | no |
+| `MaxFullScanRowsEstimate` | Maximum number of rows scanned by a full scan, as estimated by the optimizer. | no |
+| `TotalScanRowsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer. | no |
+| `OutputRowsEstimate` | The number of rows output by the query, as estimated by the optimizer. | no |
+| `StatsAvailable` | Whether table statistics were available to the optimizer when planning the query. | no |
+| `NanosSinceStatsCollected` | The maximum number of nanoseconds that have passed since stats were collected on any table scanned by this query. | no |
+| `BytesRead` | The number of bytes read from disk. | no |
+| `RowsRead` | The number of rows read from disk. | no |
+| `RowsWritten` | The number of rows written. | no |
+| `InnerJoinCount` | The number of inner joins in the query plan. | no |
+| `LeftOuterJoinCount` | The number of left (or right) outer joins in the query plan. | no |
+| `FullOuterJoinCount` | The number of full outer joins in the query plan. | no |
+| `SemiJoinCount` | The number of semi joins in the query plan. | no |
+| `AntiJoinCount` | The number of anti joins in the query plan. | no |
+| `IntersectAllJoinCount` | The number of intersect all joins in the query plan. | no |
+| `ExceptAllJoinCount` | The number of except all joins in the query plan. | no |
+| `HashJoinCount` | The number of hash joins in the query plan. | no |
+| `CrossJoinCount` | The number of cross joins in the query plan. | no |
+| `IndexJoinCount` | The number of index joins in the query plan. | no |
+| `LookupJoinCount` | The number of lookup joins in the query plan. | no |
+| `MergeJoinCount` | The number of merge joins in the query plan. | no |
+| `InvertedJoinCount` | The number of inverted joins in the query plan. | no |
+| `ApplyJoinCount` | The number of apply joins in the query plan. | no |
+| `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
+| `ContentionNanos` | The duration of time in nanoseconds that the query experienced contention. | no |
+| `Regions` | The regions of the nodes where SQL processors ran. | no |
+| `NetworkBytesSent` | The number of network bytes by DistSQL components. | no |
+| `MaxMemUsage` | The maximum amount of memory usage by nodes for this query. | no |
+| `MaxDiskUsage` | The maximum amount of disk usage by nodes for this query. | no |
+| `KVBytesRead` | The number of bytes read at the KV layer for this query. | no |
+| `KVPairsRead` | The number of key-value pairs read at the KV layer for this query. | no |
+| `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
+| `NetworkMessages` | The number of network messages sent by nodes for this query by DistSQL components. | no |
+| `IndexRecommendations` | Generated index recommendations for this query. | no |
+| `ScanCount` | The number of scans in the query plan. | no |
+| `ScanWithStatsCount` | The number of scans using statistics (including forecasted statistics) in the query plan. | no |
+| `ScanWithStatsForecastCount` | The number of scans using forecasted statistics in the query plan. | no |
+| `TotalScanRowsWithoutForecastsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer without using forecasts. | no |
+| `NanosSinceStatsForecasted` | The greatest quantity of nanoseconds that have passed since the forecast time (or until the forecast time, if it is in the future, in which case it will be negative) for any table with forecasted stats scanned by this query. | no |
+| `Indexes` | The list of indexes used by this query. | no |
+| `CpuTimeNanos` | Collects the cumulative CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
+| `KvGrpcCalls` | The number of grpc calls done to get data form KV nodes | no |
+| `KvTimeNanos` | Cumulated time spent waiting for a KV request. This includes disk IO time and potentially network time (if any of the keys are not local). | no |
+| `ServiceLatencyNanos` | The time to service the query, from start of parse to end of execute. | no |
+| `OverheadLatencyNanos` | The difference between service latency and the sum of parse latency + plan latency + run latency . | no |
+| `RunLatencyNanos` | The time to run the query and fetch or compute the result rows. | no |
+| `PlanLatencyNanos` | The time to transform the AST into a logical query plan. | no |
+| `IdleLatencyNanos` | The time between statement executions in a transaction | no |
+| `ParseLatencyNanos` | The time to transform the SQL string into an abstract syntax tree (AST). | no |
+| `MvccStepCount` | StepCount collects the number of times the iterator moved forward or backward over the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccStepCountInternal` | StepCountInternal collects the number of times the iterator moved forward or backward over LSM internal keys. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccSeekCount` | SeekCount collects the number of times the iterator moved to a specific key/value pair in the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccSeekCountInternal` | SeekCountInternal collects the number of times the iterator moved to a specific LSM internal key. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
+| `MvccBlockBytes` | BlockBytes collects the bytes in the loaded SSTable data blocks. For details, see pebble.InternalIteratorStats. | no |
+| `MvccBlockBytesInCache` | BlockBytesInCache collects the subset of BlockBytes in the block cache. For details, see pebble.InternalIteratorStats. | no |
+| `MvccKeyBytes` | KeyBytes collects the bytes in keys that were iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `MvccValueBytes` | ValueBytes collects the bytes in values that were iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `MvccPointCount` | PointCount collects the count of point keys iterated over. For details, see pebble.InternalIteratorStats. | no |
+| `MvccPointsCoveredByRangeTombstones` | PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that were covered by range tombstones. For details, see pebble.InternalIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `MvccRangeKeyCount` | RangeKeyCount collects the count of range keys encountered during iteration. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `MvccRangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `MvccRangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
+| `SchemaChangerMode` | SchemaChangerMode is the mode that was used to execute the schema change, if any. | no |
+| `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instances used in this statement's execution. | no |
+| `KVNodeIDs` | KVNodeIDs is a list of all the KV nodes used in this statement's execution. | no |
+| `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
+| `UsedFollowerRead` | UsedFollowerRead indicates whether at least some reads were served by the follower replicas. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | partially |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
+| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
+| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
+
+### `sampled_transaction`
+
+An event of type `sampled_transaction` is the event logged to telemetry at the end of transaction execution.
+
+Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
+To test compatability prior to this, set the cluster setting
+`log.channel_compatibility_mode.enabled` to true. This will send the
+events to `TELEMETRY` instead of `SQL_EXEC`.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `User` | User is the user account that triggered the transaction. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `ApplicationName` | ApplicationName is the application name for the session where the transaction was executed. This is included in the event to ease filtering of logging output by application. | no |
+| `TxnCounter` | TxnCounter is the sequence number of the SQL transaction inside its session. | no |
+| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
+| `TransactionID` | TransactionID is the id of the transaction. | no |
+| `Committed` | Committed indicates if the transaction committed successfully. We want to include this value even if it is false. | no |
+| `ImplicitTxn` | ImplicitTxn indicates if the transaction was an implicit one. We want to include this value even if it is false. | no |
+| `StartTimeUnixNanos` | StartTimeUnixNanos is the time the transaction was started. Expressed as unix time in nanoseconds. | no |
+| `EndTimeUnixNanos` | EndTimeUnixNanos the time the transaction finished (either committed or aborted). Expressed as unix time in nanoseconds. | no |
+| `ServiceLatNanos` | ServiceLatNanos is the time to service the whole transaction, from start to end of execution. | no |
+| `SQLSTATE` | SQLSTATE is the SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | ErrorText is the text of the error if any. | partially |
+| `NumRetries` | NumRetries is the number of time when the txn was retried automatically by the server. | no |
+| `LastAutoRetryReason` | LastAutoRetryReason is a string containing the reason for the last automatic retry. | partially |
+| `NumRows` | NumRows is the total number of rows returned across all statements. | no |
+| `RetryLatNanos` | RetryLatNanos is the amount of time spent retrying the transaction. | no |
+| `CommitLatNanos` | CommitLatNanos is the amount of time spent committing the transaction after all statement operations. | no |
+| `IdleLatNanos` | IdleLatNanos is the amount of time spent waiting for the client to send statements while the transaction is open. | no |
+| `BytesRead` | BytesRead is the number of bytes read from disk. | no |
+| `RowsRead` | RowsRead is the number of rows read from disk. | no |
+| `RowsWritten` | RowsWritten is the number of rows written to disk. | no |
+| `SampledExecStats` | SampledExecStats is a nested field containing execution statistics. This field will be omitted if the stats were not sampled. | yes |
+| `SkippedTransactions` | SkippedTransactions is the number of transactions that were skipped as part of sampling prior to this one. We only count skipped transactions when telemetry logging is enabled and the sampling mode is set to "transaction". | no |
+| `TransactionFingerprintID` | TransactionFingerprintID is the fingerprint ID of the transaction. This can be used to find the transaction in the console. | no |
+| `StatementFingerprintIDs` | StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Storage telemetry events
 
 
@@ -3385,29 +3596,6 @@ An event of type `captured_index_usage_stats`
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
-### `m_v_c_c_iterator_stats`
-
-Internal storage iteration statistics for a single execution.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `StepCount` | StepCount collects the number of times the iterator moved forward or backward over the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `StepCountInternal` | StepCountInternal collects the number of times the iterator moved forward or backward over LSM internal keys. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `SeekCount` | SeekCount collects the number of times the iterator moved to a specific key/value pair in the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `SeekCountInternal` | SeekCountInternal collects the number of times the iterator moved to a specific LSM internal key. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `BlockBytes` | BlockBytes collects the bytes in the loaded SSTable data blocks. For details, see pebble.InternalIteratorStats. | no |
-| `BlockBytesInCache` | BlockBytesInCache collects the subset of BlockBytes in the block cache. For details, see pebble.InternalIteratorStats. | no |
-| `KeyBytes` | KeyBytes collects the bytes in keys that were iterated over. For details, see pebble.InternalIteratorStats. | no |
-| `ValueBytes` | ValueBytes collects the bytes in values that were iterated over. For details, see pebble.InternalIteratorStats. | no |
-| `PointCount` | PointCount collects the count of point keys iterated over. For details, see pebble.InternalIteratorStats. | no |
-| `PointsCoveredByRangeTombstones` | PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that were covered by range tombstones. For details, see pebble.InternalIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `RangeKeyCount` | RangeKeyCount collects the count of range keys encountered during iteration. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `RangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `RangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-
-
-
 ### `recovery_event`
 
 An event of type `recovery_event` is an event that is logged on every invocation of BACKUP,
@@ -3439,187 +3627,6 @@ logged whenever a BACKUP and RESTORE job completes or fails.
 | `IgnoreExistingBackup` | IgnoreExistingBackup is true iff the BACKUP schedule should still be created even if a backup is already present in its destination. | no |
 | `ApplicationName` | The application name for the session where recovery event was created. | no |
 | `NumRows` | NumRows is the number of rows successfully imported, backed up or restored. | no |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-
-### `sampled_exec_stats`
-
-An event of type `sampled_exec_stats` contains execution statistics that apply to both statements
-and transactions. These stats as a whole are collected using a sampling approach.
-These exec stats are meant to contain the same fields as ExecStats in
-apps_stats.proto but are for a single execution rather than aggregated executions.
-Fields in this struct should be updated in sync with apps_stats.proto.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `NetworkBytes` | NetworkBytes collects the number of bytes sent over the network by DistSQL components. | no |
-| `MaxMemUsage` | MaxMemUsage collects the maximum memory usage that occurred on a node. | no |
-| `ContentionTime` | ContentionTime collects the time in seconds statements in the transaction spent contending. | no |
-| `NetworkMessages` | NetworkMessages collects the number of messages that were sent over the network by DistSQL components. | no |
-| `MaxDiskUsage` | MaxDiskUsage collects the maximum temporary disk usage that occurred. This is set in cases where a query had to spill to disk, e.g. when performing a large sort where not all of the tuples fit in memory. | no |
-| `CPUSQLNanos` | CPUSQLNanos collects the CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
-| `MVCCIteratorStats` | Internal storage iteration statistics. | yes |
-
-
-
-### `sampled_query`
-
-An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
-contains common SQL event/execution details.
-
-Note: in version 26.1, these events will be moved to the `SQL_EXEC` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `SQL_EXEC` instead of `TELEMETRY`.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `SkippedQueries` | skipped_queries indicate how many SQL statements were not considered for sampling prior to this one. If the field is omitted, or its value is zero, this indicates that no statement was omitted since the last event. | no |
-| `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
-| `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
-| `PlanGist` | The query's plan gist bytes as a base64 encoded string. | no |
-| `SessionID` | SessionID is the ID of the session that initiated the query. | no |
-| `Database` | Name of the database that initiated the query. | no |
-| `StatementID` | Statement ID of the query. | no |
-| `TransactionID` | Transaction ID of the query. | no |
-| `MaxFullScanRowsEstimate` | Maximum number of rows scanned by a full scan, as estimated by the optimizer. | no |
-| `TotalScanRowsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer. | no |
-| `OutputRowsEstimate` | The number of rows output by the query, as estimated by the optimizer. | no |
-| `StatsAvailable` | Whether table statistics were available to the optimizer when planning the query. | no |
-| `NanosSinceStatsCollected` | The maximum number of nanoseconds that have passed since stats were collected on any table scanned by this query. | no |
-| `BytesRead` | The number of bytes read from disk. | no |
-| `RowsRead` | The number of rows read from disk. | no |
-| `RowsWritten` | The number of rows written. | no |
-| `InnerJoinCount` | The number of inner joins in the query plan. | no |
-| `LeftOuterJoinCount` | The number of left (or right) outer joins in the query plan. | no |
-| `FullOuterJoinCount` | The number of full outer joins in the query plan. | no |
-| `SemiJoinCount` | The number of semi joins in the query plan. | no |
-| `AntiJoinCount` | The number of anti joins in the query plan. | no |
-| `IntersectAllJoinCount` | The number of intersect all joins in the query plan. | no |
-| `ExceptAllJoinCount` | The number of except all joins in the query plan. | no |
-| `HashJoinCount` | The number of hash joins in the query plan. | no |
-| `CrossJoinCount` | The number of cross joins in the query plan. | no |
-| `IndexJoinCount` | The number of index joins in the query plan. | no |
-| `LookupJoinCount` | The number of lookup joins in the query plan. | no |
-| `MergeJoinCount` | The number of merge joins in the query plan. | no |
-| `InvertedJoinCount` | The number of inverted joins in the query plan. | no |
-| `ApplyJoinCount` | The number of apply joins in the query plan. | no |
-| `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
-| `ContentionNanos` | The duration of time in nanoseconds that the query experienced contention. | no |
-| `Regions` | The regions of the nodes where SQL processors ran. | no |
-| `NetworkBytesSent` | The number of network bytes by DistSQL components. | no |
-| `MaxMemUsage` | The maximum amount of memory usage by nodes for this query. | no |
-| `MaxDiskUsage` | The maximum amount of disk usage by nodes for this query. | no |
-| `KVBytesRead` | The number of bytes read at the KV layer for this query. | no |
-| `KVPairsRead` | The number of key-value pairs read at the KV layer for this query. | no |
-| `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
-| `NetworkMessages` | The number of network messages sent by nodes for this query by DistSQL components. | no |
-| `IndexRecommendations` | Generated index recommendations for this query. | no |
-| `ScanCount` | The number of scans in the query plan. | no |
-| `ScanWithStatsCount` | The number of scans using statistics (including forecasted statistics) in the query plan. | no |
-| `ScanWithStatsForecastCount` | The number of scans using forecasted statistics in the query plan. | no |
-| `TotalScanRowsWithoutForecastsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer without using forecasts. | no |
-| `NanosSinceStatsForecasted` | The greatest quantity of nanoseconds that have passed since the forecast time (or until the forecast time, if it is in the future, in which case it will be negative) for any table with forecasted stats scanned by this query. | no |
-| `Indexes` | The list of indexes used by this query. | no |
-| `CpuTimeNanos` | Collects the cumulative CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
-| `KvGrpcCalls` | The number of grpc calls done to get data form KV nodes | no |
-| `KvTimeNanos` | Cumulated time spent waiting for a KV request. This includes disk IO time and potentially network time (if any of the keys are not local). | no |
-| `ServiceLatencyNanos` | The time to service the query, from start of parse to end of execute. | no |
-| `OverheadLatencyNanos` | The difference between service latency and the sum of parse latency + plan latency + run latency . | no |
-| `RunLatencyNanos` | The time to run the query and fetch or compute the result rows. | no |
-| `PlanLatencyNanos` | The time to transform the AST into a logical query plan. | no |
-| `IdleLatencyNanos` | The time between statement executions in a transaction | no |
-| `ParseLatencyNanos` | The time to transform the SQL string into an abstract syntax tree (AST). | no |
-| `MvccStepCount` | StepCount collects the number of times the iterator moved forward or backward over the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `MvccStepCountInternal` | StepCountInternal collects the number of times the iterator moved forward or backward over LSM internal keys. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `MvccSeekCount` | SeekCount collects the number of times the iterator moved to a specific key/value pair in the DB's underlying storage keyspace. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `MvccSeekCountInternal` | SeekCountInternal collects the number of times the iterator moved to a specific LSM internal key. For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go. | no |
-| `MvccBlockBytes` | BlockBytes collects the bytes in the loaded SSTable data blocks. For details, see pebble.InternalIteratorStats. | no |
-| `MvccBlockBytesInCache` | BlockBytesInCache collects the subset of BlockBytes in the block cache. For details, see pebble.InternalIteratorStats. | no |
-| `MvccKeyBytes` | KeyBytes collects the bytes in keys that were iterated over. For details, see pebble.InternalIteratorStats. | no |
-| `MvccValueBytes` | ValueBytes collects the bytes in values that were iterated over. For details, see pebble.InternalIteratorStats. | no |
-| `MvccPointCount` | PointCount collects the count of point keys iterated over. For details, see pebble.InternalIteratorStats. | no |
-| `MvccPointsCoveredByRangeTombstones` | PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that were covered by range tombstones. For details, see pebble.InternalIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `MvccRangeKeyCount` | RangeKeyCount collects the count of range keys encountered during iteration. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `MvccRangeKeyContainedPoints` | RangeKeyContainedPoints collects the count of point keys encountered within the bounds of a range key. For details, see pebble.RangeKeyIteratorStats and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `MvccRangeKeySkippedPoints` | RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that were skipped during iteration due to range-key masking. For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md. | no |
-| `SchemaChangerMode` | SchemaChangerMode is the mode that was used to execute the schema change, if any. | no |
-| `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instances used in this statement's execution. | no |
-| `KVNodeIDs` | KVNodeIDs is a list of all the KV nodes used in this statement's execution. | no |
-| `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
-| `UsedFollowerRead` | UsedFollowerRead indicates whether at least some reads were served by the follower replicas. | no |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
-| `EventType` | The type of the event. | no |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
-| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
-| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
-| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
-| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
-| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
-| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
-| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
-| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | partially |
-| `Age` | Age of the query in milliseconds. | no |
-| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
-| `FullTableScan` | Whether the query contains a full table scan. | no |
-| `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
-| `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
-| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
-| `StmtPosInTxn` | The statement's index in the transaction, starting at 1. | no |
-
-### `sampled_transaction`
-
-An event of type `sampled_transaction` is the event logged to telemetry at the end of transaction execution.
-
-Note: in version 26.1, these events will be moved to the `SQL_EXEC` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `SQL_EXEC` instead of `TELEMETRY`.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `User` | User is the user account that triggered the transaction. The special usernames `root` and `node` are not considered sensitive. | depends |
-| `ApplicationName` | ApplicationName is the application name for the session where the transaction was executed. This is included in the event to ease filtering of logging output by application. | no |
-| `TxnCounter` | TxnCounter is the sequence number of the SQL transaction inside its session. | no |
-| `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
-| `TransactionID` | TransactionID is the id of the transaction. | no |
-| `Committed` | Committed indicates if the transaction committed successfully. We want to include this value even if it is false. | no |
-| `ImplicitTxn` | ImplicitTxn indicates if the transaction was an implicit one. We want to include this value even if it is false. | no |
-| `StartTimeUnixNanos` | StartTimeUnixNanos is the time the transaction was started. Expressed as unix time in nanoseconds. | no |
-| `EndTimeUnixNanos` | EndTimeUnixNanos the time the transaction finished (either committed or aborted). Expressed as unix time in nanoseconds. | no |
-| `ServiceLatNanos` | ServiceLatNanos is the time to service the whole transaction, from start to end of execution. | no |
-| `SQLSTATE` | SQLSTATE is the SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | ErrorText is the text of the error if any. | partially |
-| `NumRetries` | NumRetries is the number of time when the txn was retried automatically by the server. | no |
-| `LastAutoRetryReason` | LastAutoRetryReason is a string containing the reason for the last automatic retry. | partially |
-| `NumRows` | NumRows is the total number of rows returned across all statements. | no |
-| `RetryLatNanos` | RetryLatNanos is the amount of time spent retrying the transaction. | no |
-| `CommitLatNanos` | CommitLatNanos is the amount of time spent committing the transaction after all statement operations. | no |
-| `IdleLatNanos` | IdleLatNanos is the amount of time spent waiting for the client to send statements while the transaction is open. | no |
-| `BytesRead` | BytesRead is the number of bytes read from disk. | no |
-| `RowsRead` | RowsRead is the number of rows read from disk. | no |
-| `RowsWritten` | RowsWritten is the number of rows written to disk. | no |
-| `SampledExecStats` | SampledExecStats is a nested field containing execution statistics. This field will be omitted if the stats were not sampled. | yes |
-| `SkippedTransactions` | SkippedTransactions is the number of transactions that were skipped as part of sampling prior to this one. We only count skipped transactions when telemetry logging is enabled and the sampling mode is set to "transaction". | no |
-| `TransactionFingerprintID` | TransactionFingerprintID is the fingerprint ID of the transaction. This can be used to find the transaction in the console. | no |
-| `StatementFingerprintIDs` | StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction. | no |
 
 
 #### Common fields
