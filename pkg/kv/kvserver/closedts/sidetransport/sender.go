@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -114,6 +115,19 @@ type streamState struct {
 type connTestingKnobs struct {
 	beforeSend         func(destNodeID roachpb.NodeID, msg *ctpb.Update)
 	sleepOnErrOverride time.Duration
+}
+
+// dynamicBroadcastPacerConfig implements taskpacer.Config using cluster settings.
+type dynamicBroadcastPacerConfig struct {
+	st *cluster.Settings
+}
+
+func (c *dynamicBroadcastPacerConfig) GetRefresh() time.Duration {
+	return closedts.SideTransportPacingRefreshInterval.Get(&c.st.SV)
+}
+
+func (c *dynamicBroadcastPacerConfig) GetSmear() time.Duration {
+	return 1 * time.Millisecond
 }
 
 // trackedRange contains the information that the side-transport last published
@@ -212,7 +226,7 @@ func newSenderWithConnFactory(
 		st:          st,
 		clock:       clock,
 		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		buf:         newUpdatesBuf(st),
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
@@ -236,6 +250,12 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 		}
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
+	// Set up callback for pacing refresh interval changes.
+	pacingConfChanged := func(ctx context.Context) {
+		s.buf.updatePacer(s.st)
+	}
+	closedts.SideTransportPacingRefreshInterval.SetOnChange(&s.st.SV, pacingConfChanged)
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
@@ -346,6 +366,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
+	sideTransportPacingInterval := closedts.SideTransportPacingRefreshInterval.Get(&s.st.SV)
 	for pol := ctpb.RangeClosedTimestampPolicy(0); pol < ctpb.RangeClosedTimestampPolicy(numPolicies); pol++ {
 		target := closedts.TargetForPolicy(
 			now,
@@ -353,6 +374,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			lagTargetDuration,
 			leadTargetOverride,
 			sideTransportCloseInterval,
+			sideTransportPacingInterval,
 			pol,
 		)
 		s.trackedMu.lastClosed[pol] = target
@@ -539,8 +561,36 @@ func (s *Sender) GetSnapshot() *ctpb.Update {
 type updatesBuf struct {
 	mu struct {
 		syncutil.Mutex
-		// updated is signaled when a new item is inserted.
-		updated sync.Cond
+
+		// pacer controls the timing of broadcast updates to avoid overloading the system.
+		pacer *taskpacer.Pacer
+
+		// We maintain two conditional variables to acheive this effect:
+		// Multiple goroutines can be waiting on one of the conditional variables,
+		// and when a new item is inserted, we signal the conditional variable that
+		// the goroutine were waiting on. And we can signal the conditional variable
+		// up to the number of waiters that we know are waiting on it.
+		// If we don't have another conditional variable, we could signal to the
+		// same goroutine more than once, this could happen if we signal the
+		// conditional variable, and a goroutine wakes up, sends the message, and
+		// queues up again waiting on the same conditional variable. Then while we
+		// are still signalling the conditional variable up to the number of
+		// waiters, we could re-signal to the same one again, starving another
+		// goroutine.
+		// However, by having two conditional variables that are swapped atomically
+		// when we publish a new message, we know that no new goroutines will queue
+		// up on the old conditional variable while we are signaling it.
+		updated1    sync.Cond
+		numWaiters1 int
+
+		// updated2 is signaled when a new item is inserted.
+		updated2    sync.Cond
+		numWaiters2 int
+
+		// activeCondVar is 0 or 1, indicating which conditional variable new
+		// goroutines should be waiting on. This will be flipped after each push.
+		activeCondVar int
+
 		// data contains pointers to the Updates.
 		data []*ctpb.Update
 		// head points to the earliest update in the buffer. If the buffer is empty,
@@ -559,17 +609,46 @@ type updatesBuf struct {
 // little while and not have to send a snapshot when it resumes.
 const updatesBufSize = 50
 
-func newUpdatesBuf() *updatesBuf {
+func newUpdatesBuf(st *cluster.Settings) *updatesBuf {
 	buf := &updatesBuf{}
-	buf.mu.updated.L = &buf.mu
+	buf.mu.updated1.L = &buf.mu
+	buf.mu.updated2.L = &buf.mu
 	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
+	buf.mu.pacer = taskpacer.New(&dynamicBroadcastPacerConfig{st: st})
 	return buf
+}
+
+// updatePacer atomically replaces the task pacer with a new one using the current cluster settings.
+func (b *updatesBuf) updatePacer(st *cluster.Settings) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.pacer = taskpacer.New(&dynamicBroadcastPacerConfig{st: st})
 }
 
 // Push adds a new update to the back of the buffer.
 func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+
+	// The goal here is that we want to signal to all goroutines who were waiting
+	// for the next update. We know that the goroutine that we will signal to will
+	// wakeup, and then perform some work and wait again for the next update. We
+	// want to avoid the race condition where we can't differentiate between the
+	// goroutine that is waiting for the next update and the goroutine that was
+	// waiting, got woken up, performed some work, and then is waiting for the next
+	// update.
+	var condVar *sync.Cond
+	var numWaiters *int
+	if b.mu.activeCondVar == 0 {
+		condVar = &b.mu.updated1
+		numWaiters = &b.mu.numWaiters1
+	} else {
+		condVar = &b.mu.updated2
+		numWaiters = &b.mu.numWaiters2
+	}
+
+	// At this point, we know that any goroutine that we wake up will wait on the
+	// next conditional variable.
+	b.mu.activeCondVar = (b.mu.activeCondVar + 1) % 2
 
 	// If the buffer is not empty, sanity check the seq num.
 	if b.sizeLocked() != 0 {
@@ -589,7 +668,40 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
-	b.mu.updated.Broadcast()
+	b.mu.Unlock()
+	b.PaceBroadcastUpdate(ctx, condVar, numWaiters)
+}
+
+// PaceBroadcastUpdate paces the conditional variable signaling to avoid overloading the system.
+func (b *updatesBuf) PaceBroadcastUpdate(ctx context.Context, condVar *sync.Cond, numWaiters *int) {
+	b.mu.Lock()
+	originalNumWaiters := *numWaiters
+	if originalNumWaiters <= 0 {
+		b.mu.Unlock()
+		return
+	}
+
+	// Get the current pacer (which uses the cluster setting refresh interval).
+	pacer := b.mu.pacer
+	b.mu.Unlock()
+
+	pacer.StartTask(timeutil.Now())
+
+	workLeft := originalNumWaiters
+	for workLeft > 0 {
+		todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
+		b.mu.Lock()
+		for i := 0; i < todo && workLeft > 0; i++ {
+			condVar.Signal()
+			workLeft--
+		}
+		b.mu.Unlock()
+
+		if workLeft > 0 && timeutil.Now().Before(by) {
+			time.Sleep(by.Sub(timeutil.Now()))
+		}
+	}
 }
 
 func (b *updatesBuf) lastIdxLocked() int {
@@ -612,6 +724,23 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	var condVar *sync.Cond
+	var numWaiters *int
+	if b.mu.activeCondVar == 0 {
+		condVar = &b.mu.updated1
+		numWaiters = &b.mu.numWaiters1
+	} else {
+		condVar = &b.mu.updated2
+		numWaiters = &b.mu.numWaiters2
+	}
+
+	// Increment the number of waiters on the active conditional variable, and
+	// decrement the same counter when we return.
+	*numWaiters++
+	defer func() {
+		*numWaiters--
+	}()
+
 	// Loop until the requested seqNum is added to the buffer.
 	for {
 		if b.mu.closed {
@@ -630,7 +759,7 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 		}
 		// If the requested msg has not been produced yet, block.
 		if seqNum == lastSeq+1 {
-			b.mu.updated.Wait()
+			condVar.Wait()
 			continue
 		}
 		if seqNum > lastSeq+1 {
@@ -666,7 +795,16 @@ func (b *updatesBuf) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.mu.closed = true
-	b.mu.updated.Broadcast()
+	b.mu.updated1.Broadcast()
+	b.mu.updated2.Broadcast()
+}
+
+// TestingGetTotalNumWaiters returns the total number of goroutines waiting
+// on the buffer. For testing purposes only.
+func (b *updatesBuf) TestingGetTotalNumWaiters() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.mu.numWaiters1 + b.mu.numWaiters2
 }
 
 // connFactory is capable of creating new connections to specific nodes.

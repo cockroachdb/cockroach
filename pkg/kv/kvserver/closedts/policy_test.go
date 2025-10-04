@@ -28,11 +28,12 @@ func TestTargetForPolicy(t *testing.T) {
 	maxClockOffset := millis(500)
 
 	for _, tc := range []struct {
-		lagTargetNanos             time.Duration
-		leadTargetOverride         time.Duration
-		sideTransportCloseInterval time.Duration
-		rangePolicy                ctpb.RangeClosedTimestampPolicy
-		expClosedTSTarget          hlc.Timestamp
+		lagTargetNanos              time.Duration
+		leadTargetOverride          time.Duration
+		sideTransportCloseInterval  time.Duration
+		sideTransportPacingInterval time.Duration
+		rangePolicy                 ctpb.RangeClosedTimestampPolicy
+		expClosedTSTarget           hlc.Timestamp
 	}{
 		{
 			lagTargetNanos:    secs(3),
@@ -53,6 +54,16 @@ func TestTargetForPolicy(t *testing.T) {
 					millis(25) /* bufferTime */).Nanoseconds(), 0),
 		},
 		{
+			sideTransportCloseInterval:  millis(200),
+			sideTransportPacingInterval: millis(10),
+			rangePolicy:                 ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			expClosedTSTarget: now.
+				Add((maxClockOffset +
+					millis(275) /* sideTransportPropTime */ +
+					millis(10) /* sideTransportPacing */ +
+					millis(25) /* bufferTime */).Nanoseconds(), 0),
+		},
+		{
 			sideTransportCloseInterval: millis(50),
 			rangePolicy:                ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
 			expClosedTSTarget: now.
@@ -61,10 +72,11 @@ func TestTargetForPolicy(t *testing.T) {
 					millis(25) /* bufferTime */).Nanoseconds(), 0),
 		},
 		{
-			leadTargetOverride:         millis(1234),
-			sideTransportCloseInterval: millis(200),
-			rangePolicy:                ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
-			expClosedTSTarget:          now.Add(millis(1234).Nanoseconds(), 0),
+			leadTargetOverride:          millis(1234),
+			sideTransportCloseInterval:  millis(200),
+			sideTransportPacingInterval: millis(10),
+			rangePolicy:                 ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			expClosedTSTarget:           now.Add(millis(1234).Nanoseconds(), 0),
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -74,6 +86,7 @@ func TestTargetForPolicy(t *testing.T) {
 				tc.lagTargetNanos,
 				tc.leadTargetOverride,
 				tc.sideTransportCloseInterval,
+				tc.sideTransportPacingInterval,
 				tc.rangePolicy,
 			)
 			require.Equal(t, tc.expClosedTSTarget, target)
