@@ -38,6 +38,8 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
 
+	execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics).Runs.Inc(1)
+
 	if err := c.maybeRunOnJobStartHook(execCfg); err != nil {
 		return err
 	}
@@ -93,6 +95,11 @@ func (c *inspectResumer) OnFailOrCancel(
 	jobExecCtx := execCtx.(sql.JobExecContext)
 	execCfg := jobExecCtx.ExecCfg()
 	c.maybeCleanupProtectedTimestamp(ctx, execCfg)
+
+	// Record RunsWithIssues metric if the job failed due to finding inconsistencies.
+	if jobErr != nil && errors.Is(jobErr, errInspectFoundInconsistencies) {
+		execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics).RunsWithIssues.Inc(1)
+	}
 	return nil
 }
 
