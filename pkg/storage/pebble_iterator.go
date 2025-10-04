@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -227,6 +228,11 @@ func (p *pebbleIterator) setOptions(
 		KeyTypes:                  opts.KeyTypes,
 		UseL6Filters:              opts.useL6Filters,
 		Category:                  opts.ReadCategory.PebbleCategory(),
+	}
+	switch opts.ReadCategory {
+	case fs.BatchEvalReadCategory, fs.ScanRegularBatchEvalReadCategory, fs.ScanBackgroundBatchEvalReadCategory:
+		// Exempt hot paths from iterator tracking.
+		p.options.ExemptFromTracking = true
 	}
 	p.prefix = opts.Prefix
 
