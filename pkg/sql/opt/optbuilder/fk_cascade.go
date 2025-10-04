@@ -124,7 +124,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
-			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */, true /* recomputeCols */)
 
 			mb.buildDelete(nil /* returning */)
 			return mb.outScope.expr
@@ -426,7 +426,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
-			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */, true /* recomputeCols */)
 
 			mb.buildDelete(nil /* returning */)
 			return mb.outScope.expr
@@ -567,7 +567,7 @@ func (cb *onDeleteSetBuilder) Build(
 			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
-			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */, true /* recomputeCols */)
 
 			// TODO(radu): consider plumbing a flag to prevent building the FK check
 			// against the parent we are cascading from. Need to investigate in which
@@ -840,7 +840,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
-			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */, true /* recomputeCols */)
 
 			// The exempt policy is used for RLS to maintain data integrity.
 			mb.buildUpdate(nil /* returning */, cat.PolicyScopeExempt, nil /* colRefs */)
