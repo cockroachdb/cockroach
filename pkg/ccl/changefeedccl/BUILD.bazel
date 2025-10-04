@@ -202,6 +202,7 @@ go_test(
         "alter_changefeed_test.go",
         "avro_test.go",
         "changefeed_dist_test.go",
+        "changefeed_memory_test.go",
         "changefeed_processors_test.go",
         "changefeed_stmt_test.go",
         "changefeed_test.go",
