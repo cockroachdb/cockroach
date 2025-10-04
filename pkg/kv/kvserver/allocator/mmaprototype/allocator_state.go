@@ -1348,17 +1348,36 @@ func (a *allocatorState) IsInConflictWithMMA(
 	if advisor.disabled {
 		return false
 	}
+	// Lazily compute and cache the load summary for the existing store.
 	if advisor.existingStoreSLS == nil {
-		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID,
-			&advisor.means.storeLoad, &advisor.means.nodeLoad)
+		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID, &advisor.means.storeLoad, &advisor.means.nodeLoad)
 		advisor.existingStoreSLS = &summary
 	}
 	existingSLS := advisor.existingStoreSLS
+	// Always compute the candidate's load summary.
 	candSLS := a.cs.computeLoadSummary(ctx, cand, &advisor.means.storeLoad, &advisor.means.nodeLoad)
+
+	var conflict bool
 	if cpuOnly {
-		return candSLS.dimSummary[CPURate] > existingSLS.dimSummary[CPURate]
+		conflict = candSLS.dimSummary[CPURate] > existingSLS.dimSummary[CPURate]
+		if conflict {
+			log.KvDistribution.VEventf(
+				ctx, 2,
+				"mma rejected candidate s%d (cpu-only) as a replacement for s%d: candidate=%v > existing=%v",
+				cand, advisor.existingStoreID, candSLS.dimSummary[CPURate], existingSLS.dimSummary[CPURate],
+			)
+		}
+	} else {
+		conflict = candSLS.sls > existingSLS.sls
+		if conflict {
+			log.KvDistribution.VEventf(
+				ctx, 2,
+				"mma rejected candidate s%d as a replacement for s%d: candidate=%v > existing=%v",
+				cand, advisor.existingStoreID, candSLS.sls, existingSLS.sls,
+			)
+		}
 	}
-	return candSLS.sls > existingSLS.sls
+	return conflict
 }
 
 // Consider the core logic for a change, rebalancing or recovery.
