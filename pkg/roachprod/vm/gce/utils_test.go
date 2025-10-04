@@ -30,7 +30,7 @@ func TestWriteStartupScriptTemplate(t *testing.T) {
 	config.SSHDirectory = tempDir
 
 	// Actual test
-	file, err := writeStartupScript("", vm.Zfs, false, false, false)
+	file, err := writeStartupScript("", vm.Zfs, false, false, false, false)
 	require.NoError(t, err)
 
 	f, err := os.ReadFile(file)

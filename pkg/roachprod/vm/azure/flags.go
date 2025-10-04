@@ -26,6 +26,7 @@ type ProviderOpts struct {
 	NetworkDiskSize int32
 	UltraDiskIOPS   int64
 	DiskCaching     string
+	BootDiskOnly    bool
 }
 
 // These default locations support availability zones. At the time of
@@ -90,4 +91,6 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Number of IOPS provisioned for ultra disk, only used if network-disk-type=ultra-disk")
 	flags.StringVar(&o.DiskCaching, ProviderName+"-disk-caching", "none",
 		"Disk caching behavior for attached storage.  Valid values are: none, read-only, read-write.  Not applicable to Ultra disks.")
+	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
+		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
 }

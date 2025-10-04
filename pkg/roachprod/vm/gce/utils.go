@@ -28,6 +28,12 @@ const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 function setup_disks() {
 	first_setup=$1
 
+{{ if .BootDiskOnly }}
+	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
+	echo "VM has no disk attached other than the boot disk."
+	return 0
+{{ end }}
+
 {{ if not .Zfs }}
 	mount_opts="defaults,nofail"
 	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
@@ -183,13 +189,19 @@ sudo touch {{ .OSInitializedFile }}
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool, enableCron bool,
+	extraMountOpts string,
+	fileSystem string,
+	useMultiple bool,
+	enableFIPS bool,
+	enableCron bool,
+	bootDiskOnly bool,
 ) (string, error) {
 	type tmplParams struct {
 		vm.StartupArgs
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 		PublicKey        string
+		BootDiskOnly     bool
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -208,6 +220,7 @@ func writeStartupScript(
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,
 		PublicKey:        publicKey,
+		BootDiskOnly:     bootDiskOnly,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")

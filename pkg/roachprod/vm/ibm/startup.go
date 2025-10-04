@@ -20,6 +20,7 @@ type startupArgs struct {
 	vm.StartupArgs
 	ExtraMountOpts   string
 	UseMultipleDisks bool
+	BootDiskOnly     bool
 }
 
 const startupTemplate = `#!/usr/bin/env bash
@@ -27,6 +28,12 @@ const startupTemplate = `#!/usr/bin/env bash
 # Script for setting up an IBM machine for roachprod use.
 
 function setup_disks() {
+{{ if .BootDiskOnly }}
+	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
+	echo "VM has no disk attached other than the boot disk."
+	return 0
+{{ end }}
+
 	mount_prefix="/mnt/data"
 	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 

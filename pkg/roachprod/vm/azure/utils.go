@@ -23,6 +23,7 @@ type azureStartupArgs struct {
 	vm.StartupArgs
 	AttachedDiskLun    *int // Use attached disk, with specified LUN; Use local ssd if nil.
 	DiskControllerNVMe bool // Interface data disk via NVMe
+	BootDiskOnly       bool
 }
 
 const azureStartupTemplate = `#!/bin/bash
@@ -30,7 +31,13 @@ const azureStartupTemplate = `#!/bin/bash
 # Script for setting up a Azure machine for roachprod use.
 
 function setup_disks() {
-	mount_opts="defaults"
+{{ if .BootDiskOnly }}
+	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
+	echo "VM has no disk attached other than the boot disk."
+	return 0
+{{ end }}
+
+mount_opts="defaults"
 
 	devices=()
 {{if .DiskControllerNVMe}}
