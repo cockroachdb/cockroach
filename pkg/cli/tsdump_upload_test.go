@@ -830,3 +830,73 @@ func TestDatadogInit(t *testing.T) {
 		require.Contains(t, receivedMetrics, expectedMetric, "expected metric %s should be present", expectedMetric)
 	}
 }
+
+// TestGapFillProcessor30MinTo10s tests the gap-filling functionality for 30-minute counter metrics.
+// It verifies that 30-minute resolution counter metrics are correctly interpolated to 10-second resolution
+// by distributing delta values evenly across 180 points.
+func TestGapFillProcessor30MinTo10s(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	// Create a mock 30-minute resolution counter metric with 2 data points
+	series := &datadogV2.MetricSeries{
+		Metric:   "cr.node.test-counter-count",
+		Tags:     []string{"node_id:1"},
+		Type:     datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+		Interval: datadog.PtrInt64(1800), // 30 minutes in seconds
+		Points: []datadogV2.MetricPoint{
+			{
+				Timestamp: datadog.PtrInt64(1000), // t=1000
+				Value:     datadog.PtrFloat64(180), // first 30-min delta
+			},
+			{
+				Timestamp: datadog.PtrInt64(2800), // t=2800 (1800 seconds later)
+				Value:     datadog.PtrFloat64(360), // second 30-min delta
+			},
+		},
+	}
+
+	// Process the series
+	err := processor.processCounterMetric(series)
+	require.NoError(t, err)
+
+	// Verify the interval was updated to 10 seconds
+	require.NotNil(t, series.Interval)
+	require.Equal(t, int64(10), *series.Interval)
+
+	// Verify we have the correct number of points
+	// Each 30-min point becomes 180 points at 10s resolution
+	// Total: 2 * 180 = 360 points
+	expectedPoints := 2 * 180
+	require.Len(t, series.Points, expectedPoints)
+
+	// Verify the first point has distributed value (180 / 180 = 1.0)
+	require.Equal(t, int64(1000), *series.Points[0].Timestamp)
+	require.Equal(t, 1.0, *series.Points[0].Value)
+
+	// Verify subsequent points from first 30-min delta have correct timestamps and values
+	require.Equal(t, int64(1010), *series.Points[1].Timestamp)
+	require.Equal(t, 1.0, *series.Points[1].Value)
+
+	require.Equal(t, int64(1020), *series.Points[2].Timestamp)
+	require.Equal(t, 1.0, *series.Points[2].Value)
+
+	// Verify the last point from first 30-min delta (at t=1000 + 179*10 = 2790)
+	require.Equal(t, int64(2790), *series.Points[179].Timestamp)
+	require.Equal(t, 1.0, *series.Points[179].Value)
+
+	// Verify the first point from second 30-min delta has distributed value (360 / 180 = 2.0)
+	require.Equal(t, int64(2800), *series.Points[180].Timestamp)
+	require.Equal(t, 2.0, *series.Points[180].Value)
+
+	// Verify subsequent points from second 30-min delta
+	require.Equal(t, int64(2810), *series.Points[181].Timestamp)
+	require.Equal(t, 2.0, *series.Points[181].Value)
+
+	// Verify the last point overall
+	lastIndex := len(series.Points) - 1
+	require.Equal(t, int64(4590), *series.Points[lastIndex].Timestamp) // 2800 + 179*10
+	require.Equal(t, 2.0, *series.Points[lastIndex].Value)
+}

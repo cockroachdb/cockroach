@@ -86,6 +86,61 @@ type FailedRequestsFile struct {
 	Requests []FailedRequest `json:"requests"`
 }
 
+// GapFillProcessor interpolates 30-minute resolution counter metrics to 10-second resolution
+// by distributing each delta value evenly across 180 points (1800s / 10s = 180).
+type GapFillProcessor struct{}
+
+func NewGapFillProcessor() *GapFillProcessor {
+	return &GapFillProcessor{}
+}
+
+// processCounterMetric interpolates 30-minute resolution counter metrics to 10-second resolution.
+// It checks if the metric is a counter type with 30-minute interval (1800 seconds) and converts
+// it to 10-second resolution by distributing each delta value evenly across 180 points.
+func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries) error {
+	// Only process counter metrics
+	if series.Type == nil || *series.Type != datadogV2.METRICINTAKETYPE_COUNT {
+		return nil
+	}
+
+	// Only process 30-minute resolution metrics (1800 seconds)
+	if series.Interval == nil || *series.Interval != 1800 {
+		return nil
+	}
+
+	// If no points, nothing to interpolate
+	if len(series.Points) == 0 {
+		series.Interval = datadog.PtrInt64(10)
+		return nil
+	}
+
+	// Create new points array with distributed values
+	var newPoints []datadogV2.MetricPoint
+
+	for i := 0; i < len(series.Points); i++ {
+		currentValue := *series.Points[i].Value
+		currentTimestamp := *series.Points[i].Timestamp
+
+		// Distribute the delta value across 180 points (1800s / 10s = 180)
+		distributedValue := currentValue / 180.0
+
+		// Create 180 points with distributed values, each 10 seconds apart
+		for j := 0; j < 180; j++ {
+			timestamp := currentTimestamp + int64(j*10)
+			newPoints = append(newPoints, datadogV2.MetricPoint{
+				Timestamp: datadog.PtrInt64(timestamp),
+				Value:     datadog.PtrFloat64(distributedValue),
+			})
+		}
+	}
+
+	// Update the series with new points and 10-second interval
+	series.Points = newPoints
+	series.Interval = datadog.PtrInt64(10)
+
+	return nil
+}
+
 var newTsdumpUploadID = func(uploadTime time.Time) string {
 	clusterTagValue := "cluster-debug"
 	if debugTimeSeriesDumpOpts.clusterLabel != "" {
@@ -122,6 +177,8 @@ type datadogWriter struct {
 	hasFailedRequestsInUpload bool
 	// cumulativeToDeltaProcessor is used to convert cumulative counter metrics to delta metrics
 	cumulativeToDeltaProcessor *CumulativeToDeltaProcessor
+	// gapFillProcessor is used to interpolate 30-minute resolution counter metrics to 10-second resolution
+	gapFillProcessor *GapFillProcessor
 }
 
 func makeDatadogWriter(
@@ -185,6 +242,7 @@ func makeDatadogWriter(
 		noOfUploadWorkers:               noOfUploadWorkers,
 		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
 		cumulativeToDeltaProcessor:      NewCumulativeToDeltaProcessor(),
+		gapFillProcessor:                NewGapFillProcessor(),
 	}, nil
 }
 
@@ -281,6 +339,11 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		if err := d.cumulativeToDeltaProcessor.processCounterMetric(series, isSorted); err != nil {
 			return nil, err
 		}
+	}
+
+	// Process gap-filling for 30-minute resolution counter metrics
+	if err := d.gapFillProcessor.processCounterMetric(series); err != nil {
+		return nil, err
 	}
 
 	return series, nil
@@ -559,6 +622,14 @@ func getUploadTags(d *datadogWriter) []string {
 
 func (d *datadogWriter) flush(data []datadogV2.MetricSeries) error {
 	if debugTimeSeriesDumpOpts.dryRun {
+
+		for i := 0; i < len(data); i++ {
+			fmt.Printf("dry-run: would upload metric %s with points:\n", data[i].Metric)
+			for j := 0; j < len(data[i].Points); j++ {
+				fmt.Printf("  %d: %f\n", *data[i].Points[j].Timestamp, *data[i].Points[j].Value)
+			}
+		}
+
 		return nil
 	}
 
