@@ -2142,7 +2142,7 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		_ = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+		_ = maybeDisableDeclarativeSchemaChangesForTest(t, nil, sqlDB)
 
 		// Set up a type and table.
 		sqlDB.Exec(t, `CREATE TYPE t AS ENUM ('hello', 'howdy', 'hi')`)
@@ -2663,7 +2663,7 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		_ = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+		_ = maybeDisableDeclarativeSchemaChangesForTest(t, nil, sqlDB)
 
 		// Schema changes that predate the changefeed.
 		t.Run(`historical`, func(t *testing.T) {
@@ -3036,7 +3036,11 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+
+		// TODO(151279): When the declarative schema changer is in use, this test
+		// times out waiting for a checkpoint.
+		// usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, rnd, sqlDB)
+		usingLegacySchemaChanger := false
 		// NB: For the `ALTER TABLE foo ADD COLUMN ... DEFAULT` schema change,
 		// the expected boundary is different depending on if we are using the
 		// legacy schema changer or not.
@@ -3127,7 +3131,7 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 			if initialCheckpoint.Len() > 0 {
 				return true, nil
 			}
-
+			t.Logf("Resolved Span: %v", r)
 			// A backfill begins when the associated resolved event arrives, which has a
 			// timestamp such that all backfill spans have a timestamp of
 			// timestamp.Next().
@@ -3153,6 +3157,8 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 				}
 				initialCheckpoint = makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
 				atomic.StoreInt32(&foundCheckpoint, 1)
+			} else {
+				t.Logf("no checkpoint yet")
 			}
 
 			// Filter non-backfill-related spans
@@ -3670,7 +3676,7 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, nil, sqlDB)
 
 		t.Run(`add column with default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
@@ -6204,7 +6210,7 @@ func TestChangefeedNoBackfill(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
 
-		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, nil, sqlDB)
 
 		// Shorten the intervals so this test doesn't take so long. We need to wait
 		// for timestamps to get resolved.
