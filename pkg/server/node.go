@@ -2307,6 +2307,7 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 			// Disconnector returned can be used to shut down rangefeed from the
 			// stream manager. If rangefeed disconnects with an error after being
 			// successfully registered, it calls streamSink.SendError.
+			sm.RegisteringStream(req.StreamID)
 			if disconnector, err := n.stores.RangeFeed(streamCtx, req, streamSink, limiter); err != nil {
 				streamSink.SendError(kvpb.NewError(err))
 			} else {

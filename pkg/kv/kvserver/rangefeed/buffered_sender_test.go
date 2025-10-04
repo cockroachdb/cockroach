@@ -182,14 +182,17 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	queueCap := int64(24)
+	streamID := int64(1)
+
 	RangefeedSingleBufferedSenderQueueMaxPerReg.Override(ctx, &st.SV, queueCap)
 	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+	bs.addStream(streamID)
 	require.Equal(t, queueCap, bs.queueMu.perStreamCapacity)
 
 	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1 := new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
-	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: 1}
+	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: streamID}
 
 	for range queueCap {
 		require.NoError(t, bs.sendBuffered(muxEv, nil))
@@ -235,12 +238,13 @@ func TestBufferedSenderOnOverflowMultiStream(t *testing.T) {
 	p, h, pStopper := newTestProcessor(t, withRangefeedTestType(scheduledProcessorWithBufferedSender))
 	defer pStopper.Stop(ctx)
 
-	streamID := int64(42)
+	streamID1 := int64(42)
+	streamID2 := streamID1 + 1
 
 	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	ev1 := new(kvpb.RangeFeedEvent)
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
-	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: streamID}
+	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: streamID1}
 
 	// Block the stream so that we can overflow later.
 	unblock := testServerStream.BlockSend()
@@ -256,18 +260,20 @@ func TestBufferedSenderOnOverflowMultiStream(t *testing.T) {
 	}
 
 	// Add our stream to the stream manager.
+	sm.RegisteringStream(streamID1)
 	registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-		sm.NewStream(streamID, 1 /*rangeID*/))
+		sm.NewStream(streamID1, 1 /*rangeID*/))
 	require.True(t, registered)
-	sm.AddStream(streamID, d)
+	sm.AddStream(streamID1, d)
 
 	// Add a second stream to the stream manager.
+	sm.RegisteringStream(streamID2)
 	registered, d, _ = p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-		sm.NewStream(streamID+1, 1 /*rangeID*/))
+		sm.NewStream(streamID2, 1 /*rangeID*/))
 	require.True(t, registered)
-	sm.AddStream(streamID+1, d)
+	sm.AddStream(streamID2, d)
 
 	// At this point we actually have sent 2 events, one for each checkpoint sent
 	// by the registrations. One of these should get pulled off the queue and block.
@@ -283,7 +289,7 @@ func TestBufferedSenderOnOverflowMultiStream(t *testing.T) {
 	require.EqualError(t, err, capExceededErrStr)
 
 	// A write to a different stream should be fine
-	muxEv.StreamID = streamID + 2
+	muxEv.StreamID = streamID2
 	err = sm.sender.sendBuffered(muxEv, nil)
 	require.NoError(t, err)
 
