@@ -1540,6 +1540,7 @@ func NewStore(
 	if cfg.RPCContext != nil {
 		s.allocator = allocatorimpl.MakeAllocator(
 			cfg.Settings,
+			cfg.AllocatorSync,
 			storePoolIsDeterministic,
 			cfg.RPCContext.RemoteClocks.Latency,
 			cfg.TestingKnobs.AllocatorKnobs,
@@ -1547,6 +1548,7 @@ func NewStore(
 	} else {
 		s.allocator = allocatorimpl.MakeAllocator(
 			cfg.Settings,
+			cfg.AllocatorSync,
 			storePoolIsDeterministic,
 			func(id roachpb.NodeID) (time.Duration, bool) {
 				return 0, false
