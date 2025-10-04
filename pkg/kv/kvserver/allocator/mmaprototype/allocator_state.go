@@ -1311,8 +1311,8 @@ type MMARebalanceAdvisor struct {
 // NoopMMARebalanceAdvisor is a no-op MMARebalanceAdvisor that always returns
 // false for IsInConflictWithMMA. Used when MMA is disabled or mma does not have
 // enough information to determine.
-func NoopMMARebalanceAdvisor() MMARebalanceAdvisor {
-	return MMARebalanceAdvisor{
+func NoopMMARebalanceAdvisor() *MMARebalanceAdvisor {
+	return &MMARebalanceAdvisor{
 		disabled: true,
 	}
 }
@@ -1324,7 +1324,7 @@ func NoopMMARebalanceAdvisor() MMARebalanceAdvisor {
 // existing store. mma should include the existing store in the candidate set.
 func (a *allocatorState) BuildMMARebalanceAdvisor(
 	existing roachpb.StoreID, cands []roachpb.StoreID,
-) MMARebalanceAdvisor {
+) *MMARebalanceAdvisor {
 	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call.
 	// We should reuse the scratchNodes instead.
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
@@ -1334,7 +1334,7 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	// TODO(wenyihu6): pass in the actual ctx here
 	existingSLS := a.cs.computeLoadSummary(context.Background(), existing,
 		&means.storeLoad, &means.nodeLoad)
-	return MMARebalanceAdvisor{
+	return &MMARebalanceAdvisor{
 		existingStoreSLS: existingSLS,
 		means:            means,
 	}
@@ -1345,7 +1345,7 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 // for making sure the MMARebalanceAdvisor is for the correct existing store and
 // candidate set.
 func (a *allocatorState) IsInConflictWithMMA(
-	cand roachpb.StoreID, advisor MMARebalanceAdvisor, cpuOnly bool,
+	cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool,
 ) bool {
 	if advisor.disabled {
 		return false
