@@ -1153,10 +1153,11 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				if implicitTxn {
 					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
 					require.ErrorContains(t, err, sqlerrors.QueryTimeoutError.Error())
-					require.Equal(t, 1, len(actualNotices))
+					require.Equal(t, 2, len(actualNotices))
+					require.Regexp(t, "waiting for job\\(s\\) to complete: \\d+", actualNotices[0])
 					require.Regexp(t,
 						"The statement has timed out, but the following background jobs have been created and will continue running: \\d+",
-						actualNotices[0])
+						actualNotices[1])
 				} else {
 					txn := conn.Begin(t)
 					_, err := txn.Exec("SET LOCAL autocommit_before_ddl=off")
