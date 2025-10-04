@@ -1305,7 +1305,7 @@ type MMARebalanceAdvisor struct {
 	// existingStoreSLS is the load summary for the existing store.
 	existingStoreSLS storeLoadSummary
 	// means is the means for the candidate set.
-	means meansForStoreSet
+	means meansLoad
 }
 
 // NoopMMARebalanceAdvisor is a no-op MMARebalanceAdvisor that always returns
@@ -1325,14 +1325,12 @@ func NoopMMARebalanceAdvisor() MMARebalanceAdvisor {
 func (a *allocatorState) BuildMMARebalanceAdvisor(
 	existing roachpb.StoreID, cands []roachpb.StoreID,
 ) MMARebalanceAdvisor {
-	var means meansForStoreSet
 	// TODO(wenyihu6): for simplicity, we create a new scratchNodes every call.
 	// We should reuse the scratchNodes instead.
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
-	storeIDs := makeStoreIDPostingList(cands)
-	storeIDs.insert(existing)
-	means.stores = storeIDs
-	computeMeansForStoreSet(a.cs, &means, scratchNodes)
+	scratchStores := map[roachpb.StoreID]struct{}{}
+	cands = append(cands, existing)
+	means := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
 	// TODO(wenyihu6): pass in the actual ctx here
 	existingSLS := a.cs.computeLoadSummary(context.Background(), existing,
 		&means.storeLoad, &means.nodeLoad)
