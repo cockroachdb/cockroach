@@ -653,7 +653,7 @@ func (r *Registry) innerInsertStatementDiagnostics(
 		if err != nil {
 			return diagID, err
 		}
-	} else {
+	} else if txnDiagnosticId == 0 {
 		// Insert a completed request into system.statement_diagnostics_request.
 		// This is necessary because the UI uses this table to discover completed
 		// diagnostics.
