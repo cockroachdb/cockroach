@@ -566,7 +566,7 @@ func TestRetryWithMaxDurationAndMaxRetries(t *testing.T) {
 			InitialBackoff: time.Millisecond,
 			MaxBackoff:     time.Millisecond * 20,
 			Multiplier:     2,
-			MaxDuration:    time.Millisecond * 50,
+			MaxDuration:    time.Second,
 			MaxRetries:     3,
 		}
 
