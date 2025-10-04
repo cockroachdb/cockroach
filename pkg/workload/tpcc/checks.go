@@ -48,6 +48,7 @@ func AllChecks() []Check {
 		// first Delivery transaction is run by the workload.
 		{Name: "3.3.2.11", Fn: check33211, LoadOnly: true},
 		{Name: "3.3.2.12", Fn: check33212, Expensive: true},
+		{Name: "inspect", Fn: checkInspect, Expensive: true},
 	}
 }
 
@@ -442,6 +443,37 @@ SELECT count(*) FROM
   FROM customer)
 WHERE c_balance + c_ytd_payment != sum_ol_amount
 `)
+}
+
+// checkInspect runs a data consistency check at the end of the workload using
+// INSPECT. This is not part of the official TPC-C spec, but it is a convenient
+// place to verify that the database is consistent after execution.
+func checkInspect(db *gosql.DB, asOfSystemTime string) error {
+	// TODO(148365): Switch to INSPECT once it is fully available. At that point,
+	// we can validate the entire database in a single run. Until then, we rely
+	// on EXPERIMENTAL SCRUB with the scrub job enabled for tables that have
+	// secondary indexes.
+
+	// Force SCRUB to use the INSPECT job.
+	if _, err := db.Exec("SET enable_scrub_job = true"); err != nil {
+		return errors.Wrap(err, "failed to set enable_scrub_job")
+	}
+
+	// For now, we only validate tables with secondary indexes. This lets us
+	// run the one consistency check available: verifying that no rows are
+	// missing between the primary and secondary indexes.
+	inspectTables := []string{"\"order\"", "customer"}
+	for _, tableName := range inspectTables {
+		inspectQuery := "EXPERIMENTAL SCRUB TABLE " + tableName
+		if asOfSystemTime != "" {
+			inspectQuery += " AS OF SYSTEM TIME " + asOfSystemTime
+		}
+		if _, err := db.Exec(inspectQuery); err != nil {
+			return errors.Wrapf(err, "INSPECT failed for table %s", tableName)
+		}
+	}
+
+	return nil
 }
 
 func checkNoRows(db *gosql.DB, asOfSystemTime string, q string) error {
