@@ -5140,7 +5140,6 @@ func TestAllocatorRebalanceMMAConflict(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
-			fmt.Println("test.name", test.name)
 			mmaKnobs := &mmaintegration.TestingKnobs{
 				OverrideIsInConflictWithMMA: func(cand roachpb.StoreID) bool {
 					return test.mmaReturnsConflict
