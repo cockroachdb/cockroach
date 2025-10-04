@@ -77,11 +77,17 @@ func emitInternal(
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
+		if n == nil {
+			return nil
+		}
 		// In non-verbose mode, we skip all projections.
 		// In verbose mode, we only skip trivial projections (which just rearrange
 		// or rename the columns).
 		if !ob.flags.Verbose {
 			if n.op == serializingProjectOp || n.op == simpleProjectOp {
+				if len(n.children) == 0 {
+					return nil
+				}
 				return walk(n.children[0])
 			}
 		}
@@ -233,6 +239,9 @@ func omitTrivialProjections(n *Node) (*Node, colinfo.ResultColumns, colinfo.Colu
 		return n, n.Columns(), n.Ordering()
 	}
 
+	if len(n.children) == 0 {
+		return n, n.Columns(), n.Ordering()
+	}
 	input, inputColumns, inputOrdering := omitTrivialProjections(n.children[0])
 
 	// Check if the projection is a bijection (i.e. permutation of all input

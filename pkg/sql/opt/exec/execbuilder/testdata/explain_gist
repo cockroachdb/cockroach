@@ -288,3 +288,21 @@ SELECT crdb_internal.decode_plan_gist('AgHk+v//3xoEAKAFAgAABQQGBA==');
 • virtual table
   table: @?
   spans: 1+ spans
+
+# Regression tests for #154300. Gracefully handle invalid gists.
+query T nosort
+SELECT crdb_internal.decode_external_plan_gist('AgYd':::STRING);
+----
+
+query T nosort
+SELECT crdb_internal.decode_external_plan_gist('Agwc':::STRING);
+----
+• root
+│
+├── • explain
+│
+└── • subquery
+    │ id: @S1
+    │ exec mode: exists
+    │
+    └── • group (scalar)
