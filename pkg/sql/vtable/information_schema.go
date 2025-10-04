@@ -112,7 +112,7 @@ CREATE TABLE information_schema.column_udt_usage (
 // InformationSchemaColumns describes the schema of the
 // information_schema.columns table.
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-columns.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/columns-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html
 const InformationSchemaColumns = `
 CREATE TABLE information_schema.columns (
 	TABLE_CATALOG            STRING NOT NULL,
@@ -217,7 +217,7 @@ CREATE TABLE information_schema.check_constraints (
 // InformationSchemaColumnPrivileges describes the schema of the
 // information_schema.column_privileges table.
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-column-privileges.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/column-privileges-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-column-privileges-table.html
 const InformationSchemaColumnPrivileges = `
 CREATE TABLE information_schema.column_privileges (
 	GRANTOR        STRING,
@@ -244,7 +244,7 @@ CREATE TABLE information_schema.schemata (
 // InformationSchemaTables describes the schema of the
 // information_schema.tables table.
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-tables.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/tables-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-tables-table.html
 const InformationSchemaTables = `
 CREATE TABLE information_schema.tables (
 	TABLE_CATALOG      STRING NOT NULL,

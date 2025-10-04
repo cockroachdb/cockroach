@@ -68,7 +68,7 @@ sorts and GRACE hash joins. This ends up being a lot more performant
 
 The proposal in this RFC is to introduce an on-disk queue data structure
 backed by flat files where batches of columnar data are serialized
-using the [Arrow IPC format](https://arrow.apache.org/docs/ipc.html).
+using the [Arrow IPC format](https://arrow.apache.org/docs/format/IPC.html).
 This queue can be used directly by most operators that need to buffer
 unlimited data in FIFO order. There will also be an additional abstraction
 that will give the caller the option to use separate queues as distinct
@@ -145,7 +145,7 @@ case of orphaned files when `recover`ing from possible `panic`s).
 
 Thankfully, serialization of `coldata.Batch`es is already
 implemented in the `colserde` package using the [Arrow IPC
-format](https://arrow.apache.org/docs/ipc.html). These serialized bytes will
+format](https://arrow.apache.org/docs/format/IPC.html). These serialized bytes will
 be buffered until a flush is required, at which point they are written to a
 file with an accompanying file footer. The start offset of these written bytes
 as well as the number of bytes written will be stored for when the batches
