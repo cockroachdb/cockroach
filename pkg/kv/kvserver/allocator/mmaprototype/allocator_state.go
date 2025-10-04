@@ -1343,19 +1343,18 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 // for making sure the MMARebalanceAdvisor is for the correct existing store and
 // candidate set.
 func (a *allocatorState) IsInConflictWithMMA(
-	cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool,
+	ctx context.Context, cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool,
 ) bool {
 	if advisor.disabled {
 		return false
 	}
 	if advisor.existingStoreSLS == nil {
-		// TODO(wenyihu6): pass in the actual ctx here
-		summary := a.cs.computeLoadSummary(context.Background(), advisor.existingStoreID,
+		summary := a.cs.computeLoadSummary(ctx, advisor.existingStoreID,
 			&advisor.means.storeLoad, &advisor.means.nodeLoad)
 		advisor.existingStoreSLS = &summary
 	}
 	existingSLS := advisor.existingStoreSLS
-	candSLS := a.cs.computeLoadSummary(context.Background(), cand, &advisor.means.storeLoad, &advisor.means.nodeLoad)
+	candSLS := a.cs.computeLoadSummary(ctx, cand, &advisor.means.storeLoad, &advisor.means.nodeLoad)
 	if cpuOnly {
 		return candSLS.dimSummary[CPURate] > existingSLS.dimSummary[CPURate]
 	}

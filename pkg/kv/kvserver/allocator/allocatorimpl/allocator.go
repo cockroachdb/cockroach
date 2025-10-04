@@ -1911,7 +1911,7 @@ func (a Allocator) RebalanceTarget(
 			// would have been deleted from the candidates set in bestRebalanceTarget,
 			// so we will not select it again.
 			if advisor := results[bestIdx].advisor; advisor != nil {
-				if a.as.IsInConflictWithMMA(target.store.StoreID, advisor, false) {
+				if a.as.IsInConflictWithMMA(ctx, target.store.StoreID, advisor, false) {
 					continue
 				}
 			} else {
