@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
@@ -1890,11 +1889,10 @@ func (a Allocator) RebalanceTarget(
 	// to compute the means for the original set {s1, s2, s3} ∪ {existing} once
 	// and then use it for all calls to MMA, and bestRebalanceTarget does not need
 	// to copy the candidate set.
-	advisors := make(map[int]*mmaprototype.MMARebalanceAdvisor, len(results))
 	var bestIdx int
 
 	for {
-		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as, advisors)
+		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as)
 		if target == nil {
 			return zero, zero, "", false
 		}
@@ -1912,7 +1910,7 @@ func (a Allocator) RebalanceTarget(
 			// rebalance, we will continue to the next target. Note that this target
 			// would have been deleted from the candidates set in bestRebalanceTarget,
 			// so we will not select it again.
-			if advisor, ok := advisors[bestIdx]; ok {
+			if advisor := results[bestIdx].advisor; advisor != nil {
 				if a.as.IsInConflictWithMMA(target.store.StoreID, advisor, false) {
 					continue
 				}

@@ -1420,6 +1420,7 @@ func candidateListForRemoval(
 type rebalanceOptions struct {
 	existing   candidate
 	candidates candidateList
+	advisor    *mmaprototype.MMARebalanceAdvisor
 }
 
 // equivalenceClass captures the set of "equivalent" replacement candidates
@@ -1929,10 +1930,7 @@ func rankedCandidateListForRebalancing(
 // Contract: responsible for making sure that the returned bestIdx has the
 // corresponding MMA advisor in advisors.
 func bestRebalanceTarget(
-	randGen allocatorRand,
-	options []rebalanceOptions,
-	as *mmaintegration.AllocatorSync,
-	advisors map[int]*mmaprototype.MMARebalanceAdvisor,
+	randGen allocatorRand, options []rebalanceOptions, as *mmaintegration.AllocatorSync,
 ) (target, existingCandidate *candidate, bestIdx int) {
 	bestIdx = -1
 	var bestTarget *candidate
@@ -1957,12 +1955,12 @@ func bestRebalanceTarget(
 	}
 	// For the first time an option in options is selected, build and cache the
 	// corresponding MMA advisor in advisors[bestIdx].
-	if _, ok := advisors[bestIdx]; !ok {
+	if options[bestIdx].advisor == nil {
 		stores := make([]roachpb.StoreID, 0, len(options[bestIdx].candidates))
 		for _, cand := range options[bestIdx].candidates {
 			stores = append(stores, cand.store.StoreID)
 		}
-		advisors[bestIdx] = as.BuildMMARebalanceAdvisor(options[bestIdx].existing.store.StoreID, stores)
+		options[bestIdx].advisor = as.BuildMMARebalanceAdvisor(options[bestIdx].existing.store.StoreID, stores)
 	}
 
 	// Copy the selected target out of the candidates slice before modifying
