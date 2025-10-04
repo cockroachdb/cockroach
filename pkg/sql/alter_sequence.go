@@ -77,7 +77,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 }
 
 // alterSequenceImpl applies given tree.SequenceOptions to the specified sequence descriptor.
-// Exisiting sequence options are not overridden with default values.
+// Existing sequence options are not overridden with default values.
 func alterSequenceImpl(
 	params runParams,
 	seqDesc *tabledesc.Mutable,
@@ -86,6 +86,8 @@ func alterSequenceImpl(
 ) error {
 	oldMinValue := seqDesc.SequenceOpts.MinValue
 	oldMaxValue := seqDesc.SequenceOpts.MaxValue
+	oldIncrement := seqDesc.SequenceOpts.Increment
+	oldStart := seqDesc.SequenceOpts.Start
 
 	existingType := types.Int
 	if seqDesc.GetSequenceOpts().AsIntegerType != "" {
@@ -120,45 +122,80 @@ func alterSequenceImpl(
 		if err != nil {
 			return 0, err
 		}
+
 		return kv.ValueInt(), nil
 	}
 
-	// Due to the semantics of sequence caching (see sql.planner.incrementSequenceUsingCache()),
-	// it is possible for a sequence to have a value that exceeds its MinValue or MaxValue. Users
-	// do no see values extending the sequence's bounds, and instead see "bounds exceeded" errors.
-	// To make a usable again after exceeding its bounds, there are two options:
+	setSequenceVal := func(val int64) error {
+		err := params.p.txn.Put(params.ctx, seqValueKey, val)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// Due to the semantics of sequence caching (see sql.planner.incrementSequenceUsingCache()), it
+	// is possible for a sequence to have a value that exceeds its MinValue or MaxValue. Users do
+	// not see values beyond the sequence's bounds, and instead see "bounds exceeded" errors. To
+	// make a sequence usable again after exceeding its bounds, there are two options:
+	//
 	// 1. The user changes the sequence's value by calling setval(...)
-	// 2. The user performs a schema change to alter the sequences MinValue or MaxValue. In this case, the
-	// value of the sequence must be restored to the original MinValue or MaxValue transactionally.
+	//
+	// 2. The user performs a schema change to alter the sequence's MinValue, MaxValue, or
+	// Increment. In this case, the value of the sequence must be (transactionally) restored to a
+	// value within MinValue and MaxValue.
+	//
 	// The code below handles the second case.
 
-	// The sequence is decreasing and the minvalue is being decreased.
-	if opts.Increment < 0 && seqDesc.SequenceOpts.MinValue < oldMinValue {
+	if opts.Increment < 0 && (oldIncrement != seqDesc.SequenceOpts.Increment || oldMinValue != seqDesc.SequenceOpts.MinValue) {
+		// Only get the sequence value from KV if it's needed.
 		sequenceVal, err := getSequenceValue()
 		if err != nil {
 			return err
 		}
 
-		// If the sequence exceeded the old MinValue, it must be changed to start at the old MinValue.
-		if sequenceVal < oldMinValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMinValue)
+		// If the sequence were never advanced, its current value is offset by the increment.
+		if sequenceVal > oldStart {
+			err := setSequenceVal(oldStart - seqDesc.SequenceOpts.Increment)
 			if err != nil {
 				return err
 			}
 		}
-	} else if opts.Increment > 0 && seqDesc.SequenceOpts.MaxValue > oldMaxValue {
+
+		// If the sequence were exhausted, it would be beyond its previous bounds.
+		if sequenceVal < oldMinValue {
+			// Every call to nextval increments the sequence even if the
+			// sequence is exhausted. Find the final valid value of the sequence
+			// by calculating the number of valid calls to it
+			calls := (oldMinValue - oldStart) / oldIncrement
+			err := setSequenceVal(oldStart + calls*oldIncrement)
+			if err != nil {
+				return err
+			}
+		}
+	} else if opts.Increment > 0 && (oldIncrement != seqDesc.SequenceOpts.Increment || seqDesc.SequenceOpts.MaxValue > oldMaxValue) {
 		sequenceVal, err := getSequenceValue()
 		if err != nil {
 			return err
 		}
 
+		if sequenceVal < oldStart {
+			err := setSequenceVal(oldStart - seqDesc.SequenceOpts.Increment)
+			if err != nil {
+				return err
+			}
+		}
+
 		if sequenceVal > oldMaxValue {
-			err := params.p.txn.Put(params.ctx, seqValueKey, oldMaxValue)
+			calls := (oldMaxValue - oldStart) / oldIncrement
+			err := setSequenceVal(oldStart + calls*oldIncrement)
 			if err != nil {
 				return err
 			}
 		}
 	}
+
 	var restartVal *int64
 	for _, option := range seqOptions {
 		if option.Name == tree.SeqOptRestart {
