@@ -112,5 +112,8 @@ func (as *AllocatorSync) IsInConflictWithMMA(
 	advisor *mmaprototype.MMARebalanceAdvisor,
 	cpuOnly bool,
 ) bool {
+	if as.knobs != nil && as.knobs.OverrideIsInConflictWithMMA != nil {
+		return as.knobs.OverrideIsInConflictWithMMA(cand)
+	}
 	return as.mmaAllocator.IsInConflictWithMMA(ctx, cand, advisor, cpuOnly)
 }
