@@ -255,18 +255,12 @@ func (f *resolvedSpanFrontier) ForwardResolvedSpan(
 		return false, err
 	}
 	f.latestTS.Forward(r.Timestamp)
-	if r.BoundaryType != jobspb.ResolvedSpan_NONE {
-		newBoundary := resolvedSpanBoundary{
-			ts:  r.Timestamp,
-			typ: r.BoundaryType,
-		}
-		boundaryForwarded := f.boundary.Forward(newBoundary)
-		if boundaryForwarded && !forwarded {
-			// The frontier is considered forwarded if the boundary type
-			// changes to non-NONE and all the spans are at the boundary
-			// timestamp already.
-			forwarded, _, _ = f.AtBoundary()
-		}
+	boundaryForwarded := f.boundary.Forward(r.Timestamp, r.BoundaryType)
+	if boundaryForwarded && !forwarded {
+		// The frontier is considered forwarded if the boundary type
+		// changes to non-NONE and all the spans are at the boundary
+		// timestamp already.
+		forwarded, _, _ = f.AtBoundary()
 	}
 	return forwarded, nil
 }
@@ -408,7 +402,7 @@ func newResolvedSpanBoundary(
 // At returns whether a timestamp is equal to the boundary timestamp
 // and if so, the boundary type as well.
 func (b *resolvedSpanBoundary) At(ts hlc.Timestamp) (bool, jobspb.ResolvedSpan_BoundaryType) {
-	if ts.Equal(b.ts) {
+	if b.IsSet() && ts.Equal(b.ts) {
 		return true, b.typ
 	}
 	return false, 0
@@ -416,17 +410,25 @@ func (b *resolvedSpanBoundary) At(ts hlc.Timestamp) (bool, jobspb.ResolvedSpan_B
 
 // After returns whether the boundary is after a given timestamp.
 func (b *resolvedSpanBoundary) After(ts hlc.Timestamp) bool {
-	return b.ts.After(ts)
+	return b.IsSet() && b.ts.After(ts)
 }
 
 // Forward forwards the boundary to the new boundary if it is later.
 // It returns true if the boundary changed and false otherwise.
-func (b *resolvedSpanBoundary) Forward(newBoundary resolvedSpanBoundary) bool {
-	if newBoundary.After(b.ts) {
-		*b = newBoundary
+func (b *resolvedSpanBoundary) Forward(
+	ts hlc.Timestamp, typ jobspb.ResolvedSpan_BoundaryType,
+) bool {
+	if typ != jobspb.ResolvedSpan_NONE && ts.After(b.ts) {
+		b.ts = ts
+		b.typ = typ
 		return true
 	}
 	return false
+}
+
+// IsSet returns whether the boundary is set.
+func (b *resolvedSpanBoundary) IsSet() bool {
+	return b.typ != jobspb.ResolvedSpan_NONE
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
