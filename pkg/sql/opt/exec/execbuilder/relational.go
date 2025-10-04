@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -885,6 +886,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		}
 	}
 
+	var statsCreatedAt time.Time
 	// Save some instrumentation info.
 	b.ScanCounts[exec.ScanCount]++
 	if stats.Available {
@@ -933,6 +935,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 				rowCountWithoutForecast = float64(minCardinality)
 			}
 			b.TotalScanRowsWithoutForecasts += rowCountWithoutForecast
+			statsCreatedAt = tabStat.CreatedAt()
 		}
 	}
 
@@ -941,6 +944,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	params.StatsCreatedAt = statsCreatedAt
 	reqOrdering, err := reqOrdering(scan, outputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

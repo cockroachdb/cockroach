@@ -62,6 +62,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/admission",
         "//pkg/util/buildutil",
+        "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
         "//pkg/util/limit",
         "//pkg/util/log",

@@ -9,15 +9,19 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -257,4 +261,67 @@ func GetIndexJoinBatchSize(sd *sessiondata.SessionData) int64 {
 		return joinReaderIndexJoinStrategyBatchSizeDefault
 	}
 	return sd.JoinReaderIndexJoinStrategyBatchSize
+}
+
+// ScanMisestimateLogger provides functionality for logging when the actual row
+// count observed by a scan differs significantly from the optimizer estimate.
+type ScanMisestimateLogger struct {
+	estimatedRowCount uint64
+	statsCreatedAt    time.Time
+	tableName         string
+	indexName         string
+	tableID           descpb.ID
+	enabled           bool
+}
+
+// MakeScanMisestimateLogger creates a new ScanMisestimateLogger.
+func MakeScanMisestimateLogger(
+	estimatedRowCount uint64,
+	statsCreatedAt time.Time,
+	tableName string,
+	indexName string,
+	tableID descpb.ID,
+	enabled bool,
+) ScanMisestimateLogger {
+	return ScanMisestimateLogger{
+		enabled:           enabled,
+		estimatedRowCount: estimatedRowCount,
+		statsCreatedAt:    statsCreatedAt,
+		tableName:         tableName,
+		indexName:         indexName,
+		tableID:           tableID,
+	}
+}
+
+// MaybeLogMisestimate logs a warning if the actual row count observed by the
+// scan differs significantly from the optimizer estimate.
+func (l *ScanMisestimateLogger) MaybeLogMisestimate(
+	ctx context.Context, flowCtx *FlowCtx, actualRowCount uint64,
+) {
+	if !l.enabled ||
+		!LogScanRowCountMisestimate.Get(&flowCtx.Cfg.Settings.SV) ||
+		l.estimatedRowCount == 0 {
+		return
+	}
+
+	// Note: This is the same inaccuracy criteria as in explain/emit.go
+	const inaccurateFactor = 2
+	const inaccurateAdditive = 100
+	inaccurateEstimate := actualRowCount*inaccurateFactor+inaccurateAdditive < l.estimatedRowCount ||
+		l.estimatedRowCount*inaccurateFactor+inaccurateAdditive < actualRowCount
+
+	if inaccurateEstimate {
+		var suffix string
+		if !l.statsCreatedAt.IsZero() {
+			timeSinceStats := timeutil.Since(l.statsCreatedAt)
+			duration := humanizeutil.LongDuration(timeSinceStats)
+			suffix = fmt.Sprintf("; table stats collected %s ago", duration)
+			staleness, err := flowCtx.Cfg.StatsRefresher.EstimateStaleness(ctx, l.tableID)
+			if err == nil {
+				suffix += fmt.Sprintf(" (estimated %.0f%% stale)", staleness*100)
+			}
+		}
+		log.Dev.Warningf(ctx, "inaccurate estimate for scan on table %q (index %q): estimated=%d actual=%d%s",
+			l.tableName, l.indexName, l.estimatedRowCount, actualRowCount, suffix)
+	}
 }

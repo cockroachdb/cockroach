@@ -581,6 +581,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 	}
 
+	// Note: This is the same inaccuracy criteria as execinfra.MaybeLogMisestimate
 	var inaccurateEstimate bool
 	const inaccurateFactor = 2
 	const inaccurateAdditive = 100

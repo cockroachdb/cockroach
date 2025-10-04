@@ -1063,3 +1063,173 @@ func TestRefresherReadOnlyShutdown(t *testing.T) {
 	// Wait for shutdown - this should complete without hanging.
 	readOnlyRefresher.WaitForAutoStatsShutdown(ctx)
 }
+
+func TestEstimateStaleness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	codec, st := s.Codec(), s.ClusterSettings()
+
+	evalCtx := eval.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		INSERT INTO t.a VALUES (1);`)
+
+	internalDB := s.InternalDB().(descs.DB)
+	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "a")
+	cache := NewTableStatisticsCache(
+		10, /* cacheSize */
+		s.ClusterSettings(),
+		s.InternalDB().(descs.DB),
+		s.AppStopper(),
+	)
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+
+	// curTime is used as the current time throughout the test to ensure that the
+	// calculated staleness is consistent even if there are delays due to
+	// running the test under race.
+	curTime := timeutil.Now().Round(time.Hour)
+	knobs := &TableStatsTestingKnobs{
+		StubTimeNow: func() time.Time { return curTime },
+	}
+	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, knobs, false /* readOnlyTenant */)
+
+	checkEstimatedStaleness := func(expected float64) error {
+		return testutils.SucceedsSoonError(func() error {
+			actual, err := refresher.EstimateStaleness(ctx,
+				table.GetID())
+			if err != nil {
+				return err
+			}
+			if actual != expected {
+				return fmt.Errorf("expected EstimateStaleness %f but found %f",
+					expected, actual)
+			}
+			return nil
+		})
+	}
+
+	insertStat := func(
+		txn *kv.Txn, name string, columnIDs *tree.DArray, createdAt *tree.DTimestamp,
+	) error {
+		_, err := internalDB.Executor().Exec(
+			ctx, "insert-statistic", txn,
+			`INSERT INTO system.table_statistics (
+					  "tableID",
+					  "name",
+					  "columnIDs",
+					  "createdAt",
+					  "rowCount",
+					  "distinctCount",
+					  "nullCount",
+					  "avgSize"
+				  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			table.GetID(),
+			name,
+			columnIDs,
+			createdAt,
+			100000, /* rowCount */
+			1,      /* distinctCount */
+			0,      /* nullCount */
+			4,      /* avgSize */
+		)
+		return err
+	}
+
+	// Ensure that we return an error if estimating staleness without any stats.
+	_, err := refresher.EstimateStaleness(ctx, table.GetID())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no full statistics available")
+
+	// Add 3 full stats separated by 10 hours each, starting 5 hours ago, for an
+	// avgRefreshTime of 10 hours.
+	if err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		for i := 0; i < 3; i++ {
+			columnIDsVal := tree.NewDArray(types.Int)
+			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
+				return err
+			}
+			createdAt, err := tree.MakeDTimestamp(
+				curTime.Add(time.Duration(-1*(i*10+5))*time.Hour), time.Hour,
+			)
+			if err != nil {
+				return err
+			}
+			if err := insertStat(txn, jobspb.AutoStatsName, columnIDsVal, createdAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// With default settings (fraction_stale_rows = 0.2) and the latest full stat
+	// being 5 hours old (half of avgRefreshTime of 10 hours), we expect 10%
+	// staleness.
+	if err = checkEstimatedStaleness(0.1); err != nil {
+		t.Fatal(err)
+	}
+
+	fractionStaleRows := 0.4
+	explicitSettings := catpb.AutoStatsSettings{FractionStaleRows: &fractionStaleRows}
+	refresher.settingOverrides[table.GetID()] = explicitSettings
+
+	// With fraction_stale_rows = 0.4 and the latest full stat being 5 hours old
+	// (half of avgRefreshTime of 10 hours), we expect 20% staleness.
+	if err = checkEstimatedStaleness(0.2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reset fraction_stale_rows to default (0.2)
+	delete(refresher.settingOverrides, table.GetID())
+
+	// Delete old stats and create stats with 3-hour intervals, the most recent
+	// being 15 hours old.
+	if err = s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := internalDB.Executor().Exec(
+			ctx, "delete-stats", txn,
+			`DELETE FROM system.table_statistics WHERE "tableID" = $1`,
+			table.GetID(),
+		)
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < 5; i++ {
+			columnIDsVal := tree.NewDArray(types.Int)
+			if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
+				return err
+			}
+			createdAt, err := tree.MakeDTimestamp(
+				curTime.Add(time.Duration(-1*(i*3+15))*time.Hour), time.Hour,
+			)
+			if err != nil {
+				return err
+			}
+			if err := insertStat(txn, jobspb.AutoStatsName, columnIDsVal, createdAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// With default settings (fraction_stale_rows = 0.2) and the latest full stat
+	// being 15 hours old (5 times the avgRefreshTime of 3 hours), we expect 100%
+	// staleness.
+	if err = checkEstimatedStaleness(1.0); err != nil {
+		t.Fatal(err)
+	}
+}

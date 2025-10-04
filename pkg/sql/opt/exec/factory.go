@@ -145,6 +145,10 @@ type ScanParams struct {
 	// scanned, rounded up.
 	EstimatedRowCount uint64
 
+	// StatsCreatedAt, if set, is the time when the latest table statistics were
+	// collected.
+	StatsCreatedAt time.Time
+
 	// If true, we are performing a locality optimized search. In order for this
 	// to work correctly, the execution engine must create a local DistSQL plan
 	// for the main query (subqueries and postqueries need not be local).

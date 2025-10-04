@@ -171,7 +171,7 @@ func (s *ColBatchDirectScan) Close(context.Context) error {
 	ctx := s.EnsureCtx()
 	s.fetcher.Close(ctx)
 	s.deserializer.Close(ctx)
-	return s.colBatchScanBase.close()
+	return s.colBatchScanBase.close(ctx)
 }
 
 // NewColBatchDirectScan creates a new ColBatchDirectScan operator.
@@ -185,8 +185,9 @@ func NewColBatchDirectScan(
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchDirectScan, []*types.T, error) {
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
-		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver,
+		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver, shouldCollectStats,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -226,7 +227,7 @@ func NewColBatchDirectScan(
 		}
 	}
 	var cpuStopWatch *timeutil.CPUStopWatch
-	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+	if shouldCollectStats {
 		cpuStopWatch = timeutil.NewCPUStopWatch()
 	}
 	return &ColBatchDirectScan{

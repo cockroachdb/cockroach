@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -2245,6 +2246,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			reverse:             n.reverse,
 			parallelize:         n.parallelize,
 			estimatedRowCount:   n.estimatedRowCount,
+			statsCreatedAt:      n.statsCreatedAt,
 			reqOrdering:         n.reqOrdering,
 			finalizeLastStageCb: planCtx.associateWithPlanNode(n),
 		},
@@ -2263,6 +2265,7 @@ type tableReaderPlanningInfo struct {
 	reverse             bool
 	parallelize         bool
 	estimatedRowCount   uint64
+	statsCreatedAt      time.Time
 	reqOrdering         ReqOrdering
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
@@ -2494,6 +2497,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 
 		tr.Parallelize = info.parallelize
 		tr.IgnoreMisplannedRanges = ignoreMisplannedRanges
+		tr.EstimatedRowCount = info.estimatedRowCount
+		tr.StatsCreatedAt = info.statsCreatedAt
 		p.TotalEstimatedScannedRows += info.estimatedRowCount
 
 		corePlacement[i].SQLInstanceID = sp.SQLInstanceID
