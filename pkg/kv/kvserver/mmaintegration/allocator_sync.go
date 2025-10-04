@@ -6,6 +6,8 @@
 package mmaintegration
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
@@ -45,6 +47,14 @@ type mmaState interface {
 	// AdjustPendingChangesDisposition is called by the allocator sync to adjust
 	// the disposition of pending changes.
 	AdjustPendingChangesDisposition(changeIDs []mmaprototype.ChangeID, success bool)
+	// BuildMMARebalanceAdvisor is called by the allocator sync to build a
+	// MMARebalanceAdvisor for the given existing store and candidates. The
+	// advisor should be later passed to IsInConflictWithMMA to determine if a
+	// given candidate is in conflict with the existing store.
+	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) *mmaprototype.MMARebalanceAdvisor
+	// IsInConflictWithMMA is called by the allocator sync to determine if the
+	// given candidate is in conflict with the existing store.
+	IsInConflictWithMMA(ctx context.Context, cand roachpb.StoreID, advisor *mmaprototype.MMARebalanceAdvisor, cpuOnly bool) bool
 }
 
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
@@ -58,6 +68,7 @@ type mmaState interface {
 // pool. When mma is disabled, its sole purpose is to track and apply changes
 // to the store pool upon success.
 type AllocatorSync struct {
+	knobs        *TestingKnobs
 	sp           storePool
 	st           *cluster.Settings
 	mmaAllocator mmaState
@@ -74,11 +85,14 @@ type AllocatorSync struct {
 	}
 }
 
-func NewAllocatorSync(sp storePool, mmaAllocator mmaState, st *cluster.Settings) *AllocatorSync {
+func NewAllocatorSync(
+	sp storePool, mmaAllocator mmaState, st *cluster.Settings, knobs *TestingKnobs,
+) *AllocatorSync {
 	as := &AllocatorSync{
 		sp:           sp,
 		st:           st,
 		mmaAllocator: mmaAllocator,
+		knobs:        knobs,
 	}
 	as.mu.trackedChanges = make(map[SyncChangeID]trackedAllocatorChange)
 	return as

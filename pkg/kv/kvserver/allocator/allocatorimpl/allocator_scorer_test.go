@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -436,10 +437,18 @@ func TestBestRebalanceTarget(t *testing.T) {
 	expectedTargets := []roachpb.StoreID{13, 13, 11, 12}
 	expectedExistingRepls := []roachpb.StoreID{3, 2, 1, 1}
 	allocRand := makeAllocatorRand(rand.NewSource(0))
+	ctx := context.Background()
+	stopper, _, _, a, _ := CreateTestAllocatorWithKnobs(ctx, 10, false, /* deterministic */
+		nil /* allocator.TestingKnobs */, &mmaintegration.TestingKnobs{
+			OverrideIsInConflictWithMMA: func(cand roachpb.StoreID) bool {
+				return false
+			},
+		} /* mmaintegration.TestingKnobs */)
+	defer stopper.Stop(ctx)
 	var i int
 	for {
 		i++
-		target, existing := bestRebalanceTarget(allocRand, candidates)
+		target, existing, _ := bestRebalanceTarget(allocRand, candidates, a.as)
 		if len(expectedTargets) == 0 {
 			if target == nil {
 				break

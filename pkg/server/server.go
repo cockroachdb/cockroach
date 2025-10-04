@@ -904,7 +904,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	mmaAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
-	allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocator, st)
+	allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocator, st, nil)
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {
