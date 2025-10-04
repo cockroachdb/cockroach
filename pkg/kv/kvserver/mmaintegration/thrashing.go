@@ -55,9 +55,9 @@ import (
 // the candidate struct. 2. exclude the store right before or right after the
 // equivalence class construction.
 //
-// 2. The second question was when mma computes load summary of a store, it
-// needs a set of stores to compute the summary with respect to. And the
-// question was which set of stores to use.
+// 2. The second question is: when MMA computes a store’s load summary, it
+// requires a set of stores as a basis. The question is, which set of stores
+// should be used?
 // • The principle we followed is to use the same set of stores that is used to
 // compute the mean for range or lease count. For the replicate queue, this
 // means we use all stores that satisfy constraints to compute mean. The
