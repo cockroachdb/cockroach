@@ -1301,9 +1301,10 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 type MMARebalanceAdvisor struct {
 	// disabled is true when MMA is disabled. It overrides all decisions with
 	// IsInConflictWithMMA returning false.
-	disabled bool
+	disabled        bool
+	existingStoreID roachpb.StoreID
 	// existingStoreSLS is the load summary for the existing store.
-	existingStoreSLS storeLoadSummary
+	existingStoreSLS *storeLoadSummary
 	// means is the means for the candidate set.
 	means meansLoad
 }
@@ -1331,12 +1332,9 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 	scratchStores := map[roachpb.StoreID]struct{}{}
 	cands = append(cands, existing)
 	means := computeMeansForStoreSet(a.cs, cands, scratchNodes, scratchStores)
-	// TODO(wenyihu6): pass in the actual ctx here
-	existingSLS := a.cs.computeLoadSummary(context.Background(), existing,
-		&means.storeLoad, &means.nodeLoad)
 	return &MMARebalanceAdvisor{
-		existingStoreSLS: existingSLS,
-		means:            means,
+		existingStoreID: existing,
+		means:           means,
 	}
 }
 
@@ -1350,8 +1348,14 @@ func (a *allocatorState) IsInConflictWithMMA(
 	if advisor.disabled {
 		return false
 	}
-	candSLS := a.cs.computeLoadSummary(context.Background(), cand, &advisor.means.storeLoad, &advisor.means.nodeLoad)
+	if advisor.existingStoreSLS == nil {
+		// TODO(wenyihu6): pass in the actual ctx here
+		summary := a.cs.computeLoadSummary(context.Background(), advisor.existingStoreID,
+			&advisor.means.storeLoad, &advisor.means.nodeLoad)
+		advisor.existingStoreSLS = &summary
+	}
 	existingSLS := advisor.existingStoreSLS
+	candSLS := a.cs.computeLoadSummary(context.Background(), cand, &advisor.means.storeLoad, &advisor.means.nodeLoad)
 	if cpuOnly {
 		return candSLS.dimSummary[CPURate] > existingSLS.dimSummary[CPURate]
 	}
