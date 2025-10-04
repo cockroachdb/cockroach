@@ -500,7 +500,6 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	tester := newRangeDistributionTester(t, noLocality)
 	defer tester.cleanup()
 
-	serverutils.SetClusterSetting(t, tester.tc, "changefeed.default_range_distribution_strategy", "default")
 	serverutils.SetClusterSetting(t, tester.tc, "changefeed.random_replica_selection.enabled", false)
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
@@ -527,10 +526,9 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	// Check that we roughly assign (64 ranges / 6 nodes) ranges to each node.
 	tester := newRangeDistributionTester(t, noLocality)
 	defer tester.cleanup()
-	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
 	// We need to disable the bulk oracle in order to ensure the leaseholder is selected.
 	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
-	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', range_distribution_strategy='balanced_simple'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
 	upper := int(math.Ceil((1 + rebalanceThreshold.Get(&tester.lastNode.ClusterSettings().SV)) * 64 / 6))
@@ -548,30 +546,56 @@ func TestChangefeedWithNoDistributionStrategyAndConstrainedLocality(t *testing.T
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
 
-	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
-	// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
-	// to these nodes are distributed arbitrarily to any nodes which pass the filter.
-	tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
-		if i%2 == 1 {
-			return []roachpb.Tier{{Key: "y", Value: "1"}}
-		}
-		return []roachpb.Tier{}
-	})
-	defer tester.cleanup()
-	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
-	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
-	partitions := tester.getPartitions()
-	counts := tester.countRangesPerNode(partitions)
+	t.Run("default specified", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
+		// to these nodes are distributed arbitrarily to any nodes which pass the filter.
+		tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
+			if i%2 == 1 {
+				return []roachpb.Tier{{Key: "y", Value: "1"}}
+			}
+			return []roachpb.Tier{}
+		})
+		defer tester.cleanup()
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1', range_distribution_strategy='default'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
 
-	totalRanges := 0
-	for i, count := range counts {
-		if i%2 == 1 {
-			totalRanges += count
-		} else {
-			require.Equal(t, count, 0)
+		totalRanges := 0
+		for i, count := range counts {
+			if i%2 == 1 {
+				totalRanges += count
+			} else {
+				require.Equal(t, count, 0)
+			}
 		}
-	}
-	require.Equal(t, totalRanges, 64)
+		require.Equal(t, totalRanges, 64)
+	})
+	t.Run("no distribution strategy specified", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
+		// to these nodes are distributed arbitrarily to any nodes which pass the filter.
+		tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
+			if i%2 == 1 {
+				return []roachpb.Tier{{Key: "y", Value: "1"}}
+			}
+			return []roachpb.Tier{}
+		})
+		defer tester.cleanup()
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
+
+		totalRanges := 0
+		for i, count := range counts {
+			if i%2 == 1 {
+				totalRanges += count
+			} else {
+				require.Equal(t, count, 0)
+			}
+		}
+		require.Equal(t, totalRanges, 64)
+	})
 }
 
 func TestChangefeedWithSimpleDistributionStrategyAndConstrainedLocality(t *testing.T) {
@@ -593,8 +617,7 @@ func TestChangefeedWithSimpleDistributionStrategyAndConstrainedLocality(t *testi
 		return []roachpb.Tier{}
 	})
 	defer tester.cleanup()
-	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
-	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1', range_distribution_strategy='balanced_simple'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
 

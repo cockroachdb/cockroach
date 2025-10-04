@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -345,37 +344,6 @@ func startDistChangefeed(
 // The bin packing choice gives preference to leaseholder replicas if possible.
 var replicaOracleChoice = replicaoracle.BinPackingChoice
 
-type rangeDistributionType int
-
-const (
-	// defaultDistribution employs no load balancing on the changefeed
-	// side. We defer to distsql to select nodes and distribute work.
-	defaultDistribution rangeDistributionType = 0
-	// balancedSimpleDistribution defers to distsql for selecting the
-	// set of nodes to distribute work to. However, changefeeds will try to
-	// distribute work evenly across this set of nodes.
-	balancedSimpleDistribution rangeDistributionType = 1
-	// TODO(jayant): add balancedFullDistribution which takes
-	// full control of node selection and distribution.
-)
-
-// RangeDistributionStrategy is used to determine how the changefeed balances
-// ranges between nodes.
-// TODO: deprecate this setting in favor of a changefeed option.
-var RangeDistributionStrategy = settings.RegisterEnumSetting(
-	settings.ApplicationLevel,
-	"changefeed.default_range_distribution_strategy",
-	"configures how work is distributed among nodes for a given changefeed. "+
-		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
-		"will not override locality restrictions",
-	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
-		"default", "balanced_simple"),
-	map[rangeDistributionType]string{
-		defaultDistribution:        "default",
-		balancedSimpleDistribution: "balanced_simple",
-	},
-	settings.WithPublic)
-
 var useBulkOracle = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.random_replica_selection.enabled",
@@ -410,7 +378,10 @@ func makePlan(
 			}
 		}
 
-		rangeDistribution := RangeDistributionStrategy.Get(sv)
+		rangeDistributionStrat, err := changefeedbase.MakeStatementOptions(details.Opts).GetRangeDistributionStrategy()
+		if err != nil {
+			return nil, nil, err
+		}
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
@@ -427,8 +398,8 @@ func makePlan(
 			log.Changefeed.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
 		switch {
-		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
-		case rangeDistribution == balancedSimpleDistribution:
+		case distMode == sql.LocalDistribution || rangeDistributionStrat == changefeedbase.RangeDistributionStrategyDefault:
+		case rangeDistributionStrat == changefeedbase.RangeDistributionStrategyBalancedSimple:
 			log.Changefeed.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
@@ -442,8 +413,8 @@ func makePlan(
 				log.Changefeed.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
 			}
 		default:
-			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %d and dist mode %d",
-				rangeDistribution, distMode)
+			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %s and dist mode %d",
+				rangeDistributionStrat, distMode)
 		}
 
 		if haveKnobs && maybeCfKnobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
