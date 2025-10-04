@@ -576,6 +576,9 @@ func (v *validator) processOp(op Operation) {
 			deleteOps[i] = write
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange.
 		//
 		// However, we do not add this observation if the observation filter is
@@ -583,7 +586,7 @@ func (v *validator) processOp(op Operation) {
 		// that for isolation levels that permit write skew, the DeleteRange does
 		// not prevent new keys from being inserted in the deletion span between the
 		// transaction's read and write timestamps.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
 			endKey := t.EndKey
 			if t.Result.ResumeSpan != nil {
 				endKey = t.Result.ResumeSpan.Key
@@ -665,12 +668,15 @@ func (v *validator) processOp(op Operation) {
 			v.curObservations = append(v.curObservations, write)
 		}
 
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange, even if parts of
 		// the DeleteRange that didn't materialize due to a shadowing operation.
 		//
 		// See above for why we do not add this observation if the observation
 		// filter is observeLocking.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
@@ -996,6 +1002,10 @@ func (v *validator) processOp(op Operation) {
 	case *MutateBatchHeaderOperation:
 		execTimestampStrictlyOptional = true
 		v.checkError(op, t.Result)
+	case *AddNetworkPartitionOperation, *RemoveNetworkPartitionOperation:
+		execTimestampStrictlyOptional = true
+		// Ignore any errors due to the generator trying to add/remove a partition
+		// that doesn't exist or from a node to itself.
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}

@@ -15,11 +15,13 @@ import (
 	"reflect"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,6 +68,25 @@ func l(ctx context.Context, basename string, format string, args ...interface{})
 	return ""
 }
 
+// TestMode defines how faults are inserted and validated.
+type TestMode int
+
+const (
+	// The default value of TestMode is 0, which corresponds to no faults.
+	_ TestMode = iota
+	// Safety mode is used to test for safety properties (i.e. serializability) in
+	// the presence of unlimited faults. Unavailability errors are expected and
+	// ignored.
+	Safety = 1
+	// Liveness mode is used to test for liveness properties (i.e. availability).
+	// To do so in the presence of faults, the test will inject faults carefully,
+	// ensuring a well-connected quorum of replicas is always available, and the
+	// tests connects to one of the nodes in it. Without loss of generality, we
+	// keep nodes 1 and 2 available and connected to each other.
+	// TODO(mira): don't hardcode the protected nodes.
+	Liveness = 2
+)
+
 // RunNemesis generates and applies a series of Operations to exercise the KV
 // api. It returns a slice of the logical failures encountered.
 func RunNemesis(
@@ -75,6 +96,7 @@ func RunNemesis(
 	config GeneratorConfig,
 	concurrency int,
 	numSteps int,
+	mode TestMode,
 	dbs ...*kv.DB,
 ) ([]error, error) {
 	if env.L != nil {
@@ -86,11 +108,17 @@ func RunNemesis(
 
 	dataSpan := GeneratorDataSpan()
 
-	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
+	g, err := MakeGenerator(config, newGetReplicasFn(dbs...), mode)
 	if err != nil {
 		return nil, err
 	}
-	a := MakeApplier(env, dbs...)
+	applierDBs := dbs
+	// In Liveness mode, only nodes 1 and 2 are guaranteed to be available, so use
+	// only the first two DBs to apply operations.
+	if mode == Liveness && len(applierDBs) >= 2 {
+		applierDBs = applierDBs[:2]
+	}
+	a := MakeApplier(env, applierDBs...)
 	w, err := Watch(ctx, env, dbs, dataSpan)
 	if err != nil {
 		return nil, err
@@ -117,34 +145,43 @@ func RunNemesis(
 				step.format(&buf, formatCtx{indent: `  ` + workerName + ` PRE `})
 				l(ctx, basename, "%s", &buf)
 			}
+			applyAndLogOp := func(ctx context.Context) error {
+				trace, err := a.Apply(ctx, &step)
+				step.Trace = l(ctx, fmt.Sprintf("%s_trace", stepPrefix), "%s", trace.String())
 
-			trace, err := a.Apply(ctx, &step)
-			step.Trace = l(ctx, fmt.Sprintf("%s_trace", stepPrefix), "%s", trace.String())
+				stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
 
-			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
+				prefix := ` OP  `
+				if err != nil {
+					prefix = ` ERR `
+				}
 
-			prefix := ` OP  `
-			if err != nil {
-				prefix = ` ERR `
-			}
-
-			{
-				var buf strings.Builder
-				fmt.Fprintf(&buf, "  before: %s", step.Before)
-				step.format(&buf, formatCtx{indent: `  ` + workerName + prefix})
-				fmt.Fprintf(&buf, "\n  after: %s", step.After)
-				l(ctx, basename, "%s", &buf)
-			}
-
-			if err != nil {
+				{
+					var buf strings.Builder
+					fmt.Fprintf(&buf, "  before: %s", step.Before)
+					step.format(&buf, formatCtx{indent: `  ` + workerName + prefix})
+					fmt.Fprintf(&buf, "\n  after: %s", step.After)
+					l(ctx, basename, "%s", &buf)
+				}
 				return err
+			}
+			if mode == Safety {
+				if err = timeutil.RunWithTimeout(ctx, "applying op", 10*time.Second, applyAndLogOp); err != nil {
+					return err
+				}
+			} else {
+				if err = applyAndLogOp(ctx); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	}
+	env.Partitioner.EnablePartitions(true)
 	if err := ctxgroup.GroupWorkers(ctx, concurrency, workerFn); err != nil {
 		return nil, err
 	}
+	env.Partitioner.EnablePartitions(false)
 
 	allSteps := make(steps, 0, numSteps)
 	for _, steps := range stepsByWorker {
@@ -160,12 +197,16 @@ func RunNemesis(
 	defer kvs.Close()
 
 	failures := Validate(allSteps, kvs, env.Tracker)
-
 	var filteredFailures []error
 	for _, f := range failures {
 		// ConditionFailedErrors are expected and can be ignored.
 		canBeIgnored := exceptConditionFailed(f)
-		if !canBeIgnored {
+		// The following errors are expected in safety mode.
+		canBeIgnoredSafety := mode == Safety &&
+			(exceptReplicaUnavailable(f) || exceptAmbiguous(f) || exceptContextCanceled(f))
+		// Ambiguous errors are expected in liveness mode.
+		canBeIgnoredLiveness := mode == Liveness && exceptAmbiguous(f)
+		if !canBeIgnored && !canBeIgnoredSafety && !canBeIgnoredLiveness {
 			filteredFailures = append(filteredFailures, f)
 		}
 	}
