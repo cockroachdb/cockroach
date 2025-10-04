@@ -193,7 +193,7 @@ SELECT
     is_nullable::BOOL,
     column_default,
     generation_expression,
-    IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS indices,
+    IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS indexes,
     is_hidden::BOOL`
 
 	if n.WithComment {
