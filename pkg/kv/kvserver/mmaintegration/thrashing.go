@@ -87,8 +87,8 @@ import (
 // passed to IsInConflictWithMMA to determine if a candidate conflicts with
 // MMA's goals.
 //
-// If MMA is disabled, a no-op advisor is returned, which always returns false
-// for IsInConflictWithMMA. If MMA is enabled, the advisor is created by
+// If mma-count is disabled, a no-op advisor is returned, which always returns
+// false for IsInConflictWithMMA. If MMA is enabled, the advisor is created by
 // computing the load summary for the provided existing store and candidate set.
 //
 // Note that MMARebalanceAdvisor should always use the means summary constructed
