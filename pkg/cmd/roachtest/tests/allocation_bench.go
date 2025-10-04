@@ -44,6 +44,7 @@ const (
 type allocationBenchSpec struct {
 	nodes, cpus int
 	load        allocBenchLoad
+	lbrMode     string // see kvserverbase.LoadBasedRebalancingMode
 
 	startRecord time.Duration
 	samples     int
@@ -172,7 +173,7 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 	return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), runCmd)
 }
 func registerAllocationBench(r registry.Registry) {
-	for _, spec := range []allocationBenchSpec{
+	specTemplates := []allocationBenchSpec{
 		// TODO(kvoli): Add a background event runner and implement events for
 		// import and index backfills.
 		{
@@ -242,8 +243,19 @@ func registerAllocationBench(r registry.Registry) {
 				},
 			},
 		},
-	} {
-		registerAllocationBenchSpec(r, spec)
+	}
+	for _, spec := range specTemplates {
+		{
+			spec := spec
+			spec.lbrMode = "leases and replicas"
+			registerAllocationBenchSpec(r, spec)
+		}
+		{
+			spec := spec
+			spec.lbrMode = "multi-metric and count"
+			spec.load.desc += "/lbr=mmc"
+			registerAllocationBenchSpec(r, spec)
+		}
 	}
 }
 
@@ -260,7 +272,7 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 		Timeout:           time.Duration(allocSpec.samples) * time.Hour,
 		NonReleaseBlocker: true,
 		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Suites:            registry.Suites(registry.Weekly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
 		},
@@ -278,6 +290,11 @@ func setupAllocationBench(
 			"--vmodule=store_rebalancer=2,allocator=2,replicate_queue=2")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
+	require.NotEmpty(t, spec.lbrMode, "lbrMode must be set")
+	_, err := c.Conn(ctx, t.L(), 1).ExecContext(ctx, fmt.Sprintf(
+		`SET CLUSTER SETTING kv.allocator.load_based_rebalancing = '%s';`,
+		spec.lbrMode))
+	require.NoError(t, err)
 
 	return setupStatCollector(ctx, t, c, spec)
 }
