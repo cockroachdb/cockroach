@@ -19,6 +19,7 @@ type Metrics struct {
 	AddSSTableAsWrites           int // AddSSTable requests with IngestAsWrites set
 	SplitsWithEstimatedStats     int // Splits that computed stats estimates
 	SplitEstimatedTotalBytesDiff int // Difference between pre- and post-split total bytes.
+	SubsumeLocksWritten          int // number of locks written during a subsume
 }
 
 // Add absorbs the supplied Metrics into the receiver.
@@ -34,4 +35,5 @@ func (mt *Metrics) Add(o Metrics) {
 	mt.AddSSTableAsWrites += o.AddSSTableAsWrites
 	mt.SplitsWithEstimatedStats += o.SplitsWithEstimatedStats
 	mt.SplitEstimatedTotalBytesDiff += o.SplitEstimatedTotalBytesDiff
+	mt.SubsumeLocksWritten += o.SubsumeLocksWritten
 }

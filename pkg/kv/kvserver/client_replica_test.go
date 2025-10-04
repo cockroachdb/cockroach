@@ -778,7 +778,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3"))
+	defer testutils.SetVModule(t, "replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3")()
 	const numNodes = 2
 	var manuals []*hlc.HybridManualClock
 	var clocks []*hlc.Clock
@@ -2955,7 +2955,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
+	defer testutils.SetVModule(t, "replica_range_lease=3,raft=4")()
 
 	ctx := context.Background()
 	stickyVFSRegistry := fs.NewStickyRegistry()
@@ -6072,7 +6072,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_lease=2"))
+	defer testutils.SetVModule(t, "cmd_lease=2")()
 
 	// Test Setup:
 	//
@@ -6106,9 +6106,9 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start with the lease on store 1.
-	t.Logf("transfering to s1")
+	t.Logf("transferring to s1")
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
-	t.Logf("done transfering to s1")
+	t.Logf("done transferring to s1")
 
 	// Txn 1:
 	// - Acquire lock and block until we are are sure txn2 has returned.
@@ -6165,19 +6165,24 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	// on tx1 to start).
 	<-txn2Started
 
-	t.Log("transfering lease from s1 -> s2")
+	t.Log("transferring lease from s1 -> s2")
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 	time.Sleep(250 * time.Millisecond)
 	t.Log("cancelling txn2")
 	txn2Cancel()
 	require.NoError(t, g.Wait())
+
+	// Check metrics
+	locksWritten, err := tc.GetFirstStoreFromServer(t, 0).Metrics().GetStoreMetric("leases.transfers.locks_written")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, locksWritten, int64(1))
 }
 
 func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_lease=2"))
+	defer testutils.SetVModule(t, "cmd_lease=2")()
 
 	// Test Plan:
 	//
@@ -6228,7 +6233,7 @@ func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_subsume=2"))
+	defer testutils.SetVModule(t, "cmd_subsume=2")()
 
 	// Test Plan:
 	//
@@ -6312,15 +6317,16 @@ func TestMergeReplicatesLocks(t *testing.T) {
 	)
 	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 
-	for _, b := range []bool{true, false} {
+	for _, rhsLock := range []bool{true, false} {
 		name := "lhs-lock"
 		lockKeySuffix := lhsKey
-		if b {
+		if rhsLock {
 			name = "rhs-lock"
 			lockKeySuffix = rhsKey
 		}
 		t.Run(name, func(t *testing.T) {
-			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			nodeCount := 3
+			tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Settings: st,
 				},
@@ -6416,6 +6422,17 @@ func TestMergeReplicatesLocks(t *testing.T) {
 			})
 			for _, err := range failures {
 				t.Errorf("consistency failure: %s", err.Error())
+			}
+			if rhsLock {
+				// The range could have been on any node. We just care that this metric
+				// is written somewhere.
+				var locksWritten int64
+				for i := range nodeCount {
+					l, err := tc.GetFirstStoreFromServer(t, i).Metrics().GetStoreMetric("subsume.locks_written")
+					require.NoError(t, err)
+					locksWritten += l
+				}
+				require.GreaterOrEqual(t, locksWritten, int64(1))
 			}
 		})
 	}
