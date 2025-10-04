@@ -67,6 +67,38 @@ type indexCandidateSet struct {
 	joinCandidates     map[cat.Table][][]cat.IndexColumn
 	invertedCandidates map[cat.Table][][]cat.IndexColumn
 	overallCandidates  map[cat.Table][][]cat.IndexColumn
+	finalCandidates    map[cat.Table][]IndexCandidates
+}
+
+type IndexCandidates struct {
+	columns       []cat.IndexColumn
+	predicateInfo PredicateInfo
+}
+
+// Columns returns the index columns for this candidate.
+func (ic *IndexCandidates) Columns() []cat.IndexColumn {
+	return ic.columns
+}
+
+// PredicateInfo returns the predicate information for this candidate.
+func (ic *IndexCandidates) PredicateInfo() PredicateInfo {
+	return ic.predicateInfo
+}
+
+// PredicateInfo stores predicate information along with its index ordinal.
+type PredicateInfo struct {
+	predicate string
+	ordinal   int
+}
+
+// Predicate returns the predicate string.
+func (pi PredicateInfo) Predicate() string {
+	return pi.predicate
+}
+
+// Ordinal returns the index ordinal.
+func (pi PredicateInfo) Ordinal() int {
+	return pi.ordinal
 }
 
 // init allocates memory for the maps in the set.
@@ -78,6 +110,7 @@ func (ics *indexCandidateSet) init(md *opt.Metadata) {
 	ics.joinCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.invertedCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.overallCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
+	ics.finalCandidates = make(map[cat.Table][]IndexCandidates, numTables)
 }
 
 // combineIndexCandidates adds index candidates that are combinations of
