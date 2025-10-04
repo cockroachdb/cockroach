@@ -437,7 +437,7 @@ func localRangeIDKeyPrint(
 		return
 	}
 
-	fmt.Fprintf(buf, "/%d", i)
+	buf.Printf("/%d", i)
 
 	// Print and remove the rangeID infix specifier.
 	if len(key) != 0 {
