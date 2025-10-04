@@ -6,6 +6,8 @@
 package mmaintegration
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -101,7 +103,10 @@ func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 
 // IsInConflictWithMMA determines if a candidate conflicts with MMA's goals.
 func (as *AllocatorSync) IsInConflictWithMMA(
-	cand roachpb.StoreID, advisor *mmaprototype.MMARebalanceAdvisor, cpuOnly bool,
+	ctx context.Context,
+	cand roachpb.StoreID,
+	advisor *mmaprototype.MMARebalanceAdvisor,
+	cpuOnly bool,
 ) bool {
-	return as.mmaAllocator.IsInConflictWithMMA(cand, advisor, cpuOnly)
+	return as.mmaAllocator.IsInConflictWithMMA(ctx, cand, advisor, cpuOnly)
 }
