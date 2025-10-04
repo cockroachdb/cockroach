@@ -92,7 +92,7 @@ import (
 // and associating it with the corresponding existing store.
 func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 	existing roachpb.StoreID, cands []roachpb.StoreID,
-) mmaprototype.MMARebalanceAdvisor {
+) *mmaprototype.MMARebalanceAdvisor {
 	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) != kvserverbase.LBRebalancingMultiMetricAndCount {
 		return mmaprototype.NoopMMARebalanceAdvisor()
 	}
@@ -101,7 +101,7 @@ func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 
 // IsInConflictWithMMA determines if a candidate conflicts with MMA's goals.
 func (as *AllocatorSync) IsInConflictWithMMA(
-	cand roachpb.StoreID, advisor mmaprototype.MMARebalanceAdvisor, cpuOnly bool,
+	cand roachpb.StoreID, advisor *mmaprototype.MMARebalanceAdvisor, cpuOnly bool,
 ) bool {
 	return as.mmaAllocator.IsInConflictWithMMA(cand, advisor, cpuOnly)
 }

@@ -1890,7 +1890,7 @@ func (a Allocator) RebalanceTarget(
 	// to compute the means for the original set {s1, s2, s3} ∪ {existing} once
 	// and then use it for all calls to MMA, and bestRebalanceTarget does not need
 	// to copy the candidate set.
-	advisors := make(map[int]mmaprototype.MMARebalanceAdvisor, len(results))
+	advisors := make(map[int]*mmaprototype.MMARebalanceAdvisor, len(results))
 	var bestIdx int
 
 	for {

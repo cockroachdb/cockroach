@@ -1914,7 +1914,7 @@ func bestRebalanceTarget(
 	randGen allocatorRand,
 	options []rebalanceOptions,
 	as *mmaintegration.AllocatorSync,
-	advisors map[int]mmaprototype.MMARebalanceAdvisor,
+	advisors map[int]*mmaprototype.MMARebalanceAdvisor,
 ) (target, existingCandidate *candidate, bestIdx int) {
 	bestIdx = -1
 	var bestTarget *candidate

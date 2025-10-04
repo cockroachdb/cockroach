@@ -49,10 +49,10 @@ type mmaState interface {
 	// MMARebalanceAdvisor for the given existing store and candidates. The
 	// advisor should be later passed to IsInConflictWithMMA to determine if a
 	// given candidate is in conflict with the existing store.
-	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) mmaprototype.MMARebalanceAdvisor
+	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) *mmaprototype.MMARebalanceAdvisor
 	// IsInConflictWithMMA is called by the allocator sync to determine if the
 	// given candidate is in conflict with the existing store.
-	IsInConflictWithMMA(cand roachpb.StoreID, advisor mmaprototype.MMARebalanceAdvisor, cpuOnly bool) bool
+	IsInConflictWithMMA(cand roachpb.StoreID, advisor *mmaprototype.MMARebalanceAdvisor, cpuOnly bool) bool
 }
 
 // TODO(wenyihu6): make sure allocator sync can tolerate cluster setting
