@@ -2033,10 +2033,10 @@ exec-ddl
 DROP INDEX t4@inverted
 ----
 
-# 2. Partial index case:
+# 2. Partial index recommendations test cases:
 
-# Test queries that should use existing partial indexes, partial unique indexes,
-# and partial inverted indexes.
+# Test queries against existing partial indexes to verify they don't generate
+# redundant index recommendations when the existing partial indexes are optimal.
 
 exec-ddl
 CREATE INDEX partial_idx ON t4 (i) WHERE k > 1;
@@ -2111,6 +2111,58 @@ project
            ├── cost: 19.1644445
            ├── cost-flags: unbounded-cardinality
            └── key: (6)
+
+# Test cases where partial indexes should be recommended based on EXISTING partial index predicates.
+exec-ddl
+CREATE INDEX partial_k_gt_5 ON t1 (i) WHERE k > 5
+----
+
+index-recommendations
+SELECT s, f FROM t1 WHERE k > 5 AND i = 10
+----
+replacement: CREATE INDEX ON t.public.t1 (i) STORING (k, f, s) WHERE k > 5 /* After successfully creating the replacement index, manually run: `ALTER INDEX t.public.t1@partial_k_gt_5 NOT VISIBLE` and then, after verifying workload performance, manually run: `DROP INDEX t.public.t1@partial_k_gt_5` */;
+--
+optimal plan:
+project
+ ├── columns: s:4 f:3
+ ├── cost: 28.3066667
+ ├── cost-flags: unbounded-cardinality
+ └── scan t1@_hyp_3,partial
+      ├── columns: k:1!null i:2!null f:3 s:4
+      ├── constraint: /2/5: [/10 - /10]
+      ├── cost: 28.1933333
+      ├── cost-flags: unbounded-cardinality
+      └── fd: ()-->(2)
+
+exec-ddl
+CREATE INDEX partial_f_positive ON t1 (s) WHERE f > 0
+----
+
+# Query needs column k not stored in existing partial index, triggering replacement.
+index-recommendations
+SELECT k FROM t1 WHERE f > 0 AND s = 'test'
+----
+replacement: CREATE INDEX ON t.public.t1 (s) STORING (k, f) WHERE f > 0 /* After successfully creating the replacement index, manually run: `ALTER INDEX t.public.t1@partial_f_positive NOT VISIBLE` and then, after verifying workload performance, manually run: `DROP INDEX t.public.t1@partial_f_positive` */;
+--
+optimal plan:
+project
+ ├── columns: k:1
+ ├── cost: 28.2133333
+ ├── cost-flags: unbounded-cardinality
+ └── scan t1@_hyp_5,partial
+      ├── columns: k:1 f:3!null s:4!null
+      ├── constraint: /4/5: [/'test' - /'test']
+      ├── cost: 28.1
+      ├── cost-flags: unbounded-cardinality
+      └── fd: ()-->(4)
+
+exec-ddl
+DROP INDEX t1@partial_k_gt_5
+----
+
+exec-ddl
+DROP INDEX t1@partial_f_positive
+----
 
 # Ensure that we don't recommend replacing partial indexes, partial unique
 # indexes, or partial inverted indexes.

@@ -5,13 +5,42 @@
 
 package indexrec
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+)
+
+// testIndexCandidatesWithPredicates creates IndexCandidates for testing,
+// simulating the new structure returned by FindIndexCandidateSet.
+func testIndexCandidatesWithPredicates(
+	tables []cat.Table, indexCols []cat.IndexColumn,
+) map[cat.Table][]IndexCandidates {
+	// Convert the old format to new format with empty predicates
+	oldCandidates := testIndexCandidates1(tables, indexCols)
+	newCandidates := make(map[cat.Table][]IndexCandidates)
+
+	for table, indexes := range oldCandidates {
+		candidates := make([]IndexCandidates, len(indexes))
+		for i, indexColumns := range indexes {
+			candidates[i] = IndexCandidates{
+				columns: indexColumns,
+				predicateInfo: PredicateInfo{
+					predicate: "",
+					ordinal:   -1,
+				},
+			}
+		}
+		newCandidates[table] = candidates
+	}
+	return newCandidates
+}
 
 func TestBuildOptAndHypTableMaps(t *testing.T) {
 	tables, indexCols := testTablesAndIndexCols()
 	table1 := tables[0]
 	table2 := tables[1]
-	indexCandidates := testIndexCandidates1(tables, indexCols)
+	indexCandidates := testIndexCandidatesWithPredicates(tables, indexCols)
 
 	oldTables, hypTables := BuildOptAndHypTableMaps(nil, indexCandidates)
 

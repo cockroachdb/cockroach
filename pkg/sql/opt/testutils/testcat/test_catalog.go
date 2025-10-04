@@ -1494,6 +1494,11 @@ func (ti *Index) SetPartitions(partitions []Partition) {
 	ti.partitions = partitions
 }
 
+// SetPredicate manually sets the predicate
+func (ti *Index) SetPredicate(predicate string) {
+	ti.predicate = predicate
+}
+
 // Partition implements the cat.Partition interface for testing purposes.
 type Partition struct {
 	name   string
