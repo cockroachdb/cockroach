@@ -297,21 +297,17 @@ func (ts *txnState) resetForNewSQLTxn(
 		panic(err)
 	}
 
+	ts.txnInstrumentationHelper.diagnosticsCollector.UpdateState(txnDiagnosticsNotStarted)
 	return txnID
 }
 
 func (ts *txnState) shouldCollectTxnDiagnostics(
 	ctx context.Context, stmtFingerprintId uint64, stmt *Statement, tracer *tracing.Tracer,
 ) (newCtx context.Context, collectingDiagnostics bool) {
-	// As per the documentation of txnState.mu, a lock isn't required here since
-	// we are just reading the value from the session's main go routine.
-	if ts.mu.stmtCount == 1 {
-		// If this is the first statement being executed in the transaction,
-		// check if we need to start collecting transaction-level diagnostics.
-		//var started bool
-		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeStartDiagnostics(ctx, stmtFingerprintId, tracer)
+	if ts.txnInstrumentationHelper.diagnosticsCollector.NotStarted() {
+		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeStartDiagnostics(ctx, stmt.AST, stmtFingerprintId, tracer)
 	} else {
-		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.ShouldContinueDiagnostics(ctx, stmt.AST, stmtFingerprintId)
+		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeContinueDiagnostics(ctx, stmt.AST, stmtFingerprintId)
 	}
 	return
 }
