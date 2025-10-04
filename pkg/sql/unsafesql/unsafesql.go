@@ -7,6 +7,10 @@ package unsafesql
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -63,9 +67,30 @@ func CheckInternalsAccess(
 		return nil
 	}
 
+	qq(string(debug.Stack()))
+	qq("failing query", q)
 	// Log this access to the SENSITIVE_ACCESS channel to show where failing internals accesses are happening.
 	if deniedLogLimiter.ShouldProcess(timeutil.Now()) {
 		log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsDenied{Query: q})
 	}
 	return sqlerrors.ErrUnsafeTableAccess
+}
+
+func qq(args ...any) {
+	tempDir := os.TempDir()
+	file, err := os.OpenFile(tempDir+"/q", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	templateArr := []string{}
+	for range args {
+		templateArr = append(templateArr, "%v")
+	}
+	template := strings.Join(templateArr, " ") + "\n"
+	text := fmt.Sprintf(template, args...)
+	_, err = file.WriteString(text)
+	if err != nil {
+		panic(err)
+	}
 }

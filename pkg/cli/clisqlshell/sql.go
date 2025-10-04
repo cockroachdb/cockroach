@@ -1379,6 +1379,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return nextState
 	}
 
+	// allow access to unsafe internals while handling cli commands.
+	defer c.conn.AllowUnsafeInternals(context.Background())()
+
 	errState := loopState
 	if c.iCtx.errExit {
 		// If exiterr is set, an error in a client-side command also

@@ -437,21 +437,7 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	c.alwaysInferResultTypes = false
 
 	// Metadata checks require allow_unsafe_internals to be on.
-	allowUnsafeInternals, err := c.getSessionVariable(ctx, "allow_unsafe_internals")
-	if err != nil {
-		fmt.Fprintf(c.errw, "warning: unable to retrieve allow_unsafe_internals setting: %v\n", err)
-	} else if allowUnsafeInternals == "off" {
-		// Temporarily turn on allow_unsafe_internals.
-		if err := c.Exec(ctx, "SET allow_unsafe_internals = on"); err != nil {
-			fmt.Fprintf(c.errw, "warning: unable to set allow_unsafe_internals to true: %v\n", err)
-		} else {
-			defer func() {
-				if resetErr := c.Exec(ctx, "SET allow_unsafe_internals = off"); resetErr != nil {
-					fmt.Fprintf(c.errw, "warning: unable to reset allow_unsafe_internals to false: %v\n", resetErr)
-				}
-			}()
-		}
-	}
+	defer c.AllowUnsafeInternals(ctx)()
 
 	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
 	if c.conn.IsClosed() {
@@ -816,4 +802,26 @@ func MarkWithConnectionClosed(err error) error {
 	// nolint:errwrap
 	errWithMsg := errors.WithMessagef(err, "%v", ErrConnectionClosed)
 	return errors.Mark(errWithMsg, ErrConnectionClosed)
+}
+
+// Allow unsafe internals access temporarily overrides access to the unsafe internals
+// primarily used during setup and by sql command execution.
+func (c *sqlConn) AllowUnsafeInternals(ctx context.Context) func() {
+	cleanup := func() {}
+	allowUnsafeInternals, err := c.getSessionVariable(ctx, "allow_unsafe_internals")
+	if err != nil {
+		fmt.Fprintf(c.errw, "warning: unable to retrieve allow_unsafe_internals setting: %v\n", err)
+	} else if allowUnsafeInternals == "off" {
+		// Temporarily turn on allow_unsafe_internals.
+		if err := c.Exec(ctx, "SET allow_unsafe_internals = on"); err != nil {
+			fmt.Fprintf(c.errw, "warning: unable to set allow_unsafe_internals to true: %v\n", err)
+		} else {
+			cleanup = func() {
+				if resetErr := c.Exec(ctx, "SET allow_unsafe_internals = off"); resetErr != nil {
+					fmt.Fprintf(c.errw, "warning: unable to reset allow_unsafe_internals to false: %v\n", resetErr)
+				}
+			}
+		}
+	}
+	return cleanup
 }
