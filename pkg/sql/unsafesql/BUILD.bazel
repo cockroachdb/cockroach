@@ -14,6 +14,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/severity",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -26,7 +27,9 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings",
         "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

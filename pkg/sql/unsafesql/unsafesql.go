@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // The accessedLogLimiter is used to limit the rate of logging unsafe internal access
@@ -53,7 +54,7 @@ func CheckInternalsAccess(
 		return nil
 	}
 
-	q := tree.FormatAstAsRedactableString(stmt, ann, sv)
+	q := SafeFormatQuery(stmt, ann, sv)
 	// If an override is set, allow access to this virtual table.
 	if sd.AllowUnsafeInternals {
 		// Log this access to the SENSITIVE_ACCESS channel since the override condition bypassed normal access controls.
@@ -68,4 +69,21 @@ func CheckInternalsAccess(
 		log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsDenied{Query: q})
 	}
 	return sqlerrors.ErrUnsafeTableAccess
+}
+
+// SafeFormatQuery attempts to format the query for logging, but recovers from
+// any panics that may occur during formatting.
+func SafeFormatQuery(
+	stmt tree.Statement, ann *tree.Annotations, sv *settings.Values,
+) (s redact.RedactableString) {
+	if stmt == nil {
+		return "<nil statement>"
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Dev.Errorf(context.TODO(), "panic in SafeFormatQuery: %v", r)
+			s = "<panicked query format>"
+		}
+	}()
+	return tree.FormatAstAsRedactableString(stmt, ann, sv)
 }
