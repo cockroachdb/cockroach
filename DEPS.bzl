@@ -1834,10 +1834,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "1fcaa5c3baecb9719f8aa46b75020d0a87927e5e2496bcfa82e689d2ffea9c6b",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20251002180823-347d5dc77850",
+        sha256 = "9b7aa414e32cdfe451c63df4d30eb99e197a57a0e9928c0458cbc3e6eaf6234e",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20251002224040-45d293d8d270",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20251002180823-347d5dc77850.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20251002224040-45d293d8d270.zip",
         ],
     )
     go_repository(
@@ -7551,6 +7551,16 @@ def go_deps():
         strip_prefix = "github.com/PuerkitoBio/urlesc@v0.0.0-20170810143723-de5bf2ad4578",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/PuerkitoBio/urlesc/com_github_puerkitobio_urlesc-v0.0.0-20170810143723-de5bf2ad4578.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_puzpuzpuz_xsync_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/puzpuzpuz/xsync/v3",
+        sha256 = "f7fcd1eeb1bc96bc497dc0bca05ed0d64d194fdb1a73460dd42cd2bc42ae00e6",
+        strip_prefix = "github.com/puzpuzpuz/xsync/v3@v3.5.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/puzpuzpuz/xsync/v3/com_github_puzpuzpuz_xsync_v3-v3.5.1.zip",
         ],
     )
     go_repository(
