@@ -1297,13 +1297,23 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 
 // MMARebalanceAdvisor contains information that mma needs to determine if a
 // candidate is in conflict with its goals. All fields should be immutable after
-// creation.
+// its initialization.
+//
+// MMARebalanceAdvisor uses the meansLoad summary to compute the load summary
+// for a provided candidate. Then it compares the candidate load summary against
+// the existingStoreSLS to determine if the candidate is more overloaded than
+// the existing store. If yes, mma will return true for IsInConflictWithMMA. It
+// is up to the caller to decide what to do with this information.
 type MMARebalanceAdvisor struct {
 	// disabled is true when MMA is disabled. It overrides all decisions with
 	// IsInConflictWithMMA returning false.
-	disabled        bool
+	disabled bool
+	// existingStoreID is the ID of the existing store.
 	existingStoreID roachpb.StoreID
-	// existingStoreSLS is the load summary for the existing store.
+	// existingStoreSLS holds the load summary for the existing store. It is
+	// initially nil and is computed using existingStoreID and means the first
+	// time IsInConflictWithMMA is called. The caller must ensure this advisor is
+	// only used with the corresponding existingStoreID.
 	existingStoreSLS *storeLoadSummary
 	// means is the means for the candidate set.
 	means meansLoad
@@ -1318,11 +1328,13 @@ func NoopMMARebalanceAdvisor() *MMARebalanceAdvisor {
 	}
 }
 
-// BuildMMARebalanceAdvisor creates a MMARebalanceAdvisor for the given existing
-// store and candidates. The advisor is returned here used to determine if a
-// given candidate is in conflict with the existing store via
-// IsInConflictWithMMA. The candidate set here may or may not include the
-// existing store. mma should include the existing store in the candidate set.
+// BuildMMARebalanceAdvisor constructs an MMARebalanceAdvisor for the given
+// existing store and candidate stores. The advisor can be used to determine if
+// a candidate is in conflict with the existing store via IsInConflictWithMMA.
+// The provided cands list may or may not include the existing store. This
+// method always adds the existing store to the cands list so that it is
+// included in the mean calculation. It is up to computeMeansForStoreSet to
+// handle the de-duplication of storeIDs from the cands list.
 func (a *allocatorState) BuildMMARebalanceAdvisor(
 	existing roachpb.StoreID, cands []roachpb.StoreID,
 ) *MMARebalanceAdvisor {
@@ -1339,9 +1351,11 @@ func (a *allocatorState) BuildMMARebalanceAdvisor(
 }
 
 // IsInConflictWithMMA determines if the given candidate is in conflict with the
-// existing store using the provided MMARebalanceAdvisor. Caller is responsible
-// for making sure the MMARebalanceAdvisor is for the correct existing store and
-// candidate set.
+// existing store using the provided MMARebalanceAdvisor. For simplicity, we
+// currently say that this is in conflict if the candidate is more overloaded
+// than the existing store. This is subject to change in the future. Caller is
+// responsible for making sure the MMARebalanceAdvisor is for the correct
+// existing store and candidate set.
 func (a *allocatorState) IsInConflictWithMMA(
 	ctx context.Context, cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool,
 ) bool {
@@ -1363,7 +1377,7 @@ func (a *allocatorState) IsInConflictWithMMA(
 		if conflict {
 			log.KvDistribution.VEventf(
 				ctx, 2,
-				"mma rejected candidate s%d (cpu-only) as a replacement for s%d: candidate=%v > existing=%v",
+				"mma rejected candidate s%d(cpu-only) as a replacement for s%d: candidate=%v > existing=%v",
 				cand, advisor.existingStoreID, candSLS.dimSummary[CPURate], existingSLS.dimSummary[CPURate],
 			)
 		}

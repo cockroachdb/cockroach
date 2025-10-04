@@ -1873,24 +1873,44 @@ func (a Allocator) RebalanceTarget(
 	var target, existingCandidate *candidate
 	var removeReplica roachpb.ReplicationTarget
 
-	// When bestRebalanceTarget selects an option (bestIdx) for the first time, it
-	// builds and caches the corresponding MMA advisor in advisors[bestIdx]. The
-	// advisor stores the means and other information MMA needs to determine if a
-	// candidate conflicts with its goals for this option.  After this,
-	// bestRebalanceTarget is free to mutate the cands set of the 	// option
-	// incrementally. If bestRebalanceTarget selects the same option again, it
-	// will reuse the cached advisor to call into IsInConflictWithMMA.
+	// The loop below can iterate multiple times. This is because the
+	// (source,target) pair chosen by bestRebalanceTarget may be rejected either
+	// by the multi-metric allocator or by the check that a moved replica wouldn't
+	// immediately be removable. bestRebalanceTarget mutates the candidate slice
+	// for the given option (=source) to exclude each considered candidate. For
+	// example, the loop may proceed as follows:
+	// - initially, we may consider rebalancing from s1 to either of s2, s3, or
+	// s5, or rebalancing from s6 to either of s2 or s4: options = [s1 ->
+	// [s2,s3,s5], s6 -> [s2,s4]]. Each option here is considered as an
+	// equivalence class.
+	// - bestRebalanceTarget might pick s6->s4, and removes this choice from
+	// `options`. options now becomes [s1->[s2,s3,s5], s6 -> [s2]].
+	// - mma might reject s6->s4, so we loop around.
+	// - next, s1->s3 might be chosen, but fail the removable replica check.
+	// - so we'll begin a third loop with: options is now [s1->[s2,s5], s6 ->
+	// [s2]].
+	// - s6->s2 might be chosen and might succeed, terminating the loop and
+	// proceeding to make the change.
 	//
-	// For example, the option may start with {s1, s2, s3} as its candidate set,
-	// if bestRebalanceTarget selects s1, it will remove s1 and continue with {s2,
-	// s3}, then say it continues to select s2 and remove s2 and continue with
-	// {s3}, and finally {s3} → {}. Each call to MMA should use the original set
-	// {s1, s2, s3} ∪ {existing} to compute the means. The design here allows MMA
-	// to compute the means for the original set {s1, s2, s3} ∪ {existing} once
-	// and then use it for all calls to MMA, and bestRebalanceTarget does not need
-	// to copy the candidate set.
+	// Note that in general (and in the example) a source store can be considered
+	// multiple times (s6 is considered twice), so we cache the corresponding MMA
+	// advisor to avoid potentially expensive O(store) recomputations. The
+	// corresponding advisor is constructed only once and cached in
+	// results[bestIdx].advisor when the the source store is selected as the best
+	// rebalance target for the first time. After that, bestRebalanceTarget is
+	// free to mutate the cands set of the option. However, MMARebalancerAdvisor
+	// should use the original candidate set union the existing store to compute
+	// the load summary when calling IsInConflictWithMMA. It does so by using the
+	// computed meansLoad summary cached when this option was selected as the best
+	// rebalance target for the first time.
 	var bestIdx int
 
+	// NB: bestRebalanceTarget may modify the candidate set (cands) within each
+	// option in results. However, for each option, the associated source store,
+	// MMARebalanceAdvisor, and their index in results must remain unchanged
+	// throughout the process. This ensures that any cached MMARebalanceAdvisor
+	// continues to correspond to the original candidate set and source store,
+	// even as candidates are removed.
 	for {
 		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as)
 		if target == nil {
@@ -1905,11 +1925,11 @@ func (a Allocator) RebalanceTarget(
 		// improvements.
 		if !existingCandidate.isCriticalRebalance(target) {
 			// If the rebalance is not critical, we check if it conflicts with mma's
-			// goal. advisor for the target should always be registered in
-			// bestRebalanceTarget and present in the map. If mma rejects the
-			// rebalance, we will continue to the next target. Note that this target
-			// would have been deleted from the candidates set in bestRebalanceTarget,
-			// so we will not select it again.
+			// goal. advisor for bestIdx should always be cached by
+			// bestRebalanceTarget. If mma rejects the rebalance, we will continue to
+			// the next target. Note that bestRebalanceTarget would delete this target
+			// from the candidates set when being selected, so this target will not be
+			// selected again.
 			if advisor := results[bestIdx].advisor; advisor != nil {
 				if a.as.IsInConflictWithMMA(ctx, target.store.StoreID, advisor, false) {
 					continue
@@ -2806,7 +2826,8 @@ func (a *Allocator) CountBasedRebalancingDisabled() bool {
 // change. This is used to prevent thrashing when both multi-metric and
 // count-based rebalancing are enabled and have conflicting goals.
 // TODO(wenyihu6): since we sometimes see even worse thrashing behaviour with
-// this change, should we introduce another mode for this
+// this change, should we introduce two modes
+// (mma-count with+without thrashing prevention)?
 func (a *Allocator) CountBasedRebalancingOnlyEnabledByMMA() bool {
 	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricAndCount
 }
