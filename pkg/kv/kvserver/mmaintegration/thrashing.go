@@ -42,7 +42,7 @@ import (
 // Two main design questions came up.
 // 1. The first was when to exclude overloaded stores (early before mean
 // calculation or late only at target selection).
-// - We decided to include them in the mean calculation but exclude them at the
+// • We decided to include them in the mean calculation but exclude them at the
 // final target selection step. This minimizes code churn, avoids plumbing new
 // fields into candidate structs, and reduces number of mma calls by checking
 // only the final target instead of on every candidate. It does not eliminate
@@ -50,14 +50,15 @@ import (
 // rejected later, picking a not-so-good but still better than existing
 // candidate. The lease queue follows the same rule, filtering overloaded stores
 // only at final target selection.
-// - Alternatives considered: 1. mma participates in the allocator's scoring
+// • Alternatives considered: 1. mma participates in the allocator's scoring
 // options either by jittering balance score or by introducing a new field in
 // the candidate struct. 2. exclude the store right before or right after the
 // equivalence class construction.
 //
-// 2. The second question was which set of stores to use when computing load
-// summaries with respect to.
-// - The principle we followed is to use the same set of stores that is used to
+// 2. The second question is: when MMA computes a store’s load summary, it
+// requires a set of stores as a basis. The question is, which set of stores
+// should be used?
+// • The principle we followed is to use the same set of stores that is used to
 // compute the mean for range or lease count. For the replicate queue, this
 // means we use all stores that satisfy constraints to compute mean. The
 // principle we are following here is that we want this set or the mean to be
@@ -66,7 +67,9 @@ import (
 // constraint-satisfying stores. For the lease queue, this means we use all
 // stores that satisfy the constraint to compute the lease count mean as well.
 // This approach differs from how mma computes load summary for lease transfers
-// - mma computes load summary over stores that the existing replicas are on.
+// (mma computes load summary over stores that the existing replicas are on).
+// • Note that MMARebalanceAdvisor also always include the existing store in the
+// set of stores to compute the load summary with respect to.
 //
 // Alternatives considered:
 // 1. Another option was to let mma choose from a set of candidates, but this was
@@ -88,10 +91,11 @@ import (
 // for IsInConflictWithMMA. If MMA is enabled, the advisor is created by
 // computing the load summary for the provided existing store and candidate set.
 //
-// Note that MMA continues to use this candidate set to compute load summaries,
-// so it is safe for the caller to modify the candidate set after calling this
-// function. The caller is responsible for keeping track of the returned advisor
-// and associating it with the corresponding existing store.
+// Note that MMARebalanceAdvisor should always use the means summary constructed
+// during BuildMMARebalanceAdvisor to compute the load summary for the provided
+// candidate in IsInConflictWithMMA. The caller may modify its candidate set
+// after calling this function, so the caller is responsible for keeping track
+// of the returned advisor and associating it.
 func (as *AllocatorSync) BuildMMARebalanceAdvisor(
 	existing roachpb.StoreID, cands []roachpb.StoreID,
 ) *mmaprototype.MMARebalanceAdvisor {

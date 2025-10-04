@@ -1420,7 +1420,11 @@ func candidateListForRemoval(
 type rebalanceOptions struct {
 	existing   candidate
 	candidates candidateList
-	advisor    *mmaprototype.MMARebalanceAdvisor
+	// advisor is lazily initialized by bestRebalanceTarget when this option is
+	// selected as best rebalance target. It is used to determine if a candidate
+	// is in conflict with mma's goals when LBRebalancingMultiMetricAndCount mode
+	// is enabled.
+	advisor *mmaprototype.MMARebalanceAdvisor
 }
 
 // equivalenceClass captures the set of "equivalent" replacement candidates
