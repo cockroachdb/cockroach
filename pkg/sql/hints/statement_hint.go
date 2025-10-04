@@ -7,18 +7,22 @@ package hints
 
 import "github.com/cockroachdb/cockroach/pkg/util/protoutil"
 
-// NewStatementHints converts the raw bytes from system.statement_hints into a
-// StatementHints object.
-func NewStatementHints(bytes []byte) (*StatementHints, error) {
-	res := &StatementHints{}
+type StatementHint interface {
+	protoutil.Message
+}
+
+// NewStatementHint converts the raw bytes from system.statement_hints into a
+// StatementHintUnion object.
+func NewStatementHint(bytes []byte) (*StatementHintUnion, error) {
+	res := &StatementHintUnion{}
 	if err := protoutil.Unmarshal(bytes, res); err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-// ToBytes converts the StatementHints to a raw bytes representation that can be
-// inserted into the system.statement_hints table.
-func (hints *StatementHints) ToBytes() ([]byte, error) {
-	return protoutil.Marshal(hints)
+// ToBytes converts the StatementHintUnion to a raw bytes representation that
+// can be inserted into the system.statement_hints table.
+func (hint *StatementHintUnion) ToBytes() ([]byte, error) {
+	return protoutil.Marshal(hint)
 }

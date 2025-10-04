@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -1617,19 +1618,20 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer    serverpb.SQLStatusServer
-	TenantStatusServer serverpb.TenantStatusServer
-	MetricsRecorder    limitedMetricsRecorder
-	SessionRegistry    *SessionRegistry
-	ClosedSessionCache *ClosedSessionCache
-	SQLLiveness        sqlliveness.Provider
-	JobRegistry        *jobs.Registry
-	VirtualSchemas     *VirtualSchemaHolder
-	DistSQLPlanner     *DistSQLPlanner
-	TableStatsCache    *stats.TableStatisticsCache
-	StatsRefresher     *stats.Refresher
-	QueryCache         *querycache.C
-	VecIndexManager    *vecindex.Manager
+	SQLStatusServer     serverpb.SQLStatusServer
+	TenantStatusServer  serverpb.TenantStatusServer
+	MetricsRecorder     limitedMetricsRecorder
+	SessionRegistry     *SessionRegistry
+	ClosedSessionCache  *ClosedSessionCache
+	SQLLiveness         sqlliveness.Provider
+	JobRegistry         *jobs.Registry
+	VirtualSchemas      *VirtualSchemaHolder
+	DistSQLPlanner      *DistSQLPlanner
+	TableStatsCache     *stats.TableStatisticsCache
+	StatsRefresher      *stats.Refresher
+	QueryCache          *querycache.C
+	StatementHintsCache *hints.StatementHintsCache
+	VecIndexManager     *vecindex.Manager
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
