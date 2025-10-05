@@ -104,6 +104,10 @@ var workloadGeneratorMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet("db_workload", pflag.ContinueOnError)
 		g.flags.StringVar(&g.debugLogsLocation, "debug-logs", "",
 			"Path to unzipped debug logs directory.")
+		g.flags.StringVar(&g.ddlFile, "ddl-file", "",
+			"The File containing the DDL. If this is provided, the DDL is read from this file instead of the debug logs."+
+				" To generate the file, execute: \n"+
+				"cockroach sql --url='postgresql://<url>/<db name>' --execute=\"SHOW CREATE ALL TABLES;\" > ddl_file.sql")
 		g.flags.IntVar(&g.rowCount, "rows", 1000,
 			"Base row count for tables without foreign keys; other tables scale by foreign key depth/fanout.")
 		g.flags.StringVar(&g.inputYAML, "input-yaml", "",
@@ -126,6 +130,7 @@ type workloadGenerator struct {
 	flags             workload.Flags
 	connFlags         *workload.ConnFlags
 	debugLogsLocation string // path to the unzipped debug zip file
+	ddlFile           string // path to the DDL file.
 	dbName            string // database name to use for the workload
 	rowCount          int    // base number of rows per table before FK‐depth scaling
 
@@ -200,7 +205,7 @@ func (w *workloadGenerator) initializeGenerator() error {
 	w.dbName = dbName
 
 	// 2) Parsing DDLs out of the debug logs.
-	schemas, stmts, err := generateDDLs(w.debugLogsLocation, w.dbName, false)
+	schemas, stmts, err := generateDDLs(w.debugLogsLocation, w.dbName, w.ddlFile, false)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate DDLs from debug logs")
 	}
@@ -592,7 +597,6 @@ func (w *workloadGenerator) initGenerators(db *gosql.DB) error {
 			maxRows = tblBlock.Count
 		}
 	}
-	// TODO: make the globalBatchNumber dynamic
 	globalNumBatches := (maxRows + baseBatchSize - 1) / baseBatchSize
 
 	// 1) The generator + empty cache for every table.col is built.
