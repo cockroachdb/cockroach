@@ -7,11 +7,19 @@ package rpc
 
 import (
 	"context"
+	"crypto/tls"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"storj.io/drpc"
@@ -128,4 +136,48 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 		require.Equal(t, expectedResp, resp)
 		require.ErrorIs(t, err, expectedErr)
 	})
+}
+
+// TestDRPCServerWithInterceptor verifies that configured interceptors are
+// invoked.
+func TestDRPCServerWithInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	loopbackL := netutil.NewLoopbackListener(ctx, stopper)
+
+	serverCtx := newTestContext(uuid.MakeV4(), timeutil.NewManualTime(timeutil.Unix(0, 1)), 0, stopper)
+	serverCtx.NodeID.Set(ctx, 1)
+	serverCtx.SetLoopbackDRPCDialer(loopbackL.Connect)
+	serverCtx.AdvertiseAddr = "127.0.0.1:1"
+	serverCtx.RPCHeartbeatInterval = 1 * time.Hour
+
+	var shouldBlock atomic.Bool
+	blockedErr := errors.New("RPC blocked by interceptor")
+	drpcServer, err := NewDRPCServer(ctx, serverCtx, WithInterceptor(func(rpcName string) error {
+		if shouldBlock.Load() && rpcName == "/cockroach.rpc.Heartbeat/Ping" {
+			return blockedErr
+		}
+		return nil
+	}))
+	require.NoError(t, err)
+	require.NoError(t, DRPCRegisterHeartbeat(drpcServer, serverCtx.NewHeartbeatService()))
+
+	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	require.NoError(t, err)
+	tlsListener := tls.NewListener(loopbackL, tlsConfig)
+	require.NoError(t, stopper.RunAsyncTask(ctx, "drpc-server", func(ctx context.Context) {
+		netutil.FatalIfUnexpected(drpcServer.Serve(ctx, tlsListener))
+	}))
+
+	conn, err := serverCtx.DRPCDialNode("127.0.0.1:1", 1, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	client := NewDRPCHeartbeatClient(conn)
+	shouldBlock.Store(true)
+	_, err = client.Ping(ctx, &PingRequest{})
+	require.Contains(t, err.Error(), "RPC blocked by interceptor")
 }
