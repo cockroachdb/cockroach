@@ -2786,11 +2786,8 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 // PinEngineStateForIterators implements the Engine interface.
 func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	if p.iter == nil {
-		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
-		if p.durability == GuaranteedDurability {
-			o.OnlyReadGuaranteedDurable = true
-		}
-		iter, err := p.parent.db.NewIter(o)
+		o := makeIterOptions(readCategory, p.durability)
+		iter, err := p.parent.db.NewIter(&o)
 		if err != nil {
 			return err
 		}

@@ -222,17 +222,9 @@ func (p *pebbleIterator) setOptions(
 	}
 
 	// Generate new Pebble iterator options.
-	p.options = pebble.IterOptions{
-		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
-		KeyTypes:                  opts.KeyTypes,
-		UseL6Filters:              opts.useL6Filters,
-		Category:                  opts.ReadCategory.PebbleCategory(),
-	}
-	switch opts.ReadCategory {
-	case fs.BatchEvalReadCategory, fs.ScanRegularBatchEvalReadCategory, fs.ScanBackgroundBatchEvalReadCategory:
-		// Exempt hot paths from iterator tracking.
-		p.options.ExemptFromTracking = true
-	}
+	p.options = makeIterOptions(opts.ReadCategory, durability)
+	p.options.KeyTypes = opts.KeyTypes
+	p.options.UseL6Filters = opts.useL6Filters
 	p.prefix = opts.Prefix
 
 	if opts.LowerBound != nil {
@@ -1047,4 +1039,14 @@ func (p *pebbleIterator) assertMVCCInvariants() error {
 	}
 
 	return nil
+}
+
+func makeIterOptions(
+	readCategory fs.ReadCategory, durability DurabilityRequirement,
+) pebble.IterOptions {
+	return pebble.IterOptions{
+		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
+		Category:                  readCategory.PebbleCategory(),
+		ExemptFromTracking:        readCategory == fs.BatchEvalReadCategory || readCategory == fs.ScanRegularBatchEvalReadCategory,
+	}
 }
