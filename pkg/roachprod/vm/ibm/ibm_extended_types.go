@@ -6,6 +6,7 @@
 package ibm
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -606,6 +607,9 @@ func (i *instance) toVM() vm.VM {
 		nonBootAttachedVolumes = append(nonBootAttachedVolumes, v.toVmVolume())
 	}
 
+	// Get DNS info from the DNS provider if it is configured.
+	publicDNS, publicDNSZone, dnsProviderName := vm.GetVMDNSInfo(context.Background(), *i.instance.Name, i.provider.dnsProvider)
+
 	v := vm.VM{
 		ProviderAccountID: i.provider.config.accountID,
 		Provider:          ProviderName,
@@ -617,12 +621,15 @@ func (i *instance) toVM() vm.VM {
 		RemoteUser:        defaultRemoteUser,
 		Preemptible:       false,
 
-		ProviderID: *i.instance.CRN,
-		Name:       *i.instance.Name,
-		CreatedAt:  time.Time(*i.instance.CreatedAt),
-		PublicIP:   publicIP,
-		PrivateIP:  privateIP,
-		DNS:        privateIP,
+		ProviderID:    *i.instance.CRN,
+		Name:          *i.instance.Name,
+		CreatedAt:     time.Time(*i.instance.CreatedAt),
+		PublicIP:      publicIP,
+		PrivateIP:     privateIP,
+		DNS:           privateIP,
+		PublicDNS:     publicDNS,
+		PublicDNSZone: publicDNSZone,
+		DNSProvider:   dnsProviderName,
 
 		NonBootAttachedVolumes: nonBootAttachedVolumes,
 		LocalDisks:             nil, // No local disks on IBM Cloud
