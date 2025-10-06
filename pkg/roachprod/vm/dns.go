@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -62,6 +63,12 @@ type DNSProvider interface {
 	DeletePublicRecordsByName(ctx context.Context, names ...string) error
 	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
+	// PublicDomain returns the public domain name (zone) of the DNS provider.
+	PublicDomain() string
+	// ProviderName returns the name of the DNS provider.
+	ProviderName() string
+	// SyncDNS synchronizes the DNS records for the given VMs.
+	SyncDNS(l *logger.Logger, vms List) error
 }
 
 // FanOutDNS collates a collection of VMs by their DNS providers and invoke the

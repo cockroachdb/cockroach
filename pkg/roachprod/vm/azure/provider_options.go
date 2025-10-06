@@ -5,7 +5,11 @@
 
 package azure
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+)
 
 type Option interface {
 	apply(*Provider)
@@ -41,11 +45,19 @@ func WithSyncDelete(sync bool) OptionFunc {
 	}
 }
 
+// WithDNSProvider returns an option to set the DNS provider.
+func WithDNSProvider(dnsProvider vm.DNSProvider) OptionFunc {
+	return func(p *Provider) {
+		p.dnsProvider = dnsProvider
+	}
+}
+
 // ProviderOptions holds options for configuring the Azure provider.
 type ProviderOptions struct {
 	SubscriptionName string
 	OperationTimeout time.Duration
 	SyncDelete       bool
+	DNSProvider      vm.DNSProvider
 }
 
 // ToOptions converts ProviderOptions to a slice of Option functions to be used
@@ -60,6 +72,9 @@ func (po *ProviderOptions) ToOptions() []Option {
 	}
 	if po.SyncDelete {
 		opts = append(opts, WithSyncDelete(po.SyncDelete))
+	}
+	if po.DNSProvider != nil {
+		opts = append(opts, WithDNSProvider(po.DNSProvider))
 	}
 	return opts
 }
