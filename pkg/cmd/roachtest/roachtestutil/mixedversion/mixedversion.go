@@ -545,7 +545,7 @@ func DisableMutators(names ...string) CustomOption {
 func DisableAllMutators() CustomOption {
 	return func(opts *testOptions) {
 		names := []string{}
-		for _, m := range planMutatorsFunc(opts.partitionStrategy) {
+		for _, m := range planMutators {
 			names = append(names, m.Name())
 		}
 		DisableMutators(names...)(opts)
@@ -567,7 +567,7 @@ func DisableAllClusterSettingMutators() CustomOption {
 func DisableAllFailureInjectionMutators() CustomOption {
 	return func(opts *testOptions) {
 		names := []string{}
-		for _, m := range failureInjectionMutators(opts.partitionStrategy) {
+		for _, m := range failureInjectionMutators {
 			names = append(names, m.Name())
 		}
 		DisableMutators(names...)(opts)

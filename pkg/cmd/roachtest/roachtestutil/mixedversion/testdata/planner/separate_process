@@ -31,7 +31,6 @@ plan debug=true
 Seed:               12345
 Upgrades:           v22.2.3 → v23.1.4 → v23.2.0 → v24.1.0 → v24.3.0 (<current>)
 Deployment mode:    separate-process
-Mutators:           preserve_downgrade_option_randomizer, cluster_setting[kv.transaction.write_buffering.enabled]
 Hooks:              bank workload, create tables, initialize bank workload, mixed-version 1, mixed-version 2, validate upgrade
 Plan:
 ├── install fixtures for version "v22.2.3" (1) [stage=system:system-setup;tenant:system-setup]
@@ -49,15 +48,15 @@ Plan:
 ├── run "bank workload" hookId="mixedversion.go:893" (12) [stage=system:background;tenant:background]
 ├── upgrade cluster from "v22.2.3" to "v23.1.4"
 │   ├── upgrade storage cluster
-│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (13) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (13) [stage=system:init;tenant:upgrading-system]
 │   │   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
-│   │   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (14) [stage=system:last-upgrade;tenant:upgrading-system]
-│   │   │   ├── restart system server on node 4 with binary version v23.1.4 (15) [stage=system:last-upgrade;tenant:upgrading-system]
-│   │   │   ├── restart system server on node 3 with binary version v23.1.4 (16) [stage=system:last-upgrade;tenant:upgrading-system]
-│   │   │   ├── run "mixed-version 2" hookId="planner_test.go:143_2" (17) [stage=system:last-upgrade;tenant:upgrading-system]
-│   │   │   ├── restart system server on node 1 with binary version v23.1.4 (18) [stage=system:last-upgrade;tenant:upgrading-system]
-│   │   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (19) [stage=system:last-upgrade;tenant:upgrading-system]
-│   │   │   └── restart system server on node 2 with binary version v23.1.4 (20) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 4 with binary version v23.1.4 (14) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 3 with binary version v23.1.4 (15) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── run "mixed-version 2" hookId="planner_test.go:143_2" (16) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── restart system server on node 1 with binary version v23.1.4 (17) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (18) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   │   └── restart system server on node 2 with binary version v23.1.4 (19) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (20) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
 │   │   ├── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (21) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
 │   │   └── run "validate upgrade" hookId="planner_test.go:145" (22) [stage=system:after-upgrade-finished;tenant:upgrading-system]
 │   └── upgrade tenant
@@ -76,7 +75,7 @@ Plan:
 │      └── run "validate upgrade" hookId="planner_test.go:145" (33) [stage=system:upgrading-tenant;tenant:after-upgrade-finished]
 ├── upgrade cluster from "v23.1.4" to "v23.2.0"
 │   ├── upgrade storage cluster
-│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (34) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (34) [stage=system:init;tenant:upgrading-system]
 │   │   ├── upgrade nodes :1-4 from "v23.1.4" to "v23.2.0"
 │   │   │   ├── restart system server on node 2 with binary version v23.2.0 (35) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   │   ├── restart system server on node 3 with binary version v23.2.0 (36) [stage=system:last-upgrade;tenant:upgrading-system]
@@ -114,7 +113,7 @@ Plan:
 │      └── run "validate upgrade" hookId="planner_test.go:145" (64) [stage=system:upgrading-tenant;tenant:after-upgrade-finished]
 ├── upgrade cluster from "v23.2.0" to "v24.1.0"
 │   ├── upgrade storage cluster
-│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (65) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (65) [stage=system:init;tenant:upgrading-system]
 │   │   ├── upgrade nodes :1-4 from "v23.2.0" to "v24.1.0"
 │   │   │   ├── restart system server on node 4 with binary version v24.1.0 (66) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   │   ├── restart system server on node 2 with binary version v24.1.0 (67) [stage=system:last-upgrade;tenant:upgrading-system]
@@ -144,7 +143,7 @@ Plan:
 │      └── run "validate upgrade" hookId="planner_test.go:145" (87) [stage=system:upgrading-tenant;tenant:after-upgrade-finished]
 └── upgrade cluster from "v24.1.0" to "v24.3.0 (<current>)"
    ├── upgrade storage cluster
-   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (88) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (88) [stage=system:init;tenant:upgrading-system]
    │   ├── upgrade nodes :1-4 from "v24.1.0" to "v24.3.0 (<current>)"
    │   │   ├── restart system server on node 4 with binary version v24.3.0 (<current>) (89) [stage=system:temporary-upgrade;tenant:upgrading-system]
    │   │   ├── run mixed-version hooks concurrently
@@ -156,16 +155,16 @@ Plan:
    │   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.1.0"
    │   │   ├── restart system server on node 4 with binary version v24.1.0 (95) [stage=system:rollback-upgrade;tenant:upgrading-system]
    │   │   ├── restart system server on node 3 with binary version v24.1.0 (96) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (97) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 1 with binary version v24.1.0 (98) [stage=system:rollback-upgrade;tenant:upgrading-system]
-   │   │   └── restart system server on node 2 with binary version v24.1.0 (99) [stage=system:rollback-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 1 with binary version v24.1.0 (97) [stage=system:rollback-upgrade;tenant:upgrading-system]
+   │   │   └── restart system server on node 2 with binary version v24.1.0 (98) [stage=system:rollback-upgrade;tenant:upgrading-system]
    │   ├── upgrade nodes :1-4 from "v24.1.0" to "v24.3.0 (<current>)"
-   │   │   ├── restart system server on node 1 with binary version v24.3.0 (<current>) (100) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 4 with binary version v24.3.0 (<current>) (101) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 3 with binary version v24.3.0 (<current>) (102) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (103) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 2 with binary version v24.3.0 (<current>) (104) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   └── run "mixed-version 2" hookId="planner_test.go:143_2" (105) [stage=system:last-upgrade;tenant:upgrading-system,finalizing]
+   │   │   ├── restart system server on node 1 with binary version v24.3.0 (<current>) (99) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 4 with binary version v24.3.0 (<current>) (100) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 3 with binary version v24.3.0 (<current>) (101) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (102) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 2 with binary version v24.3.0 (<current>) (103) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   └── run "mixed-version 2" hookId="planner_test.go:143_2" (104) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (105) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
    │   ├── run "mixed-version 1" hookId="planner_test.go:143" (106) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
    │   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (107) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
    │   └── run "validate upgrade" hookId="planner_test.go:145" (108) [stage=system:after-upgrade-finished;tenant:upgrading-system]

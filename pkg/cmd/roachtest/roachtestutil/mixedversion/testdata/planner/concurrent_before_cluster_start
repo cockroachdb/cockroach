@@ -21,7 +21,6 @@ plan debug=true
 Seed:               12345
 Upgrades:           v23.1.17 → v23.2.4 → v24.1.1 → v24.2.2 → v24.3.0 (<current>)
 Deployment mode:    separate-process
-Mutators:           cluster_setting[kv.expiration_leases_only.enabled], cluster_setting[kv.transaction.write_buffering.enabled], cluster_setting[kv.rangefeed.buffered_sender.enabled]
 Hooks:              init 1, init 2, init 3
 Plan:
 ├── install fixtures for version "v23.1.17" (1) [stage=system:system-setup;tenant:system-setup]
@@ -43,7 +42,7 @@ Plan:
 ├── delete all-tenants override for the `version` key (15) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── upgrade cluster from "v23.1.17" to "v23.2.4"
 │   ├── upgrade storage cluster
-│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (16) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (16) [stage=system:init;tenant:upgrading-system]
 │   │   ├── upgrade nodes :1-4 from "v23.1.17" to "v23.2.4"
 │   │   │   ├── restart system server on node 1 with binary version v23.2.4 (17) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   │   ├── restart system server on node 2 with binary version v23.2.4 (18) [stage=system:last-upgrade;tenant:upgrading-system]
@@ -61,7 +60,7 @@ Plan:
 │      └── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on mixed-version-tenant-izngg tenant (28) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
 ├── upgrade cluster from "v23.2.4" to "v24.1.1"
 │   ├── upgrade storage cluster
-│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (29) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (29) [stage=system:init;tenant:upgrading-system]
 │   │   ├── upgrade nodes :1-4 from "v23.2.4" to "v24.1.1"
 │   │   │   ├── restart system server on node 3 with binary version v24.1.1 (30) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   │   ├── restart system server on node 4 with binary version v24.1.1 (31) [stage=system:last-upgrade;tenant:upgrading-system]
@@ -79,7 +78,7 @@ Plan:
 │      └── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on mixed-version-tenant-izngg tenant (41) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
 ├── upgrade cluster from "v24.1.1" to "v24.2.2"
 │   ├── upgrade storage cluster
-│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (42) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+│   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (42) [stage=system:init;tenant:upgrading-system]
 │   │   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.2.2"
 │   │   │   ├── restart system server on node 3 with binary version v24.2.2 (43) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   │   ├── restart system server on node 2 with binary version v24.2.2 (44) [stage=system:last-upgrade;tenant:upgrading-system]
@@ -93,35 +92,33 @@ Plan:
 │      │   ├── restart mixed-version-tenant-izngg server on node 4 with binary version v24.2.2 (50) [stage=system:upgrading-tenant;tenant:last-upgrade]
 │      │   ├── restart mixed-version-tenant-izngg server on node 3 with binary version v24.2.2 (51) [stage=system:upgrading-tenant;tenant:last-upgrade]
 │      │   └── restart mixed-version-tenant-izngg server on node 2 with binary version v24.2.2 (52) [stage=system:upgrading-tenant;tenant:last-upgrade]
-│      ├── run following steps concurrently
-│      │   ├── set `version` to '24.2' on mixed-version-tenant-izngg tenant, after 30s delay (53) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
-│      │   └── set cluster setting "kv.expiration_leases_only.enabled" to 'false' on system tenant, after 3m0s delay (54) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
-│      └── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on mixed-version-tenant-izngg tenant (55) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+│      ├── set `version` to '24.2' on mixed-version-tenant-izngg tenant (53) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+│      └── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on mixed-version-tenant-izngg tenant (54) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
 └── upgrade cluster from "v24.2.2" to "v24.3.0 (<current>)"
    ├── upgrade storage cluster
-   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (56) [stage=system:selectProtectedNodes;tenant:upgrading-system]
+   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (55) [stage=system:init;tenant:upgrading-system]
    │   ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
-   │   │   ├── restart system server on node 4 with binary version v24.3.0 (<current>) (57) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 2 with binary version v24.3.0 (<current>) (58) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   ├── restart system server on node 1 with binary version v24.3.0 (<current>) (59) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   │   └── restart system server on node 3 with binary version v24.3.0 (<current>) (60) [stage=system:last-upgrade;tenant:upgrading-system]
-   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (61) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
-   │   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (62) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+   │   │   ├── restart system server on node 4 with binary version v24.3.0 (<current>) (56) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 2 with binary version v24.3.0 (<current>) (57) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   ├── restart system server on node 1 with binary version v24.3.0 (<current>) (58) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   │   └── restart system server on node 3 with binary version v24.3.0 (<current>) (59) [stage=system:last-upgrade;tenant:upgrading-system]
+   │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (60) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+   │   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (61) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
    └── upgrade tenant
       ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
-      │   ├── restart mixed-version-tenant-izngg server on node 2 with binary version v24.3.0 (<current>) (63) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      │   ├── restart mixed-version-tenant-izngg server on node 3 with binary version v24.3.0 (<current>) (64) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      │   ├── restart mixed-version-tenant-izngg server on node 1 with binary version v24.3.0 (<current>) (65) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
-      │   └── restart mixed-version-tenant-izngg server on node 4 with binary version v24.3.0 (<current>) (66) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 2 with binary version v24.3.0 (<current>) (62) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 3 with binary version v24.3.0 (<current>) (63) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 1 with binary version v24.3.0 (<current>) (64) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
+      │   └── restart mixed-version-tenant-izngg server on node 4 with binary version v24.3.0 (<current>) (65) [stage=system:upgrading-tenant;tenant:temporary-upgrade]
       ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.2"
-      │   ├── restart mixed-version-tenant-izngg server on node 3 with binary version v24.2.2 (67) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      │   ├── restart mixed-version-tenant-izngg server on node 1 with binary version v24.2.2 (68) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      │   ├── restart mixed-version-tenant-izngg server on node 4 with binary version v24.2.2 (69) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
-      │   └── restart mixed-version-tenant-izngg server on node 2 with binary version v24.2.2 (70) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 3 with binary version v24.2.2 (66) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 1 with binary version v24.2.2 (67) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 4 with binary version v24.2.2 (68) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
+      │   └── restart mixed-version-tenant-izngg server on node 2 with binary version v24.2.2 (69) [stage=system:upgrading-tenant;tenant:rollback-upgrade]
       ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
-      │   ├── restart mixed-version-tenant-izngg server on node 4 with binary version v24.3.0 (<current>) (71) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      │   ├── restart mixed-version-tenant-izngg server on node 2 with binary version v24.3.0 (<current>) (72) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      │   ├── restart mixed-version-tenant-izngg server on node 1 with binary version v24.3.0 (<current>) (73) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      │   └── restart mixed-version-tenant-izngg server on node 3 with binary version v24.3.0 (<current>) (74) [stage=system:upgrading-tenant;tenant:last-upgrade]
-      ├── set `version` to <current> on mixed-version-tenant-izngg tenant (75) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
-      └── wait for all nodes (:1-4) to acknowledge cluster version <current> on mixed-version-tenant-izngg tenant (76) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+      │   ├── restart mixed-version-tenant-izngg server on node 4 with binary version v24.3.0 (<current>) (70) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 2 with binary version v24.3.0 (<current>) (71) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      │   ├── restart mixed-version-tenant-izngg server on node 1 with binary version v24.3.0 (<current>) (72) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      │   └── restart mixed-version-tenant-izngg server on node 3 with binary version v24.3.0 (<current>) (73) [stage=system:upgrading-tenant;tenant:last-upgrade]
+      ├── set `version` to <current> on mixed-version-tenant-izngg tenant (74) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]
+      └── wait for all nodes (:1-4) to acknowledge cluster version <current> on mixed-version-tenant-izngg tenant (75) [stage=system:upgrading-tenant;tenant:running-upgrade-migrations,finalizing]

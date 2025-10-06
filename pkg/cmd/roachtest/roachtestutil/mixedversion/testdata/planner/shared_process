@@ -31,14 +31,13 @@ plan debug=true
 Seed:               12345
 Upgrades:           v22.2.3 → v23.1.12 → v23.2.0 → v24.1.0 → v24.3.0 (<current>)
 Deployment mode:    shared-process
-Mutators:           cluster_setting[storage.sstable.compression_algorithm], cluster_setting[kv.rangefeed.buffered_sender.enabled]
 Hooks:              bank workload, create tables, initialize bank workload, mixed-version 1, mixed-version 2, validate upgrade
 Plan:
 ├── install fixtures for version "v22.2.3" (1) [stage=system:system-setup;tenant:system-setup]
 ├── start cluster at version "v22.2.3" (2) [stage=system:system-setup;tenant:system-setup]
 ├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (3) [stage=system:system-setup;tenant:system-setup]
 ├── upgrade cluster from "v22.2.3" to "v23.1.12"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=system:init;tenant:init]
 │   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.12"
 │   │   ├── restart node 4 with binary version v23.1.12 (5) [stage=system:last-upgrade;tenant:last-upgrade]
 │   │   ├── restart node 1 with binary version v23.1.12 (6) [stage=system:last-upgrade;tenant:last-upgrade]
@@ -57,8 +56,8 @@ Plan:
 │   └── run "initialize bank workload" hookId="mixedversion.go:879", after 3m0s delay (18) [stage=system:on-startup;tenant:on-startup]
 ├── run "bank workload" hookId="mixedversion.go:893" (19) [stage=system:background;tenant:background]
 ├── upgrade cluster from "v23.1.12" to "v23.2.0"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (20) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
-│   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (21) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (20) [stage=system:init;tenant:init]
+│   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (21) [stage=system:init;tenant:init]
 │   ├── upgrade nodes :1-4 from "v23.1.12" to "v23.2.0"
 │   │   ├── restart node 3 with binary version v23.2.0 (22) [stage=system:last-upgrade;tenant:last-upgrade]
 │   │   ├── restart node 1 with binary version v23.2.0 (23) [stage=system:last-upgrade;tenant:last-upgrade]
@@ -75,8 +74,8 @@ Plan:
 │   ├── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on mixed-version-tenant-cyvju tenant (33) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
 │   └── run "validate upgrade" hookId="planner_test.go:145" (34) [stage=system:after-upgrade-finished;tenant:after-upgrade-finished]
 ├── upgrade cluster from "v23.2.0" to "v24.1.0"
-│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (35) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
-│   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (36) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (35) [stage=system:init;tenant:init]
+│   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (36) [stage=system:init;tenant:init]
 │   ├── upgrade nodes :1-4 from "v23.2.0" to "v24.1.0"
 │   │   ├── restart node 1 with binary version v24.1.0 (37) [stage=system:temporary-upgrade;tenant:temporary-upgrade]
 │   │   ├── restart node 3 with binary version v24.1.0 (38) [stage=system:temporary-upgrade;tenant:temporary-upgrade]
@@ -107,8 +106,8 @@ Plan:
 │   ├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on mixed-version-tenant-cyvju tenant (60) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
 │   └── run "validate upgrade" hookId="planner_test.go:145" (61) [stage=system:after-upgrade-finished;tenant:after-upgrade-finished]
 └── upgrade cluster from "v24.1.0" to "v24.3.0 (<current>)"
-   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (62) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
-   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (63) [stage=system:selectProtectedNodes;tenant:selectProtectedNodes]
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (62) [stage=system:init;tenant:init]
+   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (63) [stage=system:init;tenant:init]
    ├── upgrade nodes :1-4 from "v24.1.0" to "v24.3.0 (<current>)"
    │   ├── restart node 4 with binary version v24.3.0 (<current>) (64) [stage=system:temporary-upgrade;tenant:temporary-upgrade]
    │   ├── restart node 1 with binary version v24.3.0 (<current>) (65) [stage=system:temporary-upgrade;tenant:temporary-upgrade]
@@ -134,7 +133,6 @@ Plan:
    ├── allow upgrade to happen on mixed-version-tenant-cyvju tenant by resetting `preserve_downgrade_option` (83) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
    ├── run mixed-version hooks concurrently
    │   ├── run "mixed-version 1" hookId="planner_test.go:143", after 500ms delay (84) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
-   │   ├── run "mixed-version 2" hookId="planner_test.go:143_2", after 500ms delay (85) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
-   │   └── set cluster setting "storage.sstable.compression_algorithm" to 'zstd' on system tenant, after 100ms delay (86) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
-   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on mixed-version-tenant-cyvju tenant (87) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
-   └── run "validate upgrade" hookId="planner_test.go:145" (88) [stage=system:after-upgrade-finished;tenant:after-upgrade-finished]
+   │   └── run "mixed-version 2" hookId="planner_test.go:143_2", after 500ms delay (85) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
+   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on mixed-version-tenant-cyvju tenant (86) [stage=system:running-upgrade-migrations;tenant:running-upgrade-migrations,finalizing]
+   └── run "validate upgrade" hookId="planner_test.go:145" (87) [stage=system:after-upgrade-finished;tenant:after-upgrade-finished]

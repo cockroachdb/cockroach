@@ -145,6 +145,17 @@ func (m networkPartitionMutator) Name() string {
 	return fmt.Sprintf("network-partition-mutator-%s", m.strategy)
 }
 
+func (m networkPartitionMutator) Init(p *testPlanner) bool {
+	m.strategy = singlePartitionStrategy{}
+	if p.options.partitionStrategy != nil {
+		m.strategy = p.options.partitionStrategy
+	}
+	// Disable network partitions for separate process deployments. Network partitions
+	// currently only support partitions between VMs, forcing us to unconditionally partition
+	// all processes on a VM. This can cause separate process tenants to shut down.
+	return shouldEnableFailureInjection(p) && p.deploymentMode != SeparateProcessDeployment
+}
+
 func (m networkPartitionMutator) Probability() float64 {
 	return 0.3
 }
@@ -152,6 +163,7 @@ func (m networkPartitionMutator) Probability() float64 {
 func (m networkPartitionMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) ([]mutation, error) {
+	fmt.Printf("partition strategy: %s\n", m.strategy)
 	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
