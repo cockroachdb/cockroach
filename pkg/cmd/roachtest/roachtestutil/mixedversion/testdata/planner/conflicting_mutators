@@ -22,13 +22,13 @@ plan debug=true
 Seed:               12345
 Upgrades:           v24.2.2 → v24.3.0 (<current>)
 Deployment mode:    system-only
-Mutators:           concurrent_user_hooks_mutator, remove_user_hooks_mutator
+Mutators:           cluster_setting[kv.rangefeed.buffered_sender.enabled], concurrent_user_hooks_mutator, remove_user_hooks_mutator
 Plan:
 ├── install fixtures for version "v24.2.2" (1) [stage=system-setup]
 ├── start cluster at version "v24.2.2" (2) [stage=system-setup]
 ├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (3) [stage=system-setup]
 └── upgrade cluster from "v24.2.2" to "v24.3.0 (<current>)"
-   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=init]
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (4) [stage=selectProtectedNodes]
    ├── upgrade nodes :1-4 from "v24.2.2" to "v24.3.0 (<current>)"
    │   ├── restart node 2 with binary version v24.3.0 (<current>) (5) [stage=temporary-upgrade]
    │   ├── testSingleStep (6) [stage=temporary-upgrade]

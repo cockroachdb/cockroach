@@ -152,140 +152,167 @@ func (m networkPartitionMutator) Probability() float64 {
 func (m networkPartitionMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) ([]mutation, error) {
-	var mutations []mutation
-	upgrades := randomUpgrades(rng, plan)
-	idx := newStepIndex(plan)
-	nodeList := planner.currentContext.System.Descriptor.Nodes
-
 	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
 	}
 
-	for _, upgrade := range upgrades {
-		possiblePointsInTime := upgrade.
-			Filter(func(s *singleStep) bool {
-				// We don't want to set up a partition concurrently with other steps, and inserting
-				// before a concurrent step causes the step to run concurrently with that step, so
-				// we filter out any concurrent steps. We don't want to set up a partition while
-				// nodes are unavailable, as that could cause the cluster to lose quorum,
-				//	so we filter out steps with unavailable nodes.
-				var unavailableNodes bool
-				if planner.isMultitenant() {
-					unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
-				} else {
-					unavailableNodes = s.context.System.hasUnavailableNodes
-				}
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !unavailableNodes
-			})
+	var mutations []mutation
+	upgrades := randomUpgrades(rng, plan)
+	idx := newStepIndex(plan)
 
-		stepToPartition := possiblePointsInTime.RandomStep(rng)
-		hasInvalidConcurrentStep := false
-		var firstStepInConcurrentBlock *singleStep
-
-		isInvalidRecoverStep := func(s *singleStep) bool {
-			// Restarting a node in the middle of a network partition has a chance of
-			// loss of quorum, so we do should recover the network partition before this
-			// if the restarted node is not the node being partitioned.
-			// e.g. In a 4-node cluster, if node 1 is partitioned from nodes 2, 3, and
-			// 4, then restarting node 2 would cause a loss of quorum since 3 and 4
-			// cannot talk to 1.
-
-			// TODO: The partitioned node should be able to restart safely, provided
-			// the necessary steps are altered to allow it.
-
-			_, restartSystem := s.impl.(restartWithNewBinaryStep)
-			_, restartTenant := s.impl.(restartVirtualClusterStep)
-			// Many hook steps require communication between specific nodes, so we
-			// should recover the network partition before running any incompatible
-			// hook steps.
-			_, runHook := s.impl.(runHookStep)
-			// Waiting for stable cluster version requires communication between
-			// all nodes in the cluster, so we should recover the network partition
-			// before running it.
-			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
-
-			if idx.IsConcurrent(s) {
-				if firstStepInConcurrentBlock == nil {
-					firstStepInConcurrentBlock = s
-				}
-				hasInvalidConcurrentStep = true
-			} else {
-				hasInvalidConcurrentStep = false
-				firstStepInConcurrentBlock = nil
-			}
-
-			var unavailableNodes bool
-			if planner.isMultitenant() {
-				unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
-			} else {
-				unavailableNodes = s.context.System.hasUnavailableNodes
-			}
-			return unavailableNodes || restartTenant || restartSystem || (runHook && !planner.options.hooksSupportFailureInjection) || waitForStable
+	for i, upgrade := range upgrades {
+		// Force a network partition if it's the last upgrade as it's the most important one
+		// to test. Otherwise, we inject a partition with 50% probability.
+		if i != len(upgrades)-1 && rng.Float64() < 0.5 {
+			continue
 		}
 
-		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
-			return s == stepToPartition[0]
-		})
-
-		validEndStep, _, cutStep := validStartStep.Cut(func(s *singleStep) bool {
-			return isInvalidRecoverStep(s)
-		})
-
-		// Inserting before a concurrent step will cause the step to run concurrently with that step,
-		// so we remove the concurrent steps from the list of possible insertions if they contain
-		// any invalid steps.
-		if hasInvalidConcurrentStep {
-			validEndStep, _ = validEndStep.CutAfter(func(s *singleStep) bool {
-				return s == firstStepInConcurrentBlock
-			})
-		}
-
-		partitions, unavailableNodes, err := m.strategy.selectPartitions(rng, nodeList)
+		mut, err := m.generatePartition(rng, upgrade, idx, planner, f)
 		if err != nil {
-			return nil, err
-		}
-
-		addPartition := stepToPartition.
-			InsertBefore(networkPartitionInjectStep{
-				f:                f,
-				partitions:       partitions,
-				unavailableNodes: unavailableNodes,
-			})
-		var addRecoveryStep []mutation
-		var recoveryStep stepSelector
-		// If validEndStep is nil, it means that there are no steps after the partition step that are
-		// compatible with a network partition, so we immediately restart the node after the partition.
-		if validEndStep == nil {
-			recoveryStep = cutStep
-			addRecoveryStep = cutStep.InsertBefore(networkPartitionRecoveryStep{
-				f:                f,
-				partitions:       partitions,
-				unavailableNodes: unavailableNodes,
-			})
+			planner.logger.Printf("failed to generate valid partition: %v", err)
 		} else {
-			recoveryStep = validEndStep.RandomStep(rng)
-			addRecoveryStep = recoveryStep.
-				Insert(rng, networkPartitionRecoveryStep{
-					f:                f,
-					partitions:       partitions,
-					unavailableNodes: unavailableNodes,
-				})
+			mutations = append(mutations, mut...)
 		}
-
-		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
-			return s == recoveryStep[0]
-		})
-
-		failureContextSteps.MarkNodesUnavailable(true, true)
-		addPartition[0].hasUnavailableSystemNodes = true
-		addPartition[0].hasUnavailableTenantNodes = true
-		addRecoveryStep[0].hasUnavailableSystemNodes = true
-		addRecoveryStep[0].hasUnavailableTenantNodes = true
-
-		mutations = append(mutations, addPartition...)
-		mutations = append(mutations, addRecoveryStep...)
 	}
 
 	return mutations, nil
+}
+
+func (m networkPartitionMutator) generatePartition(
+	rng *rand.Rand, steps stepSelector, idx stepIndex, planner *testPlanner, f *failures.Failer,
+) ([]mutation, error) {
+	const maxAttempts = 500
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Randomly select a step to inject before and a step to recover after.
+		// This ensures that we skip "uninteresting partition windows", i.e. immediately
+		// recovering after injecting.
+		injectIdx := rng.Intn(len(steps))
+		recoverIdx := rng.Intn(len(steps))
+
+		if m.isValidPartitionWindow(injectIdx, recoverIdx, steps, idx, planner) {
+			return m.createPartitionMutations(rng, injectIdx, recoverIdx, steps, f, planner)
+		}
+	}
+
+	return nil, errors.Newf("failed to find valid partition window after %d attempts", maxAttempts)
+}
+
+// A partition window is valid if:
+//  1. The inject and recovery steps are non-concurrent.
+//  2. The partition does not cause a loss of quorum, e.g. it doesn't run with other failure injection.
+//  3. The window does not contain any incompatible steps.
+func (m networkPartitionMutator) isValidPartitionWindow(
+	injectIdx, recoverIdx int, steps stepSelector, idx stepIndex, planner *testPlanner,
+) bool {
+	if recoverIdx < injectIdx {
+		return false
+	}
+
+	injectStep := steps[injectIdx]
+	windowSteps := steps[injectIdx : recoverIdx+1]
+
+	// Don't concurrently run our inject step, as we don't want to cause unavailable nodes
+	// while other steps may be connecting to them.
+	if idx.IsConcurrent(injectStep) {
+		return false
+	}
+	// Don't inject a partition before we are done running setup steps.
+	if injectStep.context.System.Stage < InitUpgradeStage {
+		return false
+	}
+
+	// All steps in the window must be compatible with network partition
+	for _, s := range windowSteps {
+		if !m.isCompatibleWithPartition(s, planner) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (m networkPartitionMutator) isCompatibleWithPartition(
+	s *singleStep, planner *testPlanner,
+) bool {
+	// Avoid restarting nodes while we have a partition injected, as it could
+	// lead to a loss of quorum.
+	// e.g. In a 3 node cluster, if we partition node 1 from node 2, then restarting
+	// node 3 will cause a loss of quorum.
+	//
+	// TODO: Loosen this restriction. In the above example, we can't restart node
+	// 3, but we can restart nodes 1 or 2 without causing a loss of quorum. Similarly
+	// if we are running under a protectedPartitionStrategy, we can restart any node
+	// that is not protected.
+	_, restartSystem := s.impl.(restartWithNewBinaryStep)
+	_, restartTenant := s.impl.(restartVirtualClusterStep)
+
+	// Many hook steps hardcode a connection to a specific node, or attempt to connect
+	// to a random node in the cluster without checking for availability.
+	// Unless enabled, we avoid running hooks while a partition is injected.
+	_, runHook := s.impl.(runHookStep)
+
+	// Waiting for the cluster version to finalize requires all nodes to be able to
+	// communicate with each other.
+	_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+
+	if restartSystem || restartTenant || waitForStable {
+		return false
+	}
+
+	if runHook && !planner.options.hooksSupportFailureInjection {
+		return false
+	}
+
+	// Similar to avoiding node restarts, avoid injecting a partition if a node
+	// is already unavailable.
+	if s.context.System.hasUnavailableNodes {
+		return false
+	}
+	if s.context.Tenant != nil && s.context.Tenant.hasUnavailableNodes {
+		return false
+	}
+
+	return true
+}
+
+func (m networkPartitionMutator) createPartitionMutations(
+	rng *rand.Rand,
+	injectIdx int,
+	recoverIdx int,
+	steps stepSelector,
+	f *failures.Failer,
+	planner *testPlanner,
+) ([]mutation, error) {
+	partitions, unavailableNodes, err := m.strategy.selectPartitions(rng, planner.currentContext.System.Descriptor.Nodes)
+	if err != nil {
+		return nil, err
+	}
+
+	injectStep := stepSelector{steps[injectIdx]}
+	recoverStep := stepSelector{steps[recoverIdx]}
+
+	addPartitionStep := injectStep.InsertBefore(networkPartitionInjectStep{
+		f:                f,
+		partitions:       partitions,
+		unavailableNodes: unavailableNodes,
+	})
+
+	addRecoveryStep := recoverStep.InsertAfter(networkPartitionRecoveryStep{
+		f:                f,
+		partitions:       partitions,
+		unavailableNodes: unavailableNodes,
+	})
+
+	// Mark all steps in the failure window as having unavailable nodes, so
+	// other mutators don't attempt to also take down nodes in the same window.
+	failureContextSteps := steps[injectIdx : recoverIdx+1]
+	failureContextSteps.MarkNodesUnavailable(true, true)
+	addPartitionStep[0].hasUnavailableSystemNodes = true
+	addPartitionStep[0].hasUnavailableTenantNodes = true
+	addRecoveryStep[0].hasUnavailableSystemNodes = true
+	addRecoveryStep[0].hasUnavailableTenantNodes = true
+
+	return append(addPartitionStep, addRecoveryStep...), nil
 }

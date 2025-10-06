@@ -26,6 +26,7 @@ plan
 Seed:               12345
 Upgrades:           v24.2.2 → v24.3.0 (<current>)
 Deployment mode:    system-only
+Mutators:           cluster_setting[kv.transaction.write_buffering.enabled]
 Hooks:              bank workload, csv server, initialize bank workload, initialize rand workload, mixed-version 1, mixed-version 2, rand workload
 Plan:
 ├── start cluster at version "v24.2.2" (1)
